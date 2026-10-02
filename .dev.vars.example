@@ -1,3 +1,5 @@
-# 로컬 전용 비밀 값이 필요하면 이 파일을 .dev.vars로 복사하세요.
-# 실제 비밀 값은 Git에 커밋하지 마세요.
-# API_KEY=replace-with-your-local-key
+# Run npm run auth:keys to create .dev.vars with fresh local secrets.
+# Existing .dev.vars files are never overwritten by the generator.
+# Secret values must not be committed. Production uses Workers Secrets.
+AUTH_SIGNING_KEYS='{"active_kid":"replace","keys":[{"kid":"replace","kty":"EC","crv":"P-256","x":"replace","y":"replace","d":"replace"}]}'
+MFA_ENCRYPTION_KEYS='{"active_version":1,"keys":{"1":"replace-with-32-random-bytes-in-base64url"}}'

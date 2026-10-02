@@ -1,18 +1,35 @@
-export default {
-  async fetch(request): Promise<Response> {
-    const { pathname } = new URL(request.url);
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import api from "./routes/api";
+import web, { renderPage } from "./routes/web";
+import type { AppEnv } from "./auth/types";
 
-    if (pathname === "/health") {
-      return Response.json({ status: "ok" });
-    }
+const app = new Hono<AppEnv>();
 
-    if (pathname === "/") {
-      return Response.json({
-        name: "officeflare",
-        message: "Cloudflare Workers is running.",
-      });
-    }
+app.route("/api", api);
+app.route("/", web);
 
-    return Response.json({ error: "Not found" }, { status: 404 });
-  },
-} satisfies ExportedHandler<Env>;
+app.notFound((c) => c.html(renderPage("페이지를 찾을 수 없습니다"), 404));
+
+app.onError((error, c) => {
+  const status = error instanceof HTTPException ? error.status : 500;
+  const message = status >= 500 ? "Internal server error" : error.message;
+  const headers = new Headers(
+    error instanceof HTTPException ? error.getResponse().headers : undefined,
+  );
+  headers.delete("content-type");
+  headers.delete("content-length");
+
+  if (status >= 500) {
+    console.error(error);
+  }
+
+  if (c.req.path === "/api" || c.req.path.startsWith("/api/")) {
+    return c.json({ error: message }, { status, headers });
+  }
+
+  const title = status >= 500 ? "오류가 발생했습니다" : message;
+  return c.html(renderPage(title), { status, headers });
+});
+
+export default app;

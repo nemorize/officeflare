@@ -4,6 +4,13 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-09-29",
 	"workers_dev": true,
+	"vars": {
+		"AUTH_ISSUER": "officeflare",
+		"AUTH_AUDIENCE": "officeflare-api"
+	},
+	"secrets": {
+		"required": ["AUTH_SIGNING_KEYS", "MFA_ENCRYPTION_KEYS"]
+	},
 	"observability": {
 		"enabled": true
 	},

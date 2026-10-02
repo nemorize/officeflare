@@ -23,14 +23,21 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run typecheck && wrangler deploy && npm run db:migrate:remote",
     "tail": "wrangler tail",
-    "prepare": "npm run cf-typegen"
+    "prepare": "npm run cf-typegen",
+    "auth:keys": "node scripts/generate-auth-keys.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "overrides": {
     "undici": "7.29.1"
   },
   "devDependencies": {
     "@types/node": "22.20.4",
+    "miniflare": "5.20260926.0-alpha",
     "typescript": "7.0.2",
     "wrangler": "4.143.0"
+  },
+  "dependencies": {
+    "hono": "4.13.12",
+    "jose": "6.2.12"
   }
 }
