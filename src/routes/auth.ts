@@ -1,9 +1,14 @@
+import { and, eq, exists, gt, isNotNull, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { bearer, body, password, string, unauthorized } from "../auth/input";
 import { digest, random, signAccess, verifyPassword } from "../auth/crypto";
 import { countAttempt, verifyFactor } from "../auth/mfa";
-import { activeMfaSql, completeLogin, eligibleUserSql, getChallenge, hasMfa, makeChallenge, requireAccess, throttle } from "../auth/store";
-import { ACCESS_TTL, now, uuid, type AppEnv, type Session, type User } from "../auth/types";
+import { completeLogin, getChallenge, hasMfa, makeChallenge, requireAccess, throttle } from "../auth/store";
+import { sessionAccountValid } from "../db/auth-conditions";
+import { coalesce } from "../db/expressions";
+import { insertWhen } from "../db/conditional-insert";
+import { users, userMfaMethods, userRefreshTokens, userSessions } from "../db/schema";
+import { ACCESS_TTL, now, uuid, type AppEnv, type AuthContext } from "../auth/types";
 
 const auth = new Hono<AppEnv>();
 auth.post("/login", async (c) => {
@@ -11,8 +16,8 @@ auth.post("/login", async (c) => {
   const email = string(data.email_address, "email_address", 254).trim().toLowerCase();
   const supplied = password(data.password);
   await throttle(c, "login", email);
-  const user = await c.get("db").prepare("SELECT * FROM users WHERE email_address = ? COLLATE NOCASE AND deleted_at IS NULL")
-    .bind(email).first<User>();
+  // The existing email column uses COLLATE NOCASE, including this equality lookup.
+  const user = await c.get("db").select().from(users).where(and(eq(users.email_address, email), isNull(users.deleted_at))).get();
   const correct = await verifyPassword(supplied, user?.password_hash ?? null);
   if (!correct || !user || user.disabled_at !== null) unauthorized();
   const mfa = await hasMfa(c, user.id);
@@ -21,10 +26,10 @@ auth.post("/login", async (c) => {
   return completeLogin(c, challenge, token);
 });
 
-async function methods(c: Parameters<typeof hasMfa>[0], userId: string) {
-  const rows = await c.get("db").prepare("SELECT id, type, name FROM user_mfa_methods WHERE user_id = ? AND verified_at IS NOT NULL AND revoked_at IS NULL")
-    .bind(userId).all();
-  return rows.results;
+async function methods(c: AuthContext, userId: string) {
+  return c.get("db").select({ id: userMfaMethods.id, type: userMfaMethods.type, name: userMfaMethods.name }).from(userMfaMethods).where(and(
+    eq(userMfaMethods.user_id, userId), isNotNull(userMfaMethods.verified_at), isNull(userMfaMethods.revoked_at),
+  ));
 }
 for (const recovery of [false, true]) {
   auth.post(recovery ? "/mfa/recovery" : "/mfa/verify", async (c) => {
@@ -54,40 +59,41 @@ auth.post("/refresh", async (c) => {
   await throttle(c, "refresh");
   const token = bearer(c);
   if (!/^ofr_[A-Za-z0-9_-]{43}$/.test(token)) unauthorized();
-  const hash = await digest(token), timestamp = now();
-  const session = await c.get("db").prepare(`SELECT s.* FROM user_refresh_tokens t JOIN user_sessions s ON s.id = t.session_id
-    WHERE t.token_hash = ?`).bind(hash).first<Session>();
-  if (!session) unauthorized();
-  const refresh = `ofr_${random()}`, operation = uuid();
+  const db = c.get("db"), hash = await digest(token), timestamp = now();
+  const row = await db.select({ session: userSessions, token: userRefreshTokens }).from(userRefreshTokens)
+    .innerJoin(userSessions, eq(userSessions.id, userRefreshTokens.session_id)).where(eq(userRefreshTokens.token_hash, hash)).get();
+  if (!row) unauthorized();
+  const { session } = row, refresh = `ofr_${random()}`, operation = uuid();
   const access = await signAccess(c.env, session);
-  const results = await c.get("db").batch([
+  const rotated = exists(db.select({ id: userRefreshTokens.id }).from(userRefreshTokens).where(eq(userRefreshTokens.used_by, operation)));
+  const results = await db.batch([
     // Strict replay detection: concurrent refreshes must be serialized by the client.
-    c.get("db").prepare(`UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, ?)
-      WHERE id = ? AND EXISTS (SELECT 1 FROM user_refresh_tokens WHERE token_hash = ? AND used_at IS NOT NULL)`)
-      .bind(timestamp, session.id, hash),
-    c.get("db").prepare(`UPDATE user_refresh_tokens SET used_at = ?, used_by = ? WHERE token_hash = ?
-      AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
-      AND EXISTS (SELECT 1 FROM user_sessions s JOIN users u ON u.id = s.user_id
-        WHERE s.id = session_id AND s.revoked_at IS NULL AND s.expires_at > ?
-        AND s.auth_version = u.auth_version AND u.password_reset_required = 0 AND ${eligibleUserSql}
-        AND (NOT ${activeMfaSql} OR s.mfa_authenticated_at IS NOT NULL))`)
-      .bind(timestamp, operation, hash, timestamp, timestamp),
-    c.get("db").prepare(`INSERT INTO user_refresh_tokens(id, session_id, token_hash, parent_id, created_at, expires_at)
-      SELECT ?, session_id, ?, id, ?, expires_at FROM user_refresh_tokens WHERE used_by = ?`)
-      .bind(uuid(), await digest(refresh), timestamp, operation),
-    c.get("db").prepare(`UPDATE user_sessions SET last_used_at = ? WHERE id = ?
-      AND EXISTS (SELECT 1 FROM user_refresh_tokens WHERE used_by = ?)`)
-      .bind(timestamp, session.id, operation),
+    db.update(userSessions).set({ revoked_at: coalesce(userSessions.revoked_at, timestamp) }).where(and(
+      eq(userSessions.id, session.id), exists(db.select({ id: userRefreshTokens.id }).from(userRefreshTokens).where(and(
+        eq(userRefreshTokens.token_hash, hash), isNotNull(userRefreshTokens.used_at),
+      ))),
+    )),
+    db.update(userRefreshTokens).set({ used_at: timestamp, used_by: operation }).where(and(
+      eq(userRefreshTokens.token_hash, hash), isNull(userRefreshTokens.used_at), isNull(userRefreshTokens.revoked_at),
+      gt(userRefreshTokens.expires_at, timestamp), exists(db.select({ id: userSessions.id }).from(userSessions).where(and(
+        eq(userSessions.id, userRefreshTokens.session_id), isNull(userSessions.revoked_at),
+        gt(userSessions.expires_at, timestamp), sessionAccountValid(db),
+      ))),
+    )),
+    insertWhen(db, userRefreshTokens, {
+      id: uuid(), session_id: session.id, token_hash: await digest(refresh), parent_id: row.token.id,
+      created_at: timestamp, expires_at: row.token.expires_at,
+    }, rotated),
+    db.update(userSessions).set({ last_used_at: timestamp }).where(and(eq(userSessions.id, session.id), rotated)),
   ]);
-  if (results[1]!.meta.changes !== 1) unauthorized();
+  if (results[1].meta.changes !== 1) unauthorized();
   return c.json({ token_type: "Bearer", access_token: access, expires_in: Math.min(ACCESS_TTL, session.expires_at - timestamp),
     refresh_token: refresh, refresh_expires_at: session.expires_at, session_id: session.id });
 });
 
 auth.post("/logout", requireAccess, async (c) => {
   const { session } = c.get("identity");
-  await c.get("db").prepare("UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?").bind(now(), session.id).run();
+  await c.get("db").update(userSessions).set({ revoked_at: coalesce(userSessions.revoked_at, now()) }).where(eq(userSessions.id, session.id));
   return c.body(null, 204);
 });
-
 export default auth;

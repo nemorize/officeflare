@@ -1,20 +1,28 @@
 import { Hono } from "hono";
+import { and, count, eq, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { HTTPException } from "hono/http-exception";
 import { body, conflict, invalid, unauthorized } from "../auth/input";
-import { accessClaim, accessWon, publicUser, requireAccess } from "../auth/store";
+import { accessClaim, publicUser, requireAccess } from "../auth/store";
+import { accessWon } from "../db/auth-conditions";
+import { isNot, jsonExtract } from "../db/expressions";
+import { insertWhen } from "../db/conditional-insert";
+import { users, userProfileFields, userProfiles } from "../db/schema";
 import { now, uuid, type AppEnv } from "../auth/types";
 
-interface Field {
-  id: string; key: string; label: string; value_type: string; visibility: string; editable_by: string;
-  required: number; options_json: string | null; updated_at: number;
-}
+type Field = Pick<typeof userProfileFields.$inferSelect,
+  "id" | "key" | "label" | "value_type" | "visibility" | "editable_by" | "required" | "options_json" | "updated_at">;
+// Typed columns for the virtual JSON table used to compare a policy snapshot atomically.
+const snapshotRows = sqliteTable("profile_policy_snapshot", { value: text() });
 const profile = new Hono<AppEnv>();
 profile.use("/profile", requireAccess);
 profile.use("/profile-fields", requireAccess);
 async function fields(c: Parameters<typeof requireAccess>[0]) {
-  const result = await c.get("db").prepare(`SELECT id, key, label, value_type, visibility, editable_by, required, options_json, updated_at
-    FROM user_profile_fields WHERE deleted_at IS NULL AND visibility <> 'admin' ORDER BY key`).all<Field>();
-  return result.results;
+  return c.get("db").select({ id: userProfileFields.id, key: userProfileFields.key, label: userProfileFields.label,
+    value_type: userProfileFields.value_type, visibility: userProfileFields.visibility, editable_by: userProfileFields.editable_by,
+    required: userProfileFields.required, options_json: userProfileFields.options_json, updated_at: userProfileFields.updated_at,
+  }).from(userProfileFields).where(and(isNull(userProfileFields.deleted_at), ne(userProfileFields.visibility, "admin")))
+    .orderBy(userProfileFields.key);
 }
 profile.get("/profile-fields", async (c) => c.json({ fields: (await fields(c)).map((field) => ({
   id: field.id, key: field.key, label: JSON.parse(field.label), value_type: field.value_type,
@@ -23,10 +31,12 @@ profile.get("/profile-fields", async (c) => c.json({ fields: (await fields(c)).m
 })) }));
 profile.get("/profile", async (c) => {
   const { user } = c.get("identity");
-  const values = await c.get("db").prepare(`SELECT f.key, p.value FROM user_profiles p JOIN user_profile_fields f ON f.id = p.field_id
-    WHERE p.user_id = ? AND f.deleted_at IS NULL AND f.visibility <> 'admin' ORDER BY f.key`).bind(user.id).all<{ key: string; value: string }>();
+  const values = await c.get("db").select({ key: userProfileFields.key, value: userProfiles.value }).from(userProfiles)
+    .innerJoin(userProfileFields, eq(userProfileFields.id, userProfiles.field_id)).where(and(
+      eq(userProfiles.user_id, user.id), isNull(userProfileFields.deleted_at), ne(userProfileFields.visibility, "admin"),
+    )).orderBy(userProfileFields.key);
   return c.json({ display_name: user.display_name, profile_image_key: user.profile_image_key,
-    fields: Object.fromEntries(values.results.map((value) => [value.key, JSON.parse(value.value)])) });
+    fields: Object.fromEntries(values.map((value) => [value.key, JSON.parse(value.value)])) });
 });
 
 function validate(field: Field, value: unknown) {
@@ -71,35 +81,41 @@ profile.patch("/profile", async (c) => {
     if (field.editable_by !== "user") throw new HTTPException(403, { message: "Field cannot be edited" });
     validate(field, value); changes.push({ field, value });
   }
-  const current = await c.get("db").prepare("SELECT field_id, value FROM user_profiles WHERE user_id = ?").bind(user.id).all<{ field_id: string; value: string }>();
+  const db = c.get("db");
+  const current = await db.select({ field_id: userProfiles.field_id, value: userProfiles.value }).from(userProfiles).where(eq(userProfiles.user_id, user.id));
   for (const field of definitions.filter((field) => field.required && field.editable_by === "user")) {
     const change = changes.find((change) => change.field.id === field.id);
-    const existing = current.results.find((value) => value.field_id === field.id);
+    const existing = current.find((value) => value.field_id === field.id);
     if (!change && !existing) invalid(`Required field: ${field.key}`);
     if (!change && existing) validate(field, JSON.parse(existing.value));
   }
   const operation = uuid(), timestamp = now();
   // Recheck every visible definition, including required fields, in the write transaction.
   const snapshot = JSON.stringify(definitions);
-  const checks = `NOT EXISTS (SELECT 1 FROM json_each(?) j LEFT JOIN user_profile_fields f ON f.id = json_extract(j.value, '$.id')
-    WHERE f.id IS NULL OR f.deleted_at IS NOT NULL OR f.key <> json_extract(j.value, '$.key')
-    OR f.updated_at <> json_extract(j.value, '$.updated_at') OR f.value_type <> json_extract(j.value, '$.value_type')
-    OR f.label <> json_extract(j.value, '$.label') OR f.options_json IS NOT json_extract(j.value, '$.options_json')
-    OR f.required <> json_extract(j.value, '$.required') OR f.editable_by <> json_extract(j.value, '$.editable_by')
-    OR f.visibility <> json_extract(j.value, '$.visibility'))
-    AND (SELECT COUNT(*) FROM user_profile_fields WHERE deleted_at IS NULL AND visibility <> 'admin') = ?`;
-  const result = await c.get("db").batch([
-    accessClaim(c, operation, checks, [snapshot, definitions.length]),
-    c.get("db").prepare(`UPDATE users SET display_name = CASE WHEN ? THEN ? ELSE display_name END, updated_at = ?
-      WHERE id = ? AND ${accessWon}`).bind("display_name" in data ? 1 : 0, data.display_name as string | null ?? null, timestamp, user.id, session.id, operation),
+  const value = (key: keyof Field) => jsonExtract(snapshotRows.value, `$.${key}`);
+  const mismatches = db.select({ id: userProfileFields.id })
+    .from(sql`json_each(${snapshot}) AS ${sql.identifier("profile_policy_snapshot")}`)
+    .leftJoin(userProfileFields, eq(userProfileFields.id, value("id"))).where(or(
+      isNull(userProfileFields.id), isNotNull(userProfileFields.deleted_at), ne(userProfileFields.key, value("key")),
+      ne(userProfileFields.updated_at, value("updated_at")), ne(userProfileFields.value_type, value("value_type")),
+      ne(userProfileFields.label, value("label")), isNot(userProfileFields.options_json, value("options_json")),
+      ne(userProfileFields.required, value("required")), ne(userProfileFields.editable_by, value("editable_by")),
+      ne(userProfileFields.visibility, value("visibility")),
+    ));
+  const checks = and(notExists(mismatches), eq(db.select({ count: count() }).from(userProfileFields)
+    .where(and(isNull(userProfileFields.deleted_at), ne(userProfileFields.visibility, "admin"))), definitions.length));
+  const won = accessWon(db, session.id, operation);
+  const result = await db.batch([
+    accessClaim(c, operation, checks),
+    db.update(users).set({ updated_at: timestamp, ...("display_name" in data ? { display_name: data.display_name as string | null } : {}) })
+      .where(and(eq(users.id, user.id), won)),
     ...changes.map(({ field, value }) => value === null
-      ? c.get("db").prepare(`DELETE FROM user_profiles WHERE user_id = ? AND field_id = ? AND ${accessWon}`).bind(user.id, field.id, session.id, operation)
-      : c.get("db").prepare(`INSERT INTO user_profiles(user_id, field_id, value, updated_at)
-        SELECT ?, ?, ?, ? WHERE ${accessWon} ON CONFLICT(user_id, field_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-        .bind(user.id, field.id, JSON.stringify(value), timestamp, session.id, operation)),
+      ? db.delete(userProfiles).where(and(eq(userProfiles.user_id, user.id), eq(userProfiles.field_id, field.id), won))
+      : insertWhen(db, userProfiles, { user_id: user.id, field_id: field.id, value: JSON.stringify(value), updated_at: timestamp }, won)
+        .onConflictDoUpdate({ target: [userProfiles.user_id, userProfiles.field_id], set: { value: JSON.stringify(value), updated_at: timestamp } })),
   ]);
   if (result[0]!.meta.changes !== 1) conflict("Account or profile policy changed; reload and retry");
-  const updated = await c.get("db").prepare("SELECT * FROM users WHERE id = ?").bind(user.id).first<typeof user>();
+  const updated = await db.select().from(users).where(eq(users.id, user.id)).get();
   if (!updated) unauthorized();
   return c.json({ user: publicUser(updated) });
 });

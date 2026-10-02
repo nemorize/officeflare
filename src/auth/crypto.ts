@@ -77,7 +77,7 @@ export async function encryptTotp(env: AuthEnv, userId: string, methodId: string
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(userId, methodId) }, key, secret);
   return { version, nonce, ciphertext };
 }
-export async function decryptTotp(env: AuthEnv, userId: string, methodId: string, version: number, nonce: number[], ciphertext: number[]) {
+export async function decryptTotp(env: AuthEnv, userId: string, methodId: string, version: number, nonce: Uint8Array, ciphertext: Uint8Array) {
   const { key } = await encryptionKey(env, version);
   return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(nonce), additionalData: aad(userId, methodId) }, key, new Uint8Array(ciphertext)));
 }

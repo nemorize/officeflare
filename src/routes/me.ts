@@ -1,7 +1,11 @@
+import { and, desc, eq, exists, gt, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { body, password, unauthorized } from "../auth/input";
 import { hashPassword } from "../auth/crypto";
-import { accessClaim, accessWon, claim, getGrant, invalidateCredentials, prepareSession, publicUser, requireAccess, throttle, won } from "../auth/store";
+import { accessClaim, claim, getGrant, invalidateCredentials, prepareSession, publicUser, requireAccess, throttle } from "../auth/store";
+import { accessWon, challengeWon } from "../db/auth-conditions";
+import { coalesce, increment } from "../db/expressions";
+import { users, userAuthChallenges, userSessions } from "../db/schema";
 import { now, uuid, type AppEnv } from "../auth/types";
 import profile from "./profile";
 import mfaManagement from "./mfa-management";
@@ -14,50 +18,56 @@ me.put("/password", async (c) => {
   const data = await body(c, ["new_password"]), nextPassword = password(data.new_password, true);
   const grant = await getGrant(c, true);
   await throttle(c, "password", grant.user_id);
-  const timestamp = now(), version = grant.auth_version + 1, operation = uuid();
+  const db = c.get("db"), timestamp = now(), version = grant.auth_version + 1, operation = uuid();
   const hash = await hashPassword(nextPassword);
   const pair = await prepareSession(c, { ...grant, password_authenticated_at: timestamp }, version);
   const invalidations = invalidateCredentials(c, grant.user_id, operation, version);
-  const result = await c.get("db").batch([
+  const result = await db.batch([
     claim(c, grant, operation),
-    c.get("db").prepare(`UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ?,
-      password_reset_required = 0, auth_version = auth_version + 1 WHERE id = ? AND auth_version = ? AND ${won}`)
-      .bind(hash, timestamp, timestamp, grant.user_id, grant.auth_version, operation),
+    db.update(users).set({ password_hash: hash, password_changed_at: timestamp, updated_at: timestamp,
+      password_reset_required: 0, auth_version: increment(users.auth_version) }).where(and(
+        eq(users.id, grant.user_id), eq(users.auth_version, grant.auth_version), challengeWon(db, operation),
+      )),
     ...invalidations, ...pair.statements(operation),
-    ...(grant.purpose === "password_reset" ? [c.get("db").prepare(`UPDATE users SET last_login_at = ?
-      WHERE id = ? AND EXISTS (SELECT 1 FROM user_sessions WHERE id = ?)`).bind(timestamp, grant.user_id, pair.session.id)] : []),
+    ...(grant.purpose === "password_reset" ? [db.update(users).set({ last_login_at: timestamp }).where(and(
+      eq(users.id, grant.user_id), exists(db.select({ id: userSessions.id }).from(userSessions).where(eq(userSessions.id, pair.session.id))),
+    ))] : []),
   ]);
-  if (result[1]!.meta.changes !== 1 || result[2 + invalidations.length]!.meta.changes !== 1) unauthorized();
+  if (result[1].meta.changes !== 1 || result[2 + invalidations.length]!.meta.changes !== 1) unauthorized();
   return c.json(pair.response);
 });
 
 me.get("/sessions", requireAccess, async (c) => {
   const { user, session } = c.get("identity");
-  const rows = await c.get("db").prepare(`SELECT id, created_at, password_authenticated_at, mfa_authenticated_at,
-    last_used_at, expires_at, user_agent FROM user_sessions WHERE user_id = ? AND revoked_at IS NULL
-    AND expires_at > ? AND auth_version = ? ORDER BY created_at DESC LIMIT 100`)
-    .bind(user.id, now(), user.auth_version).all();
-  return c.json({ sessions: rows.results.map((row) => ({ ...row, current: row.id === session.id })) });
+  const rows = await c.get("db").select({ id: userSessions.id, created_at: userSessions.created_at,
+    password_authenticated_at: userSessions.password_authenticated_at, mfa_authenticated_at: userSessions.mfa_authenticated_at,
+    last_used_at: userSessions.last_used_at, expires_at: userSessions.expires_at, user_agent: userSessions.user_agent,
+  }).from(userSessions).where(and(eq(userSessions.user_id, user.id), isNull(userSessions.revoked_at),
+    gt(userSessions.expires_at, now()), eq(userSessions.auth_version, user.auth_version),
+  )).orderBy(desc(userSessions.created_at)).limit(100);
+  return c.json({ sessions: rows.map((row) => ({ ...row, current: row.id === session.id })) });
 });
 me.delete("/sessions/:id", requireAccess, async (c) => {
-  const { user, session } = c.get("identity"), operation = uuid();
-  const result = await c.get("db").batch([
+  const db = c.get("db"), { user, session } = c.get("identity"), operation = uuid();
+  const result = await db.batch([
     accessClaim(c, operation),
-    c.get("db").prepare(`UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, ?)
-      WHERE id = ? AND user_id = ? AND ${accessWon}`).bind(now(), c.req.param("id"), user.id, session.id, operation),
+    db.update(userSessions).set({ revoked_at: coalesce(userSessions.revoked_at, now()) }).where(and(
+      eq(userSessions.id, c.req.param("id")), eq(userSessions.user_id, user.id), accessWon(db, session.id, operation),
+    )),
   ]);
-  if (result[0]!.meta.changes !== 1) unauthorized();
+  if (result[0].meta.changes !== 1) unauthorized();
   return c.body(null, 204);
 });
 me.delete("/sessions", requireAccess, async (c) => {
-  const { user, session } = c.get("identity"), timestamp = now(), operation = uuid();
-  const result = await c.get("db").batch([
+  const db = c.get("db"), { user, session } = c.get("identity"), timestamp = now(), operation = uuid();
+  const won = accessWon(db, session.id, operation);
+  const result = await db.batch([
     accessClaim(c, operation),
-    c.get("db").prepare(`UPDATE users SET auth_version = auth_version + 1 WHERE id = ? AND ${accessWon}`).bind(user.id, session.id, operation),
-    c.get("db").prepare(`UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE user_id = ? AND ${accessWon}`).bind(timestamp, user.id, session.id, operation),
-    c.get("db").prepare(`UPDATE user_auth_challenges SET used_at = COALESCE(used_at, ?) WHERE user_id = ? AND ${accessWon}`).bind(timestamp, user.id, session.id, operation),
+    db.update(users).set({ auth_version: increment(users.auth_version) }).where(and(eq(users.id, user.id), won)),
+    db.update(userSessions).set({ revoked_at: coalesce(userSessions.revoked_at, timestamp) }).where(and(eq(userSessions.user_id, user.id), won)),
+    db.update(userAuthChallenges).set({ used_at: coalesce(userAuthChallenges.used_at, timestamp) }).where(and(eq(userAuthChallenges.user_id, user.id), won)),
   ]);
-  if (result[0]!.meta.changes !== 1) unauthorized();
+  if (result[0].meta.changes !== 1) unauthorized();
   return c.body(null, 204);
 });
 me.route("/", profile);

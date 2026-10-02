@@ -4,6 +4,11 @@ import { readFile, readdir } from "node:fs/promises";
 import { scryptSync, createHmac, randomBytes } from "node:crypto";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
+import { and, count, eq, isNotNull, isNull } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../src/db/schema.ts";
+
+const { users, userSessions, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes, userMfaTotp, userProfileFields } = schema;
 
 const PASSWORD = "correct horse battery staple";
 const hash = (value = PASSWORD) => {
@@ -35,7 +40,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
       AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api",
     } }] }));
   t.after(() => mf.dispose());
-  const db = await mf.getD1Database("DB");
+  const binding = await mf.getD1Database("DB");
+  // Bootstrap the existing Wrangler DDL, including STRICT tables and triggers.
   for (const file of (await readdir("migrations")).sort()) {
     let sql = "", trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {
@@ -43,14 +49,14 @@ test("Bearer account API in the Workers runtime", async (t) => {
       if (line.startsWith("CREATE TRIGGER")) trigger = true;
       sql += line + "\n";
       if (line.trim().endsWith(";") && (!trigger || line.trim() === "END;")) {
-        await db.prepare(sql).run(); sql = ""; trigger = false;
+        await binding.prepare(sql).run(); sql = ""; trigger = false;
       }
     }
     assert.equal(sql.trim(), "");
   }
+  const db = drizzle(binding, { schema });
   const seed = async (id, extra = {}) => {
-    await db.prepare("INSERT INTO users(id, email_address, password_hash, password_reset_required) VALUES (?, ?, ?, ?)")
-      .bind(id, `${id}@office.test`, extra.hash ?? hash(), extra.reset ? 1 : 0).run();
+    await db.insert(users).values({ id, email_address: `${id}@office.test`, password_hash: extra.hash ?? hash(), password_reset_required: extra.reset ? 1 : 0 });
   };
   let ip = 0;
   const request = async (path, { method = "GET", token, data, expected = 200, headers = {} } = {}) => {
@@ -71,6 +77,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   await t.test("login, token purpose, JWT validation, rotation and logout", async () => {
     await seed("basic");
+    await db.update(users).set({ email_address: "BASIC@OFFICE.TEST" }).where(eq(users.id, "basic"));
     await request("/api/auth/login", { method: "POST", data: { email_address: "missing@office.test", password: PASSWORD }, expected: 401 });
     await request("/api/auth/login", { method: "POST", data: { email_address: "basic@office.test", password: "wrong password" }, expected: 401 });
     const first = await login("basic");
@@ -110,7 +117,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request("/api/me", { token: changed.access_token });
     await request("/api/me/password", { method: "PUT", token: reset.challenge_token, data: { new_password: PASSWORD }, expected: 401 });
     await login("reset", 401);
-    const result = await db.prepare("SELECT password_hash, password_reset_required, password_changed_at FROM users WHERE id = 'reset'").first();
+    const result = await db.select({ password_hash: users.password_hash, password_reset_required: users.password_reset_required,
+      password_changed_at: users.password_changed_at }).from(users).where(eq(users.id, "reset")).get();
     assert.match(result.password_hash, /^scrypt\$/); assert.equal(result.password_reset_required, 0); assert.ok(result.password_changed_at);
   });
 
@@ -138,8 +146,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
     assert.deepEqual(responses.map((response) => response.status).sort(), [200, 401]);
     const success = await responses.find((response) => response.status === 200).json();
     await request("/api/me", { token: success.access_token });
-    assert.equal((await db.prepare("SELECT auth_version FROM users WHERE id = 'password-race'").first()).auth_version, 2);
-    assert.equal((await db.prepare("SELECT COUNT(*) AS count FROM user_sessions WHERE user_id = 'password-race' AND revoked_at IS NULL").first()).count, 1);
+    assert.equal((await db.select({ auth_version: users.auth_version }).from(users).where(eq(users.id, "password-race")).get()).auth_version, 2);
+    assert.equal((await db.select({ count: count() }).from(userSessions).where(and(eq(userSessions.user_id, "password-race"), isNull(userSessions.revoked_at))).get()).count, 1);
   });
 
   await t.test("TOTP enrollment, replay, recovery, revocation and forced reset with MFA", async () => {
@@ -148,7 +156,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
     const setupGrant = await reauth(initial.access_token);
     const setup = await request("/api/me/mfa/totp", { method: "POST", token: setupGrant.reauthentication_token, data: { name: "Phone" }, expected: 201 });
     const secret = decodeBase32(new URL(setup.provisioning_uri).searchParams.get("secret"));
-    const stored = await db.prepare("SELECT secret_ciphertext, secret_nonce FROM user_mfa_totp WHERE method_id = ?").bind(setup.method_id).first();
+    const stored = await db.select({ secret_ciphertext: userMfaTotp.secret_ciphertext, secret_nonce: userMfaTotp.secret_nonce }).from(userMfaTotp)
+      .where(eq(userMfaTotp.method_id, setup.method_id)).get();
     assert.notDeepEqual(Buffer.from(stored.secret_ciphertext).subarray(0, 20), secret); assert.equal(stored.secret_nonce.length, 12);
     const activationGrant = await reauth(initial.access_token), step = Math.floor(timestamp() / 30);
     const activated = await request(`/api/me/mfa/totp/${setup.method_id}/verify`, { method: "POST", token: activationGrant.reauthentication_token, data: { code: code(secret, step) } });
@@ -168,7 +177,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
     const another = await login("mfa");
     await request("/api/auth/mfa/recovery", { method: "POST", token: another.challenge_token, data: { recovery_code: codes[0] }, expected: 401 });
     const remaining = await request("/api/me/mfa/recovery-codes", { token: recovered.access_token }); assert.equal(remaining.remaining, 9);
-    await db.prepare("UPDATE users SET password_reset_required = 1 WHERE id = 'mfa'").run();
+    await db.update(users).set({ password_reset_required: 1 }).where(eq(users.id, "mfa"));
     await request("/api/me", { token: recovered.access_token, expected: 401 });
     const resetChallenge = await login("mfa"); assert.equal(resetChallenge.next, "mfa");
     const reset = await request("/api/auth/mfa/recovery", { method: "POST", token: resetChallenge.challenge_token, data: { recovery_code: codes[1] } });
@@ -188,8 +197,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
       ["department", "select", "user", "organization", 1, '[{"value":"engineering","label":{"default":"Engineering"}}]'],
       ["title", "text", "admin", "private", 0, null], ["internal", "text", "user", "admin", 0, null],
       ["birthday", "date", "user", "private", 0, null], ["website", "url", "user", "private", 0, null],
-    ]) await db.prepare("INSERT INTO user_profile_fields(id, key, label, value_type, editable_by, visibility, required, options_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(key, key, JSON.stringify({ default: key, en: key }), type, editable, visibility, required, options).run();
+    ]) await db.insert(userProfileFields).values({ id: key, key, label: JSON.stringify({ default: key, en: key }),
+      value_type: type, editable_by: editable, visibility, required, options_json: options });
     const loginResult = await login("profile"), token = loginResult.access_token;
     const definitions = await request("/api/me/profile-fields", { token }); assert.equal(definitions.fields.some((field) => field.key === "internal"), false);
     await request("/api/me/profile", { method: "PATCH", token, data: { fields: { title: "Admin" } }, expected: 403 });
@@ -204,8 +213,8 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request("/api/me/profile", { method: "PATCH", token, data: { fields: { department: null } }, expected: 400 });
     await request("/api/me/profile", { method: "PATCH", token, data: { fields: { birthday: null } } });
     assert.equal((await request("/api/me/profile", { token })).fields.birthday, undefined);
-    for (let index = 0; index < 25; index++) await db.prepare("INSERT INTO user_profile_fields(id, key, label, value_type, editable_by) VALUES (?, ?, ?, 'text', 'user')")
-      .bind(`extra-${index}`, `extra-${index}`, JSON.stringify({ default: `extra-${index}` })).run();
+    for (let index = 0; index < 25; index++) await db.insert(userProfileFields).values({ id: `extra-${index}`, key: `extra-${index}`,
+      label: JSON.stringify({ default: `extra-${index}` }), value_type: "text", editable_by: "user" });
     await request("/api/me/profile", { method: "PATCH", token, data: { fields: { "extra-24": "Many fields" } } });
   });
 
@@ -223,8 +232,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request(`/api/me/mfa/totp/${setup.method_id}/verify`, {
       method: "POST", token: grant.reauthentication_token, data: { code: code(secret) }, expected: 401,
     });
-    await db.prepare("UPDATE user_mfa_methods SET created_at = ?, setup_expires_at = ? WHERE id = ?")
-      .bind(timestamp() - 602, timestamp() - 2, setup.method_id).run();
+    await db.update(userMfaMethods).set({ created_at: timestamp() - 602, setup_expires_at: timestamp() - 2 }).where(eq(userMfaMethods.id, setup.method_id));
     const secondGrant = await reauth(original.access_token);
     await request(`/api/me/mfa/totp/${setup.method_id}/verify`, {
       method: "POST", token: secondGrant.reauthentication_token, data: { code: code(secret) }, expected: 401,
@@ -233,16 +241,15 @@ test("Bearer account API in the Workers runtime", async (t) => {
     const pending = await request("/api/me/mfa/totp", { method: "POST", token: freshGrant.reauthentication_token, data: {}, expected: 201 });
     const passwordGrant = await reauth(original.access_token);
     const changed = await request("/api/me/password", { method: "PUT", token: passwordGrant.reauthentication_token, data: { new_password: PASSWORD } });
-    assert.ok((await db.prepare("SELECT revoked_at FROM user_mfa_methods WHERE id = ?").bind(pending.method_id).first()).revoked_at);
+    assert.ok((await db.select({ revoked_at: userMfaMethods.revoked_at }).from(userMfaMethods).where(eq(userMfaMethods.id, pending.method_id)).get()).revoked_at);
     await request("/api/me", { token: changed.access_token });
   });
 
   await t.test("parallel recovery use grants only one login", async () => {
     // Restore the previously enrolled test method; its ciphertext remains bound to this user and method.
-    await db.prepare("UPDATE user_mfa_methods SET revoked_at = NULL WHERE user_id = 'mfa' AND verified_at IS NOT NULL").run();
+    await db.update(userMfaMethods).set({ revoked_at: null }).where(and(eq(userMfaMethods.user_id, "mfa"), isNotNull(userMfaMethods.verified_at)));
     const plaintext = randomBytes(16).toString("hex");
-    await db.prepare("INSERT INTO user_mfa_recovery_codes(id, user_id, code_hash) VALUES (?, 'mfa', ?)")
-      .bind(crypto.randomUUID(), await sha(plaintext)).run();
+    await db.insert(userMfaRecoveryCodes).values({ id: crypto.randomUUID(), user_id: "mfa", code_hash: await sha(plaintext) });
     const one = await login("mfa"), two = await login("mfa");
     const responses = await Promise.all([one, two].map((challenge) => mf.dispatchFetch("https://office.test/api/auth/mfa/recovery", {
       method: "POST", headers: { Authorization: `Bearer ${challenge.challenge_token}`, "Content-Type": "application/json" },
@@ -253,18 +260,31 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request("/api/me", { token: success.access_token });
   });
 
+  await t.test("TOTP enrollment cap prevents extra method and secret rows", async () => {
+    await seed("mfa-cap");
+    const initial = await login("mfa-cap");
+    for (let index = 0; index < 6; index++) {
+      const grant = await reauth(initial.access_token);
+      await request("/api/me/mfa/totp", { method: "POST", token: grant.reauthentication_token,
+        data: { name: `Device ${index}` }, expected: index < 5 ? 201 : 409 });
+    }
+    assert.equal((await db.select({ count: count() }).from(userMfaMethods).where(eq(userMfaMethods.user_id, "mfa-cap")).get()).count, 5);
+    assert.equal((await db.select({ count: count() }).from(userMfaTotp)
+      .innerJoin(userMfaMethods, eq(userMfaMethods.id, userMfaTotp.method_id)).where(eq(userMfaMethods.user_id, "mfa-cap")).get()).count, 5);
+  });
+
   await t.test("disabled/deleted accounts and reassigned email remain isolated", async () => {
     await seed("deleted");
     const old = await login("deleted");
-    await db.prepare("UPDATE users SET deleted_at = ? WHERE id = 'deleted'").bind(timestamp()).run();
+    await db.update(users).set({ deleted_at: timestamp() }).where(eq(users.id, "deleted"));
     await request("/api/me", { token: old.access_token, expected: 401 });
     await request("/api/auth/refresh", { method: "POST", token: old.refresh_token, expected: 401 });
     await login("deleted", 401);
     await seed("replacement");
-    await db.prepare("UPDATE users SET email_address = 'deleted@office.test' WHERE id = 'replacement'").run();
+    await db.update(users).set({ email_address: "deleted@office.test" }).where(eq(users.id, "replacement"));
     const replacement = await login("deleted");
     assert.equal((await request("/api/me", { token: replacement.access_token })).user.id, "replacement");
-    await db.prepare("UPDATE users SET disabled_at = ? WHERE id = 'replacement'").bind(timestamp()).run();
+    await db.update(users).set({ disabled_at: timestamp() }).where(eq(users.id, "replacement"));
     await request("/api/me", { token: replacement.access_token, expected: 401 }); await login("deleted", 401);
   });
 
@@ -281,12 +301,12 @@ test("Bearer account API in the Workers runtime", async (t) => {
     const first = await login("sessions"), second = await login("sessions"), stranger = await login("stranger");
     await request(`/api/me/sessions/${stranger.session_id}`, { method: "DELETE", token: first.access_token, expected: 204 });
     await request("/api/me", { token: stranger.access_token });
-    await db.prepare("UPDATE user_sessions SET created_at = ?, expires_at = ? WHERE id = ?").bind(timestamp() - 2, timestamp() - 1, second.session_id).run();
+    await db.update(userSessions).set({ created_at: timestamp() - 2, expires_at: timestamp() - 1 }).where(eq(userSessions.id, second.session_id));
     await request("/api/me", { token: second.access_token, expected: 401 });
     await request("/api/auth/refresh", { method: "POST", token: second.refresh_token, expected: 401 });
     const pending = await reauth(first.access_token);
-    await db.prepare("UPDATE user_auth_challenges SET created_at = ?, expires_at = ? WHERE token_hash = ?")
-      .bind(timestamp() - 2, timestamp() - 1, await sha(pending.reauthentication_token)).run();
+    await db.update(userAuthChallenges).set({ created_at: timestamp() - 2, expires_at: timestamp() - 1 })
+      .where(eq(userAuthChallenges.token_hash, await sha(pending.reauthentication_token)));
     await request("/api/me/password", { method: "PUT", token: pending.reauthentication_token, data: { new_password: PASSWORD }, expected: 401 });
     await request("/api/me/sessions", { method: "DELETE", token: first.access_token, expected: 204 });
     await request("/api/me", { token: first.access_token, expected: 401 }); await request("/api/me", { token: second.access_token, expected: 401 });
