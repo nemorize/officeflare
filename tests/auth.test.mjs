@@ -8,7 +8,7 @@ import { and, count, eq, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../src/db/schema.ts";
 
-const { users, userSessions, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes, userMfaTotp, userProfileFields } = schema;
+const { users, userSessions, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes, userMfaTotp, userProfileFields, roles, rolePermissions, userRoles } = schema;
 
 const PASSWORD = "correct horse battery staple";
 const hash = (value = PASSWORD) => {
@@ -324,5 +324,171 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request("/api/auth/login", { method: "POST", data: { padding: "x".repeat(70 * 1024) }, expected: 413 });
     await request("/api/me", { expected: 401 });
     await request("/api/missing", { expected: 404 });
+  });
+
+  let administratorId, administratorToken, otherAdministratorId;
+  const createRole = (key, permissions, token = administratorToken) => request("/api/roles", {
+    method: "POST", token, data: { key, label: key, permissions }, expected: 201,
+  });
+  const assignRoles = (id, roleIds, token = administratorToken, expected = 204) => request(`/api/users/${id}/roles`, {
+    method: "PUT", token, data: { role_ids: roleIds }, expected,
+  });
+
+  await t.test("authorization denies by default and only assigned roles grant permissions", async () => {
+    await seed("rbac-user");
+    const user = await login("rbac-user");
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, []);
+    for (const path of ["/api/roles", "/api/permissions", "/api/users/rbac-user/roles"]) {
+      await request(path, { expected: 401 });
+      await request(path, { token: user.access_token, expected: 403 });
+      await request(path, { token: user.refresh_token, expected: 401 });
+    }
+    await request("/api/roles", { method: "POST", token: user.access_token, data: { key: "denied", label: "Denied", permissions: [] }, expected: 403 });
+    await assignRoles("rbac-user", ["system-administrator"], user.access_token, 403);
+    await request("/api/me/profile", { token: user.access_token });
+    await request("/api/me/sessions", { token: user.access_token });
+    await seed("administrator-one"); await seed("administrator-two");
+    administratorId = "administrator-one";
+    otherAdministratorId = "administrator-two";
+    await db.insert(userRoles).values({ user_id: administratorId, role_id: "system-administrator" });
+    administratorToken = (await login(administratorId)).access_token;
+    const catalog = (await request("/api/permissions", { token: administratorToken })).permissions.map((entry) => entry.key).sort();
+    assert.deepEqual((await request("/api/me/permissions", { token: administratorToken })).permissions, catalog);
+    assert.equal(catalog.length, 4);
+  });
+
+  await t.test("role administration validates permissions, preserves system roles and rejects stale edits", async () => {
+    const reader = (await createRole("role-reader", ["roles.read"])).role;
+    assert.equal(reader.is_system, false); assert.equal(reader.version, 1);
+    assert.deepEqual(reader.permissions, ["roles.read"]);
+    await request("/api/roles", { method: "POST", token: administratorToken, data: { key: "role-reader", label: "Duplicate", permissions: [] }, expected: 409 });
+    for (const permissions of [["*"], ["invented.permission"], ["roles.read", "roles.read"], "roles.read"]) {
+      await request("/api/roles", { method: "POST", token: administratorToken, data: { key: "invalid", label: "Invalid", permissions }, expected: 400 });
+    }
+    await request("/api/roles", { method: "POST", token: administratorToken,
+      data: { key: "invalid", label: "Invalid", permissions: [], is_system: true }, expected: 400 });
+    const edited = (await request(`/api/roles/${reader.id}`, { method: "PUT", token: administratorToken,
+      data: { label: "Updated reader", description: "Reads roles", permissions: ["roles.read"], version: reader.version } })).role;
+    assert.equal(edited.label, "Updated reader"); assert.equal(edited.version, 2);
+    await request(`/api/roles/${reader.id}`, { method: "PUT", token: administratorToken,
+      data: { label: "Stale", permissions: [], version: 1 }, expected: 409 });
+    assert.deepEqual((await request(`/api/roles/${reader.id}`, { token: administratorToken })).role.permissions, ["roles.read"]);
+    for (const method of ["PUT", "DELETE"]) await request("/api/roles/system-administrator", {
+      method, token: administratorToken, data: method === "PUT" ? { label: "Changed", permissions: [], version: 1 } : undefined, expected: 403,
+    });
+    await request("/api/roles/missing", { token: administratorToken, expected: 404 });
+    await assignRoles("rbac-user", ["missing"], administratorToken, 400);
+    await assignRoles("missing-user", [], administratorToken, 404);
+    await assignRoles("deleted", [], administratorToken, 404);
+    assert.equal((await request("/api/users/rbac-user/roles", { token: administratorToken })).roles.length, 0);
+  });
+
+  await t.test("multiple roles are additive and changes apply to the same JWT without ending the session", async () => {
+    const reader = (await request("/api/roles", { token: administratorToken })).roles.find((role) => role.key === "role-reader");
+    const inspector = (await createRole("user-role-inspector", ["users.roles.read", "roles.read"])).role;
+    const user = await login("rbac-user");
+    await assignRoles("rbac-user", [reader.id, inspector.id]);
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, ["roles.read", "users.roles.read"]);
+    const assigned = await request("/api/users/rbac-user/roles", { token: administratorToken });
+    assert.equal(assigned.roles.length, 2); assert.ok(assigned.roles.every((role) => role.assigned_by === administratorId && role.assigned_at > 0));
+    await request("/api/roles", { token: user.access_token });
+    await request("/api/users/rbac-user/roles", { token: user.access_token });
+    await assignRoles("rbac-user", [], user.access_token, 403);
+    const changed = (await request(`/api/roles/${inspector.id}`, { method: "PUT", token: administratorToken,
+      data: { label: inspector.label, permissions: [], version: inspector.version } })).role;
+    assert.deepEqual(changed.permissions, []);
+    await request("/api/users/rbac-user/roles", { token: user.access_token, expected: 403 });
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, ["roles.read"]);
+    await request(`/api/roles/${reader.id}`, { method: "DELETE", token: administratorToken, expected: 204 });
+    await request("/api/roles", { token: user.access_token, expected: 403 });
+    assert.equal((await db.select().from(userRoles).where(and(eq(userRoles.user_id, "rbac-user"), eq(userRoles.role_id, reader.id)))).length, 0);
+    await request("/api/me", { token: user.access_token });
+    await assignRoles("rbac-user", []);
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, []);
+  });
+
+  await t.test("delegated managers cannot create or assign privileges they do not hold", async () => {
+    await seed("role-manager"); await seed("role-assigner");
+    const managerRole = (await createRole("role-manager", ["roles.manage"])).role;
+    const assignerRole = (await createRole("role-assigner", ["users.roles.manage"])).role;
+    await assignRoles("role-manager", [managerRole.id]); await assignRoles("role-assigner", [assignerRole.id]);
+    const manager = (await login("role-manager")).access_token, assigner = (await login("role-assigner")).access_token;
+    await request("/api/roles", { method: "POST", token: manager,
+      data: { key: "escalated", label: "Escalated", permissions: ["users.roles.manage"] }, expected: 403 });
+    await request(`/api/roles/${managerRole.id}`, { method: "PUT", token: manager,
+      data: { label: "Escalated", permissions: ["roles.manage", "users.roles.manage"], version: 1 }, expected: 403 });
+    assert.equal((await db.select().from(roles).where(eq(roles.key, "escalated"))).length, 0);
+    assert.deepEqual((await request("/api/me/permissions", { token: manager })).permissions, ["roles.manage"]);
+    await assignRoles("role-assigner", ["system-administrator"], assigner, 403);
+    await assignRoles("rbac-user", [managerRole.id], assigner, 403);
+    await assignRoles("rbac-user", [assignerRole.id], assigner);
+    assert.deepEqual((await request("/api/me/permissions", { token: (await login("rbac-user")).access_token })).permissions, ["users.roles.manage"]);
+    await assignRoles("rbac-user", []);
+  });
+
+  await t.test("roles stay attached to user IDs across email reuse", async () => {
+    await seed("role-email");
+    const role = (await createRole("email-reader", ["roles.read"])).role;
+    await assignRoles("role-email", [role.id]);
+    const old = await login("role-email");
+    await db.update(users).set({ deleted_at: timestamp() }).where(eq(users.id, "role-email"));
+    await seed("role-email-new");
+    await db.update(users).set({ email_address: "role-email@office.test" }).where(eq(users.id, "role-email-new"));
+    const replacement = await login("role-email");
+    await request("/api/roles", { token: old.access_token, expected: 401 });
+    await request("/api/roles", { token: replacement.access_token, expected: 403 });
+    assert.deepEqual((await request("/api/me/permissions", { token: replacement.access_token })).permissions, []);
+    assert.equal((await db.select().from(userRoles).where(eq(userRoles.user_id, "role-email-new"))).length, 0);
+  });
+
+  await t.test("concurrent role creation and updates cannot overwrite another administrator's change", async () => {
+    const changes = await Promise.all(["roles.read", "users.roles.read"].map((permission) => mf.dispatchFetch("https://office.test/api/roles", {
+      method: "POST", headers: { Authorization: `Bearer ${administratorToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "concurrent-role", label: "Concurrent role", permissions: [permission] }),
+    })));
+    assert.deepEqual(changes.map((response) => response.status).sort(), [201, 409]);
+    const created = (await changes.find((response) => response.status === 201).json()).role;
+    const edits = await Promise.all(["roles.read", "users.roles.read"].map((permission) => mf.dispatchFetch(`https://office.test/api/roles/${created.id}`, {
+      method: "PUT", headers: { Authorization: `Bearer ${administratorToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ label: permission, permissions: [permission], version: created.version }),
+    })));
+    assert.deepEqual(edits.map((response) => response.status).sort(), [200, 409]);
+    const winner = (await edits.find((response) => response.status === 200).json()).role;
+    const stored = (await request(`/api/roles/${created.id}`, { token: administratorToken })).role;
+    assert.equal(stored.version, 2); assert.equal(stored.label, winner.label); assert.deepEqual(stored.permissions, winner.permissions);
+  });
+
+  await t.test("paginated roles do not omit or duplicate entries", async () => {
+    await db.batch(Array.from({ length: 51 }, (_, index) => db.insert(roles).values({ id: `page-${index}`, key: `page-${String(index).padStart(2, "0")}`, label: `Page ${index}` })));
+    const first = await request("/api/roles", { token: administratorToken });
+    assert.equal(first.roles.length, 50); assert.ok(first.next_cursor);
+    const second = await request(`/api/roles?cursor=${first.next_cursor}`, { token: administratorToken });
+    assert.equal(second.next_cursor, null);
+    const keys = [...first.roles, ...second.roles].map((role) => role.key);
+    assert.equal(new Set(keys).size, keys.length);
+    assert.equal(keys.length, (await db.select({ count: count() }).from(roles).get()).count);
+    await assignRoles("rbac-user", Array.from({ length: 50 }, (_, index) => `page-${index}`));
+    assert.equal((await request("/api/users/rbac-user/roles", { token: administratorToken })).roles.length, 50);
+    await assignRoles("rbac-user", []);
+  });
+
+  await t.test("the last eligible administrator survives concurrent removals", async () => {
+    await assignRoles(administratorId, [], administratorToken, 409);
+    assert.equal((await request("/api/me/permissions", { token: administratorToken })).permissions.length, 4);
+    await assignRoles(otherAdministratorId, ["system-administrator"]);
+    const otherToken = (await login(otherAdministratorId)).access_token;
+    const attempts = await Promise.all([[administratorId, administratorToken], [otherAdministratorId, otherToken]].map(([id, token]) =>
+      mf.dispatchFetch(`https://office.test/api/users/${id}/roles`, {
+        method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ role_ids: [] }),
+      })));
+    assert.deepEqual(attempts.map((response) => response.status).sort(), [204, 409]);
+    const remaining = await db.select().from(userRoles).where(eq(userRoles.role_id, "system-administrator"));
+    assert.equal(remaining.length, 1);
+    const remainingId = remaining[0].user_id, remainingToken = remainingId === administratorId ? administratorToken : otherToken;
+    const removedId = remainingId === administratorId ? otherAdministratorId : administratorId;
+    await assignRoles(removedId, ["system-administrator"], remainingToken);
+    await db.update(users).set({ disabled_at: timestamp() }).where(eq(users.id, removedId));
+    await assignRoles(remainingId, [], remainingToken, 409);
+    await request("/api/roles", { token: remainingToken });
   });
 });

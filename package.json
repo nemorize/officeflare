@@ -21,7 +21,7 @@
     "check": "npm run typecheck && npm run build",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "npm run typecheck && wrangler deploy && npm run db:migrate:remote",
+    "deploy": "node --experimental-strip-types scripts/deploy.mjs",
     "tail": "wrangler tail",
     "prepare": "npm run cf-typegen",
     "auth:keys": "node scripts/generate-auth-keys.mjs",

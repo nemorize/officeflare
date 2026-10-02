@@ -1,5 +1,6 @@
 node_modules/
 .wrangler/
+.officeflare-deploy-*.jsonc
 dist/
 coverage/
 worker-configuration.d.ts

@@ -9,9 +9,11 @@ import { users, userAuthChallenges, userSessions } from "../db/schema";
 import { now, uuid, type AppEnv } from "../auth/types";
 import profile from "./profile";
 import mfaManagement from "./mfa-management";
+import { permissionsFor } from "../authorization/access";
 
 const me = new Hono<AppEnv>();
 me.get("/", requireAccess, (c) => c.json({ user: publicUser(c.get("identity").user) }));
+me.get("/permissions", requireAccess, async (c) => c.json({ permissions: await permissionsFor(c.get("db"), c.get("identity").user.id) }));
 
 // A password-reset or one-use reauthentication grant is the Bearer token here.
 me.put("/password", async (c) => {

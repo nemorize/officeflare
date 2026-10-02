@@ -122,3 +122,31 @@ export const authRateLimits = sqliteTable("auth_rate_limits", {
   attempts: integer().notNull(),
   expires_at: integer().notNull(),
 }, (table) => [index("auth_rate_limits_expiration_index").on(table.expires_at)]);
+
+export const roles = sqliteTable("roles", {
+  id: text().primaryKey().notNull(),
+  key: text().notNull().unique(),
+  label: text().notNull(),
+  description: text(),
+  is_system: integer().notNull().default(0),
+  version: integer().notNull().default(1),
+  created_at: timestamp("created_at"),
+  updated_at: timestamp("updated_at"),
+});
+export const rolePermissions = sqliteTable("role_permissions", {
+  role_id: text().notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permission_key: text().notNull(),
+}, (table) => [primaryKey({ columns: [table.role_id, table.permission_key] })]);
+export const userRoles = sqliteTable("user_roles", {
+  user_id: text().notNull().references(() => users.id, { onDelete: "cascade" }),
+  role_id: text().notNull().references(() => roles.id, { onDelete: "cascade" }),
+  assigned_by: text().references(() => users.id, { onDelete: "set null" }),
+  assigned_at: timestamp("assigned_at"),
+}, (table) => [primaryKey({ columns: [table.user_id, table.role_id] }), index("user_roles_role_id_index").on(table.role_id)]);
+
+// bootstrap_user_id is an audit snapshot, not a cascading foreign key.
+export const installationState = sqliteTable("installation_state", {
+  id: integer().primaryKey().notNull(),
+  initialized_at: timestamp("initialized_at"),
+  bootstrap_user_id: text(),
+});
