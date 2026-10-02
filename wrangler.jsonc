@@ -1,0 +1,20 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "officeflare",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-29",
+	"workers_dev": true,
+	"observability": {
+		"enabled": true
+	},
+	"dev": {
+		"ip": "127.0.0.1",
+		"port": 8787
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "officeflare-user-accounts"
+		}
+	]
+}

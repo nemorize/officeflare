@@ -1,0 +1,36 @@
+{
+  "name": "officeflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "사용자 계정 기본 정보를 저장하는 D1 데이터베이스입니다."
+      }
+    }
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "cf-typegen": "wrangler types",
+    "typecheck": "npm run cf-typegen && tsc --noEmit",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "check": "npm run typecheck && npm run build",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run typecheck && wrangler deploy && npm run db:migrate:remote",
+    "tail": "wrangler tail",
+    "prepare": "npm run cf-typegen"
+  },
+  "overrides": {
+    "undici": "7.29.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "typescript": "7.0.2",
+    "wrangler": "4.143.0"
+  }
+}

@@ -1,0 +1,3 @@
+# 로컬 전용 비밀 값이 필요하면 이 파일을 .dev.vars로 복사하세요.
+# 실제 비밀 값은 Git에 커밋하지 마세요.
+# API_KEY=replace-with-your-local-key
