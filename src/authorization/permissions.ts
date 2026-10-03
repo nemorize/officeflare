@@ -2,6 +2,11 @@
 export const permissionCatalog = {
   "roles.read": { label: "View roles and available permissions" },
   "roles.manage": { label: "Create, update and delete roles" },
+  "users.read": { label: "List and view user accounts" },
+  "users.create": { label: "Create user accounts" },
+  "users.update": { label: "Update user accounts and credentials" },
+  "users.email.update": { label: "Change users' email addresses" },
+  "users.delete": { label: "Delete user accounts" },
   "users.roles.read": { label: "View users' roles" },
   "users.roles.manage": { label: "Assign and remove users' roles" },
 } as const;

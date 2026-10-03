@@ -354,7 +354,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
     administratorToken = (await login(administratorId)).access_token;
     const catalog = (await request("/api/permissions", { token: administratorToken })).permissions.map((entry) => entry.key).sort();
     assert.deepEqual((await request("/api/me/permissions", { token: administratorToken })).permissions, catalog);
-    assert.equal(catalog.length, 4);
+    assert.equal(catalog.length, 9);
   });
 
   await t.test("role administration validates permissions, preserves system roles and rejects stale edits", async () => {
@@ -474,7 +474,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   await t.test("the last eligible administrator survives concurrent removals", async () => {
     await assignRoles(administratorId, [], administratorToken, 409);
-    assert.equal((await request("/api/me/permissions", { token: administratorToken })).permissions.length, 4);
+    assert.equal((await request("/api/me/permissions", { token: administratorToken })).permissions.length, 9);
     await assignRoles(otherAdministratorId, ["system-administrator"]);
     const otherToken = (await login(otherAdministratorId)).access_token;
     const attempts = await Promise.all([[administratorId, administratorToken], [otherAdministratorId, otherToken]].map(([id, token]) =>

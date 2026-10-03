@@ -86,7 +86,7 @@ test("first deployment creates an administrator, forces password change and neve
   await request("/api/roles", { token: pending.challenge_token, expected: 401 });
   const changed = await request("/api/me/password", { method: "PUT", token: pending.challenge_token,
     data: { new_password: "my replacement administrator password" } });
-  assert.equal((await request("/api/me/permissions", { token: changed.access_token })).permissions.length, 4);
+  assert.equal((await request("/api/me/permissions", { token: changed.access_token })).permissions.length, 9);
   await request("/api/roles", { token: changed.access_token });
   const changedUser = await db.select().from(users).get();
   assert.equal(changedUser.password_reset_required, 0);

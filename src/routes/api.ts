@@ -5,6 +5,7 @@ import type { AppEnv } from "../auth/types";
 import { createDatabase } from "../db";
 import auth from "./auth";
 import me from "./me";
+import users from "./users";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
@@ -27,6 +28,7 @@ api.get("/permissions", requireAccess, requirePermission("roles.read"), (c) => c
 }));
 api.route("/roles", roleRoutes);
 api.route("/users", userRoleRoutes);
+api.route("/users", users);
 
 // Register JSON API routes above this fallback to keep unknown API paths out of the web UI.
 api.all("*", (c) => c.json({ error: "Not found" }, 404));

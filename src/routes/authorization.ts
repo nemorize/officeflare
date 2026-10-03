@@ -1,4 +1,4 @@
-import { and, eq, exists, gt, inArray, isNotNull, isNull, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNull, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { Hono } from "hono";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { body, conflict, invalid, string } from "../auth/input";
 import { accessClaim, requireAccess } from "../auth/store";
 import { now, uuid, type AppEnv, type AuthContext } from "../auth/types";
-import { forbidden, permissionCondition, requirePermission } from "../authorization/access";
+import { administratorRemains, forbidden, permissionCondition, requirePermission } from "../authorization/access";
 import { ADMINISTRATOR_ROLE_ID, isPermission, permissionCatalog, type Permission } from "../authorization/permissions";
 import { accessWon } from "../db/auth-conditions";
 import { insertWhen } from "../db/conditional-insert";
@@ -142,16 +142,9 @@ userRoleRoutes.put("/:id/roles", requirePermission("users.roles.manage"), async 
   if (ids.length && !await db.select({ id: users.id }).from(users).where(and(eq(users.id, actorId), unowned())).get()) {
     forbidden("Cannot grant permissions you do not hold");
   }
-  // Preserve an eligible administrator even when concurrent requests remove assignments.
-  const administratorRemains = ids.includes(ADMINISTRATOR_ROLE_ID) ? undefined : or(
-    notExists(db.select({ id: userRoles.user_id }).from(userRoles).where(and(eq(userRoles.user_id, id), eq(userRoles.role_id, ADMINISTRATOR_ROLE_ID)))),
-    exists(db.select({ id: users.id }).from(userRoles).innerJoin(users, eq(users.id, userRoles.user_id)).where(and(
-      eq(userRoles.role_id, ADMINISTRATOR_ROLE_ID), ne(users.id, id), isNull(users.disabled_at), isNull(users.deleted_at), isNotNull(users.password_hash),
-    ))),
-  );
   await commit(c, "users.roles.manage", and(
     exists(db.select({ id: users.id }).from(users).where(and(eq(users.id, id), isNull(users.deleted_at)))),
-    administratorRemains, ids.length ? unowned() : undefined,
+    ids.includes(ADMINISTRATOR_ROLE_ID) ? undefined : administratorRemains(db, id), ids.length ? unowned() : undefined,
     notExists(mismatches),
   ), (won) => [
     db.delete(userRoles).where(and(eq(userRoles.user_id, id), ids.length ? not(inArray(userRoles.role_id, ids)) : undefined, won)),
