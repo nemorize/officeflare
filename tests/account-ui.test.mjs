@@ -81,5 +81,5 @@ test("login returns only to known workspace routes", () => {
   for (const path of ["/mail", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/trash",
     "/calendar", "/calendar/shared", "/drive", "/drive/shared", "/drive/starred", "/drive/trash",
     "/profile", "/profile/security", "/profile/sessions"]) assert.equal(returnToWorkspace(path), path);
-  for (const path of [undefined, "https://other.test", "//other.test", "javascript:alert(1)", "/api/me", "/mail/unknown"]) assert.equal(returnToWorkspace(path), "/mail");
+  for (const path of [undefined, "https://other.test", "//other.test", "javascript:alert(1)", "/api/me", "/mail/unknown"]) assert.equal(returnToWorkspace(path), "/");
 });

@@ -1,14 +1,26 @@
-import { and, eq, exists, isNotNull, isNull, ne, not, notExists, or, type SQLWrapper } from "drizzle-orm";
+import { and, eq, exists, isNotNull, isNull, ne, not, notExists, or, sql, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv, AuthContext } from "../auth/types";
 import type { Database } from "../db";
 import { rolePermissions, userRoles, users } from "../db/schema";
-import { ADMINISTRATOR_ROLE_ID, isPermission, type Permission, type ResourceRef } from "./permissions";
+import { ADMINISTRATOR_ROLE_ID, effectivePermissions, isPermission, permissionCatalog, permissionClosure, type Permission, type ResourceRef } from "./permissions";
+
+const prerequisitePolicy = JSON.stringify(Object.fromEntries(Object.keys(permissionCatalog).map((key) => [key, permissionClosure([key])])));
 
 // Also usable inside a conditional write, so revocation cannot race an API mutation.
 export function permissionCondition(db: Database, userId: string, permission: string | SQLWrapper) {
+  if (typeof permission === "string") {
+    if (!isPermission(permission)) return sql`0`;
+    return and(...permissionClosure([permission]).map((key) => directPermissionCondition(db, userId, key)))!;
+  }
+  return sql`EXISTS (SELECT 1 FROM json_each(${prerequisitePolicy}) authorization_policy
+    WHERE authorization_policy.key=${permission} AND NOT EXISTS
+    (SELECT 1 FROM json_each(authorization_policy.value) authorization_requirement
+    WHERE NOT ${directPermissionCondition(db, userId, sql`authorization_requirement.value`)}))`;
+}
+function directPermissionCondition(db: Database, userId: string, permission: string | SQLWrapper) {
   const assignments = alias(userRoles, "authorization_assignments");
   const grants = alias(rolePermissions, "authorization_permissions");
   const account = alias(users, "authorization_user");
@@ -28,7 +40,7 @@ export async function permissionsFor(db: Database, userId: string): Promise<Perm
       eq(userRoles.user_id, userId), isNull(users.deleted_at), isNull(users.disabled_at),
       isNotNull(users.password_hash), eq(users.password_reset_required, 0),
     )).orderBy(rolePermissions.permission_key);
-  return rows.map((row) => row.permission).filter(isPermission);
+  return effectivePermissions(rows.map((row) => row.permission));
 }
 
 // Editing credentials or disabling an account must not let a delegated manager take

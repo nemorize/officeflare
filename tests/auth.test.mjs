@@ -1,5 +1,5 @@
 import { workerModules } from "./worker-modules.mjs";
-import { permissionCatalog } from "../src/authorization/permissions.ts";
+import { permissionCatalog, permissionClosure } from "../src/authorization/permissions.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
@@ -415,10 +415,10 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   let administratorId, administratorToken, otherAdministratorId;
   const createRole = (key, permissions, token = administratorToken) => request("/api/roles", {
-    method: "POST", token, data: { key, label: key, permissions }, expected: 201,
+    method: "POST", token, data: { key, label: key, permissions: permissionClosure(permissions) }, expected: 201,
   });
-  const assignRoles = (id, roleIds, token = administratorToken, expected = 204) => request(`/api/users/${id}/roles`, {
-    method: "PUT", token, data: { role_ids: roleIds }, expected,
+  const assignRoles = async (id, roleIds, token = administratorToken, expected = 204) => request(`/api/users/${id}/roles`, {
+    method: "PUT", token, data: { role_ids: roleIds, version: (await db.select().from(users).where(eq(users.id, id)).get())?.role_assignment_version ?? 1 }, expected,
   });
 
   await t.test("authorization denies by default and only assigned roles grant permissions", async () => {
@@ -445,21 +445,21 @@ test("Bearer account API in the Workers runtime", async (t) => {
   });
 
   await t.test("role administration validates permissions, preserves system roles and rejects stale edits", async () => {
-    const reader = (await createRole("role-reader", ["roles.read"])).role;
+    const reader = (await createRole("role-reader", ["admin.roles.read"])).role;
     assert.equal(reader.is_system, false); assert.equal(reader.version, 1);
-    assert.deepEqual(reader.permissions, ["roles.read"]);
+    assert.deepEqual(reader.permissions, permissionClosure(["admin.roles.read"]).sort());
     await request("/api/roles", { method: "POST", token: administratorToken, data: { key: "role-reader", label: "Duplicate", permissions: [] }, expected: 409 });
-    for (const permissions of [["*"], ["invented.permission"], ["roles.read", "roles.read"], "roles.read"]) {
+    for (const permissions of [["*"], ["invented.permission"], ["admin.roles.read", "admin.roles.read"], "admin.roles.read"]) {
       await request("/api/roles", { method: "POST", token: administratorToken, data: { key: "invalid", label: "Invalid", permissions }, expected: 400 });
     }
     await request("/api/roles", { method: "POST", token: administratorToken,
       data: { key: "invalid", label: "Invalid", permissions: [], is_system: true }, expected: 400 });
     const edited = (await request(`/api/roles/${reader.id}`, { method: "PUT", token: administratorToken,
-      data: { label: "Updated reader", description: "Reads roles", permissions: ["roles.read"], version: reader.version } })).role;
+      data: { label: "Updated reader", description: "Reads roles", permissions: permissionClosure(["admin.roles.read"]), version: reader.version } })).role;
     assert.equal(edited.label, "Updated reader"); assert.equal(edited.version, 2);
     await request(`/api/roles/${reader.id}`, { method: "PUT", token: administratorToken,
       data: { label: "Stale", permissions: [], version: 1 }, expected: 409 });
-    assert.deepEqual((await request(`/api/roles/${reader.id}`, { token: administratorToken })).role.permissions, ["roles.read"]);
+    assert.deepEqual((await request(`/api/roles/${reader.id}`, { token: administratorToken })).role.permissions, permissionClosure(["admin.roles.read"]).sort());
     for (const method of ["PUT", "DELETE"]) await request("/api/roles/system-administrator", {
       method, token: administratorToken, data: method === "PUT" ? { label: "Changed", permissions: [], version: 1 } : undefined, expected: 403,
     });
@@ -472,10 +472,10 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   await t.test("multiple roles are additive and changes apply to the same JWT without ending the session", async () => {
     const reader = (await request("/api/roles", { token: administratorToken })).roles.find((role) => role.key === "role-reader");
-    const inspector = (await createRole("user-role-inspector", ["users.roles.read", "roles.read"])).role;
+    const inspector = (await createRole("user-role-inspector", ["admin.users.roles.read", "admin.roles.read"])).role;
     const user = await login("rbac-user");
     await assignRoles("rbac-user", [reader.id, inspector.id]);
-    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, ["roles.read", "users.roles.read"]);
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, permissionClosure(["admin.roles.read", "admin.users.roles.read"]).sort());
     const assigned = await request("/api/users/rbac-user/roles", { token: administratorToken });
     assert.equal(assigned.roles.length, 2); assert.ok(assigned.roles.every((role) => role.assigned_by === administratorId && role.assigned_at > 0));
     await request("/api/roles", { token: user.access_token });
@@ -485,7 +485,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
       data: { label: inspector.label, permissions: [], version: inspector.version } })).role;
     assert.deepEqual(changed.permissions, []);
     await request("/api/users/rbac-user/roles", { token: user.access_token, expected: 403 });
-    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, ["roles.read"]);
+    assert.deepEqual((await request("/api/me/permissions", { token: user.access_token })).permissions, permissionClosure(["admin.roles.read"]).sort());
     await request(`/api/roles/${reader.id}`, { method: "DELETE", token: administratorToken, expected: 204 });
     await request("/api/roles", { token: user.access_token, expected: 403 });
     assert.equal((await db.select().from(userRoles).where(and(eq(userRoles.user_id, "rbac-user"), eq(userRoles.role_id, reader.id)))).length, 0);
@@ -496,26 +496,26 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   await t.test("delegated managers cannot create or assign privileges they do not hold", async () => {
     await seed("role-manager"); await seed("role-assigner");
-    const managerRole = (await createRole("role-manager", ["roles.manage"])).role;
-    const assignerRole = (await createRole("role-assigner", ["users.roles.manage"])).role;
+    const managerRole = (await createRole("role-manager", ["admin.roles.create", "admin.roles.update", "admin.roles.delete"])).role;
+    const assignerRole = (await createRole("role-assigner", ["admin.users.roles.assign"])).role;
     await assignRoles("role-manager", [managerRole.id]); await assignRoles("role-assigner", [assignerRole.id]);
     const manager = (await login("role-manager")).access_token, assigner = (await login("role-assigner")).access_token;
     await request("/api/roles", { method: "POST", token: manager,
-      data: { key: "escalated", label: "Escalated", permissions: ["users.roles.manage"] }, expected: 403 });
+      data: { key: "escalated", label: "Escalated", permissions: permissionClosure(["admin.users.roles.assign"]) }, expected: 403 });
     await request(`/api/roles/${managerRole.id}`, { method: "PUT", token: manager,
-      data: { label: "Escalated", permissions: ["roles.manage", "users.roles.manage"], version: 1 }, expected: 403 });
+      data: { label: "Escalated", permissions: permissionClosure(["admin.roles.update", "admin.users.roles.assign"]), version: 1 }, expected: 403 });
     assert.equal((await db.select().from(roles).where(eq(roles.key, "escalated"))).length, 0);
-    assert.deepEqual((await request("/api/me/permissions", { token: manager })).permissions, ["roles.manage"]);
+    assert.deepEqual((await request("/api/me/permissions", { token: manager })).permissions, managerRole.permissions);
     await assignRoles("role-assigner", ["system-administrator"], assigner, 403);
     await assignRoles("rbac-user", [managerRole.id], assigner, 403);
     await assignRoles("rbac-user", [assignerRole.id], assigner);
-    assert.deepEqual((await request("/api/me/permissions", { token: (await login("rbac-user")).access_token })).permissions, ["users.roles.manage"]);
+    assert.deepEqual((await request("/api/me/permissions", { token: (await login("rbac-user")).access_token })).permissions, assignerRole.permissions);
     await assignRoles("rbac-user", []);
   });
 
   await t.test("roles stay attached to user IDs across email reuse", async () => {
     await seed("role-email");
-    const role = (await createRole("email-reader", ["roles.read"])).role;
+    const role = (await createRole("email-reader", ["admin.roles.read"])).role;
     await assignRoles("role-email", [role.id]);
     const old = await login("role-email");
     await db.update(users).set({ deleted_at: timestamp() }).where(eq(users.id, "role-email"));
@@ -529,15 +529,15 @@ test("Bearer account API in the Workers runtime", async (t) => {
   });
 
   await t.test("concurrent role creation and updates cannot overwrite another administrator's change", async () => {
-    const changes = await Promise.all(["roles.read", "users.roles.read"].map((permission) => mf.dispatchFetch("https://office.test/api/roles", {
+    const changes = await Promise.all(["admin.roles.read", "admin.users.roles.read"].map((permission) => mf.dispatchFetch("https://office.test/api/roles", {
       method: "POST", headers: { Authorization: `Bearer ${administratorToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "concurrent-role", label: "Concurrent role", permissions: [permission] }),
+      body: JSON.stringify({ key: "concurrent-role", label: "Concurrent role", permissions: permissionClosure([permission]) }),
     })));
     assert.deepEqual(changes.map((response) => response.status).sort(), [201, 409]);
     const created = (await changes.find((response) => response.status === 201).json()).role;
-    const edits = await Promise.all(["roles.read", "users.roles.read"].map((permission) => mf.dispatchFetch(`https://office.test/api/roles/${created.id}`, {
+    const edits = await Promise.all(["admin.roles.read", "admin.users.roles.read"].map((permission) => mf.dispatchFetch(`https://office.test/api/roles/${created.id}`, {
       method: "PUT", headers: { Authorization: `Bearer ${administratorToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ label: permission, permissions: [permission], version: created.version }),
+      body: JSON.stringify({ label: permission, permissions: permissionClosure([permission]), version: created.version }),
     })));
     assert.deepEqual(edits.map((response) => response.status).sort(), [200, 409]);
     const winner = (await edits.find((response) => response.status === 200).json()).role;
@@ -564,9 +564,9 @@ test("Bearer account API in the Workers runtime", async (t) => {
     assert.deepEqual((await request("/api/me/permissions", { token: administratorToken })).permissions, Object.keys(permissionCatalog).sort());
     await assignRoles(otherAdministratorId, ["system-administrator"]);
     const otherToken = (await login(otherAdministratorId)).access_token;
-    const attempts = await Promise.all([[administratorId, administratorToken], [otherAdministratorId, otherToken]].map(([id, token]) =>
+    const attempts = await Promise.all([[administratorId, administratorToken], [otherAdministratorId, otherToken]].map(async ([id, token]) =>
       mf.dispatchFetch(`https://office.test/api/users/${id}/roles`, {
-        method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ role_ids: [] }),
+        method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ role_ids: [], version: (await db.select().from(users).where(eq(users.id, id)).get()).role_assignment_version }),
       })));
     assert.deepEqual(attempts.map((response) => response.status).sort(), [204, 409]);
     const remaining = await db.select().from(userRoles).where(eq(userRoles.role_id, "system-administrator"));

@@ -45,10 +45,11 @@ function WorkspaceChrome() {
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
-  const systemMenu = consoleMenu(useAccess().permissions);
-  const activeApp = workspaceApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
-  const sidebarName = isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Mail");
-  const sidebarMenu = isConsole ? systemMenu : isAccount ? account : (activeApp ?? workspaceApps[0]).menu;
+  const access = useAccess(), systemMenu = consoleMenu(access.permissions);
+  const visibleApps = workspaceApps.filter((app) => access.permissions.includes(app.permission));
+  const activeApp = visibleApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
+  const sidebarName = isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
+  const sidebarMenu = isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
   const title = current?.name ?? "Page not found";
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
@@ -65,17 +66,17 @@ function WorkspaceChrome() {
   return <div className="workspace-shell">
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
-      <Link to="/mail" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
-      {workspaceApps.map((item) => <NavLink key={item.path} to={item.path} title={item.name} aria-label={item.name}
+      <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
+      {visibleApps.map((item) => <NavLink key={item.path} to={item.path} title={item.name} aria-label={item.name}
         className="workspace-rail-link"><Icon name={item.icon} width="18" height="18" /></NavLink>)}
-      {systemMenu.length > 0 && <NavLink to="/console" title="Console" aria-label="Console" className="workspace-rail-link"><Icon name="console" width="18" height="18" /></NavLink>}
+      {access.permissions.includes("console.access") && <NavLink to="/console" title="Console" aria-label="Console" className="workspace-rail-link"><Icon name="console" width="18" height="18" /></NavLink>}
       <ProfileMenu busy={busy} signOut={() => { void signOut(); }} />
     </aside>
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
         <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
-          <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Mailbox"}</h2>
+          <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>
         <div className="workspace-sidebar-footer"><Icon name={isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>

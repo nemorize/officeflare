@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { generateKeyPair, exportJWK } from "jose";
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { hashPassword } from "../src/auth/password.ts";
+import { permissionClosure } from "../src/authorization/permissions.ts";
 const password = "a long password for mail backend tests";
 async function fixture(t, target = "6000000000", queues = false) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -112,6 +113,7 @@ async function fixture(t, target = "6000000000", queues = false) {
       "INSERT INTO user_roles(user_id,role_id) VALUES('administrator','system-administrator')",
     )
     .run();
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) SELECT id, 'system-mail-user' FROM users WHERE id<>'administrator'").run();
   let ip = 0;
   const raw = (path, { method = "GET", token, data, headers = {} } = {}) =>
     mf.dispatchFetch("https://office.test" + path, {
@@ -1128,4 +1130,29 @@ test("WebSocket tickets are single-use, private drafts stay private and revoked 
     (code) => code === 1008,
     "Revoked WebSocket stayed connected",
   );
+});
+
+test("Mail service entry is independent of Console administration and is checked for JWTs and scoped keys", async (t) => {
+  const { db, tokens, raw, call, admin, base, mailbox } = await fixture(t);
+  await db.prepare("DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='mail.access'").run();
+  await admin("/provider-connections");
+  await admin("/mailboxes?all=true");
+  await admin(base + "/messages", { expected: 403 });
+  await admin("/mailboxes", { expected: 403 });
+  await call(base + "/messages");
+  await db.prepare("INSERT INTO roles(id,key,label) VALUES('provider-reader','provider-reader','Provider reader')").run();
+  for (const key of permissionClosure(["admin.mail.providers.read"])) await db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('provider-reader',?)").bind(key).run();
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('reader','provider-reader')").run();
+  await call("/provider-connections", { token: tokens.reader });
+  await call("/provider-connections", { token: tokens.reader, method: "POST", data: { provider: "cloudflare", name: "Denied" }, expected: 403 });
+  await db.prepare("DELETE FROM role_permissions WHERE role_id='provider-reader' AND permission_key='console.access'").run();
+  await call("/provider-connections", { token: tokens.reader, expected: 403 });
+  const { key } = await call("/api-keys", { method: "POST", data: { name: "Service-bound key", expires_at: Math.floor(Date.now()/1000)+3600, scopes: [{ mailbox_id: mailbox.id, action: "read" }] }, expected: 201 });
+  await call(base + "/messages", { token: key.token });
+  await db.prepare("DELETE FROM user_roles WHERE user_id='owner' AND role_id='system-mail-user'").run();
+  await call(base + "/messages", { expected: 403 });
+  await call("/mailboxes", { expected: 403 });
+  await call("/capabilities", { expected: 403 });
+  await call(base + "/messages", { token: key.token, expected: 401 });
+  assert.equal((await raw("/api/me", { token: tokens.owner })).status, 200);
 });

@@ -10,7 +10,8 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["web/**/*.ts", "web/**/*.tsx", "vite.config.ts"]
 }

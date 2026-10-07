@@ -11,6 +11,9 @@ import { insertWhen } from "../db/conditional-insert";
 import { coalesce, increment } from "../db/expressions";
 import { users, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes, userRefreshTokens, userSessions } from "../db/schema";
 import { profileImageResponse } from "../profile/image-response";
+import { defaultRoles, defaultsSnapshot, permissionsOf, requireOwnedRoles, roleIds, roleSnapshot, rolesOwned } from "../authorization/roles";
+import type { Permission } from "../authorization/permissions";
+import { roles, userRoles } from "../db/schema";
 
 const userRoutes = new Hono<AppEnv>();
 userRoutes.use("*", requireAccess);
@@ -78,7 +81,7 @@ function revokeCredentials(c: AuthContext, userId: string, operation: string, ti
   ] as const;
 }
 
-userRoutes.get("/", requirePermission("users.read"), async (c) => {
+userRoutes.get("/", requirePermission("admin.users.read"), async (c) => {
   const cursor = c.req.query("cursor"), suppliedLimit = c.req.query("limit") ?? "50";
   if (cursor !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(cursor)) invalid("Invalid cursor");
   if (!/^[1-9][0-9]{0,2}$/.test(suppliedLimit) || Number(suppliedLimit) > 100) invalid("Invalid limit");
@@ -88,11 +91,23 @@ userRoutes.get("/", requirePermission("users.read"), async (c) => {
   const page = rows.slice(0, limit);
   return c.json({ users: page.map(account), next_cursor: rows.length > limit ? page.at(-1)!.id : null });
 });
-userRoutes.get("/:id", requirePermission("users.read"), async (c) => c.json({ user: account(await findUser(c, c.req.param("id"))) }));
-userRoutes.get("/:id/profile-image", requirePermission("users.read"), async (c) => profileImageResponse(c, await findUser(c, c.req.param("id"))));
+userRoutes.get("/default-roles", requirePermission("admin.users.create"), async (c) => c.json({
+  roles: await Promise.all((await defaultRoles(c)).map(async (role) => ({ ...role, is_default: true,
+    is_system: !!role.is_system, permissions: await permissionsOf(c, role.id) }))),
+}));
+userRoutes.get("/:id", requirePermission("admin.users.read"), async (c) => c.json({ user: account(await findUser(c, c.req.param("id"))) }));
+userRoutes.get("/:id/profile-image", requirePermission("admin.users.read"), async (c) => profileImageResponse(c, await findUser(c, c.req.param("id"))));
 
-userRoutes.post("/", requirePermission("users.create"), async (c) => {
-  const data = await body(c, ["email_address", "password", "display_name", "profile_image_key", "disabled", "password_reset_required"]);
+userRoutes.post("/", requirePermission("admin.users.create"), async (c) => {
+  const data = await body(c, ["email_address", "password", "display_name", "profile_image_key", "disabled", "password_reset_required", "role_ids"]);
+  const db = c.get("db"), defaults = await defaultRoles(c), defaultIds = defaults.map((role) => role.id);
+  const ids = "role_ids" in data ? roleIds(data.role_ids) : defaultIds;
+  const selected = ids.length ? await db.select().from(roles).where(inArray(roles.id, ids)) : [];
+  if (selected.length !== ids.length) invalid("Unknown role");
+  const added = ids.filter((id) => !defaultIds.includes(id)), removed = defaultIds.filter((id) => !ids.includes(id));
+  if (added.length && !await can(c, "admin.users.roles.assign")) forbidden("Changing default roles requires admin.users.roles.assign");
+  if (removed.length && !await can(c, "admin.users.roles.remove")) forbidden("Changing default roles requires admin.users.roles.remove");
+  await requireOwnedRoles(c, [...added, ...removed]);
   const email = emailAddress(data.email_address), suppliedPassword = password(data.password, true), timestamp = now();
   const values = {
     id: uuid(), email_address: email,
@@ -104,21 +119,30 @@ userRoutes.post("/", requirePermission("users.create"), async (c) => {
     password_hash: await hashPassword(suppliedPassword),
   };
   await requireAvailableEmail(c, email);
-  const db = c.get("db"), operation = uuid(), { session, user } = c.get("identity");
+  const operation = uuid(), { session, user } = c.get("identity");
   const result = await db.batch([
-    accessClaim(c, operation, and(permissionCondition(db, user.id, "users.create"), availableEmail(c, email))),
+    accessClaim(c, operation, and(permissionCondition(db, user.id, "admin.users.create"), availableEmail(c, email),
+      defaultsSnapshot(defaults), roleSnapshot(selected), rolesOwned(c, [...added, ...removed]),
+      added.length ? permissionCondition(db, user.id, "admin.users.roles.assign") : undefined,
+      removed.length ? permissionCondition(db, user.id, "admin.users.roles.remove") : undefined)),
     insertWhen(db, users, values, accessWon(db, session.id, operation)).returning(),
+    ...ids.map((role_id) => insertWhen(db, userRoles, { user_id: values.id, role_id, assigned_by: user.id, assigned_at: timestamp }, accessWon(db, session.id, operation))),
   ]);
   if (result[0].meta.changes !== 1 || !result[1][0]) conflict("Account, permissions or email assignment changed; retry");
   c.header("Location", `/api/users/${values.id}`);
   return c.json({ user: account(result[1][0]) }, 201);
 });
 
-userRoutes.patch("/:id", requirePermission("users.update"), async (c) => {
+userRoutes.patch("/:id", requirePermission("admin.users.read"), async (c) => {
   const data = await body(c, ["email_address", "display_name", "profile_image_key", "password", "disabled", "password_reset_required"]);
   if (Object.keys(data).length === 0) invalid("No changes supplied");
-  const editsEmail = "email_address" in data;
-  if (editsEmail && !await can(c, "users.email.update")) forbidden("Changing email addresses requires users.email.update");
+  const required = new Set<Permission>();
+  for (const key of Object.keys(data)) required.add({
+    display_name: "admin.users.profile.update", profile_image_key: "admin.users.profile.update",
+    email_address: "admin.users.email.update", disabled: "admin.users.status.update",
+    password: "admin.users.credentials.reset", password_reset_required: "admin.users.credentials.reset",
+  }[key] as Permission);
+  for (const permission of required) if (!await can(c, permission)) forbidden(`This change requires ${permission}`);
   const target = await findUser(c, c.req.param("id"));
   await requireManageable(c, target.id);
   const timestamp = now(), changes: Partial<typeof users.$inferInsert> = { updated_at: timestamp };
@@ -141,8 +165,7 @@ userRoutes.patch("/:id", requirePermission("users.update"), async (c) => {
     changes.password_reset_required !== undefined && changes.password_reset_required !== target.password_reset_required;
   const db = c.get("db"), { user, session } = c.get("identity"), operation = uuid();
   const result = await db.batch([
-    accessClaim(c, operation, and(permissionCondition(db, user.id, "users.update"), unchanged(c, target), manageableUser(db, user.id, target.id),
-      editsEmail ? permissionCondition(db, user.id, "users.email.update") : undefined,
+    accessClaim(c, operation, and(...[...required].map((permission) => permissionCondition(db, user.id, permission)), unchanged(c, target), manageableUser(db, user.id, target.id),
       changes.email_address ? availableEmail(c, changes.email_address, target.id) : undefined,
       changes.disabled_at !== undefined && changes.disabled_at !== null ? administratorRemains(db, target.id) : undefined,
     )),
@@ -154,12 +177,12 @@ userRoutes.patch("/:id", requirePermission("users.update"), async (c) => {
   return c.json({ user: account(result[1][0]) });
 });
 
-userRoutes.delete("/:id", requirePermission("users.delete"), async (c) => {
+userRoutes.delete("/:id", requirePermission("admin.users.delete"), async (c) => {
   const target = await findUser(c, c.req.param("id"));
   await requireManageable(c, target.id);
   const db = c.get("db"), { user, session } = c.get("identity"), operation = uuid(), timestamp = now();
   const result = await db.batch([
-    accessClaim(c, operation, and(permissionCondition(db, user.id, "users.delete"), unchanged(c, target),
+    accessClaim(c, operation, and(permissionCondition(db, user.id, "admin.users.delete"), unchanged(c, target),
       manageableUser(db, user.id, target.id), administratorRemains(db, target.id))),
     db.update(users).set({ deleted_at: timestamp, updated_at: timestamp, auth_version: increment(users.auth_version) })
       .where(and(eq(users.id, target.id), accessWon(db, session.id, operation))),

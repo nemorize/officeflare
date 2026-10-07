@@ -33,6 +33,20 @@
 .console-permissions { display: grid; gap: 24px; }
 .console-permissions fieldset { display: grid; gap: 14px; border: 0; padding: 0; }
 .console-permissions legend { font-size: 12px; font-weight: 500; margin-block-end: 14px; }
+.console-permissions legend { display: flex; align-items: center; justify-content: space-between; width: 100%; padding-block-start: 18px; border-block-start: 1px solid var(--ui-border); }
+.console-permissions legend .console-subtext { margin: 0; }
+.console-permission-picker { display: grid; gap: 10px; }
+.console-permission-picker > .console-subtext { margin: 0 0 8px; line-height: 1.6; }
+.console-permissions .console-check small { line-height: 1.6; }
+.console-permission-key { display: block; margin-block-start: 7px; font-size: 10px; color: var(--ui-muted); }
+.console-permission-impact { font-weight: 500; }
+.console-permission-group-actions { display: flex; gap: 8px; }
+.console-role-templates { display: flex; gap: 8px; flex-wrap: wrap; margin-block-end: 22px; }
+.console-role-templates > span { width: 100%; font-size: 11px; color: var(--ui-muted); margin-block-end: 3px; }
+.console-role-name strong .console-badge { margin-inline-start: 8px; }
+.console-role-diff { display: grid; gap: 6px; margin-block: 16px; font-size: 12px; color: var(--ui-muted); }
+.console-role-summary { margin-block-start: 20px; padding-block-start: 18px; border-block-start: 1px solid var(--ui-border); }
+details.console-role-summary > .console-permission-picker { margin-block-start: 18px; }
 .console-assigned-roles { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; list-style: none; }
 .console-assigned-roles li { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 10px; background: var(--ui-surface); border-radius: 6px; }
 .console-facts { display: grid; gap: 16px; font-size: 12px; }

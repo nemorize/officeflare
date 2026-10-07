@@ -10,7 +10,7 @@ import mail from "./mail";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
-import { permissionCatalog } from "../authorization/permissions";
+import { permissionCatalog, permissionGroups } from "../authorization/permissions";
 
 const api = new Hono<AppEnv>();
 api.use("*", async (c, next) => {
@@ -32,8 +32,9 @@ api.use("*", async (c, next) => {
 api.route("/mail", mail);
 api.route("/auth", auth);
 api.route("/me", me);
-api.get("/permissions", requireAccess, requirePermission("roles.read"), (c) => c.json({
+api.get("/permissions", requireAccess, requirePermission("admin.roles.read"), (c) => c.json({
   permissions: Object.entries(permissionCatalog).map(([key, definition]) => ({ key, ...definition })),
+  groups: permissionGroups,
 }));
 api.route("/roles", roleRoutes);
 api.route("/users", userRoleRoutes);

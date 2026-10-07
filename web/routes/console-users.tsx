@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Button, Dialog, DialogPopup, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { PasswordField } from "../components/password-field";
 import { useAccount } from "../components/account-context";
+import { PermissionPicker } from "../components/permission-picker";
 import { UserAvatar } from "../components/user-avatar";
 import { useAccess } from "../components/console-access";
 import { Check, Confirm, Notice, ResourceState, adminDate, useResource } from "../components/console-shared";
@@ -13,12 +14,12 @@ import { sessions } from "../lib/session";
 import "./console.css";
 
 export function UsersPage() {
-  const access = useAccess(), canRead = access.permissions.includes("users.read");
+  const access = useAccess(), canRead = access.permissions.includes("admin.users.read");
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const cursor = cursors.at(-1), resource = useResource<{ users: AdminUser[]; next_cursor: string | null }>(canRead ? `/api/users?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}` : null);
   return <section className="account-page console-page">
     <header className="account-page-header console-page-header"><div><h1>Users</h1><p>Manage accounts and their access to your workspace.</p></div>
-      {access.permissions.includes("users.create") && <Button nativeButton={false} render={<Link to="/console/users/new" />} variant="primary"><Icon name="plus" />New user</Button>}</header>
+      {access.permissions.includes("admin.users.create") && <Button nativeButton={false} render={<Link to="/console/users/new" />} variant="primary"><Icon name="plus" />New user</Button>}</header>
     <section className="account-panel console-list-panel">
       {!canRead ? <p className="console-empty">You do not have permission to view user accounts.</p> : !resource.data ? <ResourceState {...resource} /> : <>
         <div className="console-table-scroll"><table className="console-table"><caption className="console-sr-only">User accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Status</th><th scope="col" className="console-date-column">Last sign-in</th><th scope="col"><span className="console-sr-only">Actions</span></th></tr></thead>
@@ -36,9 +37,12 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
   const notify = useNotifications();
   const { id = "" } = useParams(), navigate = useNavigate(), access = useAccess(), account = useAccount();
   const resource = useResource<{ user: AdminUser }>(creating ? null : `/api/users/${encodeURIComponent(id)}`);
-  const user = resource.data?.user, canUpdate = creating || access.permissions.includes("users.update");
+  const user = resource.data?.user, canProfile = creating || access.permissions.includes("admin.users.profile.update");
+  const canEmail = creating || access.permissions.includes("admin.users.email.update"), canReset = creating || access.permissions.includes("admin.users.credentials.reset");
+  const canUpdate = canProfile || canEmail || canReset || access.permissions.includes("admin.users.status.update");
   const isSelf = !creating && user?.id === account.user?.id;
-  const canDisable = canUpdate && (creating || !!account.user && !isSelf);
+  const canDisable = (creating || access.permissions.includes("admin.users.status.update")) && (creating || !!account.user && !isSelf);
+  const [creationRoles, setCreationRoles] = useState<string[] | null>(null);
   const [name, setName] = useState(""), [email, setEmail] = useState(""), [password, setPassword] = useState("");
   const [disabled, setDisabled] = useState(false), [passwordReset, setPasswordReset] = useState(true);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -61,16 +65,17 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (inFlight.current) return;
+    if (creating && creationRoles === null) return;
     setError("");
     try {
       if ([...name.trim()].length > 200) throw new Error("Display name must contain at most 200 characters.");
       if (creating) {
         validatePassword(password, password); inFlight.current = true; setBusy(true);
         try {
-          const result = await api<{ user: AdminUser }>("/api/users", { method: "POST", body: { display_name: name.trim() || null, email_address: email.trim().toLowerCase(), password, disabled, password_reset_required: passwordReset } });
+          const result = await api<{ user: AdminUser }>("/api/users", { method: "POST", body: { display_name: name.trim() || null, email_address: email.trim().toLowerCase(), password, disabled, password_reset_required: passwordReset, role_ids: creationRoles } });
           setPassword("");
           notify.success("The user account has been created.");
-          if (access.permissions.includes("users.read")) navigate(`/console/users/${encodeURIComponent(result.user.id)}`);
+          if (access.permissions.includes("admin.users.read")) navigate(`/console/users/${encodeURIComponent(result.user.id)}`);
           else { setName(""); setEmail(""); }
         } finally { inFlight.current = false; setBusy(false); }
       } else if (user) {
@@ -91,20 +96,21 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
     {!creating && !user ? <ResourceState {...resource} /> : <>
       <Form onSubmit={submit} aria-busy={busy}><section className="account-panel"><div className="account-panel-header"><h2>Account information</h2><p>{creating ? "The user should change their temporary password when they first sign in." : "Account security changes end the user's active sessions."}</p></div>
         <Fieldset.Root disabled={busy}>
-          <TextField label="Display name" name="display_name" autoComplete="off" value={name} onValueChange={setName} readOnly={!canUpdate} />
-          <TextField label="Email" name="email_address" type="email" autoComplete="off" required value={email} onValueChange={setEmail} readOnly={!canUpdate || !creating && !access.permissions.includes("users.email.update")} />
+          <TextField label="Display name" name="display_name" autoComplete="off" value={name} onValueChange={setName} readOnly={!canProfile} />
+          <TextField label="Email" name="email_address" type="email" autoComplete="off" required value={email} onValueChange={setEmail} readOnly={!canEmail} />
           {creating && <><PasswordField id="user-temporary-password" label="Temporary password" value={password} onChange={setPassword} autoComplete="new-password" /><p className="console-subtext">Use 15–128 characters.</p></>}
           <Check checked={disabled} onChange={setDisabled} disabled={!canDisable}>Disable this account{isSelf && <small>You cannot disable your own account.</small>}</Check>
-          <Check checked={passwordReset} onChange={setPasswordReset} disabled={!canUpdate}>Require a password change at next sign-in</Check>
+          <Check checked={passwordReset} onChange={setPasswordReset} disabled={!canReset}>Require a password change at next sign-in</Check>
         </Fieldset.Root>
+        {creating && <InitialRoles onChange={setCreationRoles} disabled={busy} />}
         <Notice error={error} />
-        {canUpdate && <div className="account-actions">{creating && <Button type="button" disabled={busy} onClick={() => navigate("/console/users")}>Cancel</Button>}<Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : creating ? "Create user" : "Save changes"}</Button></div>}
+        {canUpdate && <div className="account-actions">{creating && <Button type="button" disabled={busy} onClick={() => navigate("/console/users")}>Cancel</Button>}<Button type="submit" variant="primary" disabled={busy || creating && creationRoles === null}>{busy ? "Saving…" : creating ? "Create user" : "Save changes"}</Button></div>}
       </section></Form>
       {!creating && user && <>
-        {access.permissions.includes("users.roles.read") && <UserRoles user={user} />}
+        {access.permissions.includes("admin.users.roles.read") && <UserRoles user={user} />}
         <section className="account-panel"><div className="account-panel-header"><h2>Account activity</h2></div><dl className="console-facts"><div><dt>Created</dt><dd>{adminDate(user.created_at)}</dd></div><div><dt>Last sign-in</dt><dd>{adminDate(user.last_login_at)}</dd></div><div><dt>Password changed</dt><dd>{adminDate(user.password_changed_at)}</dd></div></dl></section>
-        {canUpdate && <section className="account-panel account-danger-panel"><div><h2>Reset password</h2><p>Set a temporary password and require a change at the next sign-in.</p></div><Button disabled={busy} onClick={() => setReset(true)}>Reset password</Button></section>}
-        {access.permissions.includes("users.delete") && <section className="account-panel account-danger-panel"><div><h2>Delete account</h2><p>Remove this user from the workspace and end all their sessions.</p></div><Button variant="danger" disabled={busy} onClick={() => setRemove(true)}>Delete user</Button></section>}
+        {canReset && <section className="account-panel account-danger-panel"><div><h2>Reset password</h2><p>Set a temporary password and require a change at the next sign-in.</p></div><Button disabled={busy} onClick={() => setReset(true)}>Reset password</Button></section>}
+        {access.permissions.includes("admin.users.delete") && <section className="account-panel account-danger-panel"><div><h2>Delete account</h2><p>Remove this user from the workspace and end all their sessions.</p></div><Button variant="danger" disabled={busy} onClick={() => setRemove(true)}>Delete user</Button></section>}
         <ResetPassword open={reset} onClose={() => setReset(false)} onSave={async (next) => { await patch({ password: next, password_reset_required: true }, "The user's password has been reset."); }} />
         <Confirm open={remove} destructive title="Delete this user?" description={`Delete ${user.email_address}? They will lose access to the workspace and all their sessions will end.`} label="Delete user" onClose={() => setRemove(false)} onConfirm={async () => { await api(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" }); notify.success("The user account has been deleted."); if (id === account.user?.id) await sessions.restore(true); navigate("/console/users"); }} />
       </>}
@@ -132,26 +138,59 @@ function ResetPassword({ open, onClose, onSave }: { open: boolean; onClose: () =
   </DialogPopup></Dialog.Root>;
 }
 
+function InitialRoles({ onChange, disabled }: { onChange: (ids: string[] | null) => void; disabled: boolean }) {
+  const access = useAccess(), canReadRoles = access.permissions.includes("admin.roles.read");
+  const [roles, setRoles] = useState<Role[]>([]), [selected, setSelected] = useState<string[]>([]), [defaults, setDefaults] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true), [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController(); onChange(null);
+    void Promise.all([api<{ roles: Role[] }>("/api/users/default-roles", { signal: controller.signal }), canReadRoles ? allRoles(api, controller.signal) : Promise.resolve([])]).then(([result, available]) => {
+      if (controller.signal.aborted) return;
+      const ids = result.roles.map((role) => role.id);
+      setDefaults(ids); setSelected(ids); setRoles(available.length ? available : result.roles); onChange(ids);
+    }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(errorMessage(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [canReadRoles, onChange]);
+  return <div className="console-role-summary"><div className="account-panel-header"><h2>Roles</h2><p>Default roles are selected automatically. Administrative access requires an explicit role assignment.</p></div>
+    {loading ? <p role="status" className="account-loading">Loading default roles…</p> : error ? <Notice error={error} /> : <div className="console-role-options">{roles.map((role) => {
+      const isDefault = defaults.includes(role.id), allowed = access.permissions.includes(isDefault ? "admin.users.roles.remove" : "admin.users.roles.assign") && canGrant(access.permissions, role.permissions);
+      return <Check key={role.id} checked={selected.includes(role.id)} disabled={disabled || !allowed || !selected.includes(role.id) && selected.length >= 50} onChange={(checked) => {
+        const ids = checked ? [...selected, role.id] : selected.filter((id) => id !== role.id); setSelected(ids); onChange(ids);
+      }}><strong>{role.label}{isDefault && <span className="console-badge">Default</span>}</strong><small>{role.description}</small></Check>;
+    })}{!roles.length && <p className="console-subtext">No default roles configured. This user will have access to their account settings.</p>}</div>}
+  </div>;
+}
+
 function UserRoles({ user }: { user: AdminUser }) {
-  const notify = useNotifications();
-  const access = useAccess(), [revision, setRevision] = useState(0);
-  const [assigned, setAssigned] = useState<Role[]>([]), [roles, setRoles] = useState<Role[]>([]), [selected, setSelected] = useState<string[]>([]);
+  const notify = useNotifications(), access = useAccess(), [revision, setRevision] = useState(0);
+  const [assigned, setAssigned] = useState<Role[]>([]), [roles, setRoles] = useState<Role[]>([]), [selected, setSelected] = useState<string[]>([]), [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(true), [error, setError] = useState(""), [confirm, setConfirm] = useState(false);
-  const canReadRoles = access.permissions.includes("roles.read"), editable = canReadRoles && access.permissions.includes("users.roles.manage");
+  const canAssign = access.permissions.includes("admin.users.roles.assign"), canRemove = access.permissions.includes("admin.users.roles.remove"), editable = canAssign || canRemove;
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError("");
-    void Promise.all([api<{ roles: Role[] }>(`/api/users/${encodeURIComponent(user.id)}/roles`, { signal: controller.signal }), canReadRoles ? allRoles(api, controller.signal) : Promise.resolve([])]).then(([result, available]) => {
+    void Promise.all([api<{ roles: Role[]; version: number }>(`/api/users/${encodeURIComponent(user.id)}/roles`, { signal: controller.signal }), allRoles(api, controller.signal)]).then(([result, available]) => {
       if (controller.signal.aborted) return;
-      setAssigned(result.roles); setSelected(result.roles.map((role) => role.id)); setRoles(available);
-    }).catch((failure: unknown) => { if (!controller.signal.aborted) { setError(failure instanceof Error ? failure.message : errorMessage(failure)); if (failure instanceof ApiError && failure.status === 403) access.refresh(); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      setAssigned(result.roles); setSelected(result.roles.map((role) => role.id)); setRoles(available); setVersion(result.version);
+    }).catch((failure: unknown) => { if (!controller.signal.aborted) { setError(errorMessage(failure)); if (failure instanceof ApiError && failure.status === 403) access.refresh(); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [user.id, canReadRoles, revision, access.refresh]);
-  const changed = [...selected].sort().join() !== assigned.map((role) => role.id).sort().join();
-  return <section className="account-panel"><div className="account-panel-header"><h2>Assigned roles</h2><p>Roles determine what this user can access and manage. You can assign up to 50 roles.</p></div><Notice error={error} />
-    {loading ? <p className="account-loading" role="status">Loading roles…</p> : error ? null : editable ? <>
-      <div className="console-role-options">{roles.map((role) => <Check key={role.id} checked={selected.includes(role.id)} disabled={!selected.includes(role.id) && (selected.length >= 50 || !canGrant(access.permissions, role.permissions))} onChange={(checked) => setSelected((current) => checked ? [...current, role.id] : current.filter((id) => id !== role.id))}><strong>{role.label}</strong>{role.description && <small>{role.description}</small>}{!canGrant(access.permissions, role.permissions) && <small>You cannot grant this role.</small>}</Check>)}{!roles.length && <p className="console-empty">No roles available.</p>}</div>
-      <div className="account-actions"><Button variant="primary" disabled={!changed} onClick={() => setConfirm(true)}>Save roles</Button></div>
-    </> : <ul className="console-assigned-roles">{assigned.map((role) => <li key={role.id}><Icon name="shield" /><span>{role.label}</span></li>)}{!assigned.length && <li>No roles assigned.</li>}</ul>}
-    <Confirm open={confirm} title="Update assigned roles?" description={`Update workspace access for ${user.email_address}? The new permissions take effect immediately.`} label="Save roles" onClose={() => setConfirm(false)} onConfirm={async () => { await api(`/api/users/${encodeURIComponent(user.id)}/roles`, { method: "PUT", body: { role_ids: selected } }); notify.success("Assigned roles have been updated."); setRevision((value) => value + 1); access.refresh(); }} />
+  }, [user.id, revision, access.refresh]);
+  const oldIds = assigned.map((role) => role.id), added = roles.filter((role) => selected.includes(role.id) && !oldIds.includes(role.id)), removed = assigned.filter((role) => !selected.includes(role.id));
+  const resulting = [...new Set(roles.filter((role) => selected.includes(role.id)).flatMap((role) => role.permissions))];
+  const changed = added.length > 0 || removed.length > 0;
+  return <section className="account-panel"><div className="account-panel-header"><h2>Roles</h2><p>Role permissions are combined. Changes apply immediately. You can assign up to 50 roles.</p></div><Notice error={error} />
+    {loading ? <p className="account-loading" role="status">Loading roles…</p> : error ? null : <>
+      {editable ? <div className="console-role-options">{roles.map((role) => {
+        const held = canGrant(access.permissions, role.permissions), allowed = oldIds.includes(role.id) ? canRemove && held : canAssign && held;
+        return <Check key={role.id} checked={selected.includes(role.id)} disabled={!allowed || !selected.includes(role.id) && selected.length >= 50} onChange={(checked) => setSelected((current) => checked ? [...current, role.id] : current.filter((id) => id !== role.id))}>
+          <strong>{role.label}</strong>{role.description && <small>{role.description}</small>}{!held && <small>You cannot change this role because it contains permissions you do not hold.</small>}
+        </Check>;
+      })}{!roles.length && <p className="console-empty">No roles available.</p>}</div> : <ul className="console-assigned-roles">{assigned.map((role) => <li key={role.id}><Icon name="shield" /><span>{role.label}</span></li>)}{!assigned.length && <li>No roles assigned.</li>}</ul>}
+      <div className="console-role-diff">{!!added.length && <span>Add: {added.map((role) => role.label).join(", ")}</span>}{!!removed.length && <span>Remove: {removed.map((role) => role.label).join(", ")}</span>}</div>
+      <details className="console-role-summary"><summary>Resulting access · {resulting.length} permissions</summary><PermissionPicker selected={resulting} /></details>
+      {editable && <div className="account-actions"><Button variant="primary" disabled={!changed} onClick={() => setConfirm(true)}>Save roles</Button></div>}
+    </>}
+    <Confirm open={confirm} title="Update assigned roles?" description={<span>Update access for {user.email_address}?{added.length > 0 && <span className="console-subtext">Add: {added.map((role) => role.label).join(", ")}</span>}{removed.length > 0 && <span className="console-subtext">Remove: {removed.map((role) => role.label).join(", ")}</span>}<span className="console-subtext">Result: {resulting.length} permissions. Changes take effect immediately.</span></span>} label="Save roles" onClose={() => setConfirm(false)} onConfirm={async () => {
+      await api(`/api/users/${encodeURIComponent(user.id)}/roles`, { method: "PUT", body: { role_ids: selected, version } }); notify.success("Assigned roles have been updated."); setRevision((value) => value + 1); access.refresh();
+    }} />
   </section>;
 }

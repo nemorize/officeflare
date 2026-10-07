@@ -7,13 +7,14 @@ export interface WorkspaceNavigationItem {
 }
 
 export interface WorkspaceApp extends WorkspaceNavigationItem {
+  permission: "mail.access" | "calendar.access" | "drive.access";
   menuTitle: string;
   menu: WorkspaceNavigationItem[];
 }
 
 export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
   {
-    path: "/mail", name: "Mail", icon: "mail", menuTitle: "Mailbox",
+    path: "/mail", name: "Mail", icon: "mail", menuTitle: "Mailbox", permission: "mail.access",
     menu: [
       { path: "/mail", name: "Inbox", icon: "inbox" },
       { path: "/mail/drafts", name: "Drafts", icon: "file" },
@@ -23,14 +24,14 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
     ],
   },
   {
-    path: "/calendar", name: "Calendar", icon: "calendar", menuTitle: "Calendars",
+    path: "/calendar", name: "Calendar", icon: "calendar", menuTitle: "Calendars", permission: "calendar.access",
     menu: [
       { path: "/calendar", name: "My calendar", icon: "calendar" },
       { path: "/calendar/shared", name: "Shared calendars", icon: "users" },
     ],
   },
   {
-    path: "/drive", name: "Drive", icon: "drive", menuTitle: "Files",
+    path: "/drive", name: "Drive", icon: "drive", menuTitle: "Files", permission: "drive.access",
     menu: [
       { path: "/drive", name: "My drive", icon: "folder" },
       { path: "/drive/shared", name: "Shared with me", icon: "users" },

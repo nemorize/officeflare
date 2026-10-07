@@ -12,6 +12,7 @@ import {
   control,
   first,
   activeAccountSql,
+  mailAccessSql,
 } from "../mail/control";
 import {
   cleanHtml,
@@ -176,7 +177,7 @@ mail.get("/capabilities", (c) =>
   }),
 );
 mail.get("/provider-connections", async (c) => {
-  await administrator(c, "mail.providers.manage");
+  await administrator(c, "admin.mail.providers.read");
   return c.json({
     connections: await all<Connection>(
       c.env,
@@ -185,12 +186,12 @@ mail.get("/provider-connections", async (c) => {
   });
 });
 mail.post("/provider-connections", async (c) => {
-  await administrator(c, "mail.providers.manage");
+  await administrator(c, "admin.mail.providers.manage");
   const data = await input(c, ["provider", "name", "enabled"]),
     name = text(data.name, "name", 100),
     selected = provider(text(data.provider, "provider", 64)),
     connectionId = id();
-  await administrativeControl(c, "mail.providers.manage")
+  await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
       "INSERT INTO mail_provider_connections(id,provider,name,enabled) VALUES(?,?,?,?)",
     )
@@ -213,7 +214,7 @@ mail.post("/provider-connections", async (c) => {
   );
 });
 mail.patch("/provider-connections/:id", async (c) => {
-  await administrator(c, "mail.providers.manage");
+  await administrator(c, "admin.mail.providers.manage");
   const data = await input(c, ["name", "enabled", "version"]),
     version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
   const existing = await first<Connection>(
@@ -222,7 +223,7 @@ mail.patch("/provider-connections/:id", async (c) => {
     c.req.param("id"),
   );
   if (!existing) fail(404, "Connection not found");
-  const result = await administrativeControl(c, "mail.providers.manage")
+  const result = await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
       "UPDATE mail_provider_connections SET name=?,enabled=?,version=version+1,updated_at=? WHERE id=? AND version=?",
     )
@@ -246,13 +247,13 @@ mail.patch("/provider-connections/:id", async (c) => {
   });
 });
 mail.get("/domains", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.read");
   return c.json({
     domains: await all(c.env, "SELECT * FROM mail_domains ORDER BY name"),
   });
 });
 mail.post("/domains", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
       "name",
       "inbound_connection_id",
@@ -290,7 +291,7 @@ mail.post("/domains", async (c) => {
         : flag(data.outbound_enabled, "outbound_enabled");
   if ((receive && !inbound) || (send && !outbound))
     fail(400, "Enabled direction requires a provider connection");
-  await administrativeControl(c, "mail.domains.manage")
+  await administrativeControl(c, "admin.mail.domains.manage")
     .prepare(
       "INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing) VALUES(?,?,?,?,?,?,?)",
     )
@@ -318,7 +319,7 @@ mail.post("/domains", async (c) => {
   );
 });
 mail.patch("/domains/:id", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
     "inbound_connection_id",
     "outbound_connection_id",
@@ -379,7 +380,7 @@ mail.patch("/domains/:id", async (c) => {
     fail(400, "Enabled direction requires a provider connection");
   const fields = Object.keys(values);
   if (!fields.length) fail(400, "No changes supplied");
-  await administrativeControl(c, "mail.domains.manage")
+  await administrativeControl(c, "admin.mail.domains.manage")
     .prepare(
       "UPDATE mail_domains SET " +
         fields.map((f) => f + "=?").join(",") +
@@ -396,7 +397,7 @@ mail.patch("/domains/:id", async (c) => {
   });
 });
 mail.get("/domains/:id/setup", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.read");
   const entry = await first<Domain>(
     c.env,
     "SELECT * FROM mail_domains WHERE id=?",
@@ -423,7 +424,7 @@ mail.get("/domains/:id/setup", async (c) => {
   });
 });
 mail.get("/domains/:id/rules", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.read");
   return c.json({
     rules: await all(
       c.env,
@@ -433,7 +434,7 @@ mail.get("/domains/:id/rules", async (c) => {
   });
 });
 mail.post("/domains/:id/rules", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
     "id",
     "version",
@@ -503,7 +504,7 @@ mail.post("/domains/:id/rules", async (c) => {
     data.action === "forward" ? email(data.forward_to) : null,
     reason,
   ];
-  const db = administrativeControl(c, "mail.domains.manage");
+  const db = administrativeControl(c, "admin.mail.domains.manage");
   const result = existing
     ? await db
         .prepare(
@@ -530,8 +531,8 @@ mail.post("/domains/:id/rules", async (c) => {
   );
 });
 mail.delete("/domains/:id/rules/:rule", async (c) => {
-  await administrator(c, "mail.domains.manage");
-  await administrativeControl(c, "mail.domains.manage")
+  await administrator(c, "admin.mail.domains.manage");
+  await administrativeControl(c, "admin.mail.domains.manage")
     .prepare("DELETE FROM mail_routing_rules WHERE id=? AND domain_id=?")
     .bind(c.req.param("rule"), c.req.param("id"))
     .run();
@@ -539,7 +540,7 @@ mail.delete("/domains/:id/rules/:rule", async (c) => {
 });
 mail.get("/mailboxes", async (c) => {
   if (c.req.query("all") === "true") {
-    await administrator(c, "mail.mailboxes.manage");
+    await administrator(c, "admin.mail.mailboxes.read");
     return c.json({
       mailboxes: await all(
         c.env,
@@ -550,7 +551,7 @@ mail.get("/mailboxes", async (c) => {
   const owner = actor(c);
   const entries = await all<Mailbox>(
     c.env,
-    "SELECT DISTINCT b.* FROM mail_mailboxes b LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=? WHERE b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send_as=1 OR m.can_send_on_behalf=1) ORDER BY b.created_at,b.id LIMIT 1000",
+    "SELECT DISTINCT b.* FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send_as=1 OR m.can_send_on_behalf=1) ORDER BY b.created_at,b.id LIMIT 1000",
     owner.user_id,
     owner.user_id,
   );
@@ -565,7 +566,7 @@ mail.get("/mailboxes", async (c) => {
   });
 });
 mail.post("/mailboxes", async (c) => {
-  await administrator(c, "mail.mailboxes.manage");
+  await administrator(c, "admin.mail.mailboxes.manage");
   const data = await input(c, ["name", "owner_user_id", "kind"]),
     owner = text(data.owner_user_id ?? actor(c).user_id, "owner_user_id", 100),
     name = text(data.name, "name", 100),
@@ -590,7 +591,7 @@ mail.post("/mailboxes", async (c) => {
   if (previous && previous.request_hash !== requestHash)
     fail(409, "Idempotency key reused with different request");
   const mailboxId = previous?.resource_id ?? id(),
-    db = administrativeControl(c, "mail.mailboxes.manage");
+    db = administrativeControl(c, "admin.mail.mailboxes.manage");
   if (!previous) {
     const result = await db.batch([
       db
@@ -632,7 +633,7 @@ mail.post("/mailboxes", async (c) => {
   );
 });
 mail.patch("/mailboxes/:m", async (c) => {
-  await administrator(c, "mail.mailboxes.manage");
+  await administrator(c, "admin.mail.mailboxes.manage");
   const data = await input(c, ["name", "status"]),
     existing = await first<Mailbox>(
       c.env,
@@ -643,7 +644,7 @@ mail.patch("/mailboxes/:m", async (c) => {
   const status = data.status ?? existing.status;
   if (!["active", "disabled"].includes(String(status)))
     fail(400, "Invalid mailbox status");
-  await administrativeControl(c, "mail.mailboxes.manage")
+  await administrativeControl(c, "admin.mail.mailboxes.manage")
     .prepare(
       "UPDATE mail_mailboxes SET name=?,status=?,updated_at=? WHERE id=?",
     )
@@ -732,7 +733,7 @@ mail.get("/mailboxes/:m/addresses", async (c) => {
   });
 });
 mail.post("/addresses", async (c) => {
-  await administrator(c, "mail.domains.manage");
+  await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
       "domain_id",
       "mailbox_id",
@@ -750,7 +751,7 @@ mail.post("/addresses", async (c) => {
     ))
   )
     fail(400, "Mailbox is unavailable");
-  await administrativeControl(c, "mail.domains.manage")
+  await administrativeControl(c, "admin.mail.domains.manage")
     .prepare(
       "INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,is_primary,receive_enabled,send_enabled) VALUES(?,?,?,?,?,?,?)",
     )
@@ -780,8 +781,8 @@ mail.post("/addresses", async (c) => {
   );
 });
 mail.delete("/addresses/:id", async (c) => {
-  await administrator(c, "mail.domains.manage");
-  await administrativeControl(c, "mail.domains.manage")
+  await administrator(c, "admin.mail.domains.manage");
+  await administrativeControl(c, "admin.mail.domains.manage")
     .prepare("DELETE FROM mail_addresses WHERE id=?")
     .bind(c.req.param("id"))
     .run();

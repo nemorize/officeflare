@@ -9,13 +9,13 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../src/db/schema.ts";
 import { hashPassword, verifyPassword } from "../src/auth/password.ts";
-import { permissionCatalog } from "../src/authorization/permissions.ts";
+import { permissionCatalog, permissionClosure } from "../src/authorization/permissions.ts";
 
 const { users, userRoles, roles, rolePermissions, userSessions, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes } = schema;
 const PASSWORD = "a password for user management tests";
 const passwordHash = await hashPassword(PASSWORD);
 
-async function fixture(t, administratorCount = 1) {
+async function fixture(t, administratorCount = 1, { beforePolicyMigration } = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{
     name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
@@ -28,6 +28,7 @@ async function fixture(t, administratorCount = 1) {
   t.after(() => mf.dispose());
   const binding = await mf.getD1Database("DB");
   for (const file of (await readdir("migrations")).sort()) {
+    if (file.startsWith("0010_") && beforePolicyMigration) await beforePolicyMigration(binding);
     let statement = "", trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {
       if (!line.trim() || line.trim().startsWith("--")) continue;
@@ -48,6 +49,8 @@ async function fixture(t, administratorCount = 1) {
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   const request = async (path, { expected = 200, ...options } = {}) => {
+    const assignment = /^\/api\/users\/([^/]+)\/roles$/.exec(path);
+    if (assignment && options.method === "PUT" && options.data && options.data.version === undefined) options.data = { ...options.data, version: (await db.select().from(users).where(eq(users.id, assignment[1])).get())?.role_assignment_version ?? 1 };
     const response = await raw(path, options);
     assert.equal(response.status, expected, `${options.method ?? "GET"} ${path}: ${await response.clone().text()}`);
     assert.equal(response.headers.get("set-cookie"), null);
@@ -78,7 +81,7 @@ test("user profile photos require user-read permission and stay within the targe
   const owner = await login("photo-owner@office.test");
   const regular = await login("photo-unprivileged@office.test");
   await db.insert(roles).values({ id: "photo-reader-role", key: "photo-reader-role", label: "Photo reader" });
-  await db.insert(rolePermissions).values({ role_id: "photo-reader-role", permission_key: "users.read" });
+  await db.batch(permissionClosure(["admin.users.read"]).map((permission_key) => db.insert(rolePermissions).values({ role_id: "photo-reader-role", permission_key })));
   await db.insert(userRoles).values({ user_id: "photo-reader", role_id: "photo-reader-role" });
   const reader = await login("photo-reader@office.test");
   const bucket = await mf.getR2Bucket("PROFILE_BUCKET");
@@ -135,7 +138,7 @@ test("self-disable is denied even with another administrator and mixed edits can
   await edit(other.id, { disabled: false });
   await seed("self-editor");
   await db.insert(roles).values({ id: "self-editor-role", key: "self-editor-role", label: "Account editor" });
-  await db.insert(rolePermissions).values({ role_id: "self-editor-role", permission_key: "users.update" });
+  await db.batch(permissionClosure(["admin.users.profile.update", "admin.users.status.update"]).map((permission_key) => db.insert(rolePermissions).values({ role_id: "self-editor-role", permission_key })));
   await db.insert(userRoles).values({ user_id: "self-editor", role_id: "self-editor-role" });
   const editor = await login("self-editor@office.test");
   await edit("self-editor", { disabled: true }, 403, editor.access_token);
@@ -177,12 +180,12 @@ test("user management in the Workers runtime", async (t) => {
     assert.equal(user.password_hash, undefined); assert.equal(user.auth_version, undefined);
     const stored = await db.select().from(users).where(eq(users.id, user.id)).get();
     assert.equal(await verifyPassword(PASSWORD, stored.password_hash), true);
-    assert.equal((await db.select().from(userRoles).where(eq(userRoles.user_id, user.id))).length, 0);
+    assert.deepEqual((await db.select().from(userRoles).where(eq(userRoles.user_id, user.id))).map((row) => row.role_id), ["system-mail-user"]);
     const pending = await login(user.email_address);
     assert.equal(pending.next, "password_reset"); assert.equal(pending.access_token, undefined);
     const changed = await request("/api/me/password", { method: "PUT", token: pending.challenge_token,
       data: { new_password: "the new user's own replacement password" } });
-    assert.deepEqual((await request("/api/me/permissions", { token: changed.access_token })).permissions, []);
+    assert.deepEqual((await request("/api/me/permissions", { token: changed.access_token })).permissions, ["mail.access"]);
     const listed = (await request(`/api/users/${user.id}`, { token })).user;
     assert.equal(listed.password_reset_required, false); assert.ok(listed.password_changed_at);
   });
@@ -192,7 +195,6 @@ test("user management in the Workers runtime", async (t) => {
       {}, { email_address: "invalid", password: PASSWORD }, { email_address: "a..b@office.test", password: PASSWORD },
       { email_address: "a@-office.test", password: PASSWORD }, { email_address: "a@office..test", password: PASSWORD },
       { email_address: "a@office.test", password: "short" },
-      { email_address: "a@office.test", password: PASSWORD, role_ids: ["system-administrator"] },
       { email_address: "a@office.test", password: PASSWORD, auth_version: 100 },
       { email_address: "a@office.test", password: PASSWORD, disabled: 1 },
       { email_address: "a@office.test", password: PASSWORD, password_reset_required: "false" },
@@ -269,7 +271,7 @@ test("user management in the Workers runtime", async (t) => {
   await t.test("soft deletion revokes credentials and allows email reuse without inheriting roles or MFA", async () => {
     const user = await create("deleted@office.test"), old = await login(user.email_address);
     await db.insert(roles).values({ id: "deleted-reader", key: "deleted-reader", label: "Deleted reader" });
-    await db.insert(rolePermissions).values({ role_id: "deleted-reader", permission_key: "users.read" });
+    await db.batch(permissionClosure(["admin.users.read"]).map((permission_key) => db.insert(rolePermissions).values({ role_id: "deleted-reader", permission_key })));
     await db.insert(userRoles).values({ user_id: user.id, role_id: "deleted-reader" });
     await db.insert(userMfaMethods).values({ id: "deleted-mfa", user_id: user.id, type: "totp", created_at: 1, verified_at: 2 });
     await db.insert(userMfaRecoveryCodes).values({ id: "deleted-recovery", user_id: user.id, code_hash: "test-only-recovery-hash" });
@@ -287,14 +289,14 @@ test("user management in the Workers runtime", async (t) => {
     const replacement = await create(user.email_address);
     assert.notEqual(replacement.id, user.id);
     const fresh = await login(replacement.email_address);
-    assert.deepEqual((await request("/api/me/permissions", { token: fresh.access_token })).permissions, []);
+    assert.deepEqual((await request("/api/me/permissions", { token: fresh.access_token })).permissions, ["mail.access"]);
     assert.deepEqual((await request("/api/me/mfa/methods", { token: fresh.access_token })).methods, []);
   });
 
   await t.test("delegated account managers cannot take over more privileged users", async () => {
     await seed("delegated-manager");
     await db.insert(roles).values({ id: "account-manager", key: "account-manager", label: "Account manager" });
-    await db.batch(["users.read", "users.create", "users.update", "users.delete"].map((permission_key) =>
+    await db.batch(permissionClosure(["admin.users.read", "admin.users.create", "admin.users.profile.update", "admin.users.status.update", "admin.users.credentials.reset", "admin.users.delete", "mail.access"]).map((permission_key) =>
       db.insert(rolePermissions).values({ role_id: "account-manager", permission_key })));
     await db.insert(userRoles).values({ user_id: "delegated-manager", role_id: "account-manager" });
     const actor = (await login("delegated-manager@office.test")).access_token;
@@ -325,7 +327,7 @@ test("user management in the Workers runtime", async (t) => {
   await t.test("email changes require a separate grant, including self changes and mixed updates", async () => {
     await seed("email-operator");
     const role = (await request("/api/roles", { method: "POST", token,
-      data: { key: "email-operator", label: "Email operator", permissions: ["users.update"] }, expected: 201 })).role;
+      data: { key: "email-operator", label: "Email operator", permissions: permissionClosure(["admin.users.profile.update", "mail.access"]) }, expected: 201 })).role;
     await request("/api/users/email-operator/roles", { method: "PUT", token, data: { role_ids: [role.id] }, expected: 204 });
     const actor = (await login("email-operator@office.test")).access_token;
     const target = await create("email-target@office.test");
@@ -340,13 +342,13 @@ test("user management in the Workers runtime", async (t) => {
     await request("/api/me", { token: existingSession.access_token });
     // An explicit role grant applies to the same JWT; general editing does not imply this grant.
     const granted = (await request(`/api/roles/${role.id}`, { method: "PUT", token,
-      data: { label: role.label, permissions: ["users.update", "users.email.update"], version: role.version } })).role;
+      data: { label: role.label, permissions: permissionClosure(["admin.users.profile.update", "admin.users.email.update", "mail.access"]), version: role.version } })).role;
     const changed = (await edit(target.id, { email_address: "EMAIL-CHANGED@OFFICE.TEST" }, 200, actor)).user;
     assert.equal(changed.email_address, "email-changed@office.test");
     await request("/api/me", { token: existingSession.access_token, expected: 401 });
     await login("email-changed@office.test");
     await request(`/api/roles/${role.id}`, { method: "PUT", token,
-      data: { label: granted.label, permissions: ["users.update"], version: granted.version } });
+      data: { label: granted.label, permissions: permissionClosure(["admin.users.profile.update", "mail.access"]), version: granted.version } });
     await edit(target.id, { email_address: "email-revoked@office.test" }, 403, actor);
     await edit(target.id, { display_name: "General permission retained" }, 200, actor);
     assert.equal((await db.select().from(users).where(eq(users.id, target.id)).get()).email_address, "email-changed@office.test");
@@ -401,11 +403,134 @@ test("concurrent role removal and account deletion use the same administrator pr
   const [one, two] = administrators;
   const responses = await Promise.all([
     raw(`/api/users/${one.id}`, { method: "DELETE", token: one.token }),
-    raw(`/api/users/${two.id}/roles`, { method: "PUT", token: two.token, data: { role_ids: [] } }),
+    raw(`/api/users/${two.id}/roles`, { method: "PUT", token: two.token, data: { role_ids: [], version: (await db.select().from(users).where(eq(users.id, two.id)).get()).role_assignment_version } }),
   ]);
   assert.deepEqual(responses.map((response) => response.status).sort(), [204, 409]);
   const remaining = await db.select().from(users).innerJoin(userRoles, eq(users.id, userRoles.user_id)).where(and(
     eq(userRoles.role_id, "system-administrator"), isNull(users.deleted_at), isNull(users.disabled_at),
   ));
   assert.equal(remaining.length, 1);
+});
+
+test("permission migration preserves legacy actions, completes parents and seeds the default mail role", async (t) => {
+  const { db } = await fixture(t, 1, { beforePolicyMigration: async (binding) => {
+    await binding.prepare("INSERT INTO users(id,email_address,password_hash) VALUES('existing-member','existing@office.test',?)").bind(passwordHash).run();
+    await binding.prepare("INSERT INTO roles(id,key,label) VALUES('legacy','legacy','Legacy')").run();
+    await binding.prepare("INSERT INTO roles(id,key,label) VALUES('existing-mail-key','mail-user','Existing custom role')").run();
+    for (const key of ["users.update", "roles.manage", "mail.domains.manage"]) await binding.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('legacy',?)").bind(key).run();
+    await binding.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('existing-member','legacy')").run();
+  } });
+  const grants = (await db.select().from(rolePermissions).where(eq(rolePermissions.role_id, "legacy"))).map((row) => row.permission_key).sort();
+  assert.deepEqual(grants, permissionClosure(["admin.users.profile.update", "admin.users.status.update", "admin.users.credentials.reset", "admin.roles.create", "admin.roles.update", "admin.roles.delete", "admin.mail.domains.manage"]).sort());
+  assert.ok(!grants.includes("admin.users.email.update")); assert.ok(!grants.includes("admin.roles.defaults.manage"));
+  const mail = await db.select().from(roles).where(eq(roles.id, "system-mail-user")).get();
+  assert.equal(mail.is_default, 1); assert.equal(mail.is_system, 0);
+  assert.match(mail.key, /^officeflare-mail-user-/);
+  assert.equal((await db.select().from(roles).where(eq(roles.id, "existing-mail-key")).get()).label, "Existing custom role");
+  assert.deepEqual((await db.select().from(rolePermissions).where(eq(rolePermissions.role_id, mail.id))).map((row) => row.permission_key), ["mail.access"]);
+  assert.ok((await db.select().from(userRoles).where(eq(userRoles.user_id, "existing-member"))).some((row) => row.role_id === mail.id));
+});
+
+test("service entry, administrative actions, role defaults and assignment concurrency are enforced in the API", async (t) => {
+  const { db, token, seed, request, raw, login, create, edit } = await fixture(t, 2);
+  const role = async (key, permissions) => (await request("/api/roles", { method: "POST", token, data: { key, label: key, permissions: permissionClosure(permissions) }, expected: 201 })).role;
+  const grant = async (id, permissions) => {
+    await seed(id); const assigned = await role(`${id}-role`, permissions);
+    await db.insert(userRoles).values({ user_id: id, role_id: assigned.id });
+    return (await login(`${id}@office.test`)).access_token;
+  };
+  await t.test("incomplete roles are rejected and missing parents deny existing raw grants", async () => {
+    const denied = await request("/api/roles", { method: "POST", token, data: { key: "incomplete", label: "Incomplete", permissions: ["admin.users.create"] }, expected: 400 });
+    assert.match(denied.error, /admin.users.read/);
+    assert.equal(await db.select().from(roles).where(eq(roles.key, "incomplete")).get(), undefined);
+    const actor = await grant("parent-check", ["admin.users.profile.update"]);
+    await request("/api/users", { token: actor });
+    const actorRole = await db.select().from(userRoles).where(eq(userRoles.user_id, "parent-check")).get();
+    await db.delete(rolePermissions).where(and(eq(rolePermissions.role_id, actorRole.role_id), eq(rolePermissions.permission_key, "console.access")));
+    await request("/api/users", { token: actor, expected: 403 });
+    assert.deepEqual((await request("/api/me/permissions", { token: actor })).permissions, []);
+  });
+  await t.test("profile-only editing cannot change account security and mixed edits are atomic", async () => {
+    const actor = await grant("profile-only", ["admin.users.profile.update", "mail.access"]), target = await create("granular-target@office.test");
+    const active = await login(target.email_address);
+    await edit(target.id, { display_name: "Allowed profile change" }, 200, actor);
+    const before = await db.select().from(users).where(eq(users.id, target.id)).get();
+    for (const change of [{ disabled: true }, { password_reset_required: true }, { password: "a proposed temporary replacement password" }, { email_address: "denied@office.test" }, { display_name: "Must not save", disabled: true }]) await edit(target.id, change, 403, actor);
+    assert.deepEqual(await db.select().from(users).where(eq(users.id, target.id)).get(), before);
+    await request("/api/me", { token: active.access_token });
+    const support = await grant("credential-only", ["admin.users.credentials.reset", "mail.access"]);
+    await edit(target.id, { display_name: "Denied profile change" }, 403, support);
+    await edit(target.id, { password_reset_required: true }, 200, support);
+    await request("/api/me", { token: active.access_token, expected: 401 });
+  });
+  await t.test("role creation, editing and deletion are independent actions", async () => {
+    const creator = await grant("role-creator", ["admin.roles.create"]);
+    const created = (await request("/api/roles", { method: "POST", token: creator, data: { key: "creator-empty", label: "Created", permissions: [] }, expected: 201 })).role;
+    await request(`/api/roles/${created.id}`, { method: "PUT", token: creator, data: { label: "Denied", permissions: [], version: created.version }, expected: 403 });
+    await request(`/api/roles/${created.id}`, { method: "DELETE", token: creator, expected: 403 });
+    const updater = await grant("role-updater", ["admin.roles.update"]);
+    await request("/api/roles", { method: "POST", token: updater, data: { key: "updater-empty", label: "Denied", permissions: [] }, expected: 403 });
+    await request(`/api/roles/${created.id}`, { method: "PUT", token: updater, data: { label: "Updated", permissions: [], version: created.version } });
+    await request(`/api/roles/${created.id}`, { method: "DELETE", token: updater, expected: 403 });
+    const deleter = await grant("role-deleter", ["admin.roles.delete"]);
+    await request(`/api/roles/${created.id}`, { method: "DELETE", token: deleter, expected: 204 });
+  });
+  await t.test("delegated managers cannot strip or delete more privileged roles", async () => {
+    const actor = await grant("restricted-manager", ["admin.roles.update", "admin.roles.delete", "admin.users.roles.assign", "admin.users.roles.remove"]);
+    const powerful = await role("powerful-role", ["admin.users.delete"]);
+    await request(`/api/roles/${powerful.id}`, { method: "PUT", token: actor, data: { label: "Stripped", permissions: [], version: powerful.version }, expected: 403 });
+    await request(`/api/roles/${powerful.id}`, { method: "DELETE", token: actor, expected: 403 });
+    await seed("privileged-target"); await db.insert(userRoles).values({ user_id: "privileged-target", role_id: powerful.id });
+    await request("/api/users/privileged-target/roles", { method: "PUT", token: actor, data: { role_ids: [] }, expected: 403 });
+    assert.deepEqual((await request(`/api/roles/${powerful.id}`, { token })).role.permissions, powerful.permissions);
+  });
+  await t.test("approved defaults are selected by the server and cannot be bypassed by basic creators", async () => {
+    const actor = await grant("basic-creator", ["admin.users.create"]);
+    const defaults = (await request("/api/users/default-roles", { token: actor })).roles;
+    assert.deepEqual(defaults.map((role) => role.id), ["system-mail-user"]);
+    const created = (await request("/api/users", { method: "POST", token: actor, data: { email_address: "defaulted@office.test", password: PASSWORD, password_reset_required: false }, expected: 201 })).user;
+    assert.deepEqual((await request(`/api/users/${created.id}/roles`, { token })).roles.map((role) => role.id), ["system-mail-user"]);
+    assert.deepEqual((await request("/api/me/permissions", { token: (await login(created.email_address)).access_token })).permissions, ["mail.access"]);
+    await request("/api/users", { method: "POST", token: actor, data: { email_address: "omitted-default@office.test", password: PASSWORD, role_ids: [] }, expected: 403 });
+    await request("/api/users", { method: "POST", token: actor, data: { email_address: "privileged-default@office.test", password: PASSWORD, role_ids: ["system-mail-user", "system-administrator"] }, expected: 403 });
+    assert.equal(await db.select().from(users).where(eq(users.email_address, "omitted-default@office.test")).get(), undefined);
+  });
+  await t.test("default settings reject administrative roles and apply only to future accounts", async () => {
+    const mail = (await request("/api/roles/system-mail-user", { token })).role;
+    const updated = (await request(`/api/roles/${mail.id}/default`, { method: "PATCH", token, data: { is_default: false, version: mail.version } })).role;
+    await request(`/api/roles/${mail.id}/default`, { method: "PATCH", token, data: { is_default: true, version: mail.version }, expected: 409 });
+    assert.ok((await request("/api/users/default-roles", { token })).roles.length === 0);
+    const created = await create("no-default@office.test");
+    assert.equal((await request(`/api/users/${created.id}/roles`, { token })).roles.length, 0);
+    const previous = await db.select().from(users).where(eq(users.email_address, "defaulted@office.test")).get();
+    assert.equal((await request(`/api/users/${previous.id}/roles`, { token })).roles[0].id, mail.id);
+    const administrative = await role("not-a-default", ["admin.users.read"]);
+    await request(`/api/roles/${administrative.id}/default`, { method: "PATCH", token, data: { is_default: true, version: administrative.version }, expected: 400 });
+    await request("/api/roles/system-administrator/default", { method: "PATCH", token, data: { is_default: true, version: 4 }, expected: 403 });
+    const restored = (await request(`/api/roles/${mail.id}/default`, { method: "PATCH", token, data: { is_default: true, version: updated.version } })).role;
+    await request(`/api/roles/${mail.id}`, { method: "PUT", token, data: { label: mail.label, permissions: permissionClosure(["admin.users.read"]), version: restored.version }, expected: 400 });
+    const editor = await grant("default-editor", ["admin.roles.update", "mail.access"]);
+    await request(`/api/roles/${mail.id}`, { method: "PUT", token: editor, data: { label: "Changed default", permissions: ["mail.access"], version: restored.version }, expected: 403 });
+  });
+  await t.test("assignment add and remove are separate and stale changes cannot overwrite newer selections", async () => {
+    await seed("assignment-target"); const mailRole = await role("assignment-mail", ["mail.access"]), driveRole = await role("assignment-drive", ["drive.access"]);
+    const assigner = await grant("only-assign", ["admin.users.roles.assign", "mail.access", "drive.access"]);
+    const old = await request("/api/users/assignment-target/roles", { token });
+    await request("/api/users/assignment-target/roles", { method: "PUT", token: assigner, data: { role_ids: [mailRole.id], version: old.version }, expected: 204 });
+    await request("/api/users/assignment-target/roles", { method: "PUT", token: assigner, data: { role_ids: [] }, expected: 403 });
+    await request("/api/users/assignment-target/roles", { method: "PUT", token, data: { role_ids: [driveRole.id], version: old.version }, expected: 409 });
+    const current = await request("/api/users/assignment-target/roles", { token });
+    const responses = await Promise.all([
+      raw("/api/users/assignment-target/roles", { method: "PUT", token, data: { role_ids: [driveRole.id], version: current.version } }),
+      raw("/api/users/assignment-target/roles", { method: "PUT", token, data: { role_ids: [], version: current.version } }),
+    ]);
+    assert.deepEqual(responses.map((response) => response.status).sort(), [204, 409]);
+    const remover = await grant("only-remove", ["admin.users.roles.remove", "mail.access", "drive.access"]);
+    await request("/api/users/assignment-target/roles", { method: "PUT", token: remover, data: { role_ids: [mailRole.id, driveRole.id] }, expected: 403 });
+    await request("/api/users/assignment-target/roles", { method: "PUT", token: remover, data: { role_ids: [] }, expected: 204 });
+    await request("/api/users/assignment-target/roles", { method: "PUT", token, data: { role_ids: [mailRole.id] }, expected: 204 });
+    const beforeDelete = await request("/api/users/assignment-target/roles", { token });
+    await request(`/api/roles/${mailRole.id}`, { method: "DELETE", token, expected: 204 });
+    assert.ok((await request("/api/users/assignment-target/roles", { token })).version > beforeDelete.version);
+  });
 });

@@ -18,6 +18,7 @@ export const users = sqliteTable("users", {
   password_reset_required: integer().notNull().default(0),
   deleted_at: integer(),
   auth_version: integer().notNull().default(1),
+  role_assignment_version: integer().notNull().default(1),
 }, (table) => [uniqueIndex("users_active_email_address_unique")
   .on(sql`${table.email_address} COLLATE NOCASE`).where(sql`${table.deleted_at} IS NULL`)]);
 
@@ -129,6 +130,7 @@ export const roles = sqliteTable("roles", {
   label: text().notNull(),
   description: text(),
   is_system: integer().notNull().default(0),
+  is_default: integer().notNull().default(0),
   version: integer().notNull().default(1),
   created_at: timestamp("created_at"),
   updated_at: timestamp("updated_at"),

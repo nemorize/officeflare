@@ -3,6 +3,7 @@ import { Link, Navigate, Outlet } from "react-router";
 import { api, errorMessage } from "../lib/api";
 import { consoleMenu } from "../lib/console";
 import { useSession } from "../lib/session";
+import { workspaceApps } from "../lib/workspace-navigation";
 
 interface Access { permissions: string[]; status: "loading" | "ready" | "error"; error: string; refresh: () => void; }
 const AccessContext = createContext<Access>({ permissions: [], status: "loading", error: "", refresh: () => {} });
@@ -33,16 +34,28 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 }
 
 export function AccessDenied() {
-  return <section className="account-page"><header className="account-page-header"><h1>Access restricted</h1><p>You do not have permission to open this page.</p></header><Link to="/mail">Return to workspace</Link></section>;
+  return <section className="account-page"><header className="account-page-header"><h1>Access restricted</h1><p>You do not have permission to open this page.</p></header><Link to="/">Return to workspace</Link></section>;
 }
 export function ConsoleGate({ children, permissions }: { children?: ReactNode; permissions?: string[] }) {
   const access = useAccess();
   if (access.status === "loading") return <p className="account-page" role="status">Checking permissions…</p>;
   if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p></section>;
-  const allowed = permissions ? permissions.some((permission) => access.permissions.includes(permission)) : consoleMenu(access.permissions).length > 0;
+  const allowed = access.permissions.includes("console.access") && (!permissions || permissions.some((permission) => access.permissions.includes(permission)));
   return allowed ? children ?? <Outlet /> : <AccessDenied />;
 }
 export function ConsoleHome() {
   const menu = consoleMenu(useAccess().permissions);
-  return menu[0] ? <Navigate to={menu[0].path} replace /> : <AccessDenied />;
+  return menu[0] ? <Navigate to={menu[0].path} replace /> : <section className="account-page"><header className="account-page-header"><h1>Console</h1><p>Your account can access Console. User and role management require additional permissions.</p></header></section>;
+}
+export function ServiceGate({ permission, children }: { permission: string; children: ReactNode }) {
+  const access = useAccess();
+  if (access.status === "loading") return <p className="account-page" role="status">Checking permissions…</p>;
+  if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p></section>;
+  return access.permissions.includes(permission) ? children : <AccessDenied />;
+}
+export function WorkspaceHome() {
+  const access = useAccess();
+  if (access.status !== "ready") return <p className="account-page" role="status">{access.error || "Checking permissions…"}</p>;
+  const app = workspaceApps.find((item) => access.permissions.includes(item.permission));
+  return <Navigate to={app?.path ?? (access.permissions.includes("console.access") ? "/console" : "/profile")} replace />;
 }

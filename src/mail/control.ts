@@ -3,7 +3,7 @@ import type { AuthContext } from "../auth/types";
 import { createMiddleware } from "hono/factory";
 import { requireAccess } from "../auth/store";
 import { can } from "../authorization/access";
-import type { Permission } from "../authorization/permissions";
+import { permissionClosure, type Permission } from "../authorization/permissions";
 import {
   epoch,
   fail,
@@ -41,6 +41,13 @@ export async function all<T>(
 }
 export const activeAccountSql =
   "u.deleted_at IS NULL AND u.disabled_at IS NULL AND u.password_hash IS NOT NULL AND u.password_reset_required=0";
+export const mailAccessSql = "EXISTS(SELECT 1 FROM user_roles access_roles JOIN role_permissions access_permissions ON access_permissions.role_id=access_roles.role_id WHERE access_roles.user_id=u.id AND access_permissions.permission_key='mail.access')";
+function administrativeRequest(c: Context<MailAppEnv>) {
+  const path = c.req.path.replace(/^\/api\/mail/, ""), method = c.req.method;
+  return /^\/(provider-connections|domains|addresses)(\/|$)/.test(path) ||
+    path === "/mailboxes" && (method === "POST" || c.req.query("all") === "true") ||
+    /^\/mailboxes\/[^/]+$/.test(path) && method === "PATCH";
+}
 export const authenticateMail = createMiddleware<MailAppEnv>(
   async (c, next) => {
     const token = /^Bearer (.+)$/i.exec(
@@ -50,7 +57,7 @@ export const authenticateMail = createMiddleware<MailAppEnv>(
       const actor = await first<MailActor>(
         c.env,
         "SELECT u.id user_id,u.auth_version,k.id api_key_id FROM mail_api_keys k JOIN users u ON u.id=k.user_id WHERE k.token_hash=? AND k.revoked_at IS NULL AND k.expires_at>? AND k.auth_version=u.auth_version AND " +
-          activeAccountSql,
+          activeAccountSql + " AND " + mailAccessSql,
         await hash(token),
         epoch(),
       );
@@ -65,6 +72,8 @@ export const authenticateMail = createMiddleware<MailAppEnv>(
           auth_version: user.auth_version,
           api_key_id: null,
         });
+        // Console administration is separate from using mailbox contents.
+        if (!administrativeRequest(c) && !await can(c as unknown as AuthContext, "mail.access")) fail(403, "Mail access is not enabled for this account");
         await next();
       });
     }
@@ -98,6 +107,7 @@ export async function authorize(
     "SELECT b.* FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id " +
       "WHERE b.id=? AND b.status='active' AND u.auth_version=? AND " +
       activeAccountSql +
+      " AND " + mailAccessSql +
       " AND (b.owner_user_id=u.id OR m." +
       columns[action] +
       "=1)" +
@@ -193,14 +203,12 @@ export function administrativeControl(
 ) {
   const actor = c.get("mail_actor");
   if (actor.api_key_id) fail(403, "Session authentication required");
-  const condition =
-    "EXISTS(SELECT 1 FROM users u JOIN user_roles r ON r.user_id=u.id JOIN role_permissions p ON p.role_id=r.role_id WHERE u.id=? AND u.auth_version=? AND p.permission_key=? AND " +
-    activeAccountSql +
-    ")";
+  const condition = "EXISTS(SELECT 1 FROM users u WHERE u.id=? AND u.auth_version=? AND " + activeAccountSql +
+    " AND NOT EXISTS(SELECT 1 FROM json_each(?) required_permission WHERE NOT EXISTS(SELECT 1 FROM user_roles r JOIN role_permissions p ON p.role_id=r.role_id WHERE r.user_id=u.id AND p.permission_key=required_permission.value)))";
   return guardedControl(c.env, condition, [
     actor.user_id,
     actor.auth_version,
-    permission,
+    JSON.stringify(permissionClosure([permission])),
   ]);
 }
 export function resourceControl(
@@ -213,6 +221,7 @@ export function resourceControl(
   const condition =
     "EXISTS(SELECT 1 FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE b.id=? AND b.status='active' AND u.auth_version=? AND " +
     activeAccountSql +
+    " AND " + mailAccessSql +
     " AND (b.owner_user_id=u.id OR m." +
     columns[action] +
     "=1))";
