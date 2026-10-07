@@ -1,4 +1,4 @@
-import { ContextMenu } from "@base-ui/react/context-menu";
+import { ContextMenu } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { ContextMenu };

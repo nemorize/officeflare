@@ -1,4 +1,4 @@
-import { Menu } from "@base-ui/react/menu";
+import { Menu } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { Menu };
@@ -11,7 +11,7 @@ export interface MenuPopupProps extends ComponentPropsWithRef<typeof Menu.Popup>
 export function MenuPopup({ portalProps, positionerProps, ...props }: MenuPopupProps) {
   return (
     <Menu.Portal {...portalProps}>
-      <Menu.Positioner data-ui="popup-positioner" {...positionerProps}>
+      <Menu.Positioner data-ui="popup-positioner" align="start" sideOffset={6} {...positionerProps}>
         <Menu.Popup data-ui="menu-popup" {...props} />
       </Menu.Positioner>
     </Menu.Portal>

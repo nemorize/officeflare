@@ -1,4 +1,4 @@
-import { PreviewCard } from "@base-ui/react/preview-card";
+import { PreviewCard } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { PreviewCard };

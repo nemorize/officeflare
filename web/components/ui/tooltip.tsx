@@ -1,4 +1,4 @@
-import { Tooltip } from "@base-ui/react/tooltip";
+import { Tooltip } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { Tooltip };

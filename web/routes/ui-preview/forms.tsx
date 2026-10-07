@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Autocomplete, AutocompletePopup, Button, Checkbox, CheckboxGroup, Combobox, ComboboxPopup,
-  Field, Fieldset, Form, Input, NumberField, OTPField, Radio, RadioGroup, Select, SelectPopup,
+  Field, Fieldset, Form, Icon, Input, NumberField, OTPField, Radio, RadioGroup, Select, SelectPopup,
   Slider, Switch, TextField } from "@/components/ui";
 
 const apps = ["Calendar", "Files", "Mail"];
@@ -37,7 +37,7 @@ export function FormDemo() {
   return <Form onFormSubmit={(values) => setResult(`Submitted: ${String(values["preview-form-email"] ?? "")}`)}>
     <TextField name="preview-form-email" label="Email for preview form" type="email" required
       description="Only local demo state is updated." />
-    <Button type="submit">Submit preview form</Button>
+    <Button type="submit" variant="primary">Submit preview form</Button>
     <p role="status">{result}</p>
   </Form>;
 }
@@ -82,7 +82,7 @@ export function SwitchDemo() {
   const [checked, setChecked] = useState(false);
   return <Field.Root name="preview-presence">
     <Field.Label><Switch.Root checked={checked} onCheckedChange={setChecked}>
-      <Switch.Thumb /><span aria-hidden="true">{checked ? "On" : "Off"}</span>
+      <Switch.Thumb />
     </Switch.Root>{" "}Show online status</Field.Label>
   </Field.Root>;
 }
@@ -106,7 +106,7 @@ export function OTPFieldDemo() {
     <Field.Label>One-time code</Field.Label>
     <OTPField.Root length={6} value={value} onValueChange={setValue}>
       {Array.from({ length: 6 }, (_, index) => <OTPField.Input key={index}
-        aria-label={`Code digit ${index + 1}`} style={{ width: "2ch" }} />)}
+        aria-label={`Code digit ${index + 1}`} />)}
     </OTPField.Root>
     <Field.Description>Try typing or pasting six digits. No code is sent.</Field.Description>
     <p role="status">{value.length === 6 ? "Code complete" : `${value.length} of 6 digits`}</p>
@@ -130,8 +130,10 @@ export function ComboboxDemo() {
   return <Field.Root name="preview-app">
     <Field.Label>Application</Field.Label>{" "}
     <Combobox.Root items={apps}>
-      <Combobox.Input />
-      <Combobox.Trigger aria-label="Show applications">Show applications</Combobox.Trigger>
+      <Combobox.InputGroup>
+        <Combobox.Input placeholder="Choose an application" />
+        <Combobox.Trigger aria-label="Show applications"><Icon name="down" /></Combobox.Trigger>
+      </Combobox.InputGroup>
       <ComboboxPopup>
         <Combobox.Empty>No applications found</Combobox.Empty>
         <Combobox.List>{(app: string) => <Combobox.Item key={app} value={app}>{app}</Combobox.Item>}</Combobox.List>
@@ -144,8 +146,10 @@ export function AutocompleteDemo() {
   return <Field.Root name="preview-search">
     <Field.Label>Search applications</Field.Label>{" "}
     <Autocomplete.Root items={apps}>
-      <Autocomplete.Input />
-      <Autocomplete.Trigger aria-label="Show suggestions">Suggestions</Autocomplete.Trigger>
+      <Autocomplete.InputGroup>
+        <Autocomplete.Input placeholder="Search applications" />
+        <Autocomplete.Trigger aria-label="Show suggestions"><Icon name="down" /></Autocomplete.Trigger>
+      </Autocomplete.InputGroup>
       <AutocompletePopup>
         <Autocomplete.Empty>No suggestions</Autocomplete.Empty>
         <Autocomplete.List>{(app: string) => <Autocomplete.Item key={app} value={app}>{app}</Autocomplete.Item>}</Autocomplete.List>

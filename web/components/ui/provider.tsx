@@ -1,5 +1,5 @@
 import { DirectionProvider } from "@base-ui/react/direction-provider";
-import { Tooltip } from "@base-ui/react/tooltip";
+import { Tooltip } from "./styled-primitives";
 import type { ReactNode } from "react";
 
 export interface UIProviderProps {

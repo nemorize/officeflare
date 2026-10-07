@@ -1,4 +1,4 @@
-import { NavigationMenu } from "@base-ui/react/navigation-menu";
+import { NavigationMenu } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { NavigationMenu };

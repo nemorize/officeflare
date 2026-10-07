@@ -6,7 +6,10 @@ const sampleImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http:/
 export function ButtonDemo() {
   const [count, setCount] = useState(0);
   return <>
-    <Button onClick={() => setCount((value) => value + 1)}>Click example button</Button>{" "}
+    <Button variant="primary" onClick={() => setCount((value) => value + 1)}>Click example button</Button>{" "}
+    <Button onClick={() => setCount((value) => value + 1)}>Secondary</Button>{" "}
+    <Button variant="subtle" onClick={() => setCount((value) => value + 1)}>Subtle</Button>{" "}
+    <Button variant="ghost" onClick={() => setCount((value) => value + 1)}>Ghost</Button>{" "}
     <Button disabled>Disabled button</Button>
     <p role="status">Clicked {count} times</p>
   </>;

@@ -24,7 +24,7 @@ export function AlertDialogDemo() {
         <AlertDialog.Title>Confirm preview action</AlertDialog.Title>
         <AlertDialog.Description>This example only updates local demo state.</AlertDialog.Description>
         <AlertDialog.Close render={<Button />}>Cancel</AlertDialog.Close>{" "}
-        <AlertDialog.Close render={<Button />} onClick={() => setResult("Preview action confirmed")}>Confirm</AlertDialog.Close>
+        <AlertDialog.Close render={<Button variant="primary" />} onClick={() => setResult("Preview action confirmed")}>Confirm</AlertDialog.Close>
       </AlertDialogPopup>
     </AlertDialog.Root>
     <p role="status">{result}</p>
@@ -115,6 +115,9 @@ function ToastContents() {
   return <>
     <Button onClick={() => manager.add({ title: "Preview notification", description: "Dismiss this example notification.", timeout: 0 })}>
       Show notification
+    </Button>
+    <Button variant="danger" onClick={() => manager.add({ title: "Unable to save changes", description: "Try again in a moment.", type: "error", timeout: 0 })}>
+      Show error notification
     </Button>
     <Toast.Portal>
       <Toast.Viewport data-ui="toast-viewport">

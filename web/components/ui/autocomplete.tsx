@@ -1,4 +1,4 @@
-import { Autocomplete } from "@base-ui/react/autocomplete";
+import { Autocomplete } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { Autocomplete };
@@ -11,7 +11,7 @@ export interface AutocompletePopupProps extends ComponentPropsWithRef<typeof Aut
 export function AutocompletePopup({ portalProps, positionerProps, ...props }: AutocompletePopupProps) {
   return (
     <Autocomplete.Portal {...portalProps}>
-      <Autocomplete.Positioner data-ui="popup-positioner" {...positionerProps}>
+      <Autocomplete.Positioner data-ui="popup-positioner" align="start" sideOffset={6} {...positionerProps}>
         <Autocomplete.Popup data-ui="autocomplete-popup" {...props} />
       </Autocomplete.Positioner>
     </Autocomplete.Portal>

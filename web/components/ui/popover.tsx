@@ -1,4 +1,4 @@
-import { Popover } from "@base-ui/react/popover";
+import { Popover } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { Popover };

@@ -18,7 +18,7 @@ createRoot(document.getElementById("root")!).render(
             <Suspense fallback={<p>Loading components…</p>}><UIPreviewPage /></Suspense>
           } />}
           <Route path="*" element={
-            <main>
+            <main className="empty-page">
               <h1>Page not found</h1>
               <p>Check the address or return to the sign-in page.</p>
               <Link to="/login">Go to sign in</Link>

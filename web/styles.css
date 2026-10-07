@@ -1,56 +1,95 @@
-/* Base UI portals sit outside the application's stacking context. */
-#root {
-  isolation: isolate;
+@import "./components/ui/components.css";
+
+/* Light surfaces and compact controls measured from the supplied app screenshots. */
+:root {
+  color-scheme: light;
+  --ui-background: #ffffff;
+  --ui-chrome: #f6f6f6;
+  --ui-sidebar: #fcfcfc;
+  --ui-surface: #f4f4f4;
+  --ui-hover: #efeff0;
+  --ui-border: #ededed;
+  --ui-control-border: #dedee0;
+  --ui-text: #1a1c1f;
+  --ui-muted: #6a6b6d;
+  --ui-subtle: #929395;
+  --ui-primary: #0a0a0a;
+  --ui-accent: #377dff;
+  --ui-focus-ring: 0 0 0 1px var(--ui-accent);
+  --ui-danger: #db3636;
+  --ui-danger-surface: #fff1f0;
+  --ui-radius-control: 9px;
+  --ui-radius-frame: 12px;
+  --ui-radius-panel: 16px;
+  --ui-radius-popup: 16px;
+  --ui-popup-padding: 5px;
+  --ui-shadow-popup: 0 4px 16px #0000000d, 0 1px 4px #00000005;
+  --ui-shadow-dialog: 0 12px 48px #00000014, 0 2px 8px #0000000a;
+  --ui-shadow-frame: -2px 0 16px #00000005;
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--ui-font);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-text);
+  background: var(--ui-background);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Absolute backdrops cover Safari's visual viewport, including browser chrome. */
-body {
-  position: relative;
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; position: relative; }
+#root { isolation: isolate; min-height: 100dvh; }
+button, input, select, textarea { font: inherit; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+button { color: inherit; }
+a { color: inherit; text-decoration: none; }
+p { margin: 0; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h1 { font-size: 26px; line-height: 1.25; letter-spacing: -.65px; }
+h2 { font-size: 16px; line-height: 1.4; }
+h3, h4 { font-size: 13px; }
+svg { flex-shrink: 0; vertical-align: middle; }
+:where(button, a, input, select, textarea, [tabindex]):focus { outline: none; }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible { box-shadow: var(--ui-focus-ring); }
+:where(button, [data-ui])[data-disabled], button:disabled { cursor: default; }
+::selection { background: #377dff26; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* Structural positioning only; component appearance is defined separately. */
-[data-ui="dialog-backdrop"] {
-  position: absolute;
-  inset: 0;
-}
+.password-control { position: relative; width: 100%; }
+.password-control > [data-ui="input"] { padding-inline-end: 40px; }
+.password-control > [data-ui-button] { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; color: var(--ui-muted); }
 
-[data-ui="dialog-viewport"]:not([hidden]) {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  overflow: auto;
-}
+.login-page { min-height: 100dvh; display: flex; flex-direction: column; background: var(--ui-sidebar); }
+.login-brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; width: fit-content; }
+.login-header { padding: 22px 28px; }
+.login-content { flex: 1; display: grid; place-items: center; padding: 32px 24px 64px; }
+.login-card { width: 100%; max-width: 400px; padding: 30px; border: 1px solid var(--ui-border); border-radius: 20px; background: var(--ui-background); }
+.login-card > h1 { font-size: 23px; letter-spacing: -.55px; margin-block: 18px 8px; }
+.login-card > p { color: var(--ui-muted); font-size: 13px; }
+.login-symbol { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: var(--ui-surface); }
+.login-card [data-ui="form"] { margin-block-start: 26px; }
+.login-card [data-ui="fieldset-root"] { gap: 18px; }
+.login-card [data-ui="input"] { max-width: none; }
+.login-card .login-submit { width: 100%; min-height: 36px; }
+.login-card .login-secondary { width: 100%; }
+.login-card .login-help { margin-block-start: 24px; font-size: 12px; line-height: 1.6; }
+.login-footer { color: var(--ui-subtle); font-size: 12px; text-align: center; padding: 20px; }
+.ui-inline-alert { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid #ffd4d1; border-radius: 10px; background: var(--ui-danger-surface); color: var(--ui-danger); }
+.ui-inline-alert svg { margin-block-start: 2px; }
+.empty-page { max-width: 440px; margin: 20vh auto; padding: 24px; display: grid; gap: 16px; }
+.empty-page p { color: var(--ui-muted); }
+.empty-page a { width: fit-content; }
 
-[data-ui="dialog-popup"] {
-  position: relative;
-  max-width: 100%;
+@media (max-width: 480px) {
+  .login-header { padding: 18px 20px; }
+  .login-content { padding: 16px 16px 40px; }
+  .login-card { padding: 24px; }
 }
-
-[data-ui="popup-positioner"] {
-  max-width: var(--available-width);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
-
-[data-ui="drawer-viewport"]:not([hidden]) {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-}
-
-[data-ui="drawer-popup"] {
-  position: relative;
-  width: 100%;
-  max-height: 100%;
-  overflow: auto;
-  transform: translate(var(--drawer-swipe-movement-x, 0px), var(--drawer-swipe-movement-y, 0px));
-}
-
-[data-ui="toast-viewport"] {
-  position: fixed;
-  inset-block-start: 1rem;
-  inset-inline-end: 1rem;
-  display: flex;
-  flex-direction: column;
-  max-width: calc(100vw - 2rem);
+@media (forced-colors: active) {
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 1px solid Highlight; outline-offset: 0; }
 }

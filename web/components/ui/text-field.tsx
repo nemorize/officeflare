@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Field } from "@base-ui/react/field";
+import { Field } from "./styled-primitives";
 import { Input, type InputProps } from "./input";
 
 export interface TextFieldProps extends InputProps {

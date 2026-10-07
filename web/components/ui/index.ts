@@ -13,3 +13,4 @@ export * from "./context-menu";
 export * from "./drawer";
 export * from "./navigation-menu";
 export * from "./preview-card";
+export * from "./icon";

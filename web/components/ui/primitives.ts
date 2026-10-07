@@ -1,29 +1,5 @@
-// Preserve Base UI's compound API, generics, refs, state and event namespaces.
-// Screens import from the local UI layer so appearance can be added here later.
-export { Accordion } from "@base-ui/react/accordion";
-export { Avatar } from "@base-ui/react/avatar";
-export { Checkbox } from "@base-ui/react/checkbox";
-export { CheckboxGroup } from "@base-ui/react/checkbox-group";
-export { Collapsible } from "@base-ui/react/collapsible";
-export { Field } from "@base-ui/react/field";
-export { Fieldset } from "@base-ui/react/fieldset";
-export { Form } from "@base-ui/react/form";
-export { Menubar } from "@base-ui/react/menubar";
-export { Meter } from "@base-ui/react/meter";
-export { NumberField } from "@base-ui/react/number-field";
-export { OTPField } from "@base-ui/react/otp-field";
-export { Progress } from "@base-ui/react/progress";
-export { Radio } from "@base-ui/react/radio";
-export { RadioGroup } from "@base-ui/react/radio-group";
-export { ScrollArea } from "@base-ui/react/scroll-area";
-export { Separator } from "@base-ui/react/separator";
-export { Slider } from "@base-ui/react/slider";
-export { Switch } from "@base-ui/react/switch";
-export { Tabs } from "@base-ui/react/tabs";
-export { Toast } from "@base-ui/react/toast";
-export { Toggle } from "@base-ui/react/toggle";
-export { ToggleGroup } from "@base-ui/react/toggle-group";
-export { Toolbar } from "@base-ui/react/toolbar";
+// Keep imports in the local UI layer, including Base UI's type namespaces.
+export { Accordion, Avatar, Checkbox, CheckboxGroup, Collapsible, Field, Fieldset, Form, Menubar, Meter, NumberField, OTPField, Progress, Radio, RadioGroup, ScrollArea, Separator, Slider, Switch, Tabs, Toast, Toggle, ToggleGroup, Toolbar } from "./styled-primitives";
 export { CSPProvider } from "@base-ui/react/csp-provider";
 export { DirectionProvider } from "@base-ui/react/direction-provider";
 export { mergeProps } from "@base-ui/react/merge-props";

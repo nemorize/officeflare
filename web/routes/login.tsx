@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PasswordField } from "../components/password-field";
-import { Button, Field, Fieldset, Form, Select, SelectPopup, TextField } from "@/components/ui";
+import { Link } from "react-router";
+import { Button, Field, Fieldset, Form, Icon, OfficeflareMark, Select, SelectPopup, TextField } from "@/components/ui";
 import { AuthError, changePassword, login, logout, recoverMfa, verifyMfa,
   type LoginResult, type MfaChallenge, type PasswordChallenge, type Session } from "../lib/auth";
 
@@ -140,72 +141,81 @@ export function LoginPage() {
   }
 
   return (
-    <main>
-      <h1 id="login-heading" ref={heading} tabIndex={-1}>{title}</h1>
-      {(description || (step.kind === "mfa" && recovery)) &&
-        <p>{step.kind === "mfa" && recovery ? "Enter one of your saved recovery codes." : description}</p>}
+    <div className="login-page">
+      <header className="login-header">
+        <Link to="/login" className="login-brand"><OfficeflareMark />Officeflare</Link>
+      </header>
+      <main className="login-content">
+        <section className="login-card" aria-labelledby="login-heading">
+          <div className="login-symbol"><Icon name={step.kind === "mfa" ? "shield" : "user"} width="20" height="20" /></div>
+          <h1 id="login-heading" ref={heading} tabIndex={-1}>{title}</h1>
+          {(description || (step.kind === "mfa" && recovery)) &&
+            <p>{step.kind === "mfa" && recovery ? "Enter one of your saved recovery codes." : description}</p>}
 
-      <Form onSubmit={submit} aria-busy={busy}>
-        <Fieldset.Root disabled={busy} aria-labelledby="login-heading">
-          {step.kind === "login" && <>
-            <TextField id="email" name="email" label="Email" type="email" autoComplete="username"
-              required maxLength={254} value={email} onValueChange={setEmail} />
-            <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
-          </>}
+          <Form onSubmit={submit} aria-busy={busy}>
+            <Fieldset.Root disabled={busy} aria-labelledby="login-heading">
+              {step.kind === "login" && <>
+                <TextField id="email" name="email" label="Email" type="email" autoComplete="username"
+                  required maxLength={254} value={email} onValueChange={setEmail} />
+                <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
+              </>}
 
-          {step.kind === "mfa" && <>
-            {!recovery && step.challenge.methods.length > 1 && <Field.Root name="method">
-              <Select.Root items={step.challenge.methods.map((method, index) => ({ value: method.id,
-                label: method.name || `Authenticator app ${index + 1}` }))}
-                value={methodId} onValueChange={(value) => { setMethodId(value ?? ""); setCode(""); setError(""); }}>
-                <Select.Label>Authentication method</Select.Label>
-                {" "}
-                <Select.Trigger id="method"><Select.Value /></Select.Trigger>
-                <SelectPopup>
-                  <Select.List>
-                    {step.challenge.methods.map((method, index) => <Select.Item key={method.id} value={method.id}>
-                      <Select.ItemText>{method.name || `Authenticator app ${index + 1}`}</Select.ItemText>
-                    </Select.Item>)}
-                  </Select.List>
-                </SelectPopup>
-              </Select.Root>
-            </Field.Root>}
-            <TextField key={recovery ? "recovery" : "totp"} id="code" name="code"
-              label={recovery ? "Recovery code" : "Authentication code"} type="text" autoComplete="one-time-code"
-              inputMode={recovery ? "text" : "numeric"} pattern={recovery ? undefined : "[0-9]{6}"}
-              maxLength={recovery ? 64 : 6} placeholder={recovery ? "Enter a recovery code" : "6-digit code"}
-              description={recovery ? "Each recovery code can only be used once." : "Find the code in your authenticator app."}
-              required value={code} onValueChange={setCode} />
-          </>}
+              {step.kind === "mfa" && <>
+                {!recovery && step.challenge.methods.length > 1 && <Field.Root name="method">
+                  <Select.Root items={step.challenge.methods.map((method, index) => ({ value: method.id,
+                    label: method.name || `Authenticator app ${index + 1}` }))}
+                    value={methodId} onValueChange={(value) => { setMethodId(value ?? ""); setCode(""); setError(""); }}>
+                    <Select.Label>Authentication method</Select.Label>
+                    {" "}
+                    <Select.Trigger id="method"><Select.Value /></Select.Trigger>
+                    <SelectPopup>
+                      <Select.List>
+                        {step.challenge.methods.map((method, index) => <Select.Item key={method.id} value={method.id}>
+                          <Select.ItemText>{method.name || `Authenticator app ${index + 1}`}</Select.ItemText>
+                        </Select.Item>)}
+                      </Select.List>
+                    </SelectPopup>
+                  </Select.Root>
+                </Field.Root>}
+                <TextField key={recovery ? "recovery" : "totp"} id="code" name="code"
+                  label={recovery ? "Recovery code" : "Authentication code"} type="text" autoComplete="one-time-code"
+                  inputMode={recovery ? "text" : "numeric"} pattern={recovery ? undefined : "[0-9]{6}"}
+                  maxLength={recovery ? 64 : 6} placeholder={recovery ? "Enter a recovery code" : "6-digit code"}
+                  description={recovery ? "Each recovery code can only be used once." : "Find the code in your authenticator app."}
+                  required value={code} onValueChange={setCode} />
+              </>}
 
-          {step.kind === "password_reset" && <>
-            <PasswordField id="new-password" label="New password" value={newPassword} onChange={setNewPassword}
-              autoComplete="new-password" describedBy="password-hint" />
-            <p id="password-hint">Use 15–128 characters.</p>
-            <PasswordField id="confirm-password" label="New password confirmation" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
-          </>}
+              {step.kind === "password_reset" && <>
+                <PasswordField id="new-password" label="New password" value={newPassword} onChange={setNewPassword}
+                  autoComplete="new-password" describedBy="password-hint" />
+                <p id="password-hint">Use 15–128 characters.</p>
+                <PasswordField id="confirm-password" label="New password confirmation" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
+              </>}
 
-          {step.kind === "success" && <p>{email.trim().toLowerCase()}</p>}
-          {error && <p role="alert">{error}</p>}
+              {step.kind === "success" && <p>{email.trim().toLowerCase()}</p>}
+              {error && <p role="alert" className="ui-inline-alert"><Icon name="info" /><span>{error}</span></p>}
 
-          <p>
-            <Button type="submit">
-              {busy ? "Processing…" : step.kind === "login" ? "Sign in" : step.kind === "mfa" ? "Verify" : step.kind === "password_reset" ? "Change password and sign in" : "Sign out"}
-            </Button>
-          </p>
+              <p>
+                <Button type="submit" variant="primary" className="login-submit">
+                  {busy ? "Processing…" : step.kind === "login" ? "Sign in" : step.kind === "mfa" ? "Verify" : step.kind === "password_reset" ? "Change password and sign in" : "Sign out"}
+                </Button>
+              </p>
 
-          {step.kind === "mfa" && step.challenge.methods.length > 0 && <p>
-            <Button type="button" onClick={() => { setRecovery(!recovery); setCode(""); setError(""); }}>
-              {recovery ? "Use an authenticator code" : "Use a recovery code"}
-            </Button>
-          </p>}
-          {(step.kind === "mfa" || step.kind === "password_reset") && <p>
-            <Button type="button" onClick={startOver}>Start over</Button>
-          </p>}
-        </Fieldset.Root>
-      </Form>
+              {step.kind === "mfa" && step.challenge.methods.length > 0 && <p>
+                <Button type="button" variant="ghost" className="login-secondary" onClick={() => { setRecovery(!recovery); setCode(""); setError(""); }}>
+                  {recovery ? "Use an authenticator code" : "Use a recovery code"}
+                </Button>
+              </p>}
+              {(step.kind === "mfa" || step.kind === "password_reset") && <p>
+                <Button type="button" variant="ghost" className="login-secondary" onClick={startOver}>Start over</Button>
+              </p>}
+            </Fieldset.Root>
+          </Form>
 
-      {step.kind === "login" && <p>Contact your organization administrator if you need an account or have forgotten your password.</p>}
-    </main>
+          {step.kind === "login" && <p className="login-help">Contact your organization administrator if you need an account or have forgotten your password.</p>}
+        </section>
+      </main>
+      <footer className="login-footer">Officeflare · Your workspace, connected.</footer>
+    </div>
   );
 }

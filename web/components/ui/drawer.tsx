@@ -1,4 +1,4 @@
-import { Drawer } from "@base-ui/react/drawer";
+import { Drawer } from "./styled-primitives";
 import type { ComponentPropsWithRef } from "react";
 
 export { Drawer };
