@@ -52,7 +52,6 @@
 .account-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-block-start: 24px; }
 .account-notice { display: flex; align-items: center; gap: 8px; margin-block: 16px; color: var(--ui-muted); font-size: 12px; }
 .account-notice[data-error] { color: var(--ui-danger); }
-.account-notice[data-success] { color: #277b48; }
 .account-readonly { display: grid; gap: 5px; font-size: 12px; }
 .account-readonly-label { font-weight: 500; }
 .account-readonly-value { color: var(--ui-muted); overflow-wrap: anywhere; }

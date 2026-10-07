@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
-import { Button, Dialog, DialogPopup, Form, Icon } from "@/components/ui";
+import { Button, Dialog, DialogPopup, Form, Icon, useNotifications } from "@/components/ui";
 import { errorMessage } from "../lib/api";
 import { photoCrop, profilePhotoSize, zoomPhotoCrop, type PhotoView } from "../lib/profile-image";
 
@@ -15,6 +15,7 @@ export function ProfileImageEditor({ file, onClose, onSave }: {
   onClose: () => void;
   onSave: (photo: Blob) => Promise<void>;
 }) {
+  const notify = useNotifications();
   const canvas = useRef<HTMLCanvasElement>(null);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
@@ -153,6 +154,7 @@ export function ProfileImageEditor({ file, onClose, onSave }: {
     event.preventDefault(); event.stopPropagation();
     if (!image || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(""); clearGesture();
+    let uploading = false;
     try {
       const output = document.createElement("canvas"); output.width = output.height = profilePhotoSize;
       const context = output.getContext("2d");
@@ -161,8 +163,12 @@ export function ProfileImageEditor({ file, onClose, onSave }: {
       context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
       context.drawImage(image, crop.left, crop.top, crop.width, crop.height);
       const photo = await new Promise<Blob>((resolve, reject) => output.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Unable to resize this image.")), "image/webp", .9));
+      uploading = true;
       await onSave(photo); onClose();
-    } catch (failure) { setError(failure instanceof Error && !("status" in failure) ? failure.message : errorMessage(failure)); }
+    } catch (failure) {
+      if (uploading) notify.error(errorMessage(failure));
+      else setError(failure instanceof Error ? failure.message : "Unable to resize this image.");
+    }
     finally { inFlight.current = false; setBusy(false); }
   }
 

@@ -8,6 +8,7 @@ export * from "./menu";
 export * from "./select";
 export * from "./tooltip";
 export * from "./provider";
+export { useNotifications } from "./notifications";
 export * from "./autocomplete";
 export * from "./context-menu";
 export * from "./drawer";

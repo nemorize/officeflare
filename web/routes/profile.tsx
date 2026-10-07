@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Checkbox, CheckboxGroup, Field, Fieldset, Form, Icon, Select, SelectPopup, TextField } from "@/components/ui";
+import { Button, Checkbox, CheckboxGroup, Field, Fieldset, Form, Icon, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
 import { useAccount } from "../components/account-context";
 import { api, errorMessage } from "../lib/api";
 import { label, profileChanges, type ProfileField, type ProfileValue } from "../lib/profile";
@@ -39,6 +39,7 @@ function FieldControl({ field, value, onChange }: { field: ProfileField; value: 
 }
 
 export function ProfilePage() {
+  const notify = useNotifications();
   const { user, reload } = useAccount();
   const auth = useSession();
   const [name, setName] = useState("");
@@ -48,14 +49,13 @@ export function ProfilePage() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [revision, setRevision] = useState(0);
   const inFlight = useRef(false);
   const email = user?.email_address ?? auth.session?.email ?? "";
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setReady(false); setError(""); setSuccess("");
+    setLoading(true); setReady(false); setError("");
     void Promise.all([
       api<{ display_name: string | null; fields: Record<string, ProfileValue> }>("/api/me/profile", { signal: controller.signal }),
       api<{ fields: ProfileField[] }>("/api/me/profile-fields", { signal: controller.signal }),
@@ -71,7 +71,7 @@ export function ProfilePage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (inFlight.current) return;
-    setError(""); setSuccess("");
+    setError("");
     let fields;
     try {
       if ([...name.trim()].length > 200) throw new Error("Your display name must contain at most 200 characters.");
@@ -80,9 +80,9 @@ export function ProfilePage() {
     inFlight.current = true; setBusy(true);
     try {
       await api("/api/me/profile", { method: "PATCH", body: { display_name: name.trim() || null, fields } });
-      setSuccess("Your profile has been saved.");
+      notify.success("Your profile has been saved.");
       await reload().catch(() => {});
-    } catch (failure) { setError(errorMessage(failure)); }
+    } catch (failure) { notify.error(errorMessage(failure)); }
     finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -102,7 +102,6 @@ export function ProfilePage() {
               onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} />)}
           </Fieldset.Root>
           {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-          {success && <p className="account-notice" data-success role="status"><Icon name="check" />{success}</p>}
           <div className="account-actions"><Button type="button" disabled={busy} onClick={() => setRevision((current) => current + 1)}>Reload</Button>
             <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
         </section>

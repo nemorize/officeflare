@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { Button, Icon, Menu, MenuPopup, OfficeflareMark } from "@/components/ui";
+import { Button, Icon, Menu, MenuPopup, OfficeflareMark, useNotifications } from "@/components/ui";
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
@@ -37,11 +37,11 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
 }
 
 function WorkspaceChrome() {
+  const notify = useNotifications();
   const { pathname: locationPath } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
@@ -56,9 +56,9 @@ function WorkspaceChrome() {
 
   async function signOut() {
     if (busy) return;
-    setBusy(true); setError("");
-    try { await sessions.signOut(); }
-    catch (failure) { setError(errorMessage(failure)); }
+    setBusy(true);
+    try { await sessions.signOut(); notify.success("You have been signed out."); }
+    catch (failure) { notify.error(errorMessage(failure)); }
     finally { setBusy(false); }
   }
 
@@ -85,7 +85,7 @@ function WorkspaceChrome() {
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>
         {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
-        {(error || auth.error) && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{error || auth.error}</span></div>}
+        {auth.error && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
           <Suspense fallback={<p className="account-page" role="status">Loading…</p>}><Outlet /></Suspense>
         </main>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Button, Checkbox, Dialog, DialogPopup, Fieldset, Form, Icon, TextField } from "@/components/ui";
+import { Button, Checkbox, Dialog, DialogPopup, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { useSession, sessions } from "../lib/session";
 import { ApiError, api, errorMessage } from "../lib/api";
 import { SessionStorageError } from "../lib/session-manager";
@@ -11,6 +11,7 @@ type Action = { kind: "start"; name: string } | { kind: "activate"; setup: Authe
   | { kind: "remove"; method: AuthenticatorMethod } | { kind: "recovery" };
 
 export function AuthenticatorSettings() {
+  const notify = useNotifications();
   const auth = useSession();
   const [methods, setMethods] = useState<AuthenticatorMethod[]>([]);
   const [remaining, setRemaining] = useState(0);
@@ -24,7 +25,6 @@ export function AuthenticatorSettings() {
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [savedCodes, setSavedCodes] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [timestamp, setTimestamp] = useState(Date.now());
   const email = auth.session?.email ?? "";
   const active = methods.filter((method) => method.status === "active");
@@ -54,13 +54,13 @@ export function AuthenticatorSettings() {
   }, [setup]);
 
   function begin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setSuccess("");
+    event.preventDefault(); setError("");
     if (!name.trim() || name.trim().length > 100) { setError("Enter an authenticator name with up to 100 characters."); return; }
     setAction({ kind: "start", name: name.trim() });
   }
 
   function verify(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setSuccess("");
+    event.preventDefault(); setError("");
     if (!setup || expired) { setError("This setup has expired. Remove the pending authenticator and start again."); return; }
     if (!/^[0-9]{6}$/.test(code.trim())) { setError("Enter the six-digit code from your new authenticator."); return; }
     setAction({ kind: "activate", setup, code: code.trim() });
@@ -68,7 +68,7 @@ export function AuthenticatorSettings() {
 
   async function perform(grant: ReauthenticationGrant) {
     if (!action) return;
-    setError(""); setSuccess("");
+    setError("");
     try {
       switch (action.kind) {
         case "start": {
@@ -78,20 +78,20 @@ export function AuthenticatorSettings() {
         case "activate":
           await client.activate(grant, action.setup, action.code);
           setSetup(null); setCode("");
-          setSuccess("OTP is enabled. Other sessions have been signed out. Save recovery codes below so you can sign in if you lose your authenticator."); break;
+          notify.success("OTP is enabled. Other sessions have been signed out. Save recovery codes below so you can sign in if you lose your authenticator."); break;
         case "remove":
           await client.remove(grant, action.method.id);
           if (setup?.method_id === action.method.id) { setSetup(null); setCode(""); }
-          setSuccess("The authenticator has been removed. Other sessions have been signed out."); break;
+          notify.success("The authenticator has been removed. Other sessions have been signed out."); break;
         case "recovery": {
           const result = await client.recoveryCodes(grant);
           setRecoveryCodes(result.recovery_codes); setSavedCodes(false);
-          setSuccess("New recovery codes have been generated. Previous codes are no longer valid. Other sessions have been signed out."); break;
+          notify.success("New recovery codes have been generated. Previous codes are no longer valid. Other sessions have been signed out."); break;
         }
       }
       setRevision((value) => value + 1);
     } catch (failure) {
-      setError(failure instanceof SessionStorageError ? failure.message : failure instanceof ApiError && failure.status === 401
+      notify.error(failure instanceof SessionStorageError ? failure.message : failure instanceof ApiError && failure.status === 401
         ? action.kind === "activate" ? "The new authenticator code is incorrect or verification expired. Enter a fresh code and try again."
           : "Verification expired. Verify your identity again."
         : failure instanceof ApiError ? errorMessage(failure) : failure instanceof Error ? failure.message : errorMessage(failure));
@@ -118,7 +118,6 @@ export function AuthenticatorSettings() {
     </div>
     {loading && <p className="account-loading" role="status">Loading authenticators…</p>}
     {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-    {success && <p className="account-notice" data-success role="status"><Icon name="check" />{success}</p>}
     {!loading && !ready ? <Button onClick={() => { setError(""); setRevision((value) => value + 1); }}>Try again</Button> : ready && <>
       {methods.length > 0 && <ul className="account-authenticator-list">{methods.map((method) => <li key={method.id}>
         <span className="account-session-icon"><Icon name="shield" /></span>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Dialog, DialogPopup, Fieldset, Form, Select, SelectPopup, TextField } from "@/components/ui";
+import { Button, Dialog, DialogPopup, Fieldset, Form, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
 import { PasswordField } from "./password-field";
 import { ApiError, api, errorMessage } from "../lib/api";
 import type { MfaChallenge } from "../lib/auth";
@@ -13,6 +13,7 @@ export function ReauthenticationDialog({ open, title, description, confirmLabel,
   onOpenChange: (open: boolean) => void;
   onVerified: (grant: ReauthenticationGrant) => Promise<void>;
 }) {
+  const notify = useNotifications();
   const [password, setPassword] = useState("");
   const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
   const [method, setMethod] = useState("");
@@ -47,10 +48,11 @@ export function ReauthenticationDialog({ open, title, description, confirmLabel,
         setChallenge(result); setMethod(result.methods[0]?.id ?? ""); setRecovery(result.methods.length === 0);
       } else await onVerified(result);
     } catch (failure) {
-      setError(failure instanceof ApiError && failure.status === 401
-        ? challenge ? "Use a new code from your authenticator, or a valid recovery code. Codes can only be used once."
+      if (failure instanceof ApiError && failure.status === 401) setError(
+        challenge ? "Use a new code from your authenticator, or a valid recovery code. Codes can only be used once."
           : "Check your current password and try again."
-        : errorMessage(failure));
+      );
+      else notify.error(errorMessage(failure));
     } finally { inFlight.current = false; setBusy(false); }
   }
 

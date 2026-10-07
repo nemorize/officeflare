@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Button, Dialog, DialogPopup, Fieldset, Form, Icon, Select, SelectPopup, TextField } from "@/components/ui";
+import { Button, Dialog, DialogPopup, Fieldset, Form, Icon, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
 import { PasswordField } from "../components/password-field";
 import { useAccount } from "../components/account-context";
 import { ApiError, api, errorMessage } from "../lib/api";
@@ -12,6 +12,7 @@ import { AuthenticatorSettings } from "../components/authenticator-settings";
 interface Grant { reauthentication_token: string; expires_at: number; }
 
 export function SecurityPage() {
+  const notify = useNotifications();
   const { reload } = useAccount();
   const auth = useSession();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -24,7 +25,6 @@ export function SecurityPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [dialogError, setDialogError] = useState("");
-  const [success, setSuccess] = useState("");
   const inFlight = useRef(false);
 
   function cancelVerification() {
@@ -37,14 +37,14 @@ export function SecurityPage() {
     const tokens = await api<Session>("/api/me/password", { method: "PUT", token: grant.reauthentication_token, body: { new_password: password } });
     await sessions.accept(tokens, auth.session?.email ?? "");
     setPassword(""); setCurrentPassword(""); setConfirmation(""); setChallenge(null); setCode(""); setDialogError("");
-    setSuccess("Your password has been changed. Other sessions have been signed out.");
+    notify.success("Your password has been changed. Other sessions have been signed out.");
     await reload().catch(() => {});
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (inFlight.current) return;
-    setError(""); setSuccess("");
+    setError("");
     try { validatePassword(password, confirmation); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Check your password."); return; }
     inFlight.current = true; setBusy(true);
@@ -55,8 +55,8 @@ export function SecurityPage() {
         setChallenge(result); setMethod(result.methods[0]?.id ?? ""); setRecovery(result.methods.length === 0); setDialogError(""); setCode("");
       } else await change(result);
     } catch (failure) {
-      setError(failure instanceof ApiError && failure.status === 401 ? "Check your current password and try again." :
-        failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
+      if (failure instanceof ApiError && failure.status === 401) setError("Check your current password and try again.");
+      else notify.error(failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
     } finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -74,8 +74,8 @@ export function SecurityPage() {
       });
       await change(grant);
     } catch (failure) {
-      setDialogError(failure instanceof ApiError && failure.status === 401 ? "The code is incorrect or verification has expired. Check the code and try again." :
-        failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
+      if (failure instanceof ApiError && failure.status === 401) setDialogError("The code is incorrect or verification has expired. Check the code and try again.");
+      else notify.error(failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
     } finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -90,7 +90,6 @@ export function SecurityPage() {
           <PasswordField id="account-confirm-password" label="Confirm new password" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
         </Fieldset.Root>
         {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-        {success && <p className="account-notice" data-success role="status"><Icon name="check" />{success}</p>}
         <div className="account-actions"><Button type="submit" variant="primary" disabled={busy}>{busy ? "Verifying…" : "Change password"}</Button></div>
       </Form>
     </section>

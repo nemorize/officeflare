@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertDialog, AlertDialogPopup, Button, Icon } from "@/components/ui";
+import { AlertDialog, AlertDialogPopup, Button, Icon, useNotifications } from "@/components/ui";
 import { api, errorMessage } from "../lib/api";
 import { sessions } from "../lib/session";
 
@@ -15,13 +15,12 @@ function device(agent: string | null) {
 }
 
 export function SessionsPage() {
+  const notify = useNotifications();
   const [items, setItems] = useState<AccountSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [target, setTarget] = useState<AccountSession | "all" | null>(null);
-  const [dialogError, setDialogError] = useState("");
   const [revision, setRevision] = useState(0);
   const inFlight = useRef(false);
 
@@ -37,16 +36,16 @@ export function SessionsPage() {
 
   async function revoke() {
     if (!target || inFlight.current) return;
-    inFlight.current = true; setBusy(true); setDialogError(""); setSuccess("");
+    inFlight.current = true; setBusy(true);
     try {
       await api(target === "all" ? "/api/me/sessions" : `/api/me/sessions/${encodeURIComponent(target.id)}`, { method: "DELETE" });
-      if (target === "all") await sessions.restore();
+      if (target === "all") { notify.success("All sessions have been signed out."); await sessions.restore(); }
       else {
         setItems((current) => current.filter((item) => item.id !== target.id));
-        setSuccess("The session has been signed out.");
+        notify.success("The session has been signed out.");
       }
       setTarget(null);
-    } catch (failure) { setDialogError(errorMessage(failure)); }
+    } catch (failure) { notify.error(errorMessage(failure)); }
     finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -60,21 +59,19 @@ export function SessionsPage() {
             <span className="account-session-icon"><Icon name="laptop" width="19" height="19" /></span>
             <div className="account-session-details"><div className="account-session-title"><h3>{device(item.user_agent)}</h3>{item.current && <span className="account-session-badge">This device</span>}</div>
               <p>Signed in {date(item.created_at)}</p><p>Last active {date(item.last_used_at)}</p><p>Expires {date(item.expires_at)}</p></div>
-            {!item.current && <Button size="sm" disabled={busy} onClick={() => { setTarget(item); setDialogError(""); }}>Sign out</Button>}
+            {!item.current && <Button size="sm" disabled={busy} onClick={() => setTarget(item)}>Sign out</Button>}
           </div>)}
           {!items.length && <p className="account-loading">No active sessions.</p>}
         </div>}
-        {success && <p className="account-notice" data-success role="status"><Icon name="check" />{success}</p>}
         <div className="account-actions"><Button disabled={busy} onClick={() => setRevision((current) => current + 1)}>Refresh</Button></div>
       </>}
     </section>
     <section className="account-panel account-danger-panel"><div><h2>Sign out everywhere</h2><p>End all sessions, including this device.</p></div>
-      <Button variant="danger" disabled={busy} onClick={() => { setTarget("all"); setDialogError(""); }}>Sign out everywhere</Button></section>
+      <Button variant="danger" disabled={busy} onClick={() => setTarget("all")}>Sign out everywhere</Button></section>
     <AlertDialog.Root open={target !== null} onOpenChange={(open) => { if (!open && !inFlight.current) setTarget(null); }}>
       <AlertDialogPopup>
         <AlertDialog.Title>{target === "all" ? "Sign out everywhere?" : "Sign out this session?"}</AlertDialog.Title>
         <AlertDialog.Description>{target === "all" ? "You will need to sign in again on every device, including this one." : "The selected device will need to sign in again."}</AlertDialog.Description>
-        {dialogError && <p className="account-notice" data-error role="alert">{dialogError}</p>}
         <div className="account-actions"><Button disabled={busy} onClick={() => setTarget(null)}>Cancel</Button>
           <Button variant="danger" disabled={busy} onClick={() => { void revoke(); }}>{busy ? "Signing out…" : "Sign out"}</Button></div>
       </AlertDialogPopup>

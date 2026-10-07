@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Button, Field, Fieldset, Form, Icon, TextField } from "@/components/ui";
+import { Button, Field, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { AccessDenied, useAccess } from "../components/console-access";
 import { Check, Confirm, Notice, ResourceState, useResource } from "../components/console-shared";
 import { ApiError, api, errorMessage } from "../lib/api";
@@ -23,29 +23,31 @@ export function RolesPage() {
 }
 
 export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
+  const notify = useNotifications();
   const { id = "" } = useParams(), access = useAccess(), navigate = useNavigate();
   const canRead = access.permissions.includes("roles.read"), canManage = access.permissions.includes("roles.manage");
   const resource = useResource<{ role: Role }>(!creating && canRead ? `/api/roles/${encodeURIComponent(id)}` : null);
   const catalog = useResource<{ permissions: PermissionDefinition[] }>(canRead ? "/api/permissions" : null);
   const role = resource.data?.role, editable = canManage && !role?.is_system;
   const [key, setKey] = useState(""), [label, setLabel] = useState(""), [description, setDescription] = useState(""), [selected, setSelected] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [success, setSuccess] = useState(""), [remove, setRemove] = useState(false);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [remove, setRemove] = useState(false);
   const inFlight = useRef(false);
-  useEffect(() => { setRemove(false); setError(""); setSuccess(""); }, [id, creating]);
+  useEffect(() => { setRemove(false); setError(""); }, [id, creating]);
   useEffect(() => { if (role) { setKey(role.key); setLabel(role.label); setDescription(role.description ?? ""); setSelected(managedPermissions(role.permissions)); } }, [role]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!editable || inFlight.current) return;
-    setError(""); setSuccess("");
+    setError("");
     let body;
     try { body = rolePayload({ key, label, description, permissions: selected }, role); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Check the role settings."); return; }
     inFlight.current = true; setBusy(true);
     try {
       const result = await api<{ role: Role }>(creating ? "/api/roles" : `/api/roles/${encodeURIComponent(id)}`, { method: creating ? "POST" : "PUT", body });
+      notify.success(creating ? "The role has been created." : "The role has been updated.");
       if (creating) navigate(`/console/roles/${encodeURIComponent(result.role.id)}`);
-      else { resource.update(result); setSuccess("The role has been updated."); }
+      else resource.update(result);
       access.refresh();
-    } catch (failure) { setError(errorMessage(failure)); if (failure instanceof ApiError && failure.status === 403) access.refresh(); }
+    } catch (failure) { notify.error(errorMessage(failure)); if (failure instanceof ApiError && failure.status === 403) access.refresh(); }
     finally { inFlight.current = false; setBusy(false); }
   }
   if (!canRead || creating && !canManage) return <AccessDenied />;
@@ -60,10 +62,10 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
       </Fieldset.Root></section>
       <section className="account-panel"><div className="account-panel-header"><h2>Permissions</h2><p>{editable ? "Select the actions users with this role can perform. You can grant permissions you already have." : "Actions available to users with this role."}</p></div>
         <div className="console-permissions">{[{ title: "User accounts", prefix: "users." }, { title: "Roles", prefix: "roles." }].map((group) => <fieldset key={group.prefix}><legend>{group.title}</legend>{definitions.filter((permission) => permission.key.startsWith(group.prefix)).map((permission) => <Check key={permission.key} checked={selected.includes(permission.key)} disabled={busy || !editable || !access.permissions.includes(permission.key) && !selected.includes(permission.key)} onChange={(checked) => setSelected((current) => checked ? [...current, permission.key] : current.filter((key) => key !== permission.key))}>{permission.label}</Check>)}</fieldset>)}</div>
-        <Notice error={error} success={success} /><div className="account-actions"><Button type="button" disabled={busy} onClick={() => creating ? navigate("/console/roles") : resource.reload()}>{creating ? "Cancel" : "Reload"}</Button>{editable && <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : creating ? "Create role" : "Save changes"}</Button>}</div>
+        <Notice error={error} /><div className="account-actions"><Button type="button" disabled={busy} onClick={() => creating ? navigate("/console/roles") : resource.reload()}>{creating ? "Cancel" : "Reload"}</Button>{editable && <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : creating ? "Create role" : "Save changes"}</Button>}</div>
       </section></Form>
       {!creating && role && !role.is_system && canManage && <section className="account-panel account-danger-panel"><div><h2>Delete role</h2><p>Remove this role and its access from every assigned user.</p></div><Button variant="danger" disabled={busy} onClick={() => setRemove(true)}>Delete role</Button></section>}
     </>}
-    <Confirm open={remove} destructive title="Delete this role?" description={`Delete ${role?.label || "this role"}? All users assigned this role will immediately lose the access it provides.`} label="Delete role" onClose={() => setRemove(false)} onConfirm={async () => { await api(`/api/roles/${encodeURIComponent(id)}`, { method: "DELETE" }); access.refresh(); navigate("/console/roles"); }} />
+    <Confirm open={remove} destructive title="Delete this role?" description={`Delete ${role?.label || "this role"}? All users assigned this role will immediately lose the access it provides.`} label="Delete role" onClose={() => setRemove(false)} onConfirm={async () => { await api(`/api/roles/${encodeURIComponent(id)}`, { method: "DELETE" }); notify.success("The role has been deleted."); access.refresh(); navigate("/console/roles"); }} />
   </section>;
 }

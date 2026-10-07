@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PasswordField } from "../components/password-field";
 import { Link, Navigate, useLocation } from "react-router";
-import { Button, Field, Fieldset, Form, Icon, OfficeflareMark, Select, SelectPopup, TextField } from "@/components/ui";
+import { Button, Field, Fieldset, Form, Icon, OfficeflareMark, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
 import { AuthError, changePassword, login, recoverMfa, verifyMfa,
   type LoginResult, type MfaChallenge, type PasswordChallenge } from "../lib/auth";
 import { sessions, useSession } from "../lib/session";
@@ -19,6 +19,7 @@ const headings = {
 } as const;
 
 export function LoginPage() {
+  const notify = useNotifications();
   const authSession = useSession();
   const location = useLocation();
   const [step, setStep] = useState<Step>({ kind: "login" });
@@ -112,18 +113,18 @@ export function LoginPage() {
       }
     } catch (failure) {
       if (failure instanceof SessionStorageError) {
-        setError(failure.message);
+        notify.error(failure.message);
       } else if (failure instanceof AuthError) {
-        if (failure.status === 429) setError("Too many requests. Try again later.");
+        if (failure.status === 429) notify.error("Too many requests. Try again later.");
         else if (failure.status === 401 && step.kind === "login") setError("Check your email and password.");
         else if (failure.status === 401 && step.kind === "mfa") setError("The code is incorrect or the verification request has expired. Check the code and try again.");
         else if (failure.status === 401 && step.kind === "password_reset") {
           startOver();
           setError("The verification request has expired. Sign in again.");
         } else if (failure.status === 400) setError("Check the information you entered.");
-        else setError("Unable to complete your request. Try again later.");
+        else notify.error("Unable to complete your request. Try again later.");
       } else {
-        setError("Unable to connect to the server. Check your connection and try again.");
+        notify.error("Unable to connect to the server. Check your connection and try again.");
       }
     } finally {
       inFlight.current = false;
