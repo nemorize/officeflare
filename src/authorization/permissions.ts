@@ -9,6 +9,9 @@ export const permissionCatalog = {
   "users.delete": { label: "Delete user accounts" },
   "users.roles.read": { label: "View users' roles" },
   "users.roles.manage": { label: "Assign and remove users' roles" },
+  "mail.providers.manage": { label: "Manage mail provider connections" },
+  "mail.domains.manage": { label: "Manage mail domains and addresses" },
+  "mail.mailboxes.manage": { label: "Provision and disable mailboxes" },
 } as const;
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";

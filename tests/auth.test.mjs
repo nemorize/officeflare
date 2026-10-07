@@ -1,3 +1,5 @@
+import { workerModules } from "./worker-modules.mjs";
+import { permissionCatalog } from "../src/authorization/permissions.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
@@ -34,7 +36,7 @@ function code(secret, step = Math.floor(timestamp() / 30)) {
 test("Bearer account API in the Workers runtime", async (t) => {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const signing = { active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] };
-  const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{ name: "officeflare", modules: true, scriptPath: "dist/index.js", compatibilityDate: "2026-09-29",
+  const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{ name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
     d1Databases: { DB: "auth-tests" }, r2Buckets: { PROFILE_BUCKET: "profile-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify(signing), MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
       AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api",
@@ -439,7 +441,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
     administratorToken = (await login(administratorId)).access_token;
     const catalog = (await request("/api/permissions", { token: administratorToken })).permissions.map((entry) => entry.key).sort();
     assert.deepEqual((await request("/api/me/permissions", { token: administratorToken })).permissions, catalog);
-    assert.equal(catalog.length, 9);
+    assert.deepEqual(catalog, Object.keys(permissionCatalog).sort());
   });
 
   await t.test("role administration validates permissions, preserves system roles and rejects stale edits", async () => {
@@ -559,7 +561,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
 
   await t.test("the last eligible administrator survives concurrent removals", async () => {
     await assignRoles(administratorId, [], administratorToken, 409);
-    assert.equal((await request("/api/me/permissions", { token: administratorToken })).permissions.length, 9);
+    assert.deepEqual((await request("/api/me/permissions", { token: administratorToken })).permissions, Object.keys(permissionCatalog).sort());
     await assignRoles(otherAdministratorId, ["system-administrator"]);
     const otherToken = (await login(otherAdministratorId)).access_token;
     const attempts = await Promise.all([[administratorId, administratorToken], [otherAdministratorId, otherToken]].map(([id, token]) =>

@@ -7,11 +7,12 @@
 	"assets": {
 		"directory": "./dist/client",
 		"not_found_handling": "single-page-application",
-		"run_worker_first": ["/api", "/api/*"]
+		"run_worker_first": ["/api", "/api/*", "/.well-known/jmap", "/jmap", "/jmap/*", "/mcp"]
 	},
 	"vars": {
 		"AUTH_ISSUER": "officeflare",
-		"AUTH_AUDIENCE": "officeflare-api"
+		"AUTH_AUDIENCE": "officeflare-api",
+		"MAIL_PARTITION_TARGET_BYTES": "6000000000"
 	},
 	"secrets": {
 		"required": ["AUTH_SIGNING_KEYS", "MFA_ENCRYPTION_KEYS"]
@@ -29,7 +30,26 @@
 			"database_name": "officeflare-user-accounts"
 		}
 	],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "MAILBOX", "class_name": "MailboxDO" },
+			{ "name": "MAIL_PARTITION", "class_name": "MailPartitionDO" }
+		]
+	},
+	"migrations": [{ "tag": "mail-v1", "new_sqlite_classes": ["MailboxDO", "MailPartitionDO"] }],
 	"r2_buckets": [
+		{ "binding": "MAIL_BUCKET", "bucket_name": "officeflare-mail" },
 		{ "binding": "PROFILE_BUCKET", "bucket_name": "officeflare-profiles" }
-	]
+	],
+	"send_email": [{ "name": "EMAIL" }],
+	"queues": {
+		"producers": [
+			{ "binding": "MAIL_QUEUE", "queue": "officeflare-mail" }
+		],
+		"consumers": [
+			{ "queue": "officeflare-mail", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "officeflare-mail-dlq" }
+		]
+	},
+	"triggers": { "crons": ["*/5 * * * *"] },
+	"rules": [{ "type": "Text", "globs": ["**/mail/*.sql"], "fallthrough": true }]
 }

@@ -6,6 +6,7 @@ import { createDatabase } from "../db";
 import auth from "./auth";
 import me from "./me";
 import users from "./users";
+import mail from "./mail";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
@@ -21,9 +22,14 @@ api.use("*", async (c, next) => {
   await next();
 });
 api.use("*", async (c, next) => {
-  const maxSize = c.req.path === "/api/me/profile-image" ? 2 * 1024 * 1024 : 64 * 1024;
+  const path = c.req.path;
+  const largeUpload = /^\/api\/mail\/mailboxes\/[^/]+\/imports$/.test(path);
+  const mailBody = path.startsWith("/api/mail/");
+  const profileImage = path === "/api/me/profile-image";
+  const maxSize = profileImage ? 2 * 1024 * 1024 : largeUpload ? 26 * 1024 * 1024 : mailBody ? 5 * 1024 * 1024 : 64 * 1024;
   return bodyLimit({ maxSize, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } })(c, next);
 });
+api.route("/mail", mail);
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("roles.read"), (c) => c.json({

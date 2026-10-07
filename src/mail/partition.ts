@@ -1,0 +1,1048 @@
+import { DurableObject } from "cloudflare:workers";
+import schema from "./partition.sql";
+import { migrate } from "./migrations";
+import { compileSearch } from "./search";
+import {
+  epoch,
+  fail,
+  id,
+  row,
+  rows,
+  type Attachment,
+  type MessageInput,
+  type MessageQuery,
+  type MessageRow,
+  type Submission,
+  type DeliveryTask,
+} from "./types";
+
+export class MailPartitionDO extends DurableObject<Env> {
+  private sql: SqlStorage;
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    ctx.blockConcurrencyWhile(async () => {
+      migrate(ctx.storage, [schema]);
+    });
+  }
+  initialize(mailboxId: string, partitionId: string) {
+    const existing = row<{ mailbox_id: string; partition_id: string }>(
+      this.sql,
+      "SELECT * FROM partition_identity WHERE id=1",
+    );
+    if (
+      existing &&
+      (existing.mailbox_id !== mailboxId ||
+        existing.partition_id !== partitionId)
+    )
+      fail(409, "Partition identity mismatch");
+    this.sql.exec(
+      "INSERT OR IGNORE INTO partition_identity VALUES(1,?,?)",
+      mailboxId,
+      partitionId,
+    );
+  }
+  state() {
+    return row<{ n: number }>(
+      this.sql,
+      "SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='change_log'),0) n",
+    )!.n;
+  }
+  size() {
+    return this.sql.databaseSize;
+  }
+  internalMessage(messageId: string) {
+    return row<MessageRow>(
+      this.sql,
+      "SELECT * FROM messages WHERE id=?",
+      messageId,
+    );
+  }
+  folderCounts(actorId: string) {
+    return rows<{
+      folder_id: string;
+      total: number;
+      unread: number;
+      threads: number;
+      unread_threads: number;
+    }>(
+      this.sql,
+      "SELECT folder_id,count(*) total,sum(1-is_read) unread,count(DISTINCT thread_id) threads,count(DISTINCT CASE WHEN is_read=0 THEN thread_id END) unread_threads FROM messages WHERE draft_owner_id IS NULL OR draft_owner_id=? GROUP BY folder_id",
+      actorId,
+    );
+  }
+  folderCount(folderId: string) {
+    return row<{ n: number }>(
+      this.sql,
+      "SELECT count(*) n FROM messages WHERE folder_id=?",
+      folderId,
+    )!.n;
+  }
+  private change(
+    messageId: string,
+    operation: string,
+    privateUser: string | null = null,
+  ) {
+    this.sql.exec(
+      "INSERT INTO change_log(message_id,operation,created_at) VALUES(?,?,?)",
+      messageId,
+      operation,
+      epoch(),
+    );
+    const identity = row<{ mailbox_id: string; partition_id: string }>(
+      this.sql,
+      "SELECT * FROM partition_identity WHERE id=1",
+    )!;
+    this.sql.exec(
+      "INSERT INTO outbox VALUES(?,?,?, ?,NULL)",
+      id(),
+      "event",
+      JSON.stringify({
+        ...identity,
+        message_id: messageId,
+        operation,
+        private_user_id: privateUser,
+      }),
+      epoch(),
+    );
+  }
+  private removeIndex(messageId: string) {
+    for (const document of rows<{
+      id: number;
+      subject: string;
+      from_address: string;
+      to_addresses: string;
+      body: string;
+    }>(
+      this.sql,
+      "SELECT * FROM search_documents WHERE message_id=?",
+      messageId,
+    )) {
+      this.sql.exec(
+        "INSERT INTO messages_fts(messages_fts,rowid,subject,from_address,to_addresses,body) VALUES('delete',?,?,?,?,?)",
+        document.id,
+        document.subject,
+        document.from_address,
+        document.to_addresses,
+        document.body,
+      );
+    }
+    this.sql.exec("DELETE FROM search_documents WHERE message_id=?", messageId);
+  }
+  private index(
+    messageId: string,
+    subject: string,
+    from: string,
+    to: string[],
+    body: string,
+  ) {
+    this.removeIndex(messageId);
+    // Overlap exceeds the supported query length, including phrases spanning a chunk boundary.
+    const chunks: string[] = [];
+    for (let start = 0; start < body.length; start += 64000)
+      chunks.push(body.slice(Math.max(0, start - 512), start + 64000));
+    if (!chunks.length) chunks.push("");
+    for (const chunk of chunks) {
+      const document = row<{ id: number }>(
+        this.sql,
+        "INSERT INTO search_documents(message_id,subject,from_address,to_addresses,body) VALUES(?,?,?,?,?) RETURNING id",
+        messageId,
+        subject,
+        from,
+        to.join(" "),
+        chunk,
+      )!;
+      this.sql.exec(
+        "INSERT INTO messages_fts(rowid,subject,from_address,to_addresses,body) VALUES(?,?,?,?,?)",
+        document.id,
+        subject,
+        from,
+        to.join(" "),
+        chunk,
+      );
+    }
+  }
+  insert(input: MessageInput) {
+    const existing = input.ingest_id
+      ? row<{ id: string }>(
+          this.sql,
+          "SELECT id FROM messages WHERE ingest_id=?",
+          input.ingest_id,
+        )
+      : row<{ id: string }>(
+          this.sql,
+          "SELECT id FROM messages WHERE id=?",
+          input.id,
+        );
+    if (existing) return existing.id;
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "INSERT INTO messages(id,thread_id,direction,folder_id,subject,from_address,received_at,provider,connection_id,provider_message_id,rfc_message_id,raw_r2_key,body_r2_key,snippet,has_attachments,draft_owner_id,ingest_id,is_spam,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        input.id,
+        input.thread_id,
+        input.direction,
+        input.folder_id,
+        input.subject,
+        input.from_address,
+        input.received_at,
+        input.provider,
+        input.connection_id,
+        input.provider_message_id,
+        input.rfc_message_id,
+        input.raw_r2_key,
+        input.body_r2_key,
+        input.snippet,
+        Number(input.attachments.length > 0),
+        input.draft_owner_id,
+        input.ingest_id ?? null,
+        Number(input.is_spam ?? false),
+        epoch(),
+        epoch(),
+      );
+      this.sql.exec(
+        "UPDATE messages SET source=?,trashed_at=?,reply_to_address=? WHERE id=?",
+        input.source ?? "email",
+        ["trash", "spam"].includes(input.folder_id) ? epoch() : null,
+        input.reply_to_address ?? null,
+        input.id,
+      );
+      for (const kind of ["to", "cc", "bcc"] as const)
+        input[kind].forEach((address, ordinal) =>
+          this.sql.exec(
+            "INSERT INTO message_recipients VALUES(?,?,?,?)",
+            input.id,
+            kind,
+            ordinal,
+            address,
+          ),
+        );
+      for (const reference of new Set(input.references))
+        this.sql.exec(
+          "INSERT INTO message_references VALUES(?,?)",
+          input.id,
+          reference,
+        );
+      for (const file of input.attachments)
+        this.sql.exec(
+          "INSERT INTO attachments VALUES(?,?,?,?,?,?,?,?)",
+          file.id,
+          input.id,
+          file.filename,
+          file.content_type,
+          file.size_bytes,
+          file.content_id,
+          file.r2_key,
+          file.disposition,
+        );
+      if (input.draft_owner_id) {
+        this.sql.exec(
+          "INSERT INTO drafts(message_id,created_by) VALUES(?,?)",
+          input.id,
+          input.draft_owner_id,
+        );
+        this.sql.exec(
+          "INSERT INTO draft_revisions VALUES(?,1,?,?)",
+          input.id,
+          input.body_r2_key,
+          epoch(),
+        );
+      }
+      this.index(
+        input.id,
+        input.subject,
+        input.from_address,
+        [...input.to, ...input.cc],
+        input.search_text,
+      );
+      this.change(input.id, "created", input.draft_owner_id);
+    });
+    return input.id;
+  }
+  receipt(operationId: string) {
+    return row<{ request_hash: string; resource_id: string }>(
+      this.sql,
+      "SELECT request_hash,resource_id FROM processing_receipts WHERE id=?",
+      operationId,
+    );
+  }
+  createDraft(input: MessageInput, operationId: string, requestHash: string) {
+    const existing = this.receipt(operationId);
+    if (existing) {
+      if (existing.request_hash !== requestHash)
+        fail(409, "Idempotency key reused with different request");
+      return existing.resource_id;
+    }
+    this.ctx.storage.transactionSync(() => {
+      this.insert(input);
+      this.sql.exec(
+        "INSERT INTO processing_receipts VALUES(?,?,?,?)",
+        operationId,
+        requestHash,
+        input.id,
+        epoch(),
+      );
+    });
+    return input.id;
+  }
+  applyInboundFlags(messageId: string, read: boolean, star: boolean) {
+    this.sql.exec(
+      "UPDATE messages SET is_read=?,is_starred=? WHERE id=?",
+      Number(read),
+      Number(star),
+      messageId,
+    );
+  }
+  get(messageId: string, actorId: string) {
+    const message = row<MessageRow>(
+      this.sql,
+      "SELECT * FROM messages WHERE id=? AND (draft_owner_id IS NULL OR draft_owner_id=?)",
+      messageId,
+      actorId,
+    );
+    if (!message) fail(404, "Message not found");
+    return {
+      ...message,
+      recipients: rows<{ kind: string; email_address: string }>(
+        this.sql,
+        "SELECT kind,email_address FROM message_recipients WHERE message_id=? ORDER BY kind,ordinal",
+        messageId,
+      ),
+      attachments: rows<Attachment>(
+        this.sql,
+        "SELECT id,filename,content_type,size_bytes,content_id,r2_key,disposition FROM attachments WHERE message_id=?",
+        messageId,
+      ),
+      references: rows<{ rfc_message_id: string }>(
+        this.sql,
+        "SELECT rfc_message_id FROM message_references WHERE message_id=?",
+        messageId,
+      ).map((r) => r.rfc_message_id),
+      draft: row<{ version: number; state: string }>(
+        this.sql,
+        "SELECT version,state FROM drafts WHERE message_id=?",
+        messageId,
+      ),
+    };
+  }
+  query(query: MessageQuery) {
+    const filters = ["(m.draft_owner_id IS NULL OR m.draft_owner_id=?)"],
+      bindings: (string | number)[] = [query.actor_id];
+    if (!query.include_snoozed) {
+      filters.push("(m.snoozed_until IS NULL OR m.snoozed_until<=?)");
+      bindings.push(epoch());
+    }
+    if (query.before) {
+      filters.push("(m.received_at<? OR (m.received_at=? AND m.id<?))");
+      bindings.push(
+        query.before.received_at,
+        query.before.received_at,
+        query.before.id,
+      );
+    }
+    if (query.folder_id) {
+      filters.push("m.folder_id=?");
+      bindings.push(query.folder_id);
+    }
+    if (query.thread_id) {
+      filters.push("m.thread_id=?");
+      bindings.push(query.thread_id);
+    }
+    if (query.search) {
+      const plan = compileSearch(query.search);
+      filters.push(...plan.filters);
+      bindings.push(...plan.bindings);
+      for (const term of plan.terms) {
+        filters.push(
+          (term.startsWith("-") ? "NOT " : "") +
+            "EXISTS(SELECT 1 FROM search_documents d JOIN messages_fts f ON f.rowid=d.id WHERE d.message_id=m.id AND messages_fts MATCH ?)",
+        );
+        bindings.push(term.startsWith("-") ? term.slice(1) : term);
+      }
+    }
+    return rows<MessageRow>(
+      this.sql,
+      "SELECT m.* FROM messages m WHERE " +
+        filters.join(" AND ") +
+        " ORDER BY m.received_at DESC,m.id DESC LIMIT ?",
+      ...bindings,
+      query.limit,
+    );
+  }
+  findThread(references: string[]) {
+    for (const reference of references.slice(-100).reverse()) {
+      const found = row<{ thread_id: string }>(
+        this.sql,
+        "SELECT thread_id FROM messages WHERE rfc_message_id=? ORDER BY received_at DESC LIMIT 1",
+        reference,
+      );
+      if (found) return found.thread_id;
+    }
+    return null;
+  }
+  patch(
+    messageId: string,
+    actorId: string,
+    version: number,
+    changes: {
+      folder_id?: string;
+      is_read?: number;
+      is_starred?: number;
+      is_spam?: number;
+      snoozed_until?: number | null;
+    },
+  ) {
+    if (changes.folder_id === "spam" && changes.is_spam === undefined)
+      changes.is_spam = 1;
+    if (
+      ["inbox", "archive"].includes(changes.folder_id ?? "") &&
+      changes.is_spam === undefined
+    )
+      changes.is_spam = 0;
+    const message = this.get(messageId, actorId);
+    if (message.version !== version) fail(409, "Message version changed");
+    if (message.draft && changes.folder_id && changes.folder_id !== "drafts")
+      fail(409, "Drafts must be submitted or discarded");
+    const keys = Object.keys(changes) as (keyof typeof changes)[];
+    if (!keys.length) fail(400, "No changes supplied");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE messages SET " +
+          keys.map((key) => key + "=?").join(",") +
+          ",trashed_at=?,version=version+1,updated_at=? WHERE id=?",
+        ...keys.map((key) => changes[key]!),
+        changes.folder_id && ["trash", "spam"].includes(changes.folder_id)
+          ? (message.trashed_at ?? epoch())
+          : changes.folder_id
+            ? null
+            : message.trashed_at,
+        epoch(),
+        messageId,
+      );
+      this.change(messageId, "updated", message.draft_owner_id);
+    });
+    return this.get(messageId, actorId);
+  }
+  editDraft(
+    messageId: string,
+    actorId: string,
+    version: number,
+    input: {
+      subject: string;
+      to: string[];
+      cc: string[];
+      bcc: string[];
+      body_r2_key: string;
+      snippet: string;
+      search_text: string;
+    },
+  ) {
+    const message = this.get(messageId, actorId);
+    if (!message.draft || message.draft.state !== "editable")
+      fail(409, "Draft is not editable");
+    if (message.draft.version !== version) fail(409, "Draft version changed");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE messages SET subject=?,body_r2_key=?,snippet=?,version=version+1,updated_at=? WHERE id=?",
+        input.subject,
+        input.body_r2_key,
+        input.snippet,
+        epoch(),
+        messageId,
+      );
+      this.sql.exec(
+        "UPDATE drafts SET version=version+1 WHERE message_id=?",
+        messageId,
+      );
+      this.sql.exec(
+        "INSERT INTO draft_revisions VALUES(?,?,?,?)",
+        messageId,
+        version + 1,
+        input.body_r2_key,
+        epoch(),
+      );
+      this.sql.exec(
+        "DELETE FROM message_recipients WHERE message_id=?",
+        messageId,
+      );
+      for (const kind of ["to", "cc", "bcc"] as const)
+        input[kind].forEach((address, ordinal) =>
+          this.sql.exec(
+            "INSERT INTO message_recipients VALUES(?,?,?,?)",
+            messageId,
+            kind,
+            ordinal,
+            address,
+          ),
+        );
+      this.index(
+        messageId,
+        input.subject,
+        message.from_address,
+        [...input.to, ...input.cc],
+        input.search_text,
+      );
+      this.change(messageId, "updated", actorId);
+    });
+    return this.get(messageId, actorId);
+  }
+  submit(
+    value: Omit<
+      Submission,
+      "provider_message_id" | "lease_until" | "attempt_count" | "error_code"
+    >,
+    fromAddress: string,
+  ) {
+    const existing = row<Submission>(
+      this.sql,
+      "SELECT * FROM submissions WHERE id=?",
+      value.id,
+    );
+    if (existing) {
+      if (existing.request_hash !== value.request_hash)
+        fail(409, "Idempotency key reused with different request");
+      return existing;
+    }
+    const message = this.get(value.message_id, value.actor_id);
+    if (
+      !message.draft ||
+      message.draft.state !== "editable" ||
+      message.draft.version !== value.draft_version
+    )
+      fail(409, "Draft version changed or submitted");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "INSERT INTO submissions(id,message_id,actor_id,actor_auth_version,api_key_id,address_id,send_mode,provider,connection_id,request_hash,draft_version,snapshot_r2_key,status,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        value.id,
+        value.message_id,
+        value.actor_id,
+        value.actor_auth_version,
+        value.api_key_id,
+        value.address_id,
+        value.send_mode,
+        value.provider,
+        value.connection_id,
+        value.request_hash,
+        value.draft_version,
+        value.snapshot_r2_key,
+        value.status,
+        value.scheduled_at,
+        epoch(),
+        epoch(),
+      );
+      const snapshotRecipients = rows<{ email_address: string }>(
+        this.sql,
+        "SELECT DISTINCT email_address FROM message_recipients WHERE message_id=?",
+        value.message_id,
+      );
+      for (const recipient of snapshotRecipients)
+        this.sql.exec(
+          "INSERT INTO submission_recipients(submission_id,email_address) VALUES(?,?)",
+          value.id,
+          recipient.email_address,
+        );
+      this.sql.exec(
+        "UPDATE drafts SET state='submitted' WHERE message_id=?",
+        value.message_id,
+      );
+      this.sql.exec(
+        "UPDATE messages SET from_address=? WHERE id=?",
+        fromAddress,
+        value.message_id,
+      );
+      for (const document of rows<{
+        id: number;
+        subject: string;
+        from_address: string;
+        to_addresses: string;
+        body: string;
+      }>(
+        this.sql,
+        "SELECT * FROM search_documents WHERE message_id=?",
+        value.message_id,
+      )) {
+        this.sql.exec(
+          "INSERT INTO messages_fts(messages_fts,rowid,subject,from_address,to_addresses,body) VALUES('delete',?,?,?,?,?)",
+          document.id,
+          document.subject,
+          document.from_address,
+          document.to_addresses,
+          document.body,
+        );
+        this.sql.exec(
+          "UPDATE search_documents SET from_address=? WHERE id=?",
+          fromAddress,
+          document.id,
+        );
+        this.sql.exec(
+          "INSERT INTO messages_fts(rowid,subject,from_address,to_addresses,body) VALUES(?,?,?,?,?)",
+          document.id,
+          document.subject,
+          fromAddress,
+          document.to_addresses,
+          document.body,
+        );
+      }
+      this.change(value.message_id, "submitted", value.actor_id);
+    });
+    return this.submission(value.id);
+  }
+  findSubmission(submissionId: string) {
+    return row<Submission>(
+      this.sql,
+      "SELECT * FROM submissions WHERE id=?",
+      submissionId,
+    );
+  }
+  submission(submissionId: string) {
+    return (
+      row<Submission>(
+        this.sql,
+        "SELECT * FROM submissions WHERE id=?",
+        submissionId,
+      ) ?? fail(404, "Submission not found")
+    );
+  }
+  submissionView(submissionId: string, actorId: string) {
+    const value = this.submission(submissionId);
+    if (value.actor_id !== actorId) this.get(value.message_id, actorId);
+    const {
+      actor_auth_version: _auth,
+      api_key_id: _key,
+      request_hash: _hash,
+      snapshot_r2_key: _snapshot,
+      ...publicValue
+    } = value;
+    return {
+      ...publicValue,
+      recipients: rows(
+        this.sql,
+        "SELECT email_address,status,event_at FROM submission_recipients WHERE submission_id=?",
+        submissionId,
+      ),
+    };
+  }
+  claim(submissionId: string) {
+    const job = this.submission(submissionId);
+    if (job.status === "processing" && (job.lease_until ?? 0) <= epoch()) {
+      this.sql.exec(
+        "UPDATE submissions SET status='unknown',error_code='acceptance_unknown',updated_at=? WHERE id=?",
+        epoch(),
+        submissionId,
+      );
+      return null;
+    }
+    if (
+      !["scheduled", "queued", "retry_wait"].includes(job.status) ||
+      job.scheduled_at > epoch()
+    )
+      return null;
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE submissions SET status='processing',attempt_count=attempt_count+1,lease_until=?,updated_at=? WHERE id=?",
+        epoch() + 300,
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "INSERT INTO submission_attempts(id,submission_id,provider,connection_id,started_at) VALUES(?,?,?,?,?)",
+        id(),
+        submissionId,
+        job.provider,
+        job.connection_id,
+        epoch(),
+      );
+    });
+    return this.submission(submissionId);
+  }
+  complete(submissionId: string, providerMessageId: string) {
+    const job = this.submission(submissionId);
+    if (job.status === "accepted") return;
+    if (!["processing", "unknown"].includes(job.status))
+      fail(409, "Submission is not processing");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE submissions SET status='accepted',provider_message_id=?,lease_until=NULL,error_code=NULL,updated_at=? WHERE id=?",
+        providerMessageId,
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "UPDATE submission_attempts SET provider_message_id=?,finished_at=? WHERE submission_id=? AND finished_at IS NULL",
+        providerMessageId,
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "UPDATE messages SET folder_id='sent',draft_owner_id=NULL,provider=?,connection_id=?,provider_message_id=?,version=version+1,updated_at=? WHERE id=?",
+        job.provider,
+        job.connection_id,
+        providerMessageId,
+        epoch(),
+        job.message_id,
+      );
+      if (providerMessageId.includes("@"))
+        this.sql.exec(
+          "UPDATE messages SET rfc_message_id=? WHERE id=?",
+          providerMessageId.replace(/^<|>$/g, ""),
+          job.message_id,
+        );
+      this.sql.exec("DELETE FROM drafts WHERE message_id=?", job.message_id);
+      this.change(job.message_id, "accepted");
+    });
+  }
+  failure(
+    submissionId: string,
+    status: "failed" | "retry_wait" | "unknown",
+    code: string,
+    retryAt = 0,
+  ) {
+    const job = this.submission(submissionId);
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE submissions SET status=?,error_code=?,scheduled_at=?,lease_until=NULL,updated_at=? WHERE id=?",
+        status,
+        code.slice(0, 200),
+        retryAt || job.scheduled_at,
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "UPDATE submission_attempts SET error_code=?,finished_at=? WHERE submission_id=? AND finished_at IS NULL",
+        code.slice(0, 200),
+        epoch(),
+        submissionId,
+      );
+      if (status === "failed")
+        this.sql.exec(
+          "UPDATE drafts SET state='editable' WHERE message_id=?",
+          job.message_id,
+        );
+      this.change(job.message_id, status, job.actor_id);
+    });
+  }
+  cancel(submissionId: string, actorId: string) {
+    this.submissionView(submissionId, actorId);
+    const job = this.submission(submissionId);
+    if (!["scheduled", "queued", "retry_wait"].includes(job.status))
+      fail(409, "Submission cannot be canceled after processing starts");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE submissions SET status='canceled',updated_at=? WHERE id=?",
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "UPDATE drafts SET state='editable' WHERE message_id=?",
+        job.message_id,
+      );
+      this.change(job.message_id, "canceled", job.actor_id);
+    });
+    return this.submission(submissionId);
+  }
+  retry(submissionId: string, actorId: string) {
+    this.submissionView(submissionId, actorId);
+    const job = this.submission(submissionId),
+      message = this.get(job.message_id, actorId);
+    if (job.status !== "failed")
+      fail(409, "Only known failed submissions may be retried");
+    if (
+      message.draft?.version !== job.draft_version ||
+      message.draft.state !== "editable"
+    )
+      fail(409, "Draft changed; create a new submission");
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE submissions SET status='queued',scheduled_at=?,error_code=NULL,updated_at=? WHERE id=?",
+        epoch(),
+        epoch(),
+        submissionId,
+      );
+      this.sql.exec(
+        "UPDATE drafts SET state='submitted' WHERE message_id=?",
+        job.message_id,
+      );
+    });
+    return this.submission(submissionId);
+  }
+  providerSubmission(
+    provider: string,
+    connectionId: string,
+    providerMessageId: string,
+  ) {
+    return (
+      row<{ id: string }>(
+        this.sql,
+        "SELECT id FROM submissions WHERE provider=? AND (connection_id=? OR ?='') AND provider_message_id=?",
+        provider,
+        connectionId,
+        connectionId,
+        providerMessageId,
+      )?.id ?? null
+    );
+  }
+  delivery(submissionId: string, event: DeliveryTask) {
+    const job = this.submission(submissionId);
+    if (
+      job.provider !== event.provider ||
+      job.connection_id !== event.connection_id ||
+      job.provider_message_id !== event.provider_message_id
+    )
+      fail(409, "Delivery event does not match submission");
+    if (
+      row(
+        this.sql,
+        "SELECT provider_event_id FROM provider_events WHERE provider=? AND connection_id=? AND provider_event_id=?",
+        event.provider,
+        event.connection_id,
+        event.provider_event_id,
+      )
+    )
+      return;
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "INSERT INTO provider_events VALUES(?,?,?,?,?,?)",
+        event.provider,
+        event.provider_event_id,
+        event.connection_id,
+        event.provider_message_id,
+        submissionId,
+        epoch(),
+      );
+      // A late temporary event must not replace a terminal outcome.
+      this.sql.exec(
+        "UPDATE submission_recipients SET status=?,event_at=? WHERE submission_id=? AND email_address=? AND event_at<=? AND (status IN ('pending','deferred') OR ?='complained')",
+        event.status,
+        event.event_at,
+        submissionId,
+        event.recipient,
+        event.event_at,
+        event.status,
+      );
+      this.change(job.message_id, "delivery");
+    });
+  }
+  private erase(messageId: string) {
+    const message = row<MessageRow>(
+      this.sql,
+      "SELECT * FROM messages WHERE id=?",
+      messageId,
+    );
+    if (!message) return;
+    if (
+      row(
+        this.sql,
+        "SELECT id FROM submissions WHERE message_id=? AND status IN ('scheduled','queued','processing','retry_wait','unknown')",
+        messageId,
+      )
+    )
+      fail(409, "Message has an active or uncertain submission");
+    this.removeIndex(messageId);
+    const keys = [
+      message.body_r2_key,
+      message.raw_r2_key,
+      ...rows<{ r2_key: string }>(
+        this.sql,
+        "SELECT r2_key FROM attachments WHERE message_id=?",
+        messageId,
+      ).map((f) => f.r2_key),
+      ...rows<{ body_r2_key: string }>(
+        this.sql,
+        "SELECT body_r2_key FROM draft_revisions WHERE message_id=?",
+        messageId,
+      ).map((f) => f.body_r2_key),
+      ...rows<{ snapshot_r2_key: string }>(
+        this.sql,
+        "SELECT snapshot_r2_key FROM submissions WHERE message_id=?",
+        messageId,
+      ).map((f) => f.snapshot_r2_key),
+    ];
+    for (const key of keys)
+      if (key)
+        this.sql.exec(
+          "INSERT OR IGNORE INTO garbage VALUES(?,?)",
+          key,
+          epoch() + 86400,
+        );
+    this.sql.exec("DELETE FROM submissions WHERE message_id=?", messageId);
+    this.sql.exec("DELETE FROM messages WHERE id=?", messageId);
+    this.change(messageId, "deleted", message.draft_owner_id);
+  }
+  purge(messageId: string, actorId: string, draft = false) {
+    const message = this.get(messageId, actorId);
+    if (draft ? !message.draft : !["trash", "spam"].includes(message.folder_id))
+      fail(409, "Permanent deletion is allowed only for trash, spam or drafts");
+    this.ctx.storage.transactionSync(() => this.erase(messageId));
+  }
+  async rebuildIndex(messageId: string, text: string) {
+    const message = row<MessageRow>(
+      this.sql,
+      "SELECT * FROM messages WHERE id=?",
+      messageId,
+    );
+    if (!message) return;
+    const to = rows<{ email_address: string }>(
+      this.sql,
+      "SELECT email_address FROM message_recipients WHERE message_id=? AND kind<>'bcc'",
+      messageId,
+    ).map((r) => r.email_address);
+    this.ctx.storage.transactionSync(() =>
+      this.index(messageId, message.subject, message.from_address, to, text),
+    );
+  }
+  registerWebhook(webhookId: string, eventId: string, payload: string) {
+    this.sql.exec(
+      "INSERT OR IGNORE INTO webhook_deliveries(id,webhook_id,event_id,payload_json,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+      id(),
+      webhookId,
+      eventId,
+      payload,
+      epoch(),
+      epoch(),
+    );
+    return row<{ id: string }>(
+      this.sql,
+      "SELECT id FROM webhook_deliveries WHERE webhook_id=? AND event_id=?",
+      webhookId,
+      eventId,
+    )!.id;
+  }
+  webhookDelivery(deliveryId: string) {
+    return row<{
+      id: string;
+      webhook_id: string;
+      payload_json: string;
+      status: string;
+      attempt_count: number;
+    }>(this.sql, "SELECT * FROM webhook_deliveries WHERE id=?", deliveryId);
+  }
+  webhookResult(deliveryId: string, success: boolean, terminal: boolean) {
+    this.sql.exec(
+      "UPDATE webhook_deliveries SET status=?,attempt_count=attempt_count+1,updated_at=? WHERE id=?",
+      success ? "delivered" : terminal ? "failed" : "pending",
+      epoch(),
+      deliveryId,
+    );
+  }
+  webhookDeliveries() {
+    return rows(
+      this.sql,
+      "SELECT id,webhook_id,event_id,status,attempt_count,updated_at FROM webhook_deliveries ORDER BY created_at DESC LIMIT 100",
+    );
+  }
+  outbox() {
+    return rows<{ id: string; kind: string; payload_json: string }>(
+      this.sql,
+      "SELECT id,kind,payload_json FROM outbox WHERE dispatched_at IS NULL ORDER BY created_at LIMIT 50",
+    );
+  }
+  markDispatched(outboxId: string) {
+    this.sql.exec(
+      "UPDATE outbox SET dispatched_at=? WHERE id=?",
+      epoch(),
+      outboxId,
+    );
+  }
+  async maintenance(retentionDays: number | null) {
+    for (const stale of rows<{ id: string }>(
+      this.sql,
+      "SELECT id FROM submissions WHERE status='processing' AND lease_until<? LIMIT 100",
+      epoch(),
+    ))
+      this.failure(stale.id, "unknown", "acceptance_unknown");
+    if (retentionDays) {
+      for (const message of rows<{ id: string }>(
+        this.sql,
+        "SELECT id FROM messages WHERE folder_id IN ('trash','spam') AND trashed_at IS NOT NULL AND trashed_at<? LIMIT 100",
+        epoch() - retentionDays * 86400,
+      )) {
+        if (
+          !row(
+            this.sql,
+            "SELECT id FROM submissions WHERE message_id=? AND status IN ('scheduled','queued','processing','retry_wait','unknown')",
+            message.id,
+          )
+        )
+          this.ctx.storage.transactionSync(() => this.erase(message.id));
+      }
+    }
+    for (const item of rows<{ r2_key: string }>(
+      this.sql,
+      "SELECT r2_key FROM garbage WHERE delete_after<=? LIMIT 50",
+      epoch(),
+    )) {
+      await this.env.MAIL_BUCKET.delete(item.r2_key);
+      this.sql.exec("DELETE FROM garbage WHERE r2_key=?", item.r2_key);
+    }
+    this.sql.exec(
+      "DELETE FROM outbox WHERE dispatched_at<?",
+      epoch() - 7 * 86400,
+    );
+    this.sql.exec(
+      "DELETE FROM change_log WHERE created_at<?",
+      epoch() - 30 * 86400,
+    );
+    const identity = row<{ mailbox_id: string; partition_id: string }>(
+      this.sql,
+      "SELECT * FROM partition_identity WHERE id=1",
+    )!;
+    for (const pending of rows<{ id: string }>(
+      this.sql,
+      "SELECT id FROM submissions WHERE status IN ('queued','scheduled','retry_wait') AND scheduled_at<=? ORDER BY scheduled_at LIMIT 50",
+      epoch(),
+    ))
+      await this.env.MAIL_QUEUE.send({
+        kind: "send",
+        ...identity,
+        reference_id: pending.id,
+      });
+    for (const uncertain of rows<{ id: string }>(
+      this.sql,
+      "SELECT id FROM submissions WHERE status='unknown' ORDER BY coalesce(reconciled_at,0),id LIMIT 50",
+    )) {
+      if (
+        await this.env.MAIL_BUCKET.head(
+          "accepted/" + identity.mailbox_id + "/" + uncertain.id + ".json",
+        )
+      )
+        await this.env.MAIL_QUEUE.send({
+          kind: "send",
+          ...identity,
+          reference_id: uncertain.id,
+        });
+      this.sql.exec(
+        "UPDATE submissions SET reconciled_at=? WHERE id=?",
+        epoch(),
+        uncertain.id,
+      );
+    }
+    for (const pending of rows<{ id: string }>(
+      this.sql,
+      "SELECT id FROM webhook_deliveries WHERE status='pending' AND updated_at<? LIMIT 50",
+      epoch() - 300,
+    ))
+      await this.env.MAIL_QUEUE.send({
+        kind: "webhook",
+        ...identity,
+        reference_id: pending.id,
+      });
+    this.sql.exec(
+      "DELETE FROM processing_receipts WHERE created_at<?",
+      epoch() - 30 * 86400,
+    );
+    this.sql.exec(
+      "DELETE FROM provider_events WHERE created_at<?",
+      epoch() - 90 * 86400,
+    );
+    this.sql.exec(
+      "DELETE FROM webhook_deliveries WHERE status<>'pending' AND updated_at<?",
+      epoch() - 30 * 86400,
+    );
+    if (this.outbox().length) {
+      await this.env.MAIL_QUEUE.send({
+        kind: "outbox",
+        ...identity,
+        reference_id: "maintenance",
+      });
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { workerModules } from "./worker-modules.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -7,7 +8,7 @@ test("React Router assets and API routes coexist in the Workers runtime", async 
   const mf = new Miniflare(convertV4MiniflareOptions({
     log: new Log(LogLevel.ERROR),
     workers: [{
-      name: "officeflare", modules: true, scriptPath: "dist/index.js", compatibilityDate: "2026-09-29",
+      name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
       d1Databases: { DB: "web-tests" },
       assets: { directory: "dist/client", run_worker_first: ["/api", "/api/*"], routerConfig: { has_user_worker: true },
         assetConfig: { not_found_handling: "single-page-application" } },

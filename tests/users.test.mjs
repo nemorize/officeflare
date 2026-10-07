@@ -1,3 +1,4 @@
+import { workerModules } from "./worker-modules.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
@@ -17,7 +18,7 @@ const passwordHash = await hashPassword(PASSWORD);
 async function fixture(t, administratorCount = 1) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{
-    name: "officeflare", modules: true, scriptPath: "dist/index.js", compatibilityDate: "2026-09-29",
+    name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
     d1Databases: { DB: "user-management-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
       MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),

@@ -62,6 +62,22 @@ export async function ensureProfileResources(config, flags, wrangler = runWrangl
   if (bucket) await ensureBucket(bucket, flags, wrangler);
 }
 
+export async function ensureMailResources(config, flags, wrangler = runWrangler) {
+  const bucket = config.r2_buckets?.find((entry) => entry.binding === "MAIL_BUCKET");
+  if (bucket) await ensureBucket(bucket, flags, wrangler);
+  const names = new Set([
+    ...(config.queues?.producers ?? []).filter((entry) => entry.binding === "MAIL_QUEUE").map((entry) => entry.queue),
+    ...(config.queues?.consumers ?? []).flatMap((entry) => [entry.queue, entry.dead_letter_queue]).filter(Boolean),
+  ]);
+  for (const name of names) {
+    const inspect = async () => {
+      const result = await wrangler(["queues", "info", name, ...flags], { capture: true });
+      if (!result.includes(`Queue Name: ${name}\n`) || !/Queue ID: [a-f0-9-]+/i.test(result)) throw new Error("Mail queue identity could not be confirmed.");
+    };
+    await ensureResource(inspect, () => wrangler(["queues", "create", name, ...flags], { capture: true }), /Queue "[^"]+" does not exist/);
+  }
+}
+
 async function ensureResource(inspect, create, missing) {
   try { await inspect(); return; }
   catch (error) { if (!missing.test(error.stderr ?? error.message)) throw error; }
@@ -104,6 +120,8 @@ export async function deploy(options = {}, {
   await wrangler(["deploy", "--dry-run", "--outdir", "dist", ...secrets, ...flags]);
   log("Preparing the D1 database...");
   const database = await ensureDatabase(config, flags, wrangler);
+  log("Preparing the mail R2 bucket and Queues...");
+  await ensureMailResources(config, flags, wrangler);
   log("Preparing the profile image R2 bucket...");
   await ensureProfileResources(config, flags, wrangler);
   await bindDatabase(config, options, database, async (path) => {

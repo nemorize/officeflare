@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstable_readConfig as readConfig } from "wrangler";
-import { deploy, deploymentOptions, ensureDatabase, ensureProfileResources, withDatabaseConfig } from "../scripts/deploy.mjs";
+import { deploy, deploymentOptions, ensureDatabase, ensureMailResources, ensureProfileResources, withDatabaseConfig } from "../scripts/deploy.mjs";
 
 const database = { name: "officeflare-user-accounts", uuid: "00000000-0000-0000-0000-000000000001" };
 const config = { configPath: "/test/wrangler.jsonc", name: "officeflare", d1_databases: [{ binding: "DB", database_name: database.name }] };
@@ -24,6 +24,42 @@ test("profile image storage is provisioned and an existing bucket is reused", as
   assert.deepEqual(commands, ["info", "create", "info"]);
   commands.length = 0; await ensureProfileResources(selected, [], wrangler);
   assert.deepEqual(commands, ["info"]);
+});
+
+test("mail provisioning confirms the R2 bucket and both work and dead-letter queues", async () => {
+  const selected = {r2_buckets:[{binding:"MAIL_BUCKET",bucket_name:"mail"}],queues:{
+    producers:[{binding:"MAIL_QUEUE",queue:"mail-work"}],consumers:[{queue:"mail-work",dead_letter_queue:"mail-dlq"}],
+  }};
+  const calls=[],existing=new Set();
+  const wrangler=async(args,options)=>{
+    assert.equal(options.capture,true); assert.deepEqual(args.slice(-flags.length),flags);calls.push(args.slice(0,-flags.length));
+    const r2=args[0]==="r2",command=r2?args[2]:args[1],name=r2?args[3]:args[2];
+    if(command==="create"){existing.add(name);return "created";}
+    if(!existing.has(name))throw new Error(r2?"The specified bucket does not exist.":`Queue "${name}" does not exist.`);
+    return r2?JSON.stringify({name}):`Queue Name: ${name}\nQueue ID: 0123abcd\n`;
+  };
+  await ensureMailResources(selected,flags,wrangler);
+  assert.deepEqual([...existing],["mail","mail-work","mail-dlq"]);
+  calls.length=0;await ensureMailResources(selected,flags,wrangler);
+  assert.equal(calls.length,3);assert.ok(calls.every((args)=>!args.includes("create")));
+});
+
+test("mail provisioning stops on permission errors or an unconfirmed resource identity",async()=>{
+  const selected={r2_buckets:[{binding:"MAIL_BUCKET",bucket_name:"mail"}]};
+  let calls=0;
+  await assert.rejects(ensureMailResources(selected,[],async()=>{calls++;throw new Error("Authentication failed");}),/Authentication failed/);
+  assert.equal(calls,1);
+  await assert.rejects(ensureMailResources(selected,[],async()=>JSON.stringify({name:"other"})),/identity could not be confirmed/);
+});
+
+test("mail provisioning reconciles a concurrent creation using a fresh identity check",async()=>{
+  let inspections=0;
+  await ensureMailResources({queues:{producers:[{binding:"MAIL_QUEUE",queue:"work"}]}},[],async(args)=>{
+    if(args[1]==="create")throw new Error("Already exists");
+    if(++inspections===1)throw new Error('Queue "work" does not exist.');
+    return "Queue Name: work\nQueue ID: 0123abcd\n";
+  });
+  assert.equal(inspections,2);
 });
 
 function recorder(failAt) {

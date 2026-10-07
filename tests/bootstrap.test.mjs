@@ -1,3 +1,5 @@
+import { workerModules } from "./worker-modules.mjs";
+import { permissionCatalog } from "../src/authorization/permissions.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -23,7 +25,7 @@ const temporaryPassword = (logs) => logs.join("\n").match(/Temporary password: (
 async function fixture(t) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{
-    name: "officeflare", modules: true, scriptPath: "dist/index.js", compatibilityDate: "2026-09-29",
+    name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
     d1Databases: { DB: "bootstrap-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
       MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
@@ -86,7 +88,7 @@ test("first deployment creates an administrator, forces password change and neve
   await request("/api/roles", { token: pending.challenge_token, expected: 401 });
   const changed = await request("/api/me/password", { method: "PUT", token: pending.challenge_token,
     data: { new_password: "my replacement administrator password" } });
-  assert.equal((await request("/api/me/permissions", { token: changed.access_token })).permissions.length, 9);
+  assert.deepEqual((await request("/api/me/permissions", { token: changed.access_token })).permissions, Object.keys(permissionCatalog).sort());
   await request("/api/roles", { token: changed.access_token });
   const changedUser = await db.select().from(users).get();
   assert.equal(changedUser.password_reset_required, 0);

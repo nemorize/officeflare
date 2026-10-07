@@ -3,10 +3,22 @@ import { HTTPException } from "hono/http-exception";
 import api from "./routes/api";
 import { renderPage } from "./routes/web";
 import type { AppEnv } from "./auth/types";
+import { receive } from "./mail/service";
+import { consume, recover } from "./mail/jobs";
+export { MailboxDO } from "./mail/mailbox";
+export { MailPartitionDO } from "./mail/partition";
 
 const app = new Hono<AppEnv>();
 
 app.route("/api", api);
+app.all("/.well-known/jmap",(c)=>{
+  const url=new URL(c.req.url);url.pathname="/api/mail/jmap/session";
+  return app.fetch(new Request(url,c.req.raw),c.env,c.executionCtx);
+});
+for(const path of ["/jmap","/jmap/*","/mcp"])app.all(path,(c)=>{
+  const url=new URL(c.req.url);url.pathname="/api/mail"+url.pathname;
+  return app.fetch(new Request(url,c.req.raw),c.env,c.executionCtx);
+});
 
 app.notFound((c) => c.html(renderPage("Page not found"), 404));
 
@@ -31,4 +43,9 @@ app.onError((error, c) => {
   return c.html(renderPage(title), { status, headers });
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  email: receive,
+  queue: consume,
+  scheduled: async (_event, env, ctx) => { ctx.waitUntil(recover(env)); },
+} satisfies ExportedHandler<AppEnv["Bindings"]>;
