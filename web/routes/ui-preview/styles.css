@@ -1,0 +1,45 @@
+/* Demo geometry lets unstyled sliders and scrollbars be operated. */
+[data-preview="slider-control"] {
+  display: flex;
+  align-items: center;
+  width: 12rem;
+  height: 2rem;
+  touch-action: none;
+}
+
+[data-preview="slider-track"] {
+  position: relative;
+  width: 100%;
+  height: 1rem;
+  outline: 1px solid currentColor;
+}
+
+[data-preview="slider-thumb"] {
+  width: 1rem;
+  height: 1rem;
+  outline: 1px solid currentColor;
+}
+
+[data-preview="scroll-area"] {
+  position: relative;
+  width: 20rem;
+  max-width: 100%;
+  height: 8rem;
+}
+
+[data-preview="scroll-viewport"] {
+  height: 100%;
+}
+
+[data-preview="scrollbar"] {
+  display: flex;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 1rem;
+}
+
+[data-preview="scroll-thumb"] {
+  width: 100%;
+  outline: 1px solid currentColor;
+}
