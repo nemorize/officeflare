@@ -8,6 +8,7 @@ import { coalesce, increment } from "../db/expressions";
 import { users, userAuthChallenges, userSessions } from "../db/schema";
 import { now, uuid, type AppEnv } from "../auth/types";
 import profile from "./profile";
+import profileImages from "./profile-images";
 import mfaManagement from "./mfa-management";
 import { permissionsFor } from "../authorization/access";
 
@@ -73,5 +74,6 @@ me.delete("/sessions", requireAccess, async (c) => {
   return c.body(null, 204);
 });
 me.route("/", profile);
+me.route("/", profileImages);
 me.route("/mfa", mfaManagement);
 export default me;

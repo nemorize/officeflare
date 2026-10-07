@@ -16,7 +16,7 @@ test("React Router assets and API routes coexist in the Workers runtime", async 
   t.after(() => mf.dispose());
   const shell = await readFile("dist/client/index.html", "utf8");
 
-  for (const path of ["/", "/login", "/login/", "/missing/nested-page"]) {
+  for (const path of ["/", "/login", "/login/", "/mail", "/calendar", "/drive", "/profile", "/profile/security", "/profile/sessions", "/missing/nested-page"]) {
     const response = await mf.dispatchFetch(`https://office.test${path}`, {
       headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" },
     });

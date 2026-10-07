@@ -1,5 +1,6 @@
-import { and, eq, exists, gt, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, exists, gt, isNotNull, isNull, not, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { Buffer } from "node:buffer";
 import { bearer, body, password, string, unauthorized } from "../auth/input";
 import { digest, random, signAccess, verifyPassword } from "../auth/crypto";
 import { countAttempt, verifyFactor } from "../auth/mfa";
@@ -57,20 +58,35 @@ auth.post("/reauthenticate", requireAccess, async (c) => {
 
 auth.post("/refresh", async (c) => {
   await throttle(c, "refresh");
+  // A durable request id lets browser clients retry a lost rotation response.
+  // Clients without it keep the existing strict one-use refresh behavior.
+  const data = c.req.header("content-type") ? await body(c, ["request_id"]) : undefined;
+  const requestId = data?.request_id !== undefined ? string(data.request_id, "request_id", 64) : undefined;
+  if (requestId && !/^[a-f0-9]{64}$/.test(requestId)) {
+    return c.json({ error: "Invalid request_id" }, 400);
+  }
   const token = bearer(c);
   if (!/^ofr_[A-Za-z0-9_-]{43}$/.test(token)) unauthorized();
   const db = c.get("db"), hash = await digest(token), timestamp = now();
   const row = await db.select({ session: userSessions, token: userRefreshTokens }).from(userRefreshTokens)
     .innerJoin(userSessions, eq(userSessions.id, userRefreshTokens.session_id)).where(eq(userRefreshTokens.token_hash, hash)).get();
   if (!row) unauthorized();
-  const { session } = row, refresh = `ofr_${random()}`, operation = uuid();
+  const { session } = row;
+  const operation = requestId ? await digest(`refresh-operation:${hash}:${requestId}`) : uuid();
+  const refresh = requestId
+    ? `ofr_${Buffer.from(await digest(`refresh-token:${token}:${requestId}`), "hex").toString("base64url")}`
+    : `ofr_${random()}`;
+  const refreshHash = await digest(refresh);
   const access = await signAccess(c.env, session);
   const rotated = exists(db.select({ id: userRefreshTokens.id }).from(userRefreshTokens).where(eq(userRefreshTokens.used_by, operation)));
+  const noSuccessor = not(exists(db.select({ id: userRefreshTokens.id }).from(userRefreshTokens)
+    .where(eq(userRefreshTokens.token_hash, refreshHash))));
   const results = await db.batch([
-    // Strict replay detection: concurrent refreshes must be serialized by the client.
+    // Only an identical durable request may repeat a completed rotation.
     db.update(userSessions).set({ revoked_at: coalesce(userSessions.revoked_at, timestamp) }).where(and(
       eq(userSessions.id, session.id), exists(db.select({ id: userRefreshTokens.id }).from(userRefreshTokens).where(and(
         eq(userRefreshTokens.token_hash, hash), isNotNull(userRefreshTokens.used_at),
+        requestId ? sql`${userRefreshTokens.used_by} IS NOT ${operation}` : undefined,
       ))),
     )),
     db.update(userRefreshTokens).set({ used_at: timestamp, used_by: operation }).where(and(
@@ -81,12 +97,20 @@ auth.post("/refresh", async (c) => {
       ))),
     )),
     insertWhen(db, userRefreshTokens, {
-      id: uuid(), session_id: session.id, token_hash: await digest(refresh), parent_id: row.token.id,
+      id: uuid(), session_id: session.id, token_hash: refreshHash, parent_id: row.token.id,
       created_at: timestamp, expires_at: row.token.expires_at,
-    }, rotated),
+    }, and(rotated, noSuccessor)!),
     db.update(userSessions).set({ last_used_at: timestamp }).where(and(eq(userSessions.id, session.id), rotated)),
   ]);
-  if (results[1].meta.changes !== 1) unauthorized();
+  if (results[1].meta.changes !== 1) {
+    const retry = requestId && await db.select({ id: userRefreshTokens.id }).from(userRefreshTokens)
+      .innerJoin(userSessions, eq(userSessions.id, userRefreshTokens.session_id)).where(and(
+        eq(userRefreshTokens.token_hash, refreshHash), eq(userRefreshTokens.parent_id, row.token.id),
+        isNull(userRefreshTokens.used_at), isNull(userRefreshTokens.revoked_at), gt(userRefreshTokens.expires_at, now()),
+        isNull(userSessions.revoked_at), gt(userSessions.expires_at, now()), sessionAccountValid(db),
+      )).get();
+    if (!retry) unauthorized();
+  }
   return c.json({ token_type: "Bearer", access_token: access, expires_in: Math.min(ACCESS_TTL, session.expires_at - timestamp),
     refresh_token: refresh, refresh_expires_at: session.expires_at, session_id: session.id });
 });

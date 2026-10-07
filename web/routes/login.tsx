@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PasswordField } from "../components/password-field";
-import { Link } from "react-router";
+import { Link, Navigate, useLocation } from "react-router";
 import { Button, Field, Fieldset, Form, Icon, OfficeflareMark, Select, SelectPopup, TextField } from "@/components/ui";
-import { AuthError, changePassword, login, logout, recoverMfa, verifyMfa,
-  type LoginResult, type MfaChallenge, type PasswordChallenge, type Session } from "../lib/auth";
+import { AuthError, changePassword, login, recoverMfa, verifyMfa,
+  type LoginResult, type MfaChallenge, type PasswordChallenge } from "../lib/auth";
+import { sessions, useSession } from "../lib/session";
+import { SessionStorageError } from "../lib/session-manager";
+import { returnToWorkspace } from "../lib/profile";
 
 type Step = { kind: "login" }
   | { kind: "mfa"; challenge: MfaChallenge }
-  | { kind: "password_reset"; challenge: PasswordChallenge }
-  | { kind: "success"; session: Session; expiresAt: number };
+  | { kind: "password_reset"; challenge: PasswordChallenge };
 
 const headings = {
   login: ["Sign in to Officeflare", "Enter your email and password."],
   mfa: ["Two-factor authentication", "Enter a code from your authenticator app."],
   password_reset: ["Change password", "Set a new password to sign in."],
-  success: ["Signed in", ""],
 } as const;
 
 export function LoginPage() {
+  const authSession = useSession();
+  const location = useLocation();
   const [step, setStep] = useState<Step>({ kind: "login" });
+  const restoring = authSession.status === "loading" || authSession.status === "unavailable";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -30,21 +34,13 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
-  const [title, description] = headings[step.kind];
+  const [title, description] = restoring
+    ? ["Checking your session", authSession.status === "loading" ? "Please wait…" : ""] : headings[step.kind];
 
   useEffect(() => {
     document.title = `${step.kind === "login" ? "Sign in" : title} · Officeflare`;
     if (step.kind !== "login") heading.current?.focus();
   }, [step.kind, title]);
-
-  useEffect(() => {
-    if (step.kind !== "success") return;
-    const timer = window.setTimeout(() => {
-      setStep({ kind: "login" });
-      setError("Your session has expired. Sign in again.");
-    }, Math.max(0, step.expiresAt - Date.now()));
-    return () => window.clearTimeout(timer);
-  }, [step]);
 
   function startOver() {
     setStep({ kind: "login" });
@@ -56,8 +52,7 @@ export function LoginPage() {
     setRecovery(false);
   }
 
-  function accept(result: LoginResult) {
-    // Credentials and tokens stay in memory for this login-only UI.
+  async function accept(result: LoginResult) {
     setPassword("");
     setCode("");
     setNewPassword("");
@@ -72,7 +67,8 @@ export function LoginPage() {
         setStep({ kind: "password_reset", challenge: result });
       }
     } else {
-      setStep({ kind: "success", session: result, expiresAt: Date.now() + result.expires_in * 1000 });
+      await sessions.accept(result, email);
+      setStep({ kind: "login" });
     }
   }
 
@@ -103,26 +99,21 @@ export function LoginPage() {
     try {
       switch (step.kind) {
         case "login":
-          accept(await login(email, password));
+          await accept(await login(email, password));
           break;
         case "mfa":
-          accept(await (recovery
+          await accept(await (recovery
             ? recoverMfa(step.challenge.challenge_token, code)
             : verifyMfa(step.challenge.challenge_token, methodId, code.trim())));
           break;
         case "password_reset":
-          accept(await changePassword(step.challenge.challenge_token, newPassword));
-          break;
-        case "success":
-          try { await logout(step.session.access_token); }
-          catch (failure) {
-            if (!(failure instanceof AuthError && failure.status === 401)) throw failure;
-          }
-          startOver();
+          await accept(await changePassword(step.challenge.challenge_token, newPassword));
           break;
       }
     } catch (failure) {
-      if (failure instanceof AuthError) {
+      if (failure instanceof SessionStorageError) {
+        setError(failure.message);
+      } else if (failure instanceof AuthError) {
         if (failure.status === 429) setError("Too many requests. Try again later.");
         else if (failure.status === 401 && step.kind === "login") setError("Check your email and password.");
         else if (failure.status === 401 && step.kind === "mfa") setError("The code is incorrect or the verification request has expired. Check the code and try again.");
@@ -140,6 +131,8 @@ export function LoginPage() {
     }
   }
 
+  if (authSession.session) return <Navigate to={returnToWorkspace(location.state?.from)} replace />;
+
   return (
     <div className="login-page">
       <header className="login-header">
@@ -152,7 +145,10 @@ export function LoginPage() {
           {(description || (step.kind === "mfa" && recovery)) &&
             <p>{step.kind === "mfa" && recovery ? "Enter one of your saved recovery codes." : description}</p>}
 
-          <Form onSubmit={submit} aria-busy={busy}>
+          {restoring ? <>
+            {authSession.error && <p role="alert">{authSession.error}</p>}
+            {authSession.status === "unavailable" && <Button type="button" onClick={() => { void sessions.restore(); }}>Try again</Button>}
+          </> : <Form onSubmit={submit} aria-busy={busy}>
             <Fieldset.Root disabled={busy} aria-labelledby="login-heading">
               {step.kind === "login" && <>
                 <TextField id="email" name="email" label="Email" type="email" autoComplete="username"
@@ -192,12 +188,12 @@ export function LoginPage() {
                 <PasswordField id="confirm-password" label="New password confirmation" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
               </>}
 
-              {step.kind === "success" && <p>{email.trim().toLowerCase()}</p>}
+              {authSession.error && <p role="alert">{authSession.error}</p>}
               {error && <p role="alert" className="ui-inline-alert"><Icon name="info" /><span>{error}</span></p>}
 
               <p>
                 <Button type="submit" variant="primary" className="login-submit">
-                  {busy ? "Processing…" : step.kind === "login" ? "Sign in" : step.kind === "mfa" ? "Verify" : step.kind === "password_reset" ? "Change password and sign in" : "Sign out"}
+                  {busy ? "Processing…" : step.kind === "login" ? "Sign in" : step.kind === "mfa" ? "Verify" : "Change password and sign in"}
                 </Button>
               </p>
 
@@ -210,9 +206,9 @@ export function LoginPage() {
                 <Button type="button" variant="ghost" className="login-secondary" onClick={startOver}>Start over</Button>
               </p>}
             </Fieldset.Root>
-          </Form>
+          </Form>}
 
-          {step.kind === "login" && <p className="login-help">Contact your organization administrator if you need an account or have forgotten your password.</p>}
+          {!restoring && step.kind === "login" && <p className="login-help">Contact your organization administrator if you need an account or have forgotten your password.</p>}
         </section>
       </main>
       <footer className="login-footer">Officeflare · Your workspace, connected.</footer>

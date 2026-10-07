@@ -20,7 +20,10 @@ api.use("*", async (c, next) => {
   c.set("db", createDatabase(c.env.DB));
   await next();
 });
-api.use("*", bodyLimit({ maxSize: 64 * 1024, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } }));
+api.use("*", async (c, next) => {
+  const maxSize = c.req.path === "/api/me/profile-image" ? 2 * 1024 * 1024 : 64 * 1024;
+  return bodyLimit({ maxSize, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } })(c, next);
+});
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("roles.read"), (c) => c.json({

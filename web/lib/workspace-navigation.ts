@@ -1,0 +1,41 @@
+import type { IconProps } from "../components/ui/icon";
+
+export interface WorkspaceNavigationItem {
+  path: string;
+  name: string;
+  icon: IconProps["name"];
+}
+
+export interface WorkspaceApp extends WorkspaceNavigationItem {
+  menuTitle: string;
+  menu: WorkspaceNavigationItem[];
+}
+
+export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
+  {
+    path: "/mail", name: "Mail", icon: "mail", menuTitle: "Mailbox",
+    menu: [
+      { path: "/mail", name: "Inbox", icon: "inbox" },
+      { path: "/mail/drafts", name: "Drafts", icon: "file" },
+      { path: "/mail/sent", name: "Sent", icon: "arrow" },
+      { path: "/mail/archive", name: "Archive", icon: "archive" },
+      { path: "/mail/trash", name: "Trash", icon: "trash" },
+    ],
+  },
+  {
+    path: "/calendar", name: "Calendar", icon: "calendar", menuTitle: "Calendars",
+    menu: [
+      { path: "/calendar", name: "My calendar", icon: "calendar" },
+      { path: "/calendar/shared", name: "Shared calendars", icon: "users" },
+    ],
+  },
+  {
+    path: "/drive", name: "Drive", icon: "drive", menuTitle: "Files",
+    menu: [
+      { path: "/drive", name: "My drive", icon: "folder" },
+      { path: "/drive/shared", name: "Shared with me", icon: "users" },
+      { path: "/drive/starred", name: "Starred", icon: "star" },
+      { path: "/drive/trash", name: "Trash", icon: "trash" },
+    ],
+  },
+];

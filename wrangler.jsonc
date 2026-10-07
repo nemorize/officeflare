@@ -28,5 +28,8 @@
 			"binding": "DB",
 			"database_name": "officeflare-user-accounts"
 		}
+	],
+	"r2_buckets": [
+		{ "binding": "PROFILE_BUCKET", "bucket_name": "officeflare-profiles" }
 	]
 }

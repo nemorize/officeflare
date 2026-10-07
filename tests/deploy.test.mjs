@@ -4,12 +4,27 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstable_readConfig as readConfig } from "wrangler";
-import { deploy, deploymentOptions, ensureDatabase, withDatabaseConfig } from "../scripts/deploy.mjs";
+import { deploy, deploymentOptions, ensureDatabase, ensureProfileResources, withDatabaseConfig } from "../scripts/deploy.mjs";
 
 const database = { name: "officeflare-user-accounts", uuid: "00000000-0000-0000-0000-000000000001" };
 const config = { configPath: "/test/wrangler.jsonc", name: "officeflare", d1_databases: [{ binding: "DB", database_name: database.name }] };
 const flags = ["--config", config.configPath, "--env", "production"];
 const boundFlags = ["--config", "/test/.officeflare-deploy.jsonc", "--env", "production"];
+
+test("profile image storage is provisioned and an existing bucket is reused", async () => {
+  const selected = { r2_buckets: [{ binding: "MAIL_BUCKET", bucket_name: "mail" }, { binding: "PROFILE_BUCKET", bucket_name: "profiles" }] };
+  let existing = false; const commands = [];
+  const wrangler = async (args) => {
+    commands.push(args[2]); assert.equal(args[3], "profiles");
+    if (args[2] === "create") { existing = true; return "created"; }
+    if (!existing) throw new Error("The specified bucket does not exist.");
+    return JSON.stringify({ name: "profiles" });
+  };
+  await ensureProfileResources(selected, [], wrangler);
+  assert.deepEqual(commands, ["info", "create", "info"]);
+  commands.length = 0; await ensureProfileResources(selected, [], wrangler);
+  assert.deepEqual(commands, ["info"]);
+});
 
 function recorder(failAt) {
   const calls = [];

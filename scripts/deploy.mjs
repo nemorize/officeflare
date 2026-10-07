@@ -47,6 +47,33 @@ export async function ensureDatabase(config, flags, wrangler = runWrangler) {
   return database;
 }
 
+async function ensureBucket(bucket, flags, wrangler) {
+  const jurisdiction = bucket.jurisdiction ? ["--jurisdiction", bucket.jurisdiction] : [];
+  const inspect = async () => {
+    const result = JSON.parse(await wrangler(["r2", "bucket", "info", bucket.bucket_name, "--json", ...jurisdiction, ...flags], { capture: true }));
+    if (result.name !== bucket.bucket_name) throw new Error("R2 bucket identity could not be confirmed.");
+  };
+  await ensureResource(inspect, () => wrangler(["r2", "bucket", "create", bucket.bucket_name, ...jurisdiction, ...flags], { capture: true }),
+    /The specified bucket does not exist|NoSuchBucket|\[code: 10006\]/);
+}
+
+export async function ensureProfileResources(config, flags, wrangler = runWrangler) {
+  const bucket = config.r2_buckets?.find((entry) => entry.binding === "PROFILE_BUCKET");
+  if (bucket) await ensureBucket(bucket, flags, wrangler);
+}
+
+async function ensureResource(inspect, create, missing) {
+  try { await inspect(); return; }
+  catch (error) { if (!missing.test(error.stderr ?? error.message)) throw error; }
+  try { await create(); }
+  catch (error) {
+    // Creation may race another deployment or succeed before its response is lost.
+    // Only a fresh, successful identity check allows deployment to continue.
+    try { await inspect(); return; } catch { throw error; }
+  }
+  await inspect();
+}
+
 export async function withDatabaseConfig(config, options, database, action) {
   const { rawConfig } = readRawConfig({ config: config.configPath });
   const snapshot = structuredClone(rawConfig);
@@ -77,6 +104,8 @@ export async function deploy(options = {}, {
   await wrangler(["deploy", "--dry-run", "--outdir", "dist", ...secrets, ...flags]);
   log("Preparing the D1 database...");
   const database = await ensureDatabase(config, flags, wrangler);
+  log("Preparing the profile image R2 bucket...");
+  await ensureProfileResources(config, flags, wrangler);
   await bindDatabase(config, options, database, async (path) => {
     const boundFlags = ["--config", path, ...(options.env ? ["--env", options.env] : [])];
     log("Applying D1 migrations...");

@@ -35,7 +35,7 @@ test("Bearer account API in the Workers runtime", async (t) => {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const signing = { active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] };
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{ name: "officeflare", modules: true, scriptPath: "dist/index.js", compatibilityDate: "2026-09-29",
-    d1Databases: { DB: "auth-tests" }, bindings: {
+    d1Databases: { DB: "auth-tests" }, r2Buckets: { PROFILE_BUCKET: "profile-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify(signing), MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
       AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api",
     } }] }));
@@ -104,6 +104,43 @@ test("Bearer account API in the Workers runtime", async (t) => {
     await request("/api/auth/logout", { method: "POST", token: second.access_token, expected: 204 });
     await request("/api/me", { token: second.access_token, expected: 401 });
     await request("/api/auth/refresh", { method: "POST", token: second.refresh_token, expected: 401 });
+  });
+
+  await t.test("durable refresh ids recover lost responses and simultaneous retries without revoking the session", async () => {
+    await seed("refresh-retry");
+    const first = await login("refresh-retry"), requestId = randomBytes(32).toString("hex");
+    const responses = await Promise.all(Array.from({ length: 3 }, () => request("/api/auth/refresh", {
+      method: "POST", token: first.refresh_token, data: { request_id: requestId },
+    })));
+    assert.equal(new Set(responses.map((result) => result.refresh_token)).size, 1);
+    assert.ok(responses.every((result) => result.session_id === first.session_id));
+    for (const result of responses) await request("/api/me", { token: result.access_token });
+    const recovered = await request("/api/auth/refresh", {
+      method: "POST", token: first.refresh_token, data: { request_id: requestId },
+    });
+    assert.equal(recovered.refresh_token, responses[0].refresh_token);
+    const next = await request("/api/auth/refresh", {
+      method: "POST", token: recovered.refresh_token, data: { request_id: randomBytes(32).toString("hex") },
+    });
+    await request("/api/auth/refresh", { method: "POST", token: first.refresh_token, data: { request_id: requestId }, expected: 401 });
+    await request("/api/me", { token: next.access_token });
+    // A different request id for an already consumed token remains a replay and revokes the session.
+    await request("/api/auth/refresh", { method: "POST", token: first.refresh_token,
+      data: { request_id: randomBytes(32).toString("hex") }, expected: 401 });
+    await request("/api/me", { token: next.access_token, expected: 401 });
+  });
+
+  await t.test("durable refresh retries cannot restore revoked or expired sessions", async () => {
+    await seed("refresh-ended");
+    const first = await login("refresh-ended"), requestId = randomBytes(32).toString("hex");
+    await request("/api/auth/refresh", { method: "POST", token: first.refresh_token, data: { request_id: "invalid" }, expected: 400 });
+    const rotated = await request("/api/auth/refresh", { method: "POST", token: first.refresh_token, data: { request_id: requestId } });
+    await request("/api/auth/logout", { method: "POST", token: rotated.access_token, expected: 204 });
+    await request("/api/auth/refresh", { method: "POST", token: first.refresh_token, data: { request_id: requestId }, expected: 401 });
+    const expired = await login("refresh-ended"), expiredId = randomBytes(32).toString("hex");
+    await request("/api/auth/refresh", { method: "POST", token: expired.refresh_token, data: { request_id: expiredId } });
+    await db.update(userSessions).set({ created_at: timestamp() - 2, expires_at: timestamp() - 1 }).where(eq(userSessions.id, expired.session_id));
+    await request("/api/auth/refresh", { method: "POST", token: expired.refresh_token, data: { request_id: expiredId }, expected: 401 });
   });
 
   await t.test("forced password reset is restricted and one-use", async () => {
@@ -216,6 +253,54 @@ test("Bearer account API in the Workers runtime", async (t) => {
     for (let index = 0; index < 25; index++) await db.insert(userProfileFields).values({ id: `extra-${index}`, key: `extra-${index}`,
       label: JSON.stringify({ default: `extra-${index}` }), value_type: "text", editable_by: "user" });
     await request("/api/me/profile", { method: "PATCH", token, data: { fields: { "extra-24": "Many fields" } } });
+  });
+
+  await t.test("profile images require ownership, validate bytes and clean up replaced images", async () => {
+    await seed("photo-owner"); await seed("photo-other");
+    const owner = await login("photo-owner"), other = await login("photo-other");
+    const bucket = await mf.getR2Bucket("PROFILE_BUCKET");
+    const deleted = async (key) => {
+      for (let attempt = 0; attempt < 50 && await bucket.head(key); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(await bucket.head(key), null);
+    };
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ9kAAAAASUVORK5CYII=", "base64");
+    const photo = async (method, token, bytes, type = "image/png") => mf.dispatchFetch("https://office.test/api/me/profile-image", {
+      method, headers: { "cf-connecting-ip": `192.0.2.${++ip % 250}`, ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(bytes ? { "Content-Type": type } : {}) }, body: bytes,
+    });
+    assert.equal((await photo("GET")).status, 401);
+    assert.equal((await photo("PUT", undefined, png)).status, 401);
+    assert.equal((await photo("GET", owner.access_token)).status, 404);
+    assert.equal((await photo("PUT", owner.access_token, Buffer.from("<svg/>"))).status, 400);
+    assert.equal((await photo("PUT", owner.access_token, png, "image/svg+xml")).status, 400);
+    const oversizedDimensions = Buffer.from(png); oversizedDimensions.writeUInt32BE(8192, 16);
+    assert.equal((await photo("PUT", owner.access_token, oversizedDimensions)).status, 400);
+    assert.equal((await photo("PUT", owner.access_token, Buffer.alloc(2 * 1024 * 1024 + 1))).status, 413);
+    const upload = await photo("PUT", owner.access_token, png); assert.equal(upload.status, 200);
+    const original = (await upload.json()).user.profile_image_key;
+    assert.match(original, /^profiles\/photo-owner\//);
+    const fetched = await photo("GET", owner.access_token);
+    assert.equal(fetched.headers.get("content-type"), "image/png");
+    assert.equal(fetched.headers.get("cache-control"), "no-store");
+    assert.equal(fetched.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(fetched.headers.get("set-cookie"), null);
+    assert.deepEqual(Buffer.from(await fetched.arrayBuffer()), png);
+    assert.equal((await photo("GET", other.access_token)).status, 404);
+    // Even a legacy administrator-controlled key must not expose another user's file.
+    await db.update(users).set({ profile_image_key: original }).where(eq(users.id, "photo-other"));
+    assert.equal((await photo("GET", other.access_token)).status, 404);
+    assert.equal((await photo("DELETE", other.access_token)).status, 200);
+    assert.ok(await bucket.head(original));
+    const replacement = await photo("PUT", owner.access_token, png); assert.equal(replacement.status, 200);
+    const next = (await replacement.json()).user.profile_image_key;
+    assert.notEqual(next, original); assert.ok(await bucket.head(next));
+    await deleted(original);
+    const removed = await photo("DELETE", owner.access_token); assert.equal(removed.status, 200);
+    assert.equal((await removed.json()).user.profile_image_key, null);
+    await deleted(next);
+    assert.equal((await photo("GET", owner.access_token)).status, 404);
+    // Image changes do not invalidate an otherwise valid login.
+    await request("/api/me", { token: owner.access_token });
   });
 
   await t.test("pending TOTP enrollment expires, limits guesses and is invalidated on password change", async () => {

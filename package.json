@@ -48,6 +48,7 @@
     "drizzle-orm": "0.45.3",
     "hono": "4.13.12",
     "jose": "6.2.12",
+    "qrcode.react": "4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "7.18.4"
