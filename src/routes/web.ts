@@ -1,8 +1,4 @@
-import { Hono } from "hono";
 import { html } from "hono/html";
-import type { AppEnv } from "../auth/types";
-
-const web = new Hono<AppEnv>();
 
 export function renderPage(title: string) {
   return html`<!doctype html>
@@ -17,7 +13,3 @@ export function renderPage(title: string) {
       </body>
     </html>`;
 }
-
-web.get("/", (c) => c.html(renderPage("Officeflare")));
-
-export default web;

@@ -1,0 +1,32 @@
+/* Base UI portals sit outside the application's stacking context. */
+#root {
+  isolation: isolate;
+}
+
+/* Absolute backdrops cover Safari's visual viewport, including browser chrome. */
+body {
+  position: relative;
+}
+
+/* Structural positioning only; component appearance is defined separately. */
+[data-ui="dialog-backdrop"] {
+  position: absolute;
+  inset: 0;
+}
+
+[data-ui="dialog-viewport"]:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+[data-ui="dialog-popup"] {
+  position: relative;
+  max-width: 100%;
+}
+
+[data-ui="popup-positioner"] {
+  max-width: var(--available-width);
+}

@@ -18,4 +18,9 @@ export async function runNode(entry, args = [], { capture = false } = {}) {
 }
 
 export const runWrangler = (args, options) => runNode(cli, args, options);
-export const runTypeScript = () => runNode(fileURLToPath(new URL("../node_modules/typescript/bin/tsc", import.meta.url)), ["--noEmit"]);
+export const runViteBuild = () => runNode(fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url)), ["build"]);
+export const runTypeScript = async () => {
+  const entry = fileURLToPath(new URL("../node_modules/typescript/bin/tsc", import.meta.url));
+  await runNode(entry, ["--noEmit"]);
+  await runNode(entry, ["--project", "tsconfig.web.json"]);
+};

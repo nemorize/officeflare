@@ -4,6 +4,11 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-09-29",
 	"workers_dev": true,
+	"assets": {
+		"directory": "./dist/client",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api", "/api/*"]
+	},
 	"vars": {
 		"AUTH_ISSUER": "officeflare",
 		"AUTH_AUDIENCE": "officeflare-api"

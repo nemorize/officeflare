@@ -21,6 +21,7 @@ function recorder(failAt) {
   return { calls, dependencies: {
     loadConfig: (options) => { assert.equal(options.env, "production"); return config; },
     typecheck: async () => record("typecheck"),
+    buildWeb: async () => record("web-build"),
     log: () => {},
     bindDatabase: async (_config, options, selected, action) => {
       assert.equal(options.env, "production"); assert.equal(selected.uuid, database.uuid);
@@ -41,7 +42,7 @@ function recorder(failAt) {
 test("deployment prepares D1, migrates and initializes before publishing the Worker", async () => {
   const { calls, dependencies } = recorder();
   await deploy({ env: "production" }, dependencies);
-  assert.deepEqual(calls, ["types", "typecheck", "build", "list", "create", "list", "bind", "migrations", "bootstrap", "deploy"]);
+  assert.deepEqual(calls, ["types", "typecheck", "web-build", "build", "list", "create", "list", "bind", "migrations", "bootstrap", "deploy"]);
 });
 
 test("first-deployment secrets are passed to Wrangler builds and uploads only", async () => {
@@ -58,7 +59,7 @@ test("first-deployment secrets are passed to Wrangler builds and uploads only", 
 });
 
 test("every failed deployment stage prevents later stages", async (t) => {
-  const sequence = ["types", "typecheck", "build", "list", "create", "bind", "migrations", "bootstrap", "deploy"];
+  const sequence = ["types", "typecheck", "web-build", "build", "list", "create", "bind", "migrations", "bootstrap", "deploy"];
   for (const stage of sequence) {
     await t.test(stage, async () => {
       const { calls, dependencies } = recorder(stage);

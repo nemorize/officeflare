@@ -4,7 +4,7 @@ import { writeFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { unstable_readConfig as readConfig, experimental_readRawConfig as readRawConfig } from "wrangler";
 import { bootstrapAdministrator } from "./bootstrap-administrator.mjs";
-import { runWrangler, runTypeScript } from "./wrangler.mjs";
+import { runWrangler, runTypeScript, runViteBuild } from "./wrangler.mjs";
 
 export function deploymentOptions(args) {
   const options = {};
@@ -63,16 +63,17 @@ export async function withDatabaseConfig(config, options, database, action) {
 }
 
 export async function deploy(options = {}, {
-  loadConfig = readConfig, wrangler = runWrangler, typecheck = runTypeScript,
+  loadConfig = readConfig, wrangler = runWrangler, typecheck = runTypeScript, buildWeb = runViteBuild,
   bootstrap = bootstrapAdministrator, bindDatabase = withDatabaseConfig, log = console.log,
 } = {}) {
   const config = loadConfig(options, { hideWarnings: true });
   if (!config.configPath) throw new Error("A Wrangler configuration file is required.");
   const flags = ["--config", config.configPath, ...(options.env ? ["--env", options.env] : [])];
   const secrets = options["secrets-file"] ? ["--secrets-file", resolve(options["secrets-file"])] : [];
-  log("Checking types and building the Worker...");
+  log("Checking types and building the web UI and Worker...");
   await wrangler(["types", ...flags]);
   await typecheck();
+  await buildWeb();
   await wrangler(["deploy", "--dry-run", "--outdir", "dist", ...secrets, ...flags]);
   log("Preparing the D1 database...");
   const database = await ensureDatabase(config, flags, wrangler);

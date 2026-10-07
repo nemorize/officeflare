@@ -1,15 +1,14 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import api from "./routes/api";
-import web, { renderPage } from "./routes/web";
+import { renderPage } from "./routes/web";
 import type { AppEnv } from "./auth/types";
 
 const app = new Hono<AppEnv>();
 
 app.route("/api", api);
-app.route("/", web);
 
-app.notFound((c) => c.html(renderPage("페이지를 찾을 수 없습니다"), 404));
+app.notFound((c) => c.html(renderPage("Page not found"), 404));
 
 app.onError((error, c) => {
   const status = error instanceof HTTPException ? error.status : 500;
@@ -28,7 +27,7 @@ app.onError((error, c) => {
     return c.json({ error: message }, { status, headers });
   }
 
-  const title = status >= 500 ? "오류가 발생했습니다" : message;
+  const title = status >= 500 ? "An error occurred" : message;
   return c.html(renderPage(title), { status, headers });
 });
 
