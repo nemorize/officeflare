@@ -1,8 +1,10 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { Button, Icon, Menu, MenuPopup, OfficeflareMark } from "@/components/ui";
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
+import { AccessProvider, useAccess } from "../components/console-access";
+import { consoleMenu } from "../lib/console";
 import { errorMessage } from "../lib/api";
 import { sessions, useSession } from "../lib/session";
 import { workspaceApps, type WorkspaceNavigationItem } from "../lib/workspace-navigation";
@@ -40,13 +42,17 @@ function WorkspaceChrome() {
   const auth = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
+  const isConsole = pathname === "/console" || pathname.startsWith("/console/");
+  const systemMenu = consoleMenu(useAccess().permissions);
   const activeApp = workspaceApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
-  const sidebarName = isAccount ? "Account" : (activeApp?.name ?? "Mail");
-  const sidebarMenu = isAccount ? account : (activeApp ?? workspaceApps[0]).menu;
-  const current = sidebarMenu.find((item) => item.path === pathname);
+  const sidebarName = isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Mail");
+  const sidebarMenu = isConsole ? systemMenu : isAccount ? account : (activeApp ?? workspaceApps[0]).menu;
+  const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
   const title = current?.name ?? "Page not found";
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
+  useEffect(() => { content.current?.scrollTo(0, 0); }, [pathname]);
 
   async function signOut() {
     if (busy) return;
@@ -62,21 +68,23 @@ function WorkspaceChrome() {
       <Link to="/mail" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
       {workspaceApps.map((item) => <NavLink key={item.path} to={item.path} title={item.name} aria-label={item.name}
         className="workspace-rail-link"><Icon name={item.icon} width="18" height="18" /></NavLink>)}
+      {systemMenu.length > 0 && <NavLink to="/console" title="Console" aria-label="Console" className="workspace-rail-link"><Icon name="console" width="18" height="18" /></NavLink>}
       <ProfileMenu busy={busy} signOut={() => { void signOut(); }} />
     </aside>
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
         <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
-          <h2>{isAccount ? "Settings" : activeApp?.menuTitle ?? "Mailbox"}</h2>
-          {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
+          <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Mailbox"}</h2>
+          {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>
-        <div className="workspace-sidebar-footer"><Icon name={isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
+        <div className="workspace-sidebar-footer"><Icon name={isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
       </aside>
-      <div className="workspace-content">
+      <div ref={content} className="workspace-content">
         <header className="workspace-topbar">
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>
+        {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
         {(error || auth.error) && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{error || auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
           <Suspense fallback={<p className="account-page" role="status">Loading…</p>}><Outlet /></Suspense>
@@ -94,7 +102,7 @@ export function WorkspaceLayout() {
     <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
     {auth.status === "unavailable" && <Button onClick={() => { void sessions.restore(); }}>Try again</Button>}
   </main>;
-  return <AccountProvider><WorkspaceChrome /></AccountProvider>;
+  return <AccountProvider><AccessProvider><WorkspaceChrome /></AccessProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {

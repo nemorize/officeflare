@@ -36,9 +36,9 @@ export function validatePassword(password: string, confirmation: string) {
 }
 
 export const returnToWorkspace = (path: unknown) =>
-  typeof path === "string" && [
+  typeof path === "string" && ([
     "/mail", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/trash",
     "/calendar", "/calendar/shared", "/drive", "/drive/shared", "/drive/starred", "/drive/trash",
     "/profile", "/profile/security", "/profile/sessions",
-  ].includes(path)
+  ].includes(path) || /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path))
     ? path : "/mail";
