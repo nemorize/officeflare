@@ -1,25 +1,17 @@
 import { Hono } from "hono";
 import { and, eq, exists, isNull } from "drizzle-orm";
-import { HTTPException } from "hono/http-exception";
 import { conflict } from "../auth/input";
 import { accessClaim, publicUser, requireAccess, throttle } from "../auth/store";
 import { accessWon } from "../db/auth-conditions";
 import { users } from "../db/schema";
 import { now, uuid, type AppEnv } from "../auth/types";
 import { inspectProfileImage, profileImagePrefix } from "../profile/images";
+import { profileImageResponse } from "../profile/image-response";
 
 const images = new Hono<AppEnv>();
 images.use("/profile-image", requireAccess);
 
-images.get("/profile-image", async (c) => {
-  const { user } = c.get("identity"), key = user.profile_image_key;
-  if (!key?.startsWith(profileImagePrefix(user.id))) throw new HTTPException(404, { message: "No profile image" });
-  const object = await c.env.PROFILE_BUCKET.get(key);
-  if (!object || !["image/png", "image/jpeg", "image/webp"].includes(object.httpMetadata?.contentType ?? "")) throw new HTTPException(404, { message: "No profile image" });
-  c.header("Content-Type", object.httpMetadata!.contentType!);
-  c.header("Content-Disposition", "inline");
-  return c.body(object.body);
-});
+images.get("/profile-image", (c) => profileImageResponse(c, c.get("identity").user));
 
 images.put("/profile-image", async (c) => {
   const { user, session } = c.get("identity"), db = c.get("db");

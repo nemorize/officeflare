@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Button, Dialog, DialogPopup, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { PasswordField } from "../components/password-field";
 import { useAccount } from "../components/account-context";
+import { UserAvatar } from "../components/user-avatar";
 import { useAccess } from "../components/console-access";
 import { Check, Confirm, Notice, ResourceState, adminDate, useResource } from "../components/console-shared";
 import { ApiError, api, errorMessage } from "../lib/api";
@@ -21,7 +22,7 @@ export function UsersPage() {
     <section className="account-panel console-list-panel">
       {!canRead ? <p className="console-empty">You do not have permission to view user accounts.</p> : !resource.data ? <ResourceState {...resource} /> : <>
         <div className="console-table-scroll"><table className="console-table"><caption className="console-sr-only">User accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Status</th><th scope="col" className="console-date-column">Last sign-in</th><th scope="col"><span className="console-sr-only">Actions</span></th></tr></thead>
-          <tbody>{resource.data.users.map((user) => <tr key={user.id}><td><Link to={`/console/users/${encodeURIComponent(user.id)}`} className="console-identity"><span className="console-initial">{(user.display_name || user.email_address).slice(0, 1).toUpperCase()}</span><span><strong>{user.display_name || user.email_address}</strong><small>{user.email_address}</small></span></Link></td>
+          <tbody>{resource.data.users.map((user) => <tr key={user.id}><td><Link to={`/console/users/${encodeURIComponent(user.id)}`} className="console-identity"><UserAvatar user={user} /><span><strong>{user.display_name || user.email_address}</strong><small>{user.email_address}</small></span></Link></td>
             <td><span className="console-badge" data-muted={user.disabled_at !== null}>{user.disabled_at === null ? "Active" : "Disabled"}</span>{user.password_reset_required && <small className="console-subtext">Password change required</small>}</td>
             <td className="console-date-column">{adminDate(user.last_login_at)}</td><td><Button nativeButton={false} render={<Link to={`/console/users/${encodeURIComponent(user.id)}`} />} size="sm" variant="ghost" aria-label={`Manage ${user.email_address}`}>Manage<Icon name="chevron" width="12" height="12" /></Button></td></tr>)}</tbody>
         </table>{!resource.data.users.length && <p className="console-empty">No users found.</p>}</div>

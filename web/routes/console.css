@@ -16,7 +16,8 @@
 .console-identity, .console-role-name { display: flex; align-items: center; gap: 12px; min-width: 170px; }
 .console-identity strong, .console-role-name strong { display: block; font-weight: 500; }
 .console-identity small, .console-role-name small { display: block; font-size: 11px; color: var(--ui-muted); margin-block-start: 4px; overflow-wrap: anywhere; }
-.console-initial, .console-role-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; background: var(--ui-surface); color: var(--ui-muted); border: 1px solid var(--ui-border); border-radius: 50%; }
+.console-avatar, .console-role-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; background: var(--ui-surface); color: var(--ui-muted); border: 1px solid var(--ui-border); border-radius: 50%; overflow: hidden; }
+.console-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .console-role-icon { border-radius: 9px; }
 .console-badge { display: inline-block; padding: 2px 7px; border-radius: 5px; background: #edf7ef; color: #277b48; font-size: 10px; white-space: nowrap; }
 .console-badge[data-muted="true"] { background: var(--ui-surface); color: var(--ui-muted); }

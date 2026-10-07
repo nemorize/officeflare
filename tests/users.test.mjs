@@ -19,7 +19,7 @@ async function fixture(t, administratorCount = 1) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{
     name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
-    d1Databases: { DB: "user-management-tests" }, bindings: {
+    d1Databases: { DB: "user-management-tests" }, r2Buckets: { PROFILE_BUCKET: "user-profile-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
       MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
       AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api",
@@ -69,8 +69,52 @@ async function fixture(t, administratorCount = 1) {
     method: "POST", token, data: { email_address: email, password: PASSWORD, password_reset_required: false, ...extra }, expected: 201,
   })).user;
   const edit = (id, data, expected = 200, actor = token) => request(`/api/users/${id}`, { method: "PATCH", token: actor, data, expected });
-  return { db, token, seed, raw, request, login, create, edit, administrators };
+  return { mf, db, token, seed, raw, request, login, create, edit, administrators };
 }
+
+test("user profile photos require user-read permission and stay within the target account's storage", async (t) => {
+  const { mf, db, token, seed, raw, request, login } = await fixture(t);
+  await seed("photo-owner"); await seed("photo-reader"); await seed("photo-unprivileged");
+  const owner = await login("photo-owner@office.test");
+  const regular = await login("photo-unprivileged@office.test");
+  await db.insert(roles).values({ id: "photo-reader-role", key: "photo-reader-role", label: "Photo reader" });
+  await db.insert(rolePermissions).values({ role_id: "photo-reader-role", permission_key: "users.read" });
+  await db.insert(userRoles).values({ user_id: "photo-reader", role_id: "photo-reader-role" });
+  const reader = await login("photo-reader@office.test");
+  const bucket = await mf.getR2Bucket("PROFILE_BUCKET");
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ9kAAAAASUVORK5CYII=", "base64");
+  const key = "profiles/photo-owner/photo.png", path = "/api/users/photo-owner/profile-image";
+  await bucket.put(key, png, { httpMetadata: { contentType: "image/png" } });
+  await db.update(users).set({ profile_image_key: key }).where(eq(users.id, "photo-owner"));
+
+  await request(path, { expected: 401 });
+  await request(path, { token: regular.access_token, expected: 403 });
+  await request(path, { token: owner.access_token, expected: 403 });
+  await request(path, { token: reader.refresh_token, expected: 401 });
+  for (const actor of [token, reader.access_token]) {
+    const response = await raw(path, { token: actor });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    assert.equal(response.headers.get("content-disposition"), "inline");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+  }
+  await request("/api/users/missing/profile-image", { token, expected: 404 });
+  await request("/api/users/photo-reader/profile-image", { token, expected: 404 });
+  await db.update(users).set({ profile_image_key: key }).where(eq(users.id, "photo-reader"));
+  await request("/api/users/photo-reader/profile-image", { token, expected: 404 });
+  await bucket.delete(key);
+  await request(path, { token, expected: 404 });
+  await bucket.put(key, "<svg/>", { httpMetadata: { contentType: "image/svg+xml" } });
+  await request(path, { token, expected: 404 });
+  await bucket.put(key, png, { httpMetadata: { contentType: "image/png" } });
+  await db.update(users).set({ deleted_at: 1 }).where(eq(users.id, "photo-owner"));
+  await request(path, { token, expected: 404 });
+  await db.delete(userRoles).where(eq(userRoles.user_id, "photo-reader"));
+  await request(path, { token: reader.access_token, expected: 403 });
+});
 
 test("user management in the Workers runtime", async (t) => {
   const { db, token, seed, raw, request, login, create, edit, administrators } = await fixture(t);

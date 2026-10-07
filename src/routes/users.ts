@@ -10,6 +10,7 @@ import { accessWon } from "../db/auth-conditions";
 import { insertWhen } from "../db/conditional-insert";
 import { coalesce, increment } from "../db/expressions";
 import { users, userAuthChallenges, userMfaMethods, userMfaRecoveryCodes, userRefreshTokens, userSessions } from "../db/schema";
+import { profileImageResponse } from "../profile/image-response";
 
 const userRoutes = new Hono<AppEnv>();
 userRoutes.use("*", requireAccess);
@@ -88,6 +89,7 @@ userRoutes.get("/", requirePermission("users.read"), async (c) => {
   return c.json({ users: page.map(account), next_cursor: rows.length > limit ? page.at(-1)!.id : null });
 });
 userRoutes.get("/:id", requirePermission("users.read"), async (c) => c.json({ user: account(await findUser(c, c.req.param("id"))) }));
+userRoutes.get("/:id/profile-image", requirePermission("users.read"), async (c) => profileImageResponse(c, await findUser(c, c.req.param("id"))));
 
 userRoutes.post("/", requirePermission("users.create"), async (c) => {
   const data = await body(c, ["email_address", "password", "display_name", "profile_image_key", "disabled", "password_reset_required"]);
