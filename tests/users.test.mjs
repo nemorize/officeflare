@@ -116,6 +116,32 @@ test("user profile photos require user-read permission and stay within the targe
   await request(path, { token: reader.access_token, expected: 403 });
 });
 
+test("self-disable is denied even with another administrator and mixed edits cannot partially save", async (t) => {
+  const { db, edit, request, administrators, seed, login } = await fixture(t, 2);
+  const [actor, other] = administrators;
+  const before = await db.select().from(users).where(eq(users.id, actor.id)).get();
+  const sessionBefore = await db.select().from(userSessions).where(eq(userSessions.user_id, actor.id)).get();
+  for (const changes of [{ disabled: true }, { disabled: true, display_name: "Must not save" }]) {
+    const response = await edit(actor.id, changes, 403);
+    assert.equal(response.error, "You cannot disable your own account.");
+    assert.deepEqual(await db.select().from(users).where(eq(users.id, actor.id)).get(), before);
+    assert.deepEqual(await db.select().from(userSessions).where(eq(userSessions.user_id, actor.id)).get(), sessionBefore);
+    await request("/api/me", { token: actor.token });
+  }
+  await edit(actor.id, { disabled: false, display_name: "Updated name" });
+  await request("/api/me", { token: actor.token });
+  const disabled = (await edit(other.id, { disabled: true })).user;
+  assert.ok(disabled.disabled_at);
+  await edit(other.id, { disabled: false });
+  await seed("self-editor");
+  await db.insert(roles).values({ id: "self-editor-role", key: "self-editor-role", label: "Account editor" });
+  await db.insert(rolePermissions).values({ role_id: "self-editor-role", permission_key: "users.update" });
+  await db.insert(userRoles).values({ user_id: "self-editor", role_id: "self-editor-role" });
+  const editor = await login("self-editor@office.test");
+  await edit("self-editor", { disabled: true }, 403, editor.access_token);
+  await request("/api/me", { token: editor.access_token });
+});
+
 test("user management in the Workers runtime", async (t) => {
   const { db, token, seed, raw, request, login, create, edit, administrators } = await fixture(t);
   const administratorId = administrators[0].id;
@@ -346,7 +372,7 @@ test("user management in the Workers runtime", async (t) => {
   });
 
   await t.test("the last administrator cannot be disabled or deleted", async () => {
-    await edit(administratorId, { disabled: true }, 409);
+    await edit(administratorId, { disabled: true }, 403);
     await request(`/api/users/${administratorId}`, { method: "DELETE", token, expected: 409 });
     await request("/api/users", { token });
     const administrator = await db.select().from(users).where(eq(users.id, administratorId)).get();
@@ -356,11 +382,14 @@ test("user management in the Workers runtime", async (t) => {
 
 test("concurrent administrator deletion and disabling preserve one active administrator", async (t) => {
   const { db, raw, administrators } = await fixture(t, 2);
-  const responses = await Promise.all(administrators.map(({ id, token }, index) => raw(`/api/users/${id}`, {
-    method: index === 0 ? "DELETE" : "PATCH", token, data: index === 0 ? undefined : { disabled: true },
-  })));
+  const [actor, other] = administrators;
+  // Deleting the actor can also invalidate the simultaneous request to disable the other account.
+  const responses = await Promise.all([
+    raw(`/api/users/${actor.id}`, { method: "DELETE", token: actor.token }),
+    raw(`/api/users/${other.id}`, { method: "PATCH", token: actor.token, data: { disabled: true } }),
+  ]);
   assert.equal(responses.filter((response) => [200, 204].includes(response.status)).length, 1);
-  assert.equal(responses.filter((response) => response.status === 409).length, 1);
+  assert.equal(responses.filter((response) => [401, 403, 409].includes(response.status)).length, 1);
   const remaining = await db.select().from(users).innerJoin(userRoles, eq(users.id, userRoles.user_id)).where(and(
     eq(userRoles.role_id, "system-administrator"), isNull(users.deleted_at), isNull(users.disabled_at),
   ));

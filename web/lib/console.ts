@@ -26,8 +26,9 @@ export interface Page<T> { items: T[]; next_cursor: string | null; }
 export interface UserValues { name: string; email: string; disabled: boolean; passwordReset: boolean; }
 export interface UserChanges { display_name?: string | null; email_address?: string; disabled?: boolean; password_reset_required?: boolean; }
 
-export function userChanges(user: AdminUser, values: UserValues, permissions: readonly string[]): UserChanges {
+export function userChanges(user: AdminUser, values: UserValues, permissions: readonly string[], currentUserId?: string): UserChanges {
   if (!permissions.includes("users.update")) throw new Error("You do not have permission to update users.");
+  if (values.disabled && user.id === currentUserId) throw new Error("You cannot disable your own account.");
   const changes: UserChanges = {}, name = values.name.trim() || null, email = values.email.trim().toLowerCase();
   if ([...(name ?? "")].length > 200) throw new Error("Display name must contain at most 200 characters.");
   if (name !== user.display_name) changes.display_name = name;

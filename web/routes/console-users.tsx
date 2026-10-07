@@ -37,6 +37,8 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
   const { id = "" } = useParams(), navigate = useNavigate(), access = useAccess(), account = useAccount();
   const resource = useResource<{ user: AdminUser }>(creating ? null : `/api/users/${encodeURIComponent(id)}`);
   const user = resource.data?.user, canUpdate = creating || access.permissions.includes("users.update");
+  const isSelf = !creating && user?.id === account.user?.id;
+  const canDisable = canUpdate && (creating || !!account.user && !isSelf);
   const [name, setName] = useState(""), [email, setEmail] = useState(""), [password, setPassword] = useState("");
   const [disabled, setDisabled] = useState(false), [passwordReset, setPasswordReset] = useState(true);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -72,7 +74,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
           else { setName(""); setEmail(""); }
         } finally { inFlight.current = false; setBusy(false); }
       } else if (user) {
-        const changes = userChanges(user, { name, email, disabled, passwordReset }, access.permissions);
+        const changes = userChanges(user, { name, email, disabled, passwordReset }, access.permissions, account.user?.id);
         if (!Object.keys(changes).length) { notify.info("No changes to save."); return; }
         if (changesEndSessions(changes)) setPending(changes); else await patch(changes);
       }
@@ -92,7 +94,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
           <TextField label="Display name" name="display_name" autoComplete="off" value={name} onValueChange={setName} readOnly={!canUpdate} />
           <TextField label="Email" name="email_address" type="email" autoComplete="off" required value={email} onValueChange={setEmail} readOnly={!canUpdate || !creating && !access.permissions.includes("users.email.update")} />
           {creating && <><PasswordField id="user-temporary-password" label="Temporary password" value={password} onChange={setPassword} autoComplete="new-password" /><p className="console-subtext">Use 15–128 characters.</p></>}
-          <Check checked={disabled} onChange={setDisabled} disabled={!canUpdate}>Disable this account</Check>
+          <Check checked={disabled} onChange={setDisabled} disabled={!canDisable}>Disable this account{isSelf && <small>You cannot disable your own account.</small>}</Check>
           <Check checked={passwordReset} onChange={setPasswordReset} disabled={!canUpdate}>Require a password change at next sign-in</Check>
         </Fieldset.Root>
         <Notice error={error} />

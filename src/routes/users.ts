@@ -125,7 +125,11 @@ userRoutes.patch("/:id", requirePermission("users.update"), async (c) => {
   if ("email_address" in data) { changes.email_address = emailAddress(data.email_address); await requireAvailableEmail(c, changes.email_address, target.id); }
   if ("display_name" in data) changes.display_name = nullableText(data.display_name, "display_name", 200);
   if ("profile_image_key" in data) changes.profile_image_key = nullableText(data.profile_image_key, "profile_image_key", 1024);
-  if ("disabled" in data) changes.disabled_at = boolean(data.disabled, "disabled") ? target.disabled_at ?? timestamp : null;
+  if ("disabled" in data) {
+    const disabled = boolean(data.disabled, "disabled");
+    if (disabled && target.id === c.get("identity").user.id) forbidden("You cannot disable your own account.");
+    changes.disabled_at = disabled ? target.disabled_at ?? timestamp : null;
+  }
   if ("password_reset_required" in data) changes.password_reset_required = Number(boolean(data.password_reset_required, "password_reset_required"));
   if ("password" in data) {
     changes.password_hash = await hashPassword(password(data.password, true));

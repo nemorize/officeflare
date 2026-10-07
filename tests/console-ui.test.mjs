@@ -30,6 +30,12 @@ test("email changes require their separate grant and security changes preserve e
   assert.equal(changesEndSessions({ disabled: false }), true);
 });
 
+test("account changes reject self-disable while allowing other edits and other users' status changes", () => {
+  assert.throws(() => userChanges(user, { ...values, disabled: true, name: "Must not save" }, ["users.update"], user.id), /cannot disable your own account/);
+  assert.deepEqual(userChanges(user, { ...values, name: "Updated name" }, ["users.update"], user.id), { display_name: "Updated name" });
+  assert.deepEqual(userChanges(user, { ...values, disabled: true }, ["users.update"], "other-user"), { disabled: true });
+});
+
 test("role updates preserve other existing permissions and submit the concurrency version", () => {
   const role = { key: "staff", is_system: false, permissions: ["users.read", "mail.domains.manage"], version: 7 };
   const body = rolePayload({ key: "ignored", label: " Staff ", description: " Team members ", permissions: ["users.read", "users.read", "users.update", "mail.providers.manage"] }, role);
