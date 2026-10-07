@@ -148,7 +148,6 @@ export function LoginPage() {
 
           {restoring ? <>
             {authSession.error && <p role="alert">{authSession.error}</p>}
-            {authSession.status === "unavailable" && <Button type="button" onClick={() => { void sessions.restore(); }}>Try again</Button>}
           </> : <Form onSubmit={submit} aria-busy={busy}>
             <Fieldset.Root disabled={busy} aria-labelledby="login-heading">
               {step.kind === "login" && <>

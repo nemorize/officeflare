@@ -100,7 +100,6 @@ export function WorkspaceLayout() {
   if (auth.status === "signed_out") return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (!auth.session) return <main className="empty-page" aria-busy={auth.status === "loading"}>
     <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
-    {auth.status === "unavailable" && <Button onClick={() => { void sessions.restore(); }}>Try again</Button>}
   </main>;
   return <AccountProvider><AccessProvider><WorkspaceChrome /></AccessProvider></AccountProvider>;
 }

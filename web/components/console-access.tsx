@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet } from "react-router";
-import { Button } from "./ui";
 import { api, errorMessage } from "../lib/api";
 import { consoleMenu } from "../lib/console";
 import { useSession } from "../lib/session";
@@ -39,7 +38,7 @@ export function AccessDenied() {
 export function ConsoleGate({ children, permissions }: { children?: ReactNode; permissions?: string[] }) {
   const access = useAccess();
   if (access.status === "loading") return <p className="account-page" role="status">Checking permissions…</p>;
-  if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p><Button onClick={access.refresh}>Try again</Button></section>;
+  if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p></section>;
   const allowed = permissions ? permissions.some((permission) => access.permissions.includes(permission)) : consoleMenu(access.permissions).length > 0;
   return allowed ? children ?? <Outlet /> : <AccessDenied />;
 }

@@ -118,7 +118,7 @@ export function AuthenticatorSettings() {
     </div>
     {loading && <p className="account-loading" role="status">Loading authenticators…</p>}
     {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-    {!loading && !ready ? <Button onClick={() => { setError(""); setRevision((value) => value + 1); }}>Try again</Button> : ready && <>
+    {ready && <>
       {methods.length > 0 && <ul className="account-authenticator-list">{methods.map((method) => <li key={method.id}>
         <span className="account-session-icon"><Icon name="shield" /></span>
         <div><strong>{method.name || "Authenticator app"}</strong><p>{method.status === "active" ? "Active" : method.status === "pending" ? "Awaiting verification" : "Setup expired"}</p></div>

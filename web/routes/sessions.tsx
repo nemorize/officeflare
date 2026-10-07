@@ -21,7 +21,6 @@ export function SessionsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [target, setTarget] = useState<AccountSession | "all" | null>(null);
-  const [revision, setRevision] = useState(0);
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -32,7 +31,7 @@ export function SessionsPage() {
       .catch((failure: unknown) => { if (!controller.signal.aborted) setError(errorMessage(failure)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [revision]);
+  }, []);
 
   async function revoke() {
     if (!target || inFlight.current) return;
@@ -63,7 +62,6 @@ export function SessionsPage() {
           </div>)}
           {!items.length && <p className="account-loading">No active sessions.</p>}
         </div>}
-        <div className="account-actions"><Button disabled={busy} onClick={() => setRevision((current) => current + 1)}>Refresh</Button></div>
       </>}
     </section>
     <section className="account-panel account-danger-panel"><div><h2>Sign out everywhere</h2><p>End all sessions, including this device.</p></div>

@@ -12,7 +12,6 @@ export function Check({ children, checked, onChange, disabled }: { children: Rea
 }
 export function useResource<T>(path: string | null) {
   const access = useAccess();
-  const [revision, setRevision] = useState(0);
   const [state, setState] = useState<{ path?: string | null; data: T | null; loading: boolean; error: string }>({ data: null, loading: true, error: "" });
   useEffect(() => {
     const controller = new AbortController(); setState({ path, data: null, error: "", loading: !!path });
@@ -26,12 +25,12 @@ export function useResource<T>(path: string | null) {
       }
     });
     return () => controller.abort();
-  }, [path, revision, access.refresh]);
+  }, [path, access.refresh]);
   const current = state.path === path ? state : { data: null, loading: !!path, error: "" };
-  return { ...current, reload: () => setRevision((value) => value + 1), update: (data: T) => setState({ path, data, loading: false, error: "" }) };
+  return { ...current, update: (data: T) => setState({ path, data, loading: false, error: "" }) };
 }
-export function ResourceState({ loading, error, reload }: { loading: boolean; error: string; reload: () => void }) {
-  return loading ? <p className="account-loading" role="status">Loading…</p> : <><Notice error={error} /><Button onClick={reload}>Try again</Button></>;
+export function ResourceState({ loading, error }: { loading: boolean; error: string }) {
+  return loading ? <p className="account-loading" role="status">Loading…</p> : <Notice error={error} />;
 }
 export function Confirm({ open, title, description, label, onClose, onConfirm, destructive = false }: { open: boolean; title: string; description: ReactNode; label: string; onClose: () => void; onConfirm: () => Promise<void>; destructive?: boolean }) {
   const access = useAccess(), notify = useNotifications(), running = useRef(false);

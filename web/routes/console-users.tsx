@@ -26,7 +26,7 @@ export function UsersPage() {
             <td><span className="console-badge" data-muted={user.disabled_at !== null}>{user.disabled_at === null ? "Active" : "Disabled"}</span>{user.password_reset_required && <small className="console-subtext">Password change required</small>}</td>
             <td className="console-date-column">{adminDate(user.last_login_at)}</td><td><Button nativeButton={false} render={<Link to={`/console/users/${encodeURIComponent(user.id)}`} />} size="sm" variant="ghost" aria-label={`Manage ${user.email_address}`}>Manage<Icon name="chevron" width="12" height="12" /></Button></td></tr>)}</tbody>
         </table>{!resource.data.users.length && <p className="console-empty">No users found.</p>}</div>
-        <div className="console-pagination"><span>Page {cursors.length} · {resource.data.users.length} {resource.data.users.length === 1 ? "user" : "users"}</span><div><Button size="sm" onClick={resource.reload}>Refresh</Button><Button size="sm" disabled={cursors.length === 1} onClick={() => setCursors((current) => current.slice(0, -1))}>Previous</Button><Button size="sm" disabled={!resource.data.next_cursor} onClick={() => { if (resource.data?.next_cursor) setCursors((current) => [...current, resource.data!.next_cursor]); }}>Next</Button></div></div>
+        <div className="console-pagination"><span>Page {cursors.length} · {resource.data.users.length} {resource.data.users.length === 1 ? "user" : "users"}</span><div><Button size="sm" disabled={cursors.length === 1} onClick={() => setCursors((current) => current.slice(0, -1))}>Previous</Button><Button size="sm" disabled={!resource.data.next_cursor} onClick={() => { if (resource.data?.next_cursor) setCursors((current) => [...current, resource.data!.next_cursor]); }}>Next</Button></div></div>
       </>}
     </section>
   </section>;
@@ -96,7 +96,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
           <Check checked={passwordReset} onChange={setPasswordReset} disabled={!canUpdate}>Require a password change at next sign-in</Check>
         </Fieldset.Root>
         <Notice error={error} />
-        <div className="account-actions"><Button type="button" disabled={busy} onClick={() => creating ? navigate("/console/users") : resource.reload()}>{creating ? "Cancel" : "Reload"}</Button>{canUpdate && <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : creating ? "Create user" : "Save changes"}</Button>}</div>
+        {canUpdate && <div className="account-actions">{creating && <Button type="button" disabled={busy} onClick={() => navigate("/console/users")}>Cancel</Button>}<Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : creating ? "Create user" : "Save changes"}</Button></div>}
       </section></Form>
       {!creating && user && <>
         {access.permissions.includes("users.roles.read") && <UserRoles user={user} />}
@@ -146,9 +146,9 @@ function UserRoles({ user }: { user: AdminUser }) {
   }, [user.id, canReadRoles, revision, access.refresh]);
   const changed = [...selected].sort().join() !== assigned.map((role) => role.id).sort().join();
   return <section className="account-panel"><div className="account-panel-header"><h2>Assigned roles</h2><p>Roles determine what this user can access and manage. You can assign up to 50 roles.</p></div><Notice error={error} />
-    {loading ? <p className="account-loading" role="status">Loading roles…</p> : error ? <Button onClick={() => setRevision((value) => value + 1)}>Try again</Button> : editable ? <>
+    {loading ? <p className="account-loading" role="status">Loading roles…</p> : error ? null : editable ? <>
       <div className="console-role-options">{roles.map((role) => <Check key={role.id} checked={selected.includes(role.id)} disabled={!selected.includes(role.id) && (selected.length >= 50 || !canGrant(access.permissions, role.permissions))} onChange={(checked) => setSelected((current) => checked ? [...current, role.id] : current.filter((id) => id !== role.id))}><strong>{role.label}</strong>{role.description && <small>{role.description}</small>}{!canGrant(access.permissions, role.permissions) && <small>You cannot grant this role.</small>}</Check>)}{!roles.length && <p className="console-empty">No roles available.</p>}</div>
-      <div className="account-actions"><Button disabled={!changed} onClick={() => setSelected(assigned.map((role) => role.id))}>Discard changes</Button><Button variant="primary" disabled={!changed} onClick={() => setConfirm(true)}>Save roles</Button></div>
+      <div className="account-actions"><Button variant="primary" disabled={!changed} onClick={() => setConfirm(true)}>Save roles</Button></div>
     </> : <ul className="console-assigned-roles">{assigned.map((role) => <li key={role.id}><Icon name="shield" /><span>{role.label}</span></li>)}{!assigned.length && <li>No roles assigned.</li>}</ul>}
     <Confirm open={confirm} title="Update assigned roles?" description={`Update workspace access for ${user.email_address}? The new permissions take effect immediately.`} label="Save roles" onClose={() => setConfirm(false)} onConfirm={async () => { await api(`/api/users/${encodeURIComponent(user.id)}/roles`, { method: "PUT", body: { role_ids: selected } }); notify.success("Assigned roles have been updated."); setRevision((value) => value + 1); access.refresh(); }} />
   </section>;

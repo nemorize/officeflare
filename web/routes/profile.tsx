@@ -49,7 +49,6 @@ export function ProfilePage() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [revision, setRevision] = useState(0);
   const inFlight = useRef(false);
   const email = user?.email_address ?? auth.session?.email ?? "";
 
@@ -66,7 +65,7 @@ export function ProfilePage() {
     }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(errorMessage(failure)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [revision]);
+  }, []);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,7 +89,7 @@ export function ProfilePage() {
     <header className="account-page-header"><h1>Profile</h1><p>Manage your personal information.</p></header>
     <ProfileImageSettings />
     {loading ? <p className="account-loading" role="status">Loading your profile…</p> : !ready ? <section className="account-panel">
-      <p className="account-notice" data-error role="alert">{error}</p><Button onClick={() => setRevision((current) => current + 1)}>Try again</Button>
+      <p className="account-notice" data-error role="alert">{error}</p>
     </section> : <>
       <Form onSubmit={save} aria-busy={busy}>
         <section className="account-panel">
@@ -102,8 +101,7 @@ export function ProfilePage() {
               onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} />)}
           </Fieldset.Root>
           {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-          <div className="account-actions"><Button type="button" disabled={busy} onClick={() => setRevision((current) => current + 1)}>Reload</Button>
-            <Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
+          <div className="account-actions"><Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
         </section>
       </Form>
     </>}
