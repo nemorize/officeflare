@@ -55,6 +55,7 @@ import {
   locator,
   publicSubmission,
   type Address,
+  type Attachment,
   type Connection,
   type Domain,
   type MailAppEnv,
@@ -249,7 +250,12 @@ mail.patch("/provider-connections/:id", async (c) => {
 mail.get("/domains", async (c) => {
   await administrator(c, "admin.mail.domains.read");
   return c.json({
-    domains: await all(c.env, "SELECT * FROM mail_domains ORDER BY name"),
+    domains: await all(c.env, "SELECT d.*,i.provider inbound_provider,o.provider outbound_provider FROM mail_domains d LEFT JOIN mail_provider_connections i ON i.id=d.inbound_connection_id LEFT JOIN mail_provider_connections o ON o.id=d.outbound_connection_id ORDER BY d.name"),
+    providers: providers.map(({ id, capabilities }) => ({
+      provider: id,
+      capabilities,
+      default_connection_id: id === "cloudflare" ? "cloudflare-bindings" : null,
+    })),
   });
 });
 mail.post("/domains", async (c) => {
@@ -549,20 +555,24 @@ mail.get("/mailboxes", async (c) => {
     });
   }
   const owner = actor(c);
-  const entries = await all<Mailbox>(
+  const entries = await all<Mailbox & { can_read: number; can_write: number; can_send_as: number; can_send_on_behalf: number; can_manage: number }>(
     c.env,
-    "SELECT DISTINCT b.* FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send_as=1 OR m.can_send_on_behalf=1) ORDER BY b.created_at,b.id LIMIT 1000",
+    "SELECT DISTINCT b.*,m.can_read,m.can_write,m.can_send_as,m.can_send_on_behalf,m.can_manage FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send_as=1 OR m.can_send_on_behalf=1) ORDER BY b.created_at,b.id LIMIT 1000",
     owner.user_id,
     owner.user_id,
   );
-  if (!owner.api_key_id) return c.json({ mailboxes: entries });
-  const scoped = await all<{ mailbox_id: string }>(
+  const scoped = owner.api_key_id ? await all<{ mailbox_id: string; action: string }>(
     c.env,
-    "SELECT DISTINCT mailbox_id FROM mail_api_key_scopes WHERE key_id=?",
+    "SELECT mailbox_id,action FROM mail_api_key_scopes WHERE key_id=?",
     owner.api_key_id,
-  );
+  ) : null;
   return c.json({
-    mailboxes: entries.filter((b) => scoped.some((s) => s.mailbox_id === b.id)),
+    mailboxes: entries.filter((b) => !scoped || scoped.some((s) => s.mailbox_id === b.id)).map(({ can_read, can_write, can_send_as, can_send_on_behalf, can_manage, ...b }) => ({
+      ...b,
+      access: Object.fromEntries(Object.entries({ read: can_read, write: can_write, send_as: can_send_as, send_on_behalf: can_send_on_behalf, manage: can_manage }).map(([action, granted]) => [action,
+        (b.owner_user_id === owner.user_id || granted === 1) && (!scoped || scoped.some((s) => s.mailbox_id === b.id && s.action === action)),
+      ])),
+    })),
   });
 });
 mail.post("/mailboxes", async (c) => {
@@ -668,9 +678,13 @@ mail.get("/mailboxes/:m/members", async (c) => {
   return c.json({
     members: await all(
       c.env,
-      "SELECT * FROM mail_mailbox_members WHERE mailbox_id=?",
+      "SELECT m.*,u.email_address,u.display_name FROM mail_mailbox_members m JOIN users u ON u.id=m.user_id WHERE m.mailbox_id=?",
       resource(c),
     ),
+    candidates: await all(c.env,
+      "SELECT u.id,u.email_address,u.display_name FROM users u WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND (u.email_address LIKE ? ESCAPE '\\' OR coalesce(u.display_name,'') LIKE ? ESCAPE '\\') ORDER BY u.email_address LIMIT 100",
+      "%" + (c.req.query("search") ?? "").slice(0, 200).replace(/[\\%_]/g, "\\$&") + "%",
+      "%" + (c.req.query("search") ?? "").slice(0, 200).replace(/[\\%_]/g, "\\$&") + "%"),
   });
 });
 mail.put("/mailboxes/:m/members/:user", async (c) => {
@@ -723,7 +737,8 @@ mail.delete("/mailboxes/:m/members/:user", async (c) => {
   return c.body(null, 204);
 });
 mail.get("/mailboxes/:m/addresses", async (c) => {
-  await authorize(c.env, actor(c), resource(c), "read");
+  try { await authorize(c.env, actor(c), resource(c), "read"); }
+  catch { await administrator(c, "admin.mail.domains.read"); }
   return c.json({
     addresses: await all(
       c.env,
@@ -872,6 +887,7 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
     folder_id: c.req.query("folder_id"),
     thread_id: c.req.query("thread_id"),
     include_snoozed: c.req.query("include_snoozed") === "true",
+    snoozed_only: c.req.query("snoozed_only") === "true",
   };
   let cursor:
     | {
@@ -1060,8 +1076,13 @@ mail.post("/mailboxes/:m/uploads", async (c) => {
   const length = Number(c.req.header("content-length"));
   if (!Number.isSafeInteger(length) || length < 0 || length > 5 * 1024 * 1024)
     fail(413, "Upload requires Content-Length and must not exceed 5 MiB");
+  let suppliedFilename = c.req.header("x-filename") ?? "attachment";
+  if (c.req.header("x-filename-encoded")) {
+    try { suppliedFilename = decodeURIComponent(c.req.header("x-filename-encoded")!); }
+    catch { fail(400, "Invalid encoded filename"); }
+  }
   const filename = text(
-      c.req.header("x-filename") ?? "attachment",
+      suppliedFilename,
       "filename",
       255,
     ),
@@ -1125,6 +1146,8 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
       "to",
       "cc",
       "bcc",
+      "attachment_ids",
+      "retained_attachment_ids",
     ]),
     store = partition(c.env, locator(c.req.param("id"))),
     current = await store.get(c.req.param("id"), actor(c).user_id),
@@ -1148,7 +1171,26 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
     cc = data.cc === undefined ? select("cc") : recipients(data.cc, "cc"),
     bcc = data.bcc === undefined ? select("bcc") : recipients(data.bcc, "bcc");
   if (to.length + cc.length + bcc.length > 50) fail(400, "Too many recipients");
+  if (!current.draft || current.draft.state !== "editable" || current.draft.version !== version) fail(409, "Draft version changed or is not editable");
+  let attachments: Attachment[] | undefined;
+  const addedKeys: string[] = [];
+  let committed = false;
+  try {
+  if (data.attachment_ids !== undefined || data.retained_attachment_ids !== undefined) {
+    const retained = data.retained_attachment_ids ?? current.attachments.map((file) => file.id);
+    const uploads = data.attachment_ids ?? [];
+    if (!Array.isArray(retained) || !Array.isArray(uploads) || retained.length + uploads.length > 32 || new Set(retained).size !== retained.length || new Set(uploads).size !== uploads.length) fail(400, "Invalid attachments");
+    attachments = retained.map((value) => current.attachments.find((file) => file.id === strictId(value)) ?? fail(400, "Unknown retained attachment"));
+    for (const value of uploads) {
+      const upload = await c.env.MAIL_BUCKET.get("uploads/" + resource(c) + "/" + actor(c).user_id + "/" + strictId(value));
+      if (!upload || Number(upload.customMetadata?.expires_at ?? 0) < epoch()) fail(400, "Upload is missing or expired");
+      const fileId = id(), r2Key = "attachments/" + resource(c) + "/" + current.id + "/" + fileId;
+      addedKeys.push(r2Key); await c.env.MAIL_BUCKET.put(r2Key, upload.body, { httpMetadata: upload.httpMetadata });
+      attachments.push({ id: fileId, filename: upload.customMetadata?.filename ?? "attachment", content_type: upload.httpMetadata?.contentType ?? "application/octet-stream", size_bytes: upload.size, content_id: null, r2_key: r2Key, disposition: "attachment" });
+    }
+  }
   const keyBody = bodyKey(resource(c), current.id, id());
+  addedKeys.push(keyBody);
   await c.env.MAIL_BUCKET.put(keyBody, JSON.stringify(body), {
     httpMetadata: { contentType: "application/json" },
   });
@@ -1163,11 +1205,17 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
     body_r2_key: keyBody,
     snippet: (body.text || htmlText(body.html)).slice(0, 200),
     search_text: body.text || htmlText(body.html),
+    attachments,
   });
+  committed = true;
   await flushOutbox(c.env, resource(c), locator(message.id));
   return c.json({
     message: await getMessage(c.env, actor(c), resource(c), message.id),
   });
+  } catch (error) {
+    if (!committed) await Promise.allSettled(addedKeys.map((objectKey) => c.env.MAIL_BUCKET.delete(objectKey)));
+    throw error;
+  }
 });
 mail.delete("/mailboxes/:m/drafts/:id", async (c) => {
   await authorize(c.env, actor(c), resource(c), "read");
@@ -1438,6 +1486,7 @@ mail.get("/api-keys", async (c) => {
       "SELECT id,name,expires_at,revoked_at,created_at FROM mail_api_keys WHERE user_id=?",
       actor(c).user_id,
     ),
+    scopes: await all(c.env, "SELECT s.key_id,s.mailbox_id,s.action FROM mail_api_key_scopes s JOIN mail_api_keys k ON k.id=s.key_id WHERE k.user_id=?", actor(c).user_id),
   });
 });
 mail.post("/api-keys", async (c) => {
@@ -1662,12 +1711,13 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
                   .map((r) => r.email_address),
               ]),
             ].filter((address) => !own.has(address.toLowerCase()));
-    const uploads: string[] = [];
+    const requestKey = key(c), uploads: string[] = [];
     if (operation === "forward")
       for (const file of source.attachments) {
         const object = await c.env.MAIL_BUCKET.get(file.r2_key);
         if (!object) fail(503, "Attachment unavailable");
-        const uploadId = id();
+        const digest = await hash(JSON.stringify([actor(c).user_id, requestKey, sourceId, file.id]));
+        const uploadId = `${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`;
         await c.env.MAIL_BUCKET.put(
           "uploads/" + resource(c) + "/" + actor(c).user_id + "/" + uploadId,
           object.body,
@@ -1696,11 +1746,11 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
         subject,
         to,
         text:
-          text(data.text ?? "", "text", 10000, true) + "\n\n" + content.text,
+          text(data.text ?? "", "text", 10000, true) + "\n\n" + (content.text || htmlText(content.html)),
         attachment_ids: uploads,
         ...(operation !== "forward" ? { reply_to_message_id: sourceId } : {}),
       },
-      key(c),
+      requestKey,
     );
     return c.json({ message: draft }, 201);
   });
@@ -1767,6 +1817,11 @@ mail.get("/mailboxes/:m/jobs/:id", async (c) => {
     cursor_json: _cursor,
     ...job
   } = await ownedJob(c, c.req.param("id"));
+  if (job.kind === "backup" && job.status === "completed") {
+    const full = await ownedJob(c, c.req.param("id"));
+    const listed = await c.env.MAIL_BUCKET.list({ prefix: full.output_prefix, limit: 100, cursor: c.req.query("files_cursor") });
+    return c.json({ job, files: listed.objects.map((object) => ({ name: object.key.slice(full.output_prefix.length), size: object.size })), next_file_cursor: listed.truncated ? listed.cursor : null });
+  }
   return c.json({ job });
 });
 mail.get("/mailboxes/:m/jobs/:id/download", async (c) => {

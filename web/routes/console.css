@@ -25,10 +25,6 @@
 .console-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-block-start: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 11px; }
 .console-pagination > div { display: flex; gap: 8px; }
 .console-empty { color: var(--ui-muted); text-align: center; padding: 40px 24px; font-size: 12px; }
-.console-check { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; }
-.console-check [data-ui="checkbox-root"] { flex-shrink: 0; margin-block-start: 1px; }
-.console-check strong { display: block; font-weight: 500; }
-.console-check small { display: block; color: var(--ui-muted); font-size: 11px; margin-block-start: 4px; }
 .console-role-options { display: grid; gap: 18px; }
 .console-permissions { display: grid; gap: 24px; }
 .console-permissions fieldset { display: grid; gap: 14px; border: 0; padding: 0; }

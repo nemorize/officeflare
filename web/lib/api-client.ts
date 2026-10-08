@@ -10,6 +10,7 @@ export interface ApiOptions {
   retryAuth?: boolean;
   signal?: AbortSignal;
   response?: "json" | "blob";
+  headers?: Record<string, string>;
 }
 
 export function createApiClient(deps: {
@@ -22,7 +23,7 @@ export function createApiClient(deps: {
     const send = (token: string) => deps.fetch(path, {
       method: options.method ?? "GET", credentials: "omit", cache: "no-store",
       signal: options.signal ?? AbortSignal.timeout(15_000),
-      headers: { Authorization: `Bearer ${token}`, ...(options.body ? { "Content-Type": binaryBody ? (options.body as Blob).type : "application/json" } : {}) },
+      headers: { ...(options.body ? { "Content-Type": binaryBody ? (options.body as Blob).type || "application/octet-stream" : "application/json" } : {}), ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) => name.toLowerCase() !== "authorization")), Authorization: `Bearer ${token}` },
       body: binaryBody ? options.body as Blob : options.body ? JSON.stringify(options.body) : undefined,
     });
     let response = await send(options.token ?? await deps.accessToken());

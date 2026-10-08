@@ -206,6 +206,70 @@ async function fixture(t, target = "6000000000", queues = false) {
     draft,
   };
 }
+test("mail UI metadata, sharing, attachment editing and send recovery use authorized resources", async (t) => {
+  const f = await fixture(t), { call, admin, base, mailbox, tokens, draft, mf, db, address } = f;
+  await t.test("mailbox rights and the member picker expose only scoped, public account information", async () => {
+    const owned = (await call("/mailboxes")).mailboxes.find((entry) => entry.id === mailbox.id);
+    assert.deepEqual(owned.access, { read: true, write: true, send_as: true, send_on_behalf: true, manage: true });
+    await call(base + "/members/reader", { method: "PUT", data: { read: true, send_on_behalf: true } });
+    const shared = (await call("/mailboxes", { token: tokens.reader })).mailboxes[0];
+    assert.deepEqual(shared.access, { read: true, write: false, send_as: false, send_on_behalf: true, manage: false });
+    const directory = await call(base + "/members?search=reader");
+    assert.equal(directory.members[0].email_address, "reader@office.test");
+    assert.deepEqual(Object.keys(directory.candidates[0]).sort(), ["display_name", "email_address", "id"]);
+    assert.equal(directory.candidates.length, 1);
+    await call(base + "/members", { token: tokens.reader, expected: 403 });
+    const { key } = await call("/api-keys", { method: "POST", data: { name: "read only", expires_at: Math.floor(Date.now() / 1000) + 3600, scopes: [{ mailbox_id: mailbox.id, action: "read" }] }, expected: 201 });
+    assert.deepEqual((await call("/mailboxes", { token: key.token })).mailboxes[0].access, { read: true, write: false, send_as: false, send_on_behalf: false, manage: false });
+    const keys = await call("/api-keys"); assert.equal(keys.scopes[0].mailbox_id, mailbox.id); assert.equal(keys.keys.some((entry) => "token" in entry), false);
+    const adminAddresses = await admin(base + "/addresses"); assert.equal(adminAddresses.addresses[0].id, address.id);
+    await call(base + "/addresses", { token: tokens.outsider, expected: 403 });
+    await admin(base + "/messages", { expected: 403 });
+  });
+  let message;
+  const upload = async (name, token = tokens.owner) => {
+    const response = await mf.dispatchFetch("https://office.test/api/mail" + base + "/uploads", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/octet-stream", "Content-Length": "4", "X-Filename-Encoded": encodeURIComponent(name) }, body: new Uint8Array([0, 255, 10, 128]) });
+    assert.equal(response.status, 201, await response.clone().text()); return (await response.json()).upload;
+  };
+  await t.test("saved drafts can add and remove attachments without changing their thread or leaking foreign uploads", async () => {
+    const first = await upload("서울 첨부파일.bin"); assert.equal(first.filename, "서울 첨부파일.bin");
+    message = await draft({ subject: "Editable attachments", attachment_ids: [first.id] });
+    const oldId = message.attachments[0].id, second = await upload("replacement.bin");
+    const patched = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: message.draft.version, retained_attachment_ids: [], attachment_ids: [second.id], text: "Revised attachment" } })).message;
+    assert.equal(patched.id, message.id); assert.equal(patched.thread_id, message.thread_id); assert.equal(patched.attachments.length, 1); assert.equal(patched.attachments[0].filename, "replacement.bin");
+    assert.equal(patched.has_attachments, 1); assert.equal(patched.draft.version, 2);
+    await call(base + "/messages/" + message.id + "/attachments/" + oldId, { expected: 404 });
+    await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 1, retained_attachment_ids: [], attachment_ids: [second.id] }, expected: 409 });
+    await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
+    const foreign = await upload("foreign.bin", tokens.reader);
+    await call(base + "/members/reader", { method: "PUT", data: { read: true } });
+    await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 2, retained_attachment_ids: [], attachment_ids: [foreign.id] }, expected: 400 });
+    await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 2, retained_attachment_ids: [oldId] }, expected: 400 });
+    const unchanged = (await call(base + "/drafts/" + message.id)).message; assert.equal(unchanged.draft.version, 2); assert.equal(unchanged.attachments.length, 1);
+    message = unchanged;
+  });
+  await t.test("forwarding an HTML-only message with attachments recovers the same draft on replay", async () => {
+    const htmlOnly = await draft({ subject: "HTML source", text: "", html: "<p>Quoted HTML content</p>", attachment_ids: [(await upload("forward.bin")).id] });
+    const options = { method: "POST", data: { to: ["forward@example.test"] }, headers: { "Idempotency-Key": "forward-ui-recovery" }, expected: 201 };
+    const first = (await call(base + "/messages/" + htmlOnly.id + "/forward", options)).message;
+    const replay = (await call(base + "/messages/" + htmlOnly.id + "/forward", options)).message;
+    assert.equal(first.id, replay.id); assert.equal(replay.attachments.length, 1); assert.match(first.body.text, /Quoted HTML content/);
+  });
+  await t.test("snoozed-only queries preserve cursor filters and message details expose public send status", async () => {
+    const snoozed = (await call(base + "/messages/" + message.id, { method: "PATCH", data: { version: message.version, snoozed_until: Math.floor(Date.now() / 1000) + 3600 } })).message;
+    const results = await call(base + "/messages?include_snoozed=true&snoozed_only=true"); assert.deepEqual(results.messages.map((entry) => entry.id), [message.id]);
+    assert.deepEqual((await call(base + "/messages?snoozed_only=true")).messages.map((entry) => entry.id), [message.id]);
+    const sending = await draft({ subject: "Scheduled UI" });
+    const { submission } = await call(base + "/drafts/" + sending.id + "/submissions", { method: "POST", data: { version: sending.draft.version, address_id: address.id, scheduled_at: Math.floor(Date.now() / 1000) + 3600 }, headers: { "Idempotency-Key": "ui-send" }, expected: 202 });
+    const detail = (await call(base + "/messages/" + sending.id)).message;
+    assert.equal(detail.submissions[0].id, submission.id); assert.equal(detail.submissions[0].status, "scheduled");
+    for (const key of ["actor_auth_version", "api_key_id", "request_hash", "snapshot_r2_key"]) assert.equal(key in detail.submissions[0], false);
+    await call(base + "/messages/" + sending.id, { token: tokens.reader, expected: 404 });
+    await call(base + "/submissions/" + submission.id + "/cancel", { method: "POST" });
+    assert.equal((await call(base + "/drafts/" + sending.id)).message.draft.state, "editable");
+    assert.equal(snoozed.id, message.id);
+  });
+});
 test("mail backend permissions, providers, drafts, search and scheduling", async (t) => {
   const { db, tokens, raw, call, admin, base, address, mailbox, draft } =
     await fixture(t);
@@ -216,6 +280,11 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
         (await call("/providers")).providers[0].provider,
         "cloudflare",
       );
+      const domainSettings = await admin("/domains");
+      assert.equal(domainSettings.domains[0].inbound_provider, "cloudflare");
+      assert.equal(domainSettings.domains[0].outbound_provider, "cloudflare");
+      assert.deepEqual(domainSettings.providers.map(({ provider, default_connection_id }) => ({ provider, default_connection_id })), [{ provider: "cloudflare", default_connection_id: "cloudflare-bindings" }]);
+      await call("/domains", { expected: 403 });
       await admin("/provider-connections", {
         method: "POST",
         data: { provider: "ses", name: "unsupported" },
@@ -741,6 +810,11 @@ test("imports, backups, restore, JMAP and MCP use the same permission boundary",
     (r) => r.job.status === "completed",
     "Backup did not complete",
   );
+  const backupDetails = await call(base + "/jobs/" + backup.id);
+  assert.ok(backupDetails.files.some((file) => file.name === "manifest.json"));
+  assert.ok(backupDetails.files.some((file) => file.name.endsWith(".message.json")));
+  assert.equal("output_prefix" in backupDetails.job, false);
+  for (const file of backupDetails.files) assert.match(file.name, /^[a-z0-9.-]{1,100}$/);
   const target = (
     await admin("/mailboxes", {
       method: "POST",

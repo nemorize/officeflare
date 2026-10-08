@@ -9,6 +9,8 @@ export const rolePermissions = Object.keys(permissionCatalog).filter((key) => ke
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [
   { path: "/console/users", name: "Users", icon: "users", permissions: ["admin.users.read"] },
   { path: "/console/roles", name: "Roles", icon: "shield", permissions: ["admin.roles.read"] },
+  { path: "/console/mail/domains", name: "Mail domains", icon: "mail", permissions: ["admin.mail.domains.read"] },
+  { path: "/console/mail/mailboxes", name: "Mailboxes", icon: "inbox", permissions: ["admin.mail.mailboxes.read"] },
 ];
 export const consoleMenu = (permissions: readonly string[]) => permissions.includes("console.access") ? consoleSections.filter((item) => item.permissions.some((permission) => permissions.includes(permission))) : [];
 export const canGrant = (permissions: readonly string[], grants: readonly string[]) => grants.every((key) => isPermission(key)) && permissionClosure(grants).every((key) => permissions.includes(key));

@@ -75,7 +75,7 @@
 :is([data-ui="combobox-input-group"], [data-ui="autocomplete-input-group"], [data-ui="number-field-group"]):has([data-invalid]) { border-color: var(--ui-danger); }
 :is([data-ui="combobox-input-group"], [data-ui="autocomplete-input-group"], [data-ui="number-field-group"]) > :focus-visible { outline: none; box-shadow: none; }
 
-[data-ui="popup-positioner"], [data-ui$="-positioner"] { z-index: 60; max-width: var(--available-width); }
+[data-ui="popup-positioner"], [data-ui$="-positioner"] { z-index: 80; max-width: var(--available-width); }
 :where([data-ui="menu-popup"], [data-ui="context-menu-popup"], [data-ui="select-popup"], [data-ui="combobox-popup"], [data-ui="autocomplete-popup"], [data-ui="popover-popup"], [data-ui="preview-card-popup"], [data-ui="navigation-menu-popup"]) {
   min-width: 190px; max-width: min(380px, var(--available-width, 100vw));
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius-popup);

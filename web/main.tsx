@@ -1,6 +1,6 @@
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes } from "react-router";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./routes/login";
 import { UIProvider } from "@/components/ui";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
@@ -17,6 +17,12 @@ const UsersPage = lazy(() => import("./routes/console-users").then((module) => (
 const UserEditorPage = lazy(() => import("./routes/console-users").then((module) => ({ default: module.UserEditorPage })));
 const RolesPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RolesPage })));
 const RoleEditorPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RoleEditorPage })));
+const MailPage = lazy(() => import("./routes/mail").then((module) => ({ default: module.MailPage })));
+const MailManagePage = lazy(() => import("./routes/mail-manage").then((module) => ({ default: module.MailManagePage })));
+const MailIntegrationsPage = lazy(() => import("./routes/mail-integrations").then((module) => ({ default: module.MailIntegrationsPage })));
+const MailDataPage = lazy(() => import("./routes/mail-data").then((module) => ({ default: module.MailDataPage })));
+const MailConsolePage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailConsolePage })));
+const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailDomainEditorPage })));
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
 if (import.meta.hot) import.meta.hot.data.root = root;
@@ -28,9 +34,13 @@ root.render(
           <Route path="/login" element={<LoginPage />} />
           <Route element={<WorkspaceLayout />}>
             <Route path="/" element={<WorkspaceHome />} />
-            {workspaceApps.flatMap((app) => app.menu.map((item) =>
+            {workspaceApps.filter((app) => app.path !== "/mail").flatMap((app) => app.menu.map((item) =>
               <Route key={item.path} path={item.path} element={<ServiceGate permission={app.permission}><EmptyWorkspacePage title={item.name} /></ServiceGate>} />
             ))}
+            {["/mail", "/mail/starred", "/mail/snoozed", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/spam", "/mail/trash", "/mail/folders/:folder"].map((path) => <Route key={path} path={path} element={<ServiceGate permission="mail.access"><MailPage /></ServiceGate>} />)}
+            {["contacts", "templates", "rules", "settings"].map((page) => <Route key={page} path={`/mail/${page}`} element={<ServiceGate permission="mail.access"><MailManagePage key={page} page={page} /></ServiceGate>} />)}
+            <Route path="/mail/integrations" element={<ServiceGate permission="mail.access"><MailIntegrationsPage /></ServiceGate>} />
+            {["data", "activity"].map((page) => <Route key={page} path={`/mail/${page}`} element={<ServiceGate permission="mail.access"><MailDataPage key={page} page={page} /></ServiceGate>} />)}
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/security" element={<SecurityPage />} />
             <Route path="/profile/sessions" element={<SessionsPage />} />
@@ -42,6 +52,10 @@ root.render(
               <Route path="roles" element={<ConsoleGate permissions={rolePermissions}><RolesPage /></ConsoleGate>} />
               <Route path="roles/new" element={<ConsoleGate permissions={["admin.roles.create"]}><RoleEditorPage key="new" creating /></ConsoleGate>} />
               <Route path="roles/:id" element={<ConsoleGate permissions={["admin.roles.read"]}><RoleEditorPage /></ConsoleGate>} />
+              {["domains", "mailboxes"].map((page) => <Route key={page} path={`mail/${page}`} element={<ConsoleGate permissions={[`admin.mail.${page}.read`]}><MailConsolePage key={page} page={page} /></ConsoleGate>} />)}
+              <Route path="mail/domains/new" element={<ConsoleGate permissions={["admin.mail.domains.manage"]}><MailDomainEditorPage key="new" creating /></ConsoleGate>} />
+              <Route path="mail/domains/:id" element={<ConsoleGate permissions={["admin.mail.domains.read"]}><MailDomainEditorPage /></ConsoleGate>} />
+              <Route path="mail/providers" element={<Navigate to="/console/mail/domains" replace />} />
             </Route>
             <Route path="*" element={
               <section className="account-page">

@@ -45,6 +45,7 @@ export const mailAccessSql = "EXISTS(SELECT 1 FROM user_roles access_roles JOIN 
 function administrativeRequest(c: Context<MailAppEnv>) {
   const path = c.req.path.replace(/^\/api\/mail/, ""), method = c.req.method;
   return /^\/(provider-connections|domains|addresses)(\/|$)/.test(path) ||
+    method === "GET" && /^\/mailboxes\/[^/]+\/addresses$/.test(path) ||
     path === "/mailboxes" && (method === "POST" || c.req.query("all") === "true") ||
     /^\/mailboxes\/[^/]+$/.test(path) && method === "PATCH";
 }

@@ -14,6 +14,7 @@ import {
   type MessageRow,
   type Submission,
   type DeliveryTask,
+  publicSubmission,
 } from "./types";
 
 export class MailPartitionDO extends DurableObject<Env> {
@@ -322,15 +323,17 @@ export class MailPartitionDO extends DurableObject<Env> {
         "SELECT version,state FROM drafts WHERE message_id=?",
         messageId,
       ),
+      submissions: rows<Submission>(this.sql, "SELECT * FROM submissions WHERE message_id=? ORDER BY created_at DESC LIMIT 20", messageId).map(publicSubmission),
     };
   }
   query(query: MessageQuery) {
     const filters = ["(m.draft_owner_id IS NULL OR m.draft_owner_id=?)"],
       bindings: (string | number)[] = [query.actor_id];
-    if (!query.include_snoozed) {
+    if (!query.include_snoozed && !query.snoozed_only) {
       filters.push("(m.snoozed_until IS NULL OR m.snoozed_until<=?)");
       bindings.push(epoch());
     }
+    if (query.snoozed_only) { filters.push("m.snoozed_until>?"); bindings.push(epoch()); }
     if (query.before) {
       filters.push("(m.received_at<? OR (m.received_at=? AND m.id<?))");
       bindings.push(
@@ -434,6 +437,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       body_r2_key: string;
       snippet: string;
       search_text: string;
+      attachments?: Attachment[];
     },
   ) {
     const message = this.get(messageId, actorId);
@@ -474,6 +478,14 @@ export class MailPartitionDO extends DurableObject<Env> {
             address,
           ),
         );
+      if (input.attachments) {
+        for (const removed of message.attachments.filter((file) => !input.attachments!.some((keep) => keep.id === file.id))) {
+          this.sql.exec("INSERT OR IGNORE INTO garbage VALUES(?,?)", removed.r2_key, epoch() + 86400);
+        }
+        this.sql.exec("DELETE FROM attachments WHERE message_id=?", messageId);
+        for (const file of input.attachments) this.sql.exec("INSERT INTO attachments(id,message_id,filename,content_type,size_bytes,content_id,r2_key,disposition) VALUES(?,?,?,?,?,?,?,?)", file.id, messageId, file.filename, file.content_type, file.size_bytes, file.content_id, file.r2_key, file.disposition);
+        this.sql.exec("UPDATE messages SET has_attachments=? WHERE id=?", Number(input.attachments.length > 0), messageId);
+      }
       this.index(
         messageId,
         input.subject,

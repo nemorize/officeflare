@@ -4,6 +4,7 @@ import { Button, Icon, Menu, MenuPopup, OfficeflareMark, useNotifications } from
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
+import { MailProvider, MailSidebar } from "../components/mail-context";
 import { consoleMenu } from "../lib/console";
 import { errorMessage } from "../lib/api";
 import { sessions, useSession } from "../lib/session";
@@ -45,13 +46,14 @@ function WorkspaceChrome() {
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
+  const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
   const access = useAccess(), systemMenu = consoleMenu(access.permissions);
   const visibleApps = workspaceApps.filter((app) => access.permissions.includes(app.permission));
   const activeApp = visibleApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
   const sidebarName = isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
   const sidebarMenu = isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
-  const title = current?.name ?? "Page not found";
+  const title = current?.name ?? (isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
   useEffect(() => { content.current?.scrollTo(0, 0); }, [pathname]);
 
@@ -75,10 +77,10 @@ function WorkspaceChrome() {
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
-        <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
+        {isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
-        </nav>
+        </nav>}
         <div className="workspace-sidebar-footer"><Icon name={isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
       </aside>
       <div ref={content} className="workspace-content">
@@ -86,6 +88,7 @@ function WorkspaceChrome() {
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>
         {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
+        {isMail && activeApp && <MailSidebar mobile />}
         {auth.error && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
           <Suspense fallback={<p className="account-page" role="status">Loading…</p>}><Outlet /></Suspense>
@@ -102,7 +105,7 @@ export function WorkspaceLayout() {
   if (!auth.session) return <main className="empty-page" aria-busy={auth.status === "loading"}>
     <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
   </main>;
-  return <AccountProvider><AccessProvider><WorkspaceChrome /></AccessProvider></AccountProvider>;
+  return <AccountProvider><AccessProvider><MailProvider><WorkspaceChrome /></MailProvider></AccessProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {

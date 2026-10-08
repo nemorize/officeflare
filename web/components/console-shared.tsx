@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertDialog, AlertDialogPopup, Button, Checkbox, Icon, useNotifications } from "./ui";
 import { ApiError, api, errorMessage } from "../lib/api";
 import { useAccess } from "./console-access";
+import "./console-shared.css";
 
 export const adminDate = (timestamp: number | null) => timestamp === null ? "Never" : new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 export function Notice({ error }: { error?: string }) {

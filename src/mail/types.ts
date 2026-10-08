@@ -123,6 +123,7 @@ export interface MessageQuery {
   thread_id?: string;
   search?: string;
   include_snoozed?: boolean;
+  snoozed_only?: boolean;
 }
 export interface Submission {
   id: string;
