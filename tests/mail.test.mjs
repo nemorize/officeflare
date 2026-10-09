@@ -214,6 +214,12 @@ test("mail UI metadata, sharing, attachment editing and send recovery use author
     await call(base + "/contacts", { method: "POST", data: { email_address: "contact@example.test", name: "Contact" }, expected: 404 });
     await call(base + "/contacts/removed", { method: "DELETE", expected: 404 });
   });
+  await t.test("mail capabilities and endpoints no longer expose mailbox templates", async () => {
+    assert.equal("templates" in (await call("/capabilities")).features, false);
+    await call(base + "/templates", { expected: 404 });
+    await call(base + "/templates", { method: "POST", data: { name: "Template", subject: "Welcome", text: "Template body" }, expected: 404 });
+    await call(base + "/templates/removed", { method: "DELETE", expected: 404 });
+  });
   await t.test("mailbox rights and the member picker expose only scoped, public account information", async () => {
     const owned = (await call("/mailboxes")).mailboxes.find((entry) => entry.id === mailbox.id);
     assert.deepEqual(owned.access, { read: true, write: true, send_as: true, send_on_behalf: true, manage: true });
@@ -999,11 +1005,6 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
     { "Idempotency-Key": "backup-draft" },
   );
   assert.equal(replay.body.text, original.body.text);
-  await call(base + "/templates", {
-    method: "POST",
-    expected: 201,
-    data: { name: "Template", subject: "Welcome", text: "Template body" },
-  });
   await call(base + "/blocked-senders", {
     method: "PUT",
     expected: 204,
@@ -1045,8 +1046,13 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
   const manifestKey = `data-jobs/${mailbox.id}/${backup.id}/manifest.json`;
   const manifest = await (await bucket.get(manifestKey)).json();
   assert.equal("contacts" in manifest, false);
-  // Old mailbox backups still restore mail and settings while ignoring retired contacts.
-  await bucket.put(manifestKey, JSON.stringify({ ...manifest, contacts: [{ id: "legacy-contact", email_address: "contact@example.test", name: "Contact" }] }));
+  assert.equal("templates" in manifest, false);
+  // Old backups still restore mail and settings while ignoring retired contacts and templates.
+  await bucket.put(manifestKey, JSON.stringify({
+    ...manifest,
+    contacts: [{ id: "legacy-contact", email_address: "contact@example.test", name: "Contact" }],
+    templates: [{ id: "legacy-template", name: "Template", subject: "Welcome", text_body: "Template body" }],
+  }));
   await call(base + "/drafts/" + original.id, {
     method: "DELETE",
     expected: 204,
@@ -1105,10 +1111,7 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
     "Changed signature",
   );
   await call(targetBase + "/contacts", { expected: 404 });
-  assert.equal(
-    (await call(targetBase + "/templates")).templates[0].text_body,
-    "Template body",
-  );
+  await call(targetBase + "/templates", { expected: 404 });
   assert.equal(
     (await call(targetBase + "/blocked-senders"))["blocked-senders"].length,
     1,

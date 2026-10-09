@@ -463,12 +463,6 @@ async function restorePage(
     folders: { id: string; name: string; system_key: string | null }[];
     settings: Record<string, string | number | null>;
     rules: Rule[];
-    templates: {
-      id: string;
-      name: string;
-      subject: string;
-      text_body: string;
-    }[];
     blocked_senders: { email_address: string }[];
   }>();
   if (manifest.format !== "officeflare-mail-v1")
@@ -503,8 +497,6 @@ async function restorePage(
       });
     }
     if (cursor.restore_settings) {
-      for (const value of manifest.templates)
-        await coordinator.putTemplate(value);
       for (const value of manifest.blocked_senders)
         await coordinator.blockSender(value.email_address, true);
       const current = await coordinator.rules();
@@ -666,7 +658,6 @@ async function backupManifest(
       settings: await coordinator.settings(),
       folders: await coordinator.folders(),
       rules: await coordinator.rules(),
-      templates: await coordinator.templates(),
       blocked_senders: await coordinator.blockedSenders(),
     }),
     { httpMetadata: { contentType: "application/json" } },

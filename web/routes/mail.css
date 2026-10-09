@@ -123,11 +123,9 @@
 .mail-record p { color: var(--ui-muted); font-size: 11px; margin-top: 6px; line-height: 1.7; }
 .mail-record small { color: var(--ui-subtle); font-size: 10px; }
 .mail-record .mail-actions { flex-shrink: 0; }
-.mail-template-grid, .mail-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.mail-template, .mail-domain-card { border: 1px solid var(--ui-border); border-radius: 10px; padding: 22px; }
-.mail-template h2, .mail-domain-card h2 { font-size: 14px; font-weight: 500; margin-bottom: 14px; }
-.mail-template > strong { font-size: 12px; font-weight: 500; }
-.mail-template pre { white-space: pre-wrap; font: inherit; font-size: 11px; color: var(--ui-muted); margin: 12px 0 20px; max-height: 130px; overflow: auto; }
+.mail-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.mail-domain-card { border: 1px solid var(--ui-border); border-radius: 10px; padding: 22px; }
+.mail-domain-card h2 { font-size: 14px; font-weight: 500; margin-bottom: 14px; }
 .mail-domain-card[data-selected="true"] { border-color: #80929d; background: #fafbfc; }
 .mail-domain-card p { margin-bottom: 12px; }
 .mail-domain-card .mail-badge { margin-right: 6px; }
@@ -183,6 +181,6 @@
 .mail-rich-editor blockquote { border-left: 2px solid var(--ui-border); padding-left: 15px; color: var(--ui-muted); }
 .mail-compose-footer { display: flex; gap: 14px; justify-content: space-between; align-items: center; border-top: 1px solid var(--ui-border); padding-top: 20px; }
 .mail-rich-editor:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
-@media (max-width: 1120px) { .mail-inbox { grid-template-columns: 310px minmax(0, 1fr); } .mail-reader { padding: 24px 20px; } .mail-manage-page { padding: 30px 22px 50px; } .mail-page-heading { flex-wrap: wrap; } .mail-template-grid, .mail-domain-grid { grid-template-columns: minmax(0, 1fr); } .mail-record { flex-wrap: wrap; } }
+@media (max-width: 1120px) { .mail-inbox { grid-template-columns: 310px minmax(0, 1fr); } .mail-reader { padding: 24px 20px; } .mail-manage-page { padding: 30px 22px 50px; } .mail-page-heading { flex-wrap: wrap; } .mail-domain-grid { grid-template-columns: minmax(0, 1fr); } .mail-record { flex-wrap: wrap; } }
 @media (max-width: 900px) and (min-width: 761px) { .mail-inbox { grid-template-columns: minmax(0, 1fr); } .mail-reader-pane { display: none; } .mail-has-message .mail-list-pane { display: none; } .mail-has-message .mail-reader-pane { display: block; } }
 @media (max-width: 760px) { .mail-mobile-nav { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; padding: 12px; border-bottom: 1px solid var(--ui-border); gap: 10px; } .mail-mobile-nav .mail-box-picker { padding: 0; gap: 4px; } .mail-mobile-nav .mail-compose-button { margin: 0; height: 36px; } .mail-mobile-nav .workspace-nav { grid-column: 1 / -1; display: flex; gap: 5px; padding: 0; overflow-x: auto; } .mail-mobile-nav .workspace-nav a { flex-shrink: 0; white-space: nowrap; } .mail-mobile-nav .workspace-nav h2, .mail-mobile-nav .mail-connection { display: none; } .mail-inbox { display: block; height: calc(100dvh - 215px); min-height: 420px; } .mail-list-pane, .mail-reader-pane { height: 100%; } .mail-reader-pane { display: none; } .mail-has-message .mail-reader-pane { display: block; } .mail-has-message .mail-list-pane { display: none; } .mail-manage-page { padding: 26px 16px 45px; } .mail-section { padding: 18px; } .mail-page-heading h1 { font-size: 22px; } .mail-protocol-grid, .mail-data-options, .mail-form-grid { grid-template-columns: minmax(0, 1fr); } .mail-modal { padding: 20px !important; max-height: calc(100dvh - 24px); } .mail-rule-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px; gap: 8px; } .mail-rule-row .mail-field:nth-child(3) { grid-column: 1 / 3; } .mail-rule-row [data-ui="button"] { grid-column: 3; grid-row: 2; } .mail-message-details > div { grid-template-columns: 95px minmax(0, 1fr); } .mail-section > header { flex-wrap: wrap; } .mail-inline-form { flex-wrap: wrap; } .mail-compose-footer { flex-wrap: wrap; } .mail-reader-heading h1 { font-size: 20px; } }

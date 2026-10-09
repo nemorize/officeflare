@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../lib/api";
-import { mailboxPath, type Address, type MailRight, type MailSettings, type Template } from "../lib/mail";
+import { mailboxPath, type Address, type MailRight, type MailSettings } from "../lib/mail";
 import { useMail } from "../components/mail-context";
 import { MailReady } from "./mail";
 import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailTextarea, MailFieldset, MailSelect } from "../components/mail-common";
@@ -11,13 +11,7 @@ import { Check, Confirm } from "../components/console-shared";
 import { useAccess } from "../components/console-access";
 export function MailManagePage({ page }: { page: string }) {
   const mail = useMail();
-  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "templates" ? <Templates /> : page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
-}
-function Templates() {
-  const mail = useMail(), path = mailboxPath(mail.box!.id) + "/templates", resource = useMailResource<{ templates: Template[] }>(path), action = useMailAction(), [open, setOpen] = useState(false), [name, setName] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [deleting, setDeleting] = useState<Template | null>(null);
-  return <><MailPageHeader title="Templates" description="Reuse a subject and message body when composing mail.">{mail.box!.access?.write && <Button variant="primary" onClick={() => { setName(""); setSubject(""); setText(""); setOpen(true); }}>New template</Button>}</MailPageHeader><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} /><div className="mail-template-grid">{resource.data?.templates.map((template) => <article className="mail-template" key={template.id}><h2>{template.name}</h2><strong>{template.subject || "(No subject)"}</strong><pre>{template.text_body}</pre>{mail.box!.access?.write && <div className="mail-actions"><Button size="sm" onClick={() => { setName(`${template.name} copy`.slice(0, 100)); setSubject(template.subject); setText(template.text_body); setOpen(true); }}>Duplicate</Button><Button size="sm" variant="ghost" onClick={() => setDeleting(template)}>Delete</Button></div>}</article>)}</div>{resource.data && !resource.data.templates.length && <p className="mail-empty">No templates yet.</p>}
-    <MailModal open={open} title="New template" description="Templates are available to all mailbox members." onClose={() => setOpen(false)} busy={action.busy}><MailForm className="mail-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { await api(path, { method: "POST", body: { name, subject, text } }); resource.reload(); setOpen(false); }); }}><MailInput label="Template name" value={name} required maxLength={100} onChange={(event) => setName(event.target.value)} /><MailInput label="Subject" value={subject} maxLength={998} onChange={(event) => setSubject(event.target.value)} /><MailField label="Message"><MailTextarea required maxLength={10000} value={text} onChange={(event) => setText(event.target.value)} /></MailField><MailNotice error={action.error} /><Button type="submit" variant="primary" disabled={action.busy}>Create template</Button></MailForm></MailModal><Confirm open={!!deleting} title="Delete template?" description={deleting?.name} label="Delete template" destructive onClose={() => setDeleting(null)} onConfirm={async () => { await api(`${path}/${deleting!.id}`, { method: "DELETE" }); resource.reload(); }} />
-  </>;
+  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
 }
 function Rules() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), resource = useMailResource<{ "blocked-senders": { email_address: string }[] }>(path + "/blocked-senders"), action = useMailAction(), [email, setEmail] = useState(""), [test, setTest] = useState({ from: "", to: "", subject: "", body: "" }), [result, setResult] = useState<{ folder_id: string; is_read: boolean; is_starred: boolean; is_spam: boolean; matched_rules: string[] } | null>(null);

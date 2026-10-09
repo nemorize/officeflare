@@ -160,7 +160,6 @@ mail.get("/capabilities", (c) =>
       signatures: true,
       auto_reply: true,
       routing_rules: true,
-      templates: true,
       api_keys: true,
       imports: true,
       exports: true,
@@ -1376,43 +1375,15 @@ mail.post("/mailboxes/:m/events/ticket", async (c) => {
     expires_in: 60,
   });
 });
-for (const noun of [
-  "templates",
-  "blocked-senders",
-  "rules",
-] as const)
+for (const noun of ["blocked-senders", "rules"] as const)
   mail.get("/mailboxes/:m/" + noun, async (c) => {
     await authorize(c.env, actor(c), resource(c), "read");
     const store = mailbox(c.env, resource(c));
     return c.json({
       [noun]:
-        noun === "templates"
-          ? await store.templates()
-          : noun === "rules"
-            ? await store.rules()
-            : await store.blockedSenders(),
+        noun === "rules" ? await store.rules() : await store.blockedSenders(),
     });
   });
-mail.post("/mailboxes/:m/templates", async (c) => {
-  await authorize(c.env, actor(c), resource(c), "write");
-  const data = await input(c, ["name", "subject", "text"]);
-  return c.json(
-    {
-      template: await mailbox(c.env, resource(c)).putTemplate({
-        id: id(),
-        name: text(data.name, "name", 100),
-        subject: text(data.subject ?? "", "subject", 998, true),
-        text_body: text(data.text, "text", 10000, true),
-      }),
-    },
-    201,
-  );
-});
-mail.delete("/mailboxes/:m/templates/:id", async (c) => {
-  await authorize(c.env, actor(c), resource(c), "write");
-  await mailbox(c.env, resource(c)).deleteTemplate(c.req.param("id"));
-  return c.body(null, 204);
-});
 mail.put("/mailboxes/:m/blocked-senders", async (c) => {
   await authorize(c.env, actor(c), resource(c), "write");
   const data = await input(c, ["email_address", "blocked"]);

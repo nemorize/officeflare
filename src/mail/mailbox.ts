@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./mailbox.sql";
 import removeContacts from "./mailbox-v2.sql";
+import removeTemplates from "./mailbox-v3.sql";
 import { migrate } from "./migrations";
 import { authorize } from "./control";
 import { hash } from "./input";
@@ -39,7 +40,7 @@ export class MailboxDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, removeContacts]);
+      migrate(ctx.storage, [schema, removeContacts, removeTemplates]);
     });
   }
   async initialize(mailboxId: string) {
@@ -343,27 +344,6 @@ export class MailboxDO extends DurableObject<Env> {
         "DELETE FROM blocked_senders WHERE email_address=?",
         address,
       );
-  }
-  templates() {
-    return rows(this.sql, "SELECT * FROM templates ORDER BY name LIMIT 1000");
-  }
-  putTemplate(value: {
-    id: string;
-    name: string;
-    subject: string;
-    text_body: string;
-  }) {
-    this.sql.exec(
-      "INSERT INTO templates VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,subject=excluded.subject,text_body=excluded.text_body",
-      value.id,
-      value.name,
-      value.subject,
-      value.text_body,
-    );
-    return row(this.sql, "SELECT * FROM templates WHERE id=?", value.id);
-  }
-  deleteTemplate(templateId: string) {
-    this.sql.exec("DELETE FROM templates WHERE id=?", templateId);
   }
   rules() {
     return rows<Rule>(
