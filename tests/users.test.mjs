@@ -15,14 +15,15 @@ const { users, userRoles, roles, rolePermissions, userSessions, userAuthChalleng
 const PASSWORD = "a password for user management tests";
 const passwordHash = await hashPassword(PASSWORD);
 
-async function fixture(t, administratorCount = 1, { beforePolicyMigration } = {}) {
+async function fixture(t, administratorCount = 1, { beforePolicyMigration, mailStore = true } = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [{
     name: "officeflare", modules: workerModules, compatibilityDate: "2026-09-29",
+    ...(mailStore ? { durableObjects: { MAILBOX: { className: "MailboxDO", useSQLite: true }, MAIL_PARTITION: { className: "MailPartitionDO", useSQLite: true } } } : {}),
     d1Databases: { DB: "user-management-tests" }, r2Buckets: { PROFILE_BUCKET: "user-profile-tests" }, bindings: {
       AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
       MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
-      AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api",
+      AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api", MAIL_PARTITION_TARGET_BYTES: "6000000000",
     },
   }] }));
   t.after(() => mf.dispose());
@@ -533,4 +534,15 @@ test("service entry, administrative actions, role defaults and assignment concur
     await request(`/api/roles/${mailRole.id}`, { method: "DELETE", token, expected: 204 });
     assert.ok((await request("/api/users/assignment-target/roles", { token })).version > beforeDelete.version);
   });
+});
+
+
+test("account creation retains recoverable mail provisioning when the mailbox service is unavailable", async (t) => {
+  const { request, token, db } = await fixture(t, 1, { mailStore: false });
+  const result = await request("/api/users", { method: "POST", token, data: { email_address: "pending@external.test", password: PASSWORD }, expected: 201 });
+  assert.equal(result.mail.mailbox.status, "provisioning");
+  assert.equal((await request(`/api/users/${result.user.id}`, { token })).user.id, result.user.id);
+  const retried = await request(`/api/users/${result.user.id}/mailbox`, { method: "POST", token, data: { domain_id: null } });
+  assert.equal(retried.mailbox.id, result.mail.mailbox.id);
+  assert.equal((await db.select({ n: count() }).from(schema.mailMailboxes).where(eq(schema.mailMailboxes.owner_user_id, result.user.id)).get()).n, 1);
 });

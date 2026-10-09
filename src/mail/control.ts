@@ -44,7 +44,8 @@ export const activeAccountSql =
 export const mailAccessSql = "EXISTS(SELECT 1 FROM user_roles access_roles JOIN role_permissions access_permissions ON access_permissions.role_id=access_roles.role_id WHERE access_roles.user_id=u.id AND access_permissions.permission_key='mail.access')";
 function administrativeRequest(c: Context<MailAppEnv>) {
   const path = c.req.path.replace(/^\/api\/mail/, ""), method = c.req.method;
-  return /^\/(provider-connections|domains|addresses)(\/|$)/.test(path) ||
+  return /^\/(provider-connections|domains|addresses|mailbox-users)(\/|$)/.test(path) ||
+    /^\/mailboxes\/[^/]+\/configuration$/.test(path) ||
     method === "GET" && /^\/mailboxes\/[^/]+\/addresses$/.test(path) ||
     path === "/mailboxes" && (method === "POST" || c.req.query("all") === "true") ||
     /^\/mailboxes\/[^/]+$/.test(path) && method === "PATCH";
@@ -200,16 +201,18 @@ export async function sender(
 // revalidation and durable operation records because there is no cross-store transaction.
 export function administrativeControl(
   c: Context<MailAppEnv>,
-  permission: Permission,
+  permission: Permission | readonly Permission[],
+  extra?: { sql: string; bindings: (string | number | null)[] },
 ) {
   const actor = c.get("mail_actor");
   if (actor.api_key_id) fail(403, "Session authentication required");
   const condition = "EXISTS(SELECT 1 FROM users u WHERE u.id=? AND u.auth_version=? AND " + activeAccountSql +
     " AND NOT EXISTS(SELECT 1 FROM json_each(?) required_permission WHERE NOT EXISTS(SELECT 1 FROM user_roles r JOIN role_permissions p ON p.role_id=r.role_id WHERE r.user_id=u.id AND p.permission_key=required_permission.value)))";
-  return guardedControl(c.env, condition, [
+  return guardedControl(c.env, extra ? `(${condition}) AND (${extra.sql})` : condition, [
     actor.user_id,
     actor.auth_version,
-    JSON.stringify(permissionClosure([permission])),
+    JSON.stringify(permissionClosure(typeof permission === "string" ? [permission] : permission)),
+    ...(extra?.bindings ?? []),
   ]);
 }
 export function resourceControl(
@@ -235,7 +238,7 @@ export function resourceControl(
 function guardedControl(
   env: Env,
   condition: string,
-  guardBindings: (string | number)[],
+  guardBindings: (string | number | null)[],
 ) {
   const session = control(env);
   return {

@@ -1,6 +1,6 @@
 import { api } from "./api";
 export type MailRight = "read" | "write" | "send_as" | "send_on_behalf" | "manage";
-export interface Mailbox { id: string; name: string; kind: "personal" | "shared"; status: string; owner_user_id: string; access?: Record<MailRight, boolean>; }
+export interface Mailbox { id: string; name: string; kind: "personal" | "shared"; status: string; owner_user_id: string; email_address?: string | null; member_count?: number; access?: Record<MailRight, boolean>; }
 export interface Folder { id: string; name: string; system_key: string | null; version: number; }
 export interface Address { id: string; mailbox_id: string; domain_id: string; local_part: string; email_address: string; is_primary: number; receive_enabled: number; send_enabled: number; }
 export interface Attachment { id: string; filename: string; content_type: string; size_bytes: number; content_id: string | null; disposition: string; }
@@ -12,7 +12,7 @@ export interface Template { id: string; name: string; subject: string; text_body
 export interface MailSettings { signature: string; retention_days: number | null; auto_reply_enabled: number; auto_reply_subject: string; auto_reply_text: string; }
 export interface Capabilities { features: Record<string, boolean>; providers: { provider: string; [key: string]: unknown }[]; limits: { max_upload_bytes: number; max_inbound_bytes: number; max_page_size: number }; }
 export interface Connection { id: string; provider: string; name: string; enabled: number; version: number; }
-export interface Domain { id: string; name: string; inbound_connection_id: string | null; outbound_connection_id: string | null; inbound_provider?: string | null; outbound_provider?: string | null; inbound_enabled: number; outbound_enabled: number; plus_addressing: number; catch_all_mailbox_id: string | null; }
+export interface Domain { id: string; name: string; is_default: number; inbound_connection_id: string | null; outbound_connection_id: string | null; inbound_provider?: string | null; outbound_provider?: string | null; inbound_enabled: number; outbound_enabled: number; plus_addressing: number; catch_all_mailbox_id: string | null; }
 export interface DomainProvider { provider: string; capabilities: { receive: boolean; send: boolean }; default_connection_id: string | null; }
 export interface Condition { field: string; operator: string; value: string; }
 export interface RuleAction { type: string; folder_id?: string; }

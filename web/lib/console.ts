@@ -10,7 +10,7 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
   { path: "/console/users", name: "Users", icon: "users", permissions: ["admin.users.read"] },
   { path: "/console/roles", name: "Roles", icon: "shield", permissions: ["admin.roles.read"] },
   { path: "/console/mail/domains", name: "Mail domains", icon: "mail", permissions: ["admin.mail.domains.read"] },
-  { path: "/console/mail/mailboxes", name: "Mailboxes", icon: "inbox", permissions: ["admin.mail.mailboxes.read"] },
+  { path: "/console/mail/mailboxes", name: "Shared mailboxes", icon: "inbox", permissions: ["admin.mail.mailboxes.read"] },
 ];
 export const consoleMenu = (permissions: readonly string[]) => permissions.includes("console.access") ? consoleSections.filter((item) => item.permissions.some((permission) => permissions.includes(permission))) : [];
 export const canGrant = (permissions: readonly string[], grants: readonly string[]) => grants.every((key) => isPermission(key)) && permissionClosure(grants).every((key) => permissions.includes(key));
@@ -24,6 +24,7 @@ export const roleTemplates = [
 export interface AdminUser {
   id: string; email_address: string; display_name: string | null; profile_image_key: string | null;
   created_at: number; updated_at: number; last_login_at: number | null; password_changed_at: number | null;
+  mail?: { mailbox: import("./mail").Mailbox | null; email_address: string | null; mail_enabled: boolean };
   password_reset_required: boolean; disabled_at: number | null; deleted_at: number | null;
 }
 export interface Role {

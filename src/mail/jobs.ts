@@ -5,6 +5,7 @@ import { mailbox, partition } from "./mailbox";
 import { provider } from "./providers";
 import { flushOutbox, ingest } from "./service";
 import { unseal } from "./secrets";
+import { recoverMailboxProvisioning } from "./provisioning";
 import {
   epoch,
   fail,
@@ -346,6 +347,7 @@ export async function consume(batch: MessageBatch, env: Env) {
   }
 }
 export async function recover(env: Env) {
+  await recoverMailboxProvisioning(env);
   await cleanUploads(env);
   let cursor: string | undefined;
   // Process a bounded page each run, rotate the listing cursor durably to avoid starving later keys.

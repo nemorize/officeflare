@@ -38,6 +38,7 @@ import {
 } from "../mail/data";
 import { jmap, mcp } from "../mail/protocols";
 import { seal } from "../mail/secrets";
+import type { Permission } from "../authorization/permissions";
 import {
   belongs,
   bodyKey,
@@ -267,6 +268,7 @@ mail.post("/domains", async (c) => {
       "inbound_enabled",
       "outbound_enabled",
       "plus_addressing",
+      "is_default",
     ]),
     domainId = id();
   const inbound =
@@ -297,8 +299,11 @@ mail.post("/domains", async (c) => {
         : flag(data.outbound_enabled, "outbound_enabled");
   if ((receive && !inbound) || (send && !outbound))
     fail(400, "Enabled direction requires a provider connection");
-  await administrativeControl(c, "admin.mail.domains.manage")
-    .prepare(
+  const domainDb = administrativeControl(c, "admin.mail.domains.manage");
+  const defaultFlag = data.is_default === undefined ? null : flag(data.is_default, "is_default");
+  await domainDb.batch([
+    ...(defaultFlag === 1 ? [domainDb.prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1").bind()] : []),
+    domainDb.prepare(
       "INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing) VALUES(?,?,?,?,?,?,?)",
     )
     .bind(
@@ -311,8 +316,9 @@ mail.post("/domains", async (c) => {
       data.plus_addressing === undefined
         ? 1
         : flag(data.plus_addressing, "plus_addressing"),
-    )
-    .run();
+    ),
+    ...(defaultFlag !== 0 ? [domainDb.prepare("UPDATE mail_domains SET is_default=1 WHERE id=? AND NOT EXISTS(SELECT 1 FROM mail_domains WHERE is_default=1)").bind(domainId)] : []),
+  ]);
   return c.json(
     {
       domain: await first(
@@ -333,6 +339,7 @@ mail.patch("/domains/:id", async (c) => {
     "outbound_enabled",
     "plus_addressing",
     "catch_all_mailbox_id",
+    "is_default",
   ]);
   const existing = await first<Domain>(
     c.env,
@@ -354,6 +361,7 @@ mail.patch("/domains/:id", async (c) => {
     "inbound_enabled",
     "outbound_enabled",
     "plus_addressing",
+    "is_default",
   ])
     if (field in data) values[field] = flag(data[field], field);
   if ("catch_all_mailbox_id" in data) {
@@ -386,14 +394,16 @@ mail.patch("/domains/:id", async (c) => {
     fail(400, "Enabled direction requires a provider connection");
   const fields = Object.keys(values);
   if (!fields.length) fail(400, "No changes supplied");
-  await administrativeControl(c, "admin.mail.domains.manage")
-    .prepare(
+  const domainDb = administrativeControl(c, "admin.mail.domains.manage");
+  await domainDb.batch([
+    ...(values.is_default === 1 ? [domainDb.prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1 AND id<>?").bind(existing.id)] : []),
+    domainDb.prepare(
       "UPDATE mail_domains SET " +
         fields.map((f) => f + "=?").join(",") +
         ",updated_at=? WHERE id=?",
     )
-    .bind(...fields.map((f) => values[f]), epoch(), existing.id)
-    .run();
+    .bind(...fields.map((f) => values[f]), epoch(), existing.id),
+  ]);
   return c.json({
     domain: await first(
       c.env,
@@ -547,10 +557,12 @@ mail.delete("/domains/:id/rules/:rule", async (c) => {
 mail.get("/mailboxes", async (c) => {
   if (c.req.query("all") === "true") {
     await administrator(c, "admin.mail.mailboxes.read");
+    const kind = c.req.query("kind") ?? null;
+    if (kind && !["personal", "shared"].includes(kind)) fail(400, "Invalid mailbox kind");
     return c.json({
       mailboxes: await all(
         c.env,
-        "SELECT * FROM mail_mailboxes WHERE status<>'deleted' ORDER BY created_at,id LIMIT 1000",
+        "SELECT b.*,a.local_part||'@'||d.name email_address,(SELECT count(*) FROM mail_mailbox_members m WHERE m.mailbox_id=b.id) member_count FROM mail_mailboxes b LEFT JOIN mail_addresses a ON a.mailbox_id=b.id AND a.is_primary=1 LEFT JOIN mail_domains d ON d.id=a.domain_id WHERE b.status<>'deleted' AND (? IS NULL OR b.kind=?) ORDER BY b.created_at,b.id LIMIT 1000", kind, kind,
       ),
     });
   }
@@ -575,72 +587,106 @@ mail.get("/mailboxes", async (c) => {
     })),
   });
 });
+type SetupAddress = { domain_id: string; local_part: string };
+type SetupMember = { user_id: string; role: "viewer" | "member" | "manager" | "custom"; permissions?: Record<string, boolean> };
+async function setupAddress(c: Parameters<typeof authenticateMail>[0], value: unknown): Promise<SetupAddress | null> {
+  if (value == null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !["domain_id", "local_part"].includes(key))) fail(400, "Invalid mail address");
+  const data = value as Record<string, unknown>;
+  const address = { domain_id: strictId(data.domain_id), local_part: localPart(data.local_part) };
+  await administrator(c, "admin.mail.domains.manage");
+  if (!await first(c.env, "SELECT id FROM mail_domains WHERE id=?", address.domain_id)) fail(400, "Mail domain is unavailable");
+  return address;
+}
+async function setupMembers(c: Parameters<typeof authenticateMail>[0], value: unknown): Promise<SetupMember[]> {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 100) fail(400, "Invalid mailbox members");
+  const members = value.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !["user_id", "role", "permissions"].includes(key))) fail(400, "Invalid mailbox member");
+    const user_id = text(value.user_id, "user_id", 100), role = value.role ?? "member";
+    if (!["viewer", "member", "manager", "custom"].includes(role)) fail(400, "Invalid member role");
+    if (role !== "custom" && value.permissions !== undefined) fail(400, "Custom permissions require a custom role");
+    const keys = ["can_read", "can_write", "can_send_as", "can_send_on_behalf", "can_manage"];
+    if (role === "custom" && (!value.permissions || typeof value.permissions !== "object" || Array.isArray(value.permissions) || Object.keys(value.permissions).some((key) => !keys.includes(key)) || keys.some((key) => typeof value.permissions[key] !== "boolean"))) fail(400, "Invalid custom member permissions");
+    return { user_id, role, ...(role === "custom" ? { permissions: Object.fromEntries(keys.map((key) => [key, value.permissions[key]])) } : {}) } as SetupMember;
+  });
+  if (new Set(members.map((entry) => entry.user_id)).size !== members.length) fail(400, "Duplicate mailbox member");
+  const available = await all<{ id: string }>(c.env, "SELECT u.id FROM users u WHERE u.deleted_at IS NULL AND u.disabled_at IS NULL AND u.password_hash IS NOT NULL AND " + mailAccessSql);
+  if (members.some((member) => !available.some((user) => user.id === member.user_id))) fail(400, "A selected member is unavailable or does not have Mail enabled");
+  return members.sort((a, b) => a.user_id.localeCompare(b.user_id));
+}
+function setupControl(c: Parameters<typeof authenticateMail>[0], boxId: string, owner: string, address: SetupAddress | null, members: SetupMember[], creating = false) {
+  const permissions: Permission[] = ["admin.mail.mailboxes.manage", ...(address ? ["admin.mail.domains.manage" as const] : [])];
+  const conditions = ["EXISTS(SELECT 1 FROM users WHERE id=?" + (creating ? " AND deleted_at IS NULL" : "") + ")", "NOT EXISTS(SELECT 1 FROM json_each(?) selected LEFT JOIN users u ON u.id=json_extract(selected.value,'$.user_id') WHERE u.id IS NULL OR u.deleted_at IS NOT NULL OR u.disabled_at IS NOT NULL OR u.password_hash IS NULL OR NOT (" + mailAccessSql + "))"];
+  const bindings: (string | number | null)[] = [owner, JSON.stringify(members)];
+  if (address) { conditions.push("EXISTS(SELECT 1 FROM mail_domains WHERE id=?)", "NOT EXISTS(SELECT 1 FROM mail_addresses WHERE domain_id=? AND local_part=? AND mailbox_id<>?)"); bindings.push(address.domain_id, address.domain_id, address.local_part, boxId); }
+  return administrativeControl(c, permissions, { sql: conditions.join(" AND "), bindings });
+}
+function setupStatements(db: ReturnType<typeof setupControl>, boxId: string, owner: string, address: SetupAddress | null, members: SetupMember[], replaceMembers = false) {
+  const statements: D1PreparedStatement[] = [];
+  if (address) {
+    statements.push(db.prepare("UPDATE mail_addresses SET is_primary=0 WHERE mailbox_id=?").bind(boxId));
+    statements.push(db.prepare("UPDATE mail_addresses SET is_primary=1 WHERE mailbox_id=? AND domain_id=? AND local_part=?").bind(boxId, address.domain_id, address.local_part));
+    statements.push(db.prepare("INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,is_primary) SELECT ?,?,?,?,1 WHERE EXISTS(SELECT 1 FROM mail_mailboxes WHERE id=?) AND NOT EXISTS(SELECT 1 FROM mail_addresses WHERE domain_id=? AND local_part=?)").bind(id(), address.domain_id, boxId, address.local_part, boxId, address.domain_id, address.local_part));
+  }
+  if (replaceMembers) statements.push(db.prepare("DELETE FROM mail_mailbox_members WHERE mailbox_id=? AND user_id<>?").bind(boxId, owner));
+  const assignments = members.filter((entry) => entry.user_id !== owner).map((member) => ({ user_id: member.user_id,
+    ...(member.permissions ?? { can_read: true, can_write: member.role !== "viewer", can_send_as: member.role !== "viewer", can_send_on_behalf: false, can_manage: member.role === "manager" }) }));
+  if (assignments.length) statements.push(db.prepare("INSERT INTO mail_mailbox_members(mailbox_id,user_id,can_read,can_write,can_send_as,can_send_on_behalf,can_manage) SELECT ?,json_extract(selected.value,'$.user_id'),json_extract(selected.value,'$.can_read'),json_extract(selected.value,'$.can_write'),json_extract(selected.value,'$.can_send_as'),json_extract(selected.value,'$.can_send_on_behalf'),json_extract(selected.value,'$.can_manage') FROM json_each(?) selected WHERE EXISTS(SELECT 1 FROM mail_mailboxes WHERE id=?)").bind(boxId, JSON.stringify(assignments), boxId));
+  return statements;
+}
+mail.get("/mailbox-users", async (c) => {
+  await administrator(c, "admin.mail.mailboxes.read");
+  return c.json({ users: await all(c.env, "SELECT u.id,u.email_address,u.display_name FROM users u WHERE u.deleted_at IS NULL AND u.disabled_at IS NULL AND u.password_hash IS NOT NULL AND " + mailAccessSql + " ORDER BY u.email_address LIMIT 1000") });
+});
+mail.get("/mailboxes/:m/configuration", async (c) => {
+  await administrator(c, "admin.mail.mailboxes.read");
+  const entry = await first<Mailbox>(c.env, "SELECT * FROM mail_mailboxes WHERE id=? AND status<>'deleted'", resource(c));
+  if (!entry) fail(404, "Mailbox not found");
+  return c.json({ mailbox: entry,
+    owner: await first(c.env, "SELECT id,email_address,display_name FROM users WHERE id=?", entry.owner_user_id),
+    addresses: await all(c.env, "SELECT a.*,a.local_part||'@'||d.name email_address FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.mailbox_id=? ORDER BY a.is_primary DESC,a.created_at,a.id", entry.id),
+    members: await all(c.env, "SELECT m.*,u.email_address,u.display_name FROM mail_mailbox_members m JOIN users u ON u.id=m.user_id WHERE m.mailbox_id=?", entry.id) });
+});
+mail.patch("/mailboxes/:m/configuration", async (c) => {
+  await administrator(c, "admin.mail.mailboxes.manage");
+  const entry = await first<Mailbox>(c.env, "SELECT * FROM mail_mailboxes WHERE id=? AND status<>'deleted'", resource(c));
+  if (!entry) fail(404, "Mailbox not found");
+  const data = await input(c, ["name", "status", "address", "members"]), address = await setupAddress(c, data.address), members = await setupMembers(c, data.members);
+  if (entry.kind !== "shared" && data.members !== undefined) fail(400, "Manage personal mailboxes from the user account");
+  const name = data.name === undefined ? entry.name : text(data.name, "name", 100), status = data.status ?? entry.status;
+  if (!["active", "disabled", "provisioning"].includes(String(status))) fail(400, "Invalid mailbox status");
+  if (entry.status === "provisioning" && status === "active") await mailbox(c.env, entry.id).initialize(entry.id);
+  const db = setupControl(c, entry.id, entry.owner_user_id, address, members);
+  const result = await db.batch([db.prepare("UPDATE mail_mailboxes SET name=?,status=?,updated_at=? WHERE id=? AND status<>'deleted'").bind(name, status, epoch(), entry.id), ...setupStatements(db, entry.id, entry.owner_user_id, address, members, data.members !== undefined)]);
+  if (!result[0]!.meta.changes) fail(409, "Permissions, address or members changed. Retry the update.");
+  return c.json({ mailbox: await first(c.env, "SELECT * FROM mail_mailboxes WHERE id=?", entry.id) });
+});
 mail.post("/mailboxes", async (c) => {
   await administrator(c, "admin.mail.mailboxes.manage");
-  const data = await input(c, ["name", "owner_user_id", "kind"]),
-    owner = text(data.owner_user_id ?? actor(c).user_id, "owner_user_id", 100),
-    name = text(data.name, "name", 100),
-    kind = data.kind ?? "personal";
-  if (!["personal", "shared"].includes(String(kind)))
-    fail(400, "Invalid mailbox kind");
-  if (
-    !(await first(
-      c.env,
-      "SELECT id FROM users WHERE id=? AND deleted_at IS NULL",
-      owner,
-    ))
-  )
-    fail(400, "Owner is unavailable");
-  const operationId = await hash(actor(c).user_id + ":mailbox:" + key(c)),
-    requestHash = await hash(JSON.stringify({ name, owner, kind }));
-  const previous = await first<{ resource_id: string; request_hash: string }>(
-    c.env,
-    "SELECT * FROM mail_control_operations WHERE id=?",
-    operationId,
-  );
-  if (previous && previous.request_hash !== requestHash)
-    fail(409, "Idempotency key reused with different request");
-  const mailboxId = previous?.resource_id ?? id(),
-    db = administrativeControl(c, "admin.mail.mailboxes.manage");
+  const data = await input(c, ["name", "owner_user_id", "kind", "address", "members"]), owner = text(data.owner_user_id ?? actor(c).user_id, "owner_user_id", 100), name = text(data.name, "name", 100), kind = data.kind ?? "personal";
+  if (!["personal", "shared"].includes(String(kind))) fail(400, "Invalid mailbox kind");
+  if (kind !== "shared" && data.members !== undefined) fail(400, "Only shared mailboxes accept members");
+  if (!await first(c.env, "SELECT id FROM users WHERE id=? AND deleted_at IS NULL", owner)) fail(400, "Owner is unavailable");
+  const address = await setupAddress(c, data.address), members = await setupMembers(c, data.members);
+  const operationId = await hash(actor(c).user_id + ":mailbox:" + key(c)), requestHash = await hash(JSON.stringify(data.address === undefined && data.members === undefined ? { name, owner, kind } : { name, owner, kind, address, members }));
+  const previous = await first<{ resource_id: string; request_hash: string }>(c.env, "SELECT * FROM mail_control_operations WHERE id=?", operationId);
+  if (previous && previous.request_hash !== requestHash) fail(409, "Idempotency key reused with different request");
+  const mailboxId = previous?.resource_id ?? id(), db = setupControl(c, mailboxId, owner, address, members, true);
   if (!previous) {
     const result = await db.batch([
-      db
-        .prepare(
-          "INSERT INTO mail_mailboxes(id,owner_user_id,name,kind) VALUES(?,?,?,?)",
-        )
-        .bind(mailboxId, owner, name, kind),
-      db
-        .prepare(
-          "INSERT INTO mail_control_operations(id,actor_id,operation,resource_id,request_hash) VALUES(?,?,'provision_mailbox',?,?)",
-        )
-        .bind(operationId, actor(c).user_id, mailboxId, requestHash),
+      db.prepare("INSERT INTO mail_mailboxes(id,owner_user_id,name,kind) VALUES(?,?,?,?)").bind(mailboxId, owner, name, kind),
+      ...setupStatements(db, mailboxId, owner, address, members),
+      db.prepare("INSERT INTO mail_control_operations(id,actor_id,operation,resource_id,request_hash) SELECT ?,?,'provision_mailbox',?,? WHERE EXISTS(SELECT 1 FROM mail_mailboxes WHERE id=?)").bind(operationId, actor(c).user_id, mailboxId, requestHash, mailboxId),
     ]);
-    if (!result[0]!.meta.changes)
-      fail(409, "Permissions changed during mailbox provisioning");
+    if (!result[0]!.meta.changes) fail(409, "Permissions, address or members changed during mailbox provisioning");
   }
   await mailbox(c.env, mailboxId).initialize(mailboxId);
   await db.batch([
-    db
-      .prepare(
-        "UPDATE mail_mailboxes SET status='active',updated_at=? WHERE id=? AND status='provisioning'",
-      )
-      .bind(epoch(), mailboxId),
-    db
-      .prepare(
-        "UPDATE mail_control_operations SET status='completed' WHERE id=?",
-      )
-      .bind(operationId),
+    db.prepare("UPDATE mail_mailboxes SET status='active',updated_at=? WHERE id=? AND status='provisioning'").bind(epoch(), mailboxId),
+    db.prepare("UPDATE mail_control_operations SET status='completed' WHERE id=?").bind(operationId),
   ]);
-  return c.json(
-    {
-      mailbox: await first(
-        c.env,
-        "SELECT * FROM mail_mailboxes WHERE id=?",
-        mailboxId,
-      ),
-    },
-    previous ? 200 : 201,
-  );
+  return c.json({ mailbox: await first(c.env, "SELECT * FROM mail_mailboxes WHERE id=?", mailboxId) }, previous ? 200 : 201);
 });
 mail.patch("/mailboxes/:m", async (c) => {
   await administrator(c, "admin.mail.mailboxes.manage");
@@ -794,6 +840,16 @@ mail.post("/addresses", async (c) => {
     },
     201,
   );
+});
+mail.patch("/addresses/:id", async (c) => {
+  await administrator(c, "admin.mail.domains.manage");
+  const address = await first<Address>(c.env, "SELECT * FROM mail_addresses WHERE id=?", strictId(c.req.param("id")));
+  if (!address) fail(404, "Address not found");
+  const data = await input(c, ["receive_enabled", "send_enabled"]);
+  const result = await administrativeControl(c, "admin.mail.domains.manage").prepare("UPDATE mail_addresses SET receive_enabled=?,send_enabled=? WHERE id=?")
+    .bind(data.receive_enabled === undefined ? address.receive_enabled : flag(data.receive_enabled, "receive_enabled"), data.send_enabled === undefined ? address.send_enabled : flag(data.send_enabled, "send_enabled"), address.id).run();
+  if (!result.meta.changes) fail(409, "Address or permissions changed. Retry the update.");
+  return c.json({ address: await first(c.env, "SELECT * FROM mail_addresses WHERE id=?", address.id) });
 });
 mail.delete("/addresses/:id", async (c) => {
   await administrator(c, "admin.mail.domains.manage");

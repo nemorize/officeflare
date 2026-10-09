@@ -169,6 +169,7 @@ export const mailProviderConnections = sqliteTable(
   },
 );
 export const mailDomains = sqliteTable("mail_domains", {
+  is_default: integer().notNull().default(0),
   id: text().primaryKey().notNull(),
   name: text().notNull().unique(),
   inbound_connection_id: text().references(() => mailProviderConnections.id),
@@ -181,7 +182,7 @@ export const mailDomains = sqliteTable("mail_domains", {
   ),
   created_at: timestamp("created_at"),
   updated_at: timestamp("updated_at"),
-});
+}, (table) => [uniqueIndex("mail_domains_default_unique").on(table.is_default).where(sql`${table.is_default}=1`)]);
 export const mailRoutingRules = sqliteTable(
   "mail_routing_rules",
   {

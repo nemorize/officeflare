@@ -22,6 +22,7 @@ const MailManagePage = lazy(() => import("./routes/mail-manage").then((module) =
 const MailIntegrationsPage = lazy(() => import("./routes/mail-integrations").then((module) => ({ default: module.MailIntegrationsPage })));
 const MailDataPage = lazy(() => import("./routes/mail-data").then((module) => ({ default: module.MailDataPage })));
 const MailConsolePage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailConsolePage })));
+const SharedMailboxEditorPage = lazy(() => import("./routes/console-shared-mailboxes").then((module) => ({ default: module.SharedMailboxEditorPage })));
 const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailDomainEditorPage })));
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
@@ -55,6 +56,8 @@ root.render(
               {["domains", "mailboxes"].map((page) => <Route key={page} path={`mail/${page}`} element={<ConsoleGate permissions={[`admin.mail.${page}.read`]}><MailConsolePage key={page} page={page} /></ConsoleGate>} />)}
               <Route path="mail/domains/new" element={<ConsoleGate permissions={["admin.mail.domains.manage"]}><MailDomainEditorPage key="new" creating /></ConsoleGate>} />
               <Route path="mail/domains/:id" element={<ConsoleGate permissions={["admin.mail.domains.read"]}><MailDomainEditorPage /></ConsoleGate>} />
+              <Route path="mail/mailboxes/new" element={<ConsoleGate permissions={["admin.mail.mailboxes.manage"]}><SharedMailboxEditorPage key="new" creating /></ConsoleGate>} />
+              <Route path="mail/mailboxes/:id" element={<ConsoleGate permissions={["admin.mail.mailboxes.read"]}><SharedMailboxEditorPage /></ConsoleGate>} />
               <Route path="mail/providers" element={<Navigate to="/console/mail/domains" replace />} />
             </Route>
             <Route path="*" element={

@@ -17,7 +17,7 @@ export const permissionCatalog = {
   "calendar.access": { label: "Access Calendar", description: "Open the Calendar workspace.", group: "services", requires: [] },
   "drive.access": { label: "Access Drive", description: "Open the Drive workspace.", group: "services", requires: [] },
   "admin.users.read": { label: "View administrative user records", description: "Inspect account details, status and sign-in activity in Console.", group: "users", requires: ["console.access"] },
-  "admin.users.create": { label: "Create user accounts", description: "Create accounts with the approved default roles. Changing those roles requires assignment permissions.", group: "users", requires: userRead },
+  "admin.users.create": { label: "Create user accounts", description: "Create accounts with approved roles and a personal mailbox when Mail is enabled. Changing those roles requires assignment permissions.", group: "users", requires: userRead },
   "admin.users.profile.update": { label: "Edit user profiles", description: "Change user display names and profile photos.", group: "users", requires: userRead },
   "admin.users.email.update": { label: "Change login email addresses", description: "Change a user's sign-in address.", group: "security", requires: userRead, impact: "Ends the user's sessions" },
   "admin.users.status.update": { label: "Enable or disable accounts", description: "Change account availability. You cannot disable your own account.", group: "security", requires: userRead, impact: "Ends the user's sessions" },

@@ -30,6 +30,7 @@ export interface Mailbox {
   status: string;
 }
 export interface Domain {
+  is_default: number;
   id: string;
   name: string;
   inbound_connection_id: string | null;

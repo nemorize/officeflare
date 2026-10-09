@@ -1230,3 +1230,140 @@ test("Mail service entry is independent of Console administration and is checked
   await call(base + "/messages", { token: key.token, expected: 401 });
   assert.equal((await raw("/api/me", { token: tokens.owner })).status, 200);
 });
+
+test("personal mail is provisioned with users and managed through the user resource", async (t) => {
+  const { mf, raw, db, admin, domain, tokens } = await fixture(t);
+  const request = async (path, data, expected = 200, token = tokens.administrator, method = data === undefined ? "GET" : "POST") => {
+    const response = await raw(path, { token, data, method });
+    assert.equal(response.status, expected, path + ": " + await response.clone().text()); return response.json();
+  };
+  const create = (email, extra = {}, expected = 201) => request("/api/users", { email_address: email, password, ...extra }, expected);
+  assert.equal(domain.is_default, 1);
+  const created = await create("new.person@external.test", { display_name: "New Person" });
+  const { user, mail } = created;
+  assert.equal(user.password_reset_required, true);
+  assert.equal(mail.mailbox.kind, "personal"); assert.equal(mail.mailbox.owner_user_id, user.id); assert.equal(mail.mailbox.status, "active");
+  assert.equal(mail.addresses[0].email_address, "new.person@mail.test");
+  const pending = await request(`/api/users/${user.id}/mailbox`);
+  assert.equal(pending.mail_enabled, true);
+  assert.equal(pending.mailbox.id, mail.mailbox.id);
+  const challenge = await request("/api/auth/login", { email_address: user.email_address, password });
+  const signedIn = await request("/api/me/password", { new_password: "a replacement password for personal mail" }, 200, challenge.challenge_token, "PUT");
+  assert.equal((await request(`/api/mail/mailboxes/${mail.mailbox.id}/folders`, undefined, 200, signedIn.access_token)).folders.length, 6);
+  const listed = (await request("/api/users")).users.find((entry) => entry.id === user.id);
+  assert.equal(listed.mail.email_address, "new.person@mail.test"); assert.equal(listed.mail.mailbox.id, mail.mailbox.id);
+
+  await request(`/api/users/${user.id}/mailbox`, { domain_id: domain.id, local_part: "new.person" });
+  const changed = await request(`/api/users/${user.id}/mailbox`, { domain_id: domain.id, local_part: "renamed" });
+  assert.equal(changed.mailbox.id, mail.mailbox.id); assert.equal(changed.addresses.length, 2);
+  assert.equal(changed.addresses.find((entry) => entry.is_primary).email_address, "renamed@mail.test");
+  assert.equal(changed.addresses.find((entry) => !entry.is_primary).email_address, "new.person@mail.test");
+  assert.equal((await request(`/api/users/${user.id}`)).user.email_address, "new.person@external.test");
+  await request(`/api/users/${user.id}`, { display_name: "Renamed Person" }, 200, tokens.administrator, "PATCH");
+  assert.equal((await request(`/api/users/${user.id}/mailbox`)).mailbox.name, "Renamed Person");
+  assert.equal((await request(`/api/users/${user.id}/mailbox`)).addresses.find((entry) => entry.is_primary).email_address, "renamed@mail.test");
+
+  assert.equal((await db.prepare("SELECT count(*) n FROM mail_mailboxes WHERE owner_user_id=? AND kind='personal'").bind(user.id).first()).n, 1);
+
+  const alternate = (await admin("/domains", { method: "POST", data: { name: "other.test", is_default: true }, expected: 201 })).domain;
+  assert.equal((await admin("/domains")).domains.filter((entry) => entry.is_default).length, 1);
+  const matching = await create("matching@mail.test");
+  assert.equal(matching.mail.addresses[0].domain_id, domain.id);
+  const explicit = await create("explicit@external.test", { mail_address: { domain_id: domain.id, local_part: "preferred" } });
+  assert.equal(explicit.mail.addresses[0].email_address, "preferred@mail.test");
+  const defaulted = await create("defaulted@external.test");
+  assert.equal(defaulted.mail.addresses[0].domain_id, alternate.id);
+  const accountOnly = await create("account-only@external.test", { role_ids: [] });
+  assert.equal(accountOnly.mail, null);
+  await create("illegal@external.test", { role_ids: [], mail_address: { domain_id: domain.id, local_part: "illegal" } }, 400);
+  const before = (await db.prepare("SELECT count(*) n FROM mail_mailboxes").first()).n;
+  await create("collision@external.test", { mail_address: { domain_id: domain.id, local_part: "renamed" } }, 409);
+  assert.equal((await db.prepare("SELECT count(*) n FROM users WHERE email_address='collision@external.test'").first()).n, 0);
+  assert.equal((await db.prepare("SELECT count(*) n FROM mail_mailboxes").first()).n, before);
+  await request(`/api/users/${user.id}/mailbox`, { domain_id: alternate.id, local_part: "forbidden" }, 403, tokens.reader);
+  await request(`/api/users/${accountOnly.user.id}/mailbox`, { domain_id: domain.id, local_part: "account-only" }, 400);
+  assert.equal((await request(`/api/users/${accountOnly.user.id}/mailbox`)).enable_role.id, "system-mail-user");
+  await request(`/api/users/${accountOnly.user.id}/mailbox`, { domain_id: domain.id, local_part: "renamed", enable_mail: true }, 409);
+  assert.equal((await request(`/api/users/${accountOnly.user.id}/mailbox`)).mail_enabled, false);
+  const activated = await request(`/api/users/${accountOnly.user.id}/mailbox`, { domain_id: domain.id, local_part: "account-only", enable_mail: true });
+  assert.equal(activated.mailbox.status, "active");
+  assert.equal((await request(`/api/users/${accountOnly.user.id}/mailbox`)).mail_enabled, true);
+
+  const raced = await Promise.all(["first", "second"].map((name) => raw("/api/users", { method: "POST", token: tokens.administrator, data: { email_address: `${name}.race@external.test`, password, mail_address: { domain_id: domain.id, local_part: "one-winner" } } })));
+  assert.deepEqual(raced.map((response) => response.status).sort(), [201, 409]);
+  assert.equal((await db.prepare("SELECT count(*) n FROM users WHERE email_address IN ('first.race@external.test','second.race@external.test')").first()).n, 1);
+  await admin(`/domains/${domain.id}`, { method: "PATCH", data: { is_default: true } });
+  assert.equal((await admin("/domains")).domains.find((entry) => entry.is_default).id, domain.id);
+  await admin(`/domains/${domain.id}`, { method: "PATCH", data: { is_default: false } });
+  await admin(`/domains/${alternate.id}`, { method: "PATCH", data: { is_default: false } });
+  const unaddressed = await create("without-domain@external.test");
+  assert.equal(unaddressed.mail.mailbox.status, "active"); assert.deepEqual(unaddressed.mail.addresses, []);
+  const configured = await request(`/api/users/${unaddressed.user.id}/mailbox`, { domain_id: domain.id, local_part: "without-domain" });
+  assert.equal(configured.mailbox.id, unaddressed.mail.mailbox.id); assert.equal(configured.addresses[0].email_address, "without-domain@mail.test");
+});
+
+test("shared mailbox address and membership save atomically with safe retries and metadata-only access", async (t) => {
+  const { db, admin, call, raw, tokens, domain } = await fixture(t);
+  const data = { name: "Support", kind: "shared", address: { domain_id: domain.id, local_part: "support" }, members: [{ user_id: "reader", role: "viewer" }, { user_id: "outsider", role: "manager" }] };
+  const headers = { "Idempotency-Key": "shared-setup-test" };
+  const first = await admin("/mailboxes", { method: "POST", data, headers, expected: 201 });
+  const id = first.mailbox.id, path = `/mailboxes/${id}/configuration`;
+  const replay = await admin("/mailboxes", { method: "POST", data, headers });
+  assert.equal(replay.mailbox.id, id);
+  const config = await admin(path);
+  assert.equal(config.addresses[0].email_address, "support@mail.test"); assert.equal(config.members.length, 2);
+  const reader = config.members.find((entry) => entry.user_id === "reader"), manager = config.members.find((entry) => entry.user_id === "outsider");
+  assert.equal(reader.can_read, 1); assert.equal(reader.can_send_as, 0); assert.equal(manager.can_manage, 1);
+  assert.equal((await call("/mailboxes", { token: tokens.reader })).mailboxes.find((entry) => entry.id === id).access.write, false);
+  await call(path, { token: tokens.reader, expected: 403 });
+  await call(`/mailboxes/${id}/messages`, { token: tokens.reader });
+  await call(`/mailboxes/${id}/messages`, { token: tokens.owner, expected: 403 });
+  const directory = await admin("/mailbox-users");
+  assert.deepEqual(Object.keys(directory.users[0]).sort(), ["display_name", "email_address", "id"]);
+  assert.deepEqual(Object.keys(config.owner).sort(), ["display_name", "email_address", "id"]);
+  const all = (await admin("/mailboxes?all=true")).mailboxes.find((entry) => entry.id === id);
+  assert.equal(all.email_address, "support@mail.test"); assert.equal(all.member_count, 2);
+
+  const custom = { can_read: true, can_write: false, can_send_as: false, can_send_on_behalf: true, can_manage: false };
+  await admin(path, { method: "PATCH", data: { name: "Support team", address: { domain_id: domain.id, local_part: "help" }, members: [{ user_id: "reader", role: "custom", permissions: custom }] } });
+  const changed = await admin(path);
+  assert.equal(changed.addresses.find((entry) => entry.is_primary).email_address, "help@mail.test");
+  assert.equal(changed.addresses.find((entry) => !entry.is_primary).email_address, "support@mail.test");
+  assert.equal(changed.members.length, 1); assert.equal(changed.members[0].can_send_on_behalf, 1);
+  await call(`/mailboxes/${id}/messages`, { token: tokens.outsider, expected: 403 });
+  const alias = changed.addresses.find((entry) => !entry.is_primary);
+  await admin(`/addresses/${alias.id}`, { method: "PATCH", data: { receive_enabled: false, send_enabled: true } });
+  assert.equal((await admin(path)).addresses.find((entry) => entry.id === alias.id).receive_enabled, 0);
+  const count = (await db.prepare("SELECT count(*) n FROM mail_mailboxes").first()).n;
+  await admin("/mailboxes", { method: "POST", data: { ...data, name: "Collision" }, headers: { "Idempotency-Key": "shared-conflict-test" }, expected: 409 });
+  assert.equal((await db.prepare("SELECT count(*) n FROM mail_mailboxes").first()).n, count);
+  await admin(path, { method: "PATCH", data: { name: "Must not save", address: { domain_id: domain.id, local_part: "owner" }, members: [] }, expected: 409 });
+  assert.equal((await admin(path)).mailbox.name, "Support team"); assert.equal((await admin(path)).members.length, 1);
+  await admin(path, { method: "PATCH", data: { name: "Must not save", members: [{ user_id: "missing", role: "member" }] }, expected: 400 });
+  assert.equal((await admin(path)).mailbox.name, "Support team");
+
+  await db.prepare("INSERT INTO roles(id,key,label) VALUES('mailbox-admin','mailbox-admin','Mailbox admin')").run();
+  await db.batch(permissionClosure(["admin.mail.mailboxes.manage"]).map((key) => db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('mailbox-admin',?)").bind(key)));
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('owner','mailbox-admin')").run();
+  const response = await raw("/api/auth/login", { method: "POST", data: { email_address: "owner@office.test", password } });
+  const limited = (await response.json()).access_token;
+  await call(path, { method: "PATCH", token: limited, data: { address: { domain_id: domain.id, local_part: "limited" } }, expected: 403 });
+  await call(path, { method: "PATCH", token: limited, data: { name: "Limited admin saved" } });
+  await call(`/mailboxes/${id}/messages`, { token: limited, expected: 403 });
+  await admin(path, { method: "PATCH", data: { members: [] } });
+  assert.equal((await admin(path)).members.length, 0);
+  const legacy = (await admin("/mailboxes", { method: "POST", data: { name: "Legacy retry", kind: "personal" }, headers: { "Idempotency-Key": "legacy-mailbox-operation" }, expected: 201 })).mailbox;
+  assert.equal((await admin("/mailboxes", { method: "POST", data: { name: "Legacy retry", kind: "personal" }, headers: { "Idempotency-Key": "legacy-mailbox-operation" } })).mailbox.id, legacy.id);
+  assert.ok((await admin("/mailboxes?all=true&kind=shared")).mailboxes.every((entry) => entry.kind === "shared"));
+  await admin("/mailboxes?all=true&kind=invalid", { expected: 400 });
+
+  const accountResponse = await raw("/api/users", { method: "POST", token: tokens.administrator, data: { email_address: "to-delete@external.test", password, password_reset_required: false } });
+  const deleted = await accountResponse.json();
+  assert.equal(accountResponse.status, 201);
+  const retained = (await admin("/mailboxes", { method: "POST", data: { name: "Retained team", owner_user_id: deleted.user.id, kind: "shared", members: [{ user_id: "reader", role: "member" }] }, expected: 201 })).mailbox;
+  assert.equal((await raw(`/api/users/${deleted.user.id}`, { method: "DELETE", token: tokens.administrator })).status, 204);
+  assert.equal((await db.prepare("SELECT status FROM mail_mailboxes WHERE id=?").bind(deleted.mail.mailbox.id).first()).status, "disabled");
+  await call(`/mailboxes/${retained.id}/messages`, { token: tokens.reader });
+  await admin(`/mailboxes/${retained.id}/configuration`, { method: "PATCH", data: { name: "Team remains available" } });
+
+});
