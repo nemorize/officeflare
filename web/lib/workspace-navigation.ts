@@ -24,7 +24,6 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
       { path: "/mail/spam", name: "Spam", icon: "shield" },
       { path: "/mail/starred", name: "Starred", icon: "star" },
       { path: "/mail/snoozed", name: "Snoozed", icon: "circle" },
-      { path: "/mail/contacts", name: "Contacts", icon: "users" },
       { path: "/mail/templates", name: "Templates", icon: "file" },
       { path: "/mail/rules", name: "Rules & blocked senders", icon: "controls" },
       { path: "/mail/settings", name: "Mailbox settings", icon: "settings" },

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../lib/api";
-import { mailboxPath, type Address, type Contact, type MailRight, type MailSettings, type Template } from "../lib/mail";
+import { mailboxPath, type Address, type MailRight, type MailSettings, type Template } from "../lib/mail";
 import { useMail } from "../components/mail-context";
 import { MailReady } from "./mail";
 import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailTextarea, MailFieldset, MailSelect } from "../components/mail-common";
@@ -11,13 +11,7 @@ import { Check, Confirm } from "../components/console-shared";
 import { useAccess } from "../components/console-access";
 export function MailManagePage({ page }: { page: string }) {
   const mail = useMail();
-  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "contacts" ? <Contacts /> : page === "templates" ? <Templates /> : page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
-}
-function Contacts() {
-  const mail = useMail(), path = mailboxPath(mail.box!.id) + "/contacts", resource = useMailResource<{ contacts: Contact[] }>(path), action = useMailAction(), [open, setOpen] = useState(false), [name, setName] = useState(""), [email, setEmail] = useState(""), [search, setSearch] = useState(""), [deleting, setDeleting] = useState<Contact | null>(null);
-  return <><MailPageHeader title="Contacts" description="Contacts are shared by everyone who can read this mailbox.">{mail.box!.access?.write && <Button variant="primary" onClick={() => { setName(""); setEmail(""); setOpen(true); }}>Add contact</Button>}</MailPageHeader><MailInput label="Find contacts" placeholder="Name or email address" value={search} onChange={(event) => setSearch(event.target.value)} /><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} /><div className="mail-record-list">{resource.data?.contacts.filter((contact) => `${contact.name} ${contact.email_address}`.toLowerCase().includes(search.toLowerCase())).map((contact) => <div className="mail-record" key={contact.id}><div><strong>{contact.name || contact.email_address}</strong><p>{contact.email_address}</p></div><div className="mail-actions">{mail.box!.access?.write && <><Button size="sm" onClick={() => { setEmail(contact.email_address); setName(contact.name); setOpen(true); }}>Edit name</Button><Button size="sm" variant="ghost" onClick={() => setDeleting(contact)}>Delete</Button></>}</div></div>)}</div>{resource.data && !resource.data.contacts.length && <p className="mail-empty">No contacts yet.</p>}
-    <MailModal open={open} title="Save contact" description="Saving an existing email address updates its name." busy={action.busy} onClose={() => setOpen(false)}><MailForm className="mail-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { await api(path, { method: "POST", body: { name, email_address: email } }); resource.reload(); setOpen(false); }); }}><MailInput label="Name" value={name} maxLength={200} onChange={(event) => setName(event.target.value)} /><MailInput label="Email address" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /><MailNotice error={action.error} /><Button type="submit" variant="primary" disabled={action.busy}>Save contact</Button></MailForm></MailModal><Confirm open={!!deleting} title="Delete contact?" description={deleting?.email_address} label="Delete contact" destructive onClose={() => setDeleting(null)} onConfirm={async () => { await api(`${path}/${deleting!.id}`, { method: "DELETE" }); resource.reload(); }} />
-  </>;
+  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "templates" ? <Templates /> : page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
 }
 function Templates() {
   const mail = useMail(), path = mailboxPath(mail.box!.id) + "/templates", resource = useMailResource<{ templates: Template[] }>(path), action = useMailAction(), [open, setOpen] = useState(false), [name, setName] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [deleting, setDeleting] = useState<Template | null>(null);

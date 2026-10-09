@@ -208,6 +208,12 @@ async function fixture(t, target = "6000000000", queues = false) {
 }
 test("mail UI metadata, sharing, attachment editing and send recovery use authorized resources", async (t) => {
   const f = await fixture(t), { call, admin, base, mailbox, tokens, draft, mf, db, address } = f;
+  await t.test("mail capabilities and endpoints no longer expose mailbox contacts", async () => {
+    assert.equal("contacts" in (await call("/capabilities")).features, false);
+    await call(base + "/contacts", { expected: 404 });
+    await call(base + "/contacts", { method: "POST", data: { email_address: "contact@example.test", name: "Contact" }, expected: 404 });
+    await call(base + "/contacts/removed", { method: "DELETE", expected: 404 });
+  });
   await t.test("mailbox rights and the member picker expose only scoped, public account information", async () => {
     const owned = (await call("/mailboxes")).mailboxes.find((entry) => entry.id === mailbox.id);
     assert.deepEqual(owned.access, { read: true, write: true, send_as: true, send_on_behalf: true, manage: true });
@@ -993,11 +999,6 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
     { "Idempotency-Key": "backup-draft" },
   );
   assert.equal(replay.body.text, original.body.text);
-  await call(base + "/contacts", {
-    method: "POST",
-    expected: 201,
-    data: { email_address: "contact@example.test", name: "Contact" },
-  });
   await call(base + "/templates", {
     method: "POST",
     expected: 201,
@@ -1041,6 +1042,11 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
     (r) => r.job.status === "completed",
     "Attachment backup did not finish",
   );
+  const manifestKey = `data-jobs/${mailbox.id}/${backup.id}/manifest.json`;
+  const manifest = await (await bucket.get(manifestKey)).json();
+  assert.equal("contacts" in manifest, false);
+  // Old mailbox backups still restore mail and settings while ignoring retired contacts.
+  await bucket.put(manifestKey, JSON.stringify({ ...manifest, contacts: [{ id: "legacy-contact", email_address: "contact@example.test", name: "Contact" }] }));
   await call(base + "/drafts/" + original.id, {
     method: "DELETE",
     expected: 204,
@@ -1098,10 +1104,7 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
     (await call(targetBase + "/settings")).settings.signature,
     "Changed signature",
   );
-  assert.equal(
-    (await call(targetBase + "/contacts")).contacts[0].name,
-    "Contact",
-  );
+  await call(targetBase + "/contacts", { expected: 404 });
   assert.equal(
     (await call(targetBase + "/templates")).templates[0].text_body,
     "Template body",

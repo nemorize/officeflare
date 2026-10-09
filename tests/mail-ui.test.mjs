@@ -58,5 +58,5 @@ test("HTML email uses a restrictive frame policy that blocks remote images and s
 });
 test("new mail routes restore safely after login without accepting arbitrary paths", () => {
   for (const path of ["/mail/settings", "/mail/integrations", "/mail/data", "/mail/spam", "/mail/snoozed", "/mail/folders/abcd-1234", "/console/mail/domains", "/console/mail/domains/new", "/console/mail/domains/abcd-1234", "/console/mail/mailboxes", "/console/mail/mailboxes/new", "/console/mail/mailboxes/abcd-1234", "/console/mail/providers"]) assert.equal(returnToWorkspace(path), path);
-  for (const path of ["//evil.test/mail", "/mail/folders/../../console", "/mail/settings?redirect=evil", "/console/mail/unknown", "/console/mail/domains/../users", "/console/mail/domains/abcd/extra", "/console/mail/mailboxes/../users", "/console/mail/mailboxes/abcd/extra"]) assert.equal(returnToWorkspace(path), "/");
+  for (const path of ["/mail/contacts", "//evil.test/mail", "/mail/folders/../../console", "/mail/settings?redirect=evil", "/console/mail/unknown", "/console/mail/domains/../users", "/console/mail/domains/abcd/extra", "/console/mail/mailboxes/../users", "/console/mail/mailboxes/abcd/extra"]) assert.equal(returnToWorkspace(path), "/");
 });

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./mailbox.sql";
+import removeContacts from "./mailbox-v2.sql";
 import { migrate } from "./migrations";
 import { authorize } from "./control";
 import { hash } from "./input";
@@ -38,7 +39,7 @@ export class MailboxDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema]);
+      migrate(ctx.storage, [schema, removeContacts]);
     });
   }
   async initialize(mailboxId: string) {
@@ -327,28 +328,6 @@ export class MailboxDO extends DurableObject<Env> {
       ...keys.map((key) => data[key]!),
     );
     return this.settings();
-  }
-  contacts() {
-    return rows(
-      this.sql,
-      "SELECT * FROM contacts ORDER BY name,email_address LIMIT 1000",
-    );
-  }
-  putContact(value: { id: string; email_address: string; name: string }) {
-    this.sql.exec(
-      "INSERT INTO contacts VALUES(?,?,?) ON CONFLICT(email_address) DO UPDATE SET name=excluded.name",
-      value.id,
-      value.email_address,
-      value.name,
-    );
-    return row(
-      this.sql,
-      "SELECT * FROM contacts WHERE email_address=?",
-      value.email_address,
-    );
-  }
-  deleteContact(contactId: string) {
-    this.sql.exec("DELETE FROM contacts WHERE id=?", contactId);
   }
   blockedSenders() {
     return rows<{ email_address: string }>(

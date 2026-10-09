@@ -63,7 +63,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
 const links = [
   ["/mail", "Inbox", "inbox"], ["/mail/starred", "Starred", "star"], ["/mail/drafts", "Drafts", "file"], ["/mail/sent", "Sent", "arrow"], ["/mail/snoozed", "Snoozed", "circle"], ["/mail/archive", "Archive", "archive"], ["/mail/spam", "Spam", "shield"], ["/mail/trash", "Trash", "trash"],
 ] as const;
-const settingsLinks = [["contacts", "Contacts", "users"], ["templates", "Templates", "file"], ["rules", "Rules & blocked senders", "controls"], ["settings", "Mailbox settings", "settings"], ["integrations", "Integrations", "code"], ["data", "Import & backup", "drive"], ["activity", "Activity & storage", "layers"]] as const;
+const settingsLinks = [["templates", "Templates", "file"], ["rules", "Rules & blocked senders", "controls"], ["settings", "Mailbox settings", "settings"], ["integrations", "Integrations", "code"], ["data", "Import & backup", "drive"], ["activity", "Activity & storage", "layers"]] as const;
 export function MailSidebar({ mobile = false }: { mobile?: boolean }) {
   const mail = useMail();
   return <div className={mobile ? "mail-mobile-nav" : "mail-sidebar-content"}>

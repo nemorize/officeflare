@@ -463,7 +463,6 @@ async function restorePage(
     folders: { id: string; name: string; system_key: string | null }[];
     settings: Record<string, string | number | null>;
     rules: Rule[];
-    contacts: { id: string; email_address: string; name: string }[];
     templates: {
       id: string;
       name: string;
@@ -504,8 +503,6 @@ async function restorePage(
       });
     }
     if (cursor.restore_settings) {
-      for (const value of manifest.contacts)
-        await coordinator.putContact(value);
       for (const value of manifest.templates)
         await coordinator.putTemplate(value);
       for (const value of manifest.blocked_senders)
@@ -669,7 +666,6 @@ async function backupManifest(
       settings: await coordinator.settings(),
       folders: await coordinator.folders(),
       rules: await coordinator.rules(),
-      contacts: await coordinator.contacts(),
       templates: await coordinator.templates(),
       blocked_senders: await coordinator.blockedSenders(),
     }),

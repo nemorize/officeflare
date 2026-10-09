@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Autocomplete, AutocompletePopup, Button, Checkbox, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, Select, SelectPopup } from "./ui";
+import { Button, Checkbox, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, Select, SelectPopup } from "./ui";
 import { api, ApiError } from "../lib/api";
 import { mailFailure } from "../lib/mail";
 import { useAccess } from "./console-access";
@@ -62,14 +62,6 @@ export function MailTextarea({ value, disabled, ...props }: React.ComponentProps
 export function MailFileInput({ onChange, multiple, disabled, ...props }: Omit<React.ComponentProps<"input">, "type" | "value" | "defaultValue">) {
   const input = useRef<HTMLInputElement>(null);
   return <div className="mail-file-input"><Input {...props} ref={input} type="file" hidden multiple={multiple} disabled={disabled} onChange={onChange} /><Button disabled={disabled} onClick={() => input.current?.click()}><Icon name="file" />{multiple ? "Choose files" : "Choose file"}</Button></div>;
-}
-export function MailRecipients({ label, value, onValueChange, contacts }: { label: string; value: string; onValueChange: (value: string) => void; contacts: { id: string; name: string; email_address: string }[] }) {
-  const prefix = value.match(/^([\s\S]*[,;\n]\s*)/)?.[1] ?? "", query = value.slice(prefix.length).trim().toLowerCase();
-  const suggestions = contacts.filter((contact) => `${contact.name} ${contact.email_address}`.toLowerCase().includes(query));
-  return <MailField label={label}><Autocomplete.Root items={suggestions} filter={null} value={value} onValueChange={onValueChange} itemToStringValue={(contact) => prefix + contact.email_address}>
-    <Autocomplete.Input placeholder="name@example.com, another@example.com" />
-    {suggestions.length > 0 && <AutocompletePopup><Autocomplete.List>{(contact: typeof contacts[number]) => <Autocomplete.Item key={contact.id} value={contact}><span>{contact.name ? `${contact.name} · ` : ""}{contact.email_address}</span></Autocomplete.Item>}</Autocomplete.List></AutocompletePopup>}
-  </Autocomplete.Root></MailField>;
 }
 export function MailMeter({ value, max, label }: { value: number; max: number; label: string }) {
   return <Meter.Root value={value} min={0} max={max} aria-label={label}><Meter.Track><Meter.Indicator /></Meter.Track></Meter.Root>;
