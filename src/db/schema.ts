@@ -347,3 +347,5 @@ export const mailControlOperations = sqliteTable(
     ),
   ],
 );
+
+export const userMailPreferences = sqliteTable("user_mail_preferences", { user_id: text().primaryKey().notNull().references(() => users.id, { onDelete: "cascade" }), preferences_json: text().notNull(), updated_at: timestamp("updated_at") });

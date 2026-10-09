@@ -38,7 +38,7 @@ root.render(
             {workspaceApps.filter((app) => app.path !== "/mail").flatMap((app) => app.menu.map((item) =>
               <Route key={item.path} path={item.path} element={<ServiceGate permission={app.permission}><EmptyWorkspacePage title={item.name} /></ServiceGate>} />
             ))}
-            {["/mail", "/mail/starred", "/mail/snoozed", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/spam", "/mail/trash", "/mail/folders/:folder"].map((path) => <Route key={path} path={path} element={<ServiceGate permission="mail.access"><MailPage /></ServiceGate>} />)}
+            {["/mail", "/mail/starred", "/mail/snoozed", "/mail/all", "/mail/scheduled", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/spam", "/mail/trash", "/mail/folders/:folder"].map((path) => <Route key={path} path={path} element={<ServiceGate permission="mail.access"><MailPage /></ServiceGate>} />)}
             {["rules", "settings"].map((page) => <Route key={page} path={`/mail/${page}`} element={<ServiceGate permission="mail.access"><MailManagePage key={page} page={page} /></ServiceGate>} />)}
             <Route path="/mail/integrations" element={<ServiceGate permission="mail.access"><MailIntegrationsPage /></ServiceGate>} />
             {["data", "activity"].map((page) => <Route key={page} path={`/mail/${page}`} element={<ServiceGate permission="mail.access"><MailDataPage key={page} page={page} /></ServiceGate>} />)}

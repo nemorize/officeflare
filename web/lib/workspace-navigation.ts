@@ -19,6 +19,8 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
       { path: "/mail", name: "Inbox", icon: "inbox" },
       { path: "/mail/drafts", name: "Drafts", icon: "file" },
       { path: "/mail/sent", name: "Sent", icon: "arrow" },
+      { path: "/mail/all", name: "All mail", icon: "mail" },
+      { path: "/mail/scheduled", name: "Scheduled", icon: "clock" },
       { path: "/mail/archive", name: "Archive", icon: "archive" },
       { path: "/mail/trash", name: "Trash", icon: "trash" },
       { path: "/mail/spam", name: "Spam", icon: "shield" },

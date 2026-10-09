@@ -4,7 +4,8 @@ import { Button, Icon, Menu, MenuPopup, OfficeflareMark, useNotifications } from
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
-import { MailProvider, MailSidebar } from "../components/mail-context";
+import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
+import { MailTopbar } from "../components/mail-chrome";
 import { consoleMenu } from "../lib/console";
 import { errorMessage } from "../lib/api";
 import { sessions, useSession } from "../lib/session";
@@ -38,7 +39,7 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
 }
 
 function WorkspaceChrome() {
-  const notify = useNotifications();
+  const notify = useNotifications(), mail = useMail();
   const { pathname: locationPath } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
@@ -65,7 +66,7 @@ function WorkspaceChrome() {
     finally { setBusy(false); }
   }
 
-  return <div className="workspace-shell">
+  return <div className={`workspace-shell${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
       <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
@@ -84,11 +85,10 @@ function WorkspaceChrome() {
         <div className="workspace-sidebar-footer"><Icon name={isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
       </aside>
       <div ref={content} className="workspace-content">
-        <header className="workspace-topbar">
+        {isMail ? <MailTopbar/> : <header className="workspace-topbar">
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
-        </header>
+        </header>}
         {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
-        {isMail && activeApp && <MailSidebar mobile />}
         {auth.error && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
           <Suspense fallback={<p className="account-page" role="status">Loading…</p>}><Outlet /></Suspense>

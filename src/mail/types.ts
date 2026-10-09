@@ -58,7 +58,9 @@ export interface Attachment {
   r2_key: string;
   disposition: "inline" | "attachment";
 }
+export interface ComposeState { to: string; cc: string; bcc: string; address_id?: string; send_mode?: string; schedule?: string; }
 export interface MailBody {
+  compose_state?: ComposeState;
   text: string;
   html: string;
 }
@@ -90,6 +92,8 @@ export interface MessageInput {
   is_spam?: boolean;
 }
 export interface MessageRow {
+  scheduled_at?: number;
+  draft_state?: string | null;
   id: string;
   thread_id: string;
   direction: string;
@@ -125,6 +129,9 @@ export interface MessageQuery {
   search?: string;
   include_snoozed?: boolean;
   snoozed_only?: boolean;
+  view?: "all" | "scheduled";
+  exclude_drafts?: boolean;
+  editable_drafts?: boolean;
 }
 export interface Submission {
   id: string;
@@ -257,3 +264,5 @@ export function publicSubmission<T extends Submission>(value: T) {
   } = value;
   return result;
 }
+
+export interface ThreadRow extends MessageRow { message_count: number; unread_count: number; starred_count: number; participants: string; recipient_summary: string; }

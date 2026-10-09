@@ -5,6 +5,8 @@ import PostalMime, { type Address as MimeAddress } from "postal-mime";
 import { all, authorize, first, resolveRecipient, sender } from "./control";
 import {
   cleanHtml,
+  composeState,
+  integer,
   flag,
   email,
   hash,
@@ -77,7 +79,7 @@ export async function getMessage(
   return {
     ...result,
     attachments: message.attachments.map(({ r2_key: _key, ...file }) => file),
-    body: { text: content.text, html: cleanHtml(content.html, cid) },
+    body: { text: content.text, html: cleanHtml(content.html, cid), ...(message.draft && content.compose_state ? { compose_state: content.compose_state } : {}) },
   };
 }
 export async function belongs(
@@ -136,10 +138,11 @@ export async function createDraft(
   await authorize(env, actor, mailboxId, "read");
   await authorize(env, actor, mailboxId, "write");
   const subject = text(data.subject ?? "", "subject", 998, true),
-    content = {
+    content: MailBody = {
       text: text(data.text ?? "", "text", 2 * 1024 * 1024, true),
       html: text(data.html ?? "", "html", 2 * 1024 * 1024, true),
     };
+  if (data.compose_state !== undefined) content.compose_state = composeState(data.compose_state);
   const to = recipients(data.to, "to"),
     cc = recipients(data.cc, "cc"),
     bcc = recipients(data.bcc, "bcc");
@@ -154,6 +157,7 @@ export async function createDraft(
         to,
         cc,
         bcc,
+        ...(content.compose_state ? { compose_state: content.compose_state } : {}),
         attachments: data.attachment_ids ?? [],
         reply_to_message_id: data.reply_to_message_id ?? null,
         include_signature: data.include_signature ?? true,
@@ -299,7 +303,7 @@ export async function submitDraft(
   if (!Number.isSafeInteger(version) || version < 1)
     fail(400, "Invalid version");
   const scheduledAt =
-    data.scheduled_at === undefined ? epoch() : Number(data.scheduled_at);
+    data.scheduled_at === undefined ? epoch() + integer(data.undo_window ?? 0, "undo_window", 0, 30) : Number(data.scheduled_at);
   if (
     !Number.isSafeInteger(scheduledAt) ||
     scheduledAt < epoch() - 60 ||
@@ -313,6 +317,7 @@ export async function submitDraft(
       mode,
       version,
       scheduled_at: data.scheduled_at ?? null,
+      ...(data.undo_window !== undefined ? { undo_window: integer(data.undo_window, "undo_window", 0, 30) } : {}),
       provider: address.provider,
       connection_id: address.connection_id,
     }),

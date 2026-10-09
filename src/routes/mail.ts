@@ -1,3 +1,5 @@
+import { queryThreads, mailboxSummary } from "../mail/views";
+import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
 import { Hono } from "hono";
@@ -16,6 +18,7 @@ import {
 } from "../mail/control";
 import {
   cleanHtml,
+  composeState,
   domain,
   email,
   flag,
@@ -131,6 +134,21 @@ mail.onError((error, c) => {
   console.error("Mail API failure", error);
   return c.json({ error: "Internal server error" }, 500);
 });
+mail.get("/preferences", async (c) => {
+  if (actor(c).api_key_id) fail(403, "Personal preferences require a user session");
+  const saved = await first<{ preferences_json: string }>(c.env,"SELECT preferences_json FROM user_mail_preferences WHERE user_id=?",actor(c).user_id);
+  return c.json({ preferences: saved ? mailPreferences(JSON.parse(saved.preferences_json)) : defaultMailPreferences });
+});
+mail.patch("/preferences", async (c) => {
+  if (actor(c).api_key_id) fail(403, "Personal preferences require a user session");
+  const data = await input(c,Object.keys(defaultMailPreferences));
+  const validated = mailPreferences(data);
+  const changes = Object.fromEntries(Object.keys(data).map((key) => [key,validated[key as keyof typeof validated]]));
+  await c.env.DB.prepare("INSERT INTO user_mail_preferences(user_id,preferences_json) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET preferences_json=json_patch(preferences_json,excluded.preferences_json),updated_at=unixepoch()").bind(actor(c).user_id,JSON.stringify(changes)).run();
+  const current = await first<{ preferences_json: string }>(c.env,"SELECT preferences_json FROM user_mail_preferences WHERE user_id=?",actor(c).user_id);
+  return c.json({ preferences: mailPreferences(JSON.parse(current!.preferences_json)) });
+});
+mail.get("/mailboxes/:m/summary", async (c) => c.json({ summary: await mailboxSummary(c.env,actor(c),resource(c)) }));
 mail.get("/providers", (c) =>
   c.json({
     providers: providers.map(({ id, capabilities }) => ({
@@ -936,13 +954,16 @@ mail.delete("/mailboxes/:m/folders/:id", async (c) => {
 });
 async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
   const query = {
-    limit: integer(Number(c.req.query("limit") ?? 50), "limit", 1, 100) + 1,
+    limit: integer(Number(c.req.query("limit") ?? (c.req.param("thread") ? 100 : 50)), "limit", 1, 100) + 1,
     search: c.req.query("q"),
     folder_id: c.req.query("folder_id"),
-    thread_id: c.req.query("thread_id"),
-    include_snoozed: c.req.query("include_snoozed") === "true",
+    thread_id: c.req.param("thread") ? strictId(c.req.param("thread")) : c.req.query("thread_id"),
+    view: c.req.query("view") as "all" | "scheduled" | undefined,
+    editable_drafts: c.req.query("folder_id") === "drafts",
+    include_snoozed: c.req.query("include_snoozed") === "true" || !!c.req.param("thread") && c.req.query("include_snoozed") !== "false",
     snoozed_only: c.req.query("snoozed_only") === "true",
   };
+  if (query.view && !["all", "scheduled"].includes(query.view)) fail(400, "Invalid view");
   let cursor:
     | {
         before: { received_at: number; id: string };
@@ -970,7 +991,7 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
     )
       fail(400, "Invalid cursor");
   }
-  const result = await queryMessages(
+  const result = await (c.req.path.endsWith("/threads") ? queryThreads : queryMessages)(
       c.env,
       actor(c),
       resource(c),
@@ -981,7 +1002,9 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
   const page = result.messages.slice(0, query.limit - 1),
     last = page.at(-1);
   return c.json({
+    ...(c.req.param("thread") ? { thread_id: c.req.param("thread") } : {}),
     messages: page.map(publicMessage),
+    has_more: hasNext,
     next_cursor:
       hasNext && last
         ? btoa(
@@ -996,18 +1019,8 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
 }
 mail.get("/mailboxes/:m/messages", listMessages);
 mail.get("/mailboxes/:m/search", listMessages);
-mail.get("/mailboxes/:m/threads/:thread", async (c) => {
-  const result = await queryMessages(c.env, actor(c), resource(c), {
-    limit: 101,
-    thread_id: strictId(c.req.param("thread")),
-    include_snoozed: true,
-  });
-  return c.json({
-    thread_id: c.req.param("thread"),
-    messages: result.messages.slice(0, 100).map(publicMessage),
-    has_more: result.messages.length > 100,
-  });
-});
+mail.get("/mailboxes/:m/threads", listMessages);
+mail.get("/mailboxes/:m/threads/:thread", listMessages);
 mail.post("/mailboxes/:m/search/rebuild", async (c) => {
   await authorize(c.env, actor(c), resource(c), "manage");
   await authorize(c.env, actor(c), resource(c), "write");
@@ -1177,6 +1190,7 @@ mail.post("/mailboxes/:m/drafts", async (c) => {
     "attachment_ids",
     "reply_to_message_id",
     "include_signature",
+    "compose_state",
   ]);
   return c.json(
     { message: await createDraft(c.env, actor(c), resource(c), data, key(c)) },
@@ -1202,12 +1216,14 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
       "bcc",
       "attachment_ids",
       "retained_attachment_ids",
+      "compose_state",
     ]),
     store = partition(c.env, locator(c.req.param("id"))),
     current = await store.get(c.req.param("id"), actor(c).user_id),
     old = await readBody(c.env, current.body_r2_key);
   const version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER),
     body = {
+      ...(data.compose_state === undefined ? old.compose_state ? { compose_state: old.compose_state } : {} : { compose_state: composeState(data.compose_state) }),
       text:
         data.text === undefined
           ? old.text
@@ -1291,6 +1307,7 @@ mail.post("/mailboxes/:m/drafts/:id/submissions", async (c) => {
     "provider",
     "connection_id",
     "scheduled_at",
+    "undo_window",
   ]);
   return c.json(
     {

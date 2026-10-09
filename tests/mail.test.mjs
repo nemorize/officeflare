@@ -1373,3 +1373,78 @@ test("shared mailbox address and membership save atomically with safe retries an
   await admin(`/mailboxes/${retained.id}/configuration`, { method: "PATCH", data: { name: "Team remains available" } });
 
 });
+
+test("mail experience preferences, draft recovery and conversation paging", async (t) => {
+  const { call, base, draft, mf, tokens, address } = await fixture(t, "250000", true);
+  await t.test("personal preferences merge fields and remain scoped to the signed-in user", async () => {
+    const defaults = (await call("/preferences")).preferences;
+    assert.equal(defaults.conversation_view, true);
+    await call("/preferences", { method: "PATCH", data: { density: "compact", undo_seconds: 30 } });
+    const updated = await call("/preferences", { method: "PATCH", data: { reading_pane: "right" } });
+    assert.equal(updated.preferences.density, "compact");
+    assert.equal(updated.preferences.undo_seconds, 30);
+    assert.equal(updated.preferences.reading_pane, "right");
+    assert.deepEqual((await call("/preferences", { token: tokens.reader })).preferences, defaults);
+    await call("/preferences", { method: "PATCH", data: { undo_seconds: 31 }, expected: 400 });
+    await call("/preferences", { method: "PATCH", data: { density: "invalid" }, expected: 400 });
+    await call("/preferences", { method: "PATCH", data: { shortcuts: "true" }, expected: 400 });
+  });
+  await t.test("unfinished recipient input survives draft saves without relaxing send validation", async () => {
+    const state = { to: "unfinished@", cc: "", bcc: "", address_id: address.id, send_mode: "send_as", schedule: "" };
+    const message = await draft({ to: [], compose_state: state });
+    assert.deepEqual(message.body.compose_state, state);
+    const updated = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 1, text: "Updated body" } })).message;
+    assert.deepEqual(updated.body.compose_state, state);
+    await call(base + "/drafts/" + message.id + "/submissions", { method: "POST", data: { version: updated.draft.version, address_id: address.id, undo_window: 30 }, expected: 400 });
+    const next = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: updated.draft.version, to: ["recipient@example.test"], compose_state: { ...state, to: "recipient@example.test, " } } })).message;
+    const before = Math.floor(Date.now() / 1000), data = { version: next.draft.version, address_id: address.id, undo_window: 30 }, headers = { "Idempotency-Key": "undo-delay-test" };
+    const send = (await call(base + "/drafts/" + next.id + "/submissions", { method: "POST", data, headers, expected: 202 })).submission;
+    assert.equal(send.status, "scheduled");
+    assert.ok(send.scheduled_at >= before + 30);
+    assert.equal((await call(base + "/drafts/" + next.id + "/submissions", { method: "POST", data, headers, expected: 202 })).submission.id, send.id);
+    const scheduled = await call(base + "/messages?view=scheduled");
+    assert.equal(scheduled.messages.find((entry) => entry.id === next.id).scheduled_at, send.scheduled_at);
+    assert.equal(scheduled.messages.find((entry) => entry.id === next.id).draft_state, "submitted");
+    assert.equal((await call(base + "/messages?folder_id=drafts")).messages.some((entry) => entry.id === next.id), false);
+    assert.equal((await call(base + "/summary")).summary.scheduled, 1);
+    await call(base + "/submissions/" + send.id + "/cancel", { method: "POST" });
+    assert.equal((await call(base + "/drafts/" + next.id)).message.draft.state, "editable");
+    assert.equal((await call(base + "/summary")).summary.scheduled, 0);
+  });
+  await t.test("conversations merge across partitions with complete counts and stable cursor pages", async () => {
+    const harness = await mf.getWorker("mail-harness");
+    for (let n = 0; n < 5; n++) {
+      const mime = ["From: Sender <sender@example.test>", "To: owner@mail.test", "Subject: " + (n < 3 ? "Conversation" : "Other " + n), `Message-ID: <experience-${n}@example.test>`, ...(n > 0 && n < 3 ? ["In-Reply-To: <experience-0@example.test>", "References: <experience-0@example.test>"] : []), "Content-Type: text/plain; charset=utf-8", "", "Message " + n].join("\r\n");
+      const result = await harness.fetch("https://test/email", { method: "POST", body: mime });
+      assert.equal((await result.json()).rejected, null);
+      await eventually(() => call(base + "/messages?folder_id=inbox"), (page) => page.messages.length === n + 1, "Inbound mail missing");
+    }
+    assert.ok((await call(base + "/storage")).partitions.length > 1);
+    const threads = (await call(base + "/threads?folder_id=inbox")).messages;
+    assert.equal(threads.length, 3);
+    const conversation = threads.find((entry) => entry.message_count === 3);
+    assert.ok(conversation);
+    assert.equal(conversation.unread_count, 3);
+    const visited = [], ids = [];
+    let cursor = null;
+    do {
+      const page = await call(base + "/threads?folder_id=inbox&limit=1" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
+      visited.push(...page.messages.map((entry) => entry.thread_id));
+      ids.push(...page.messages.map((entry) => entry.id));
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.deepEqual(ids, threads.map((entry) => entry.id));
+    assert.equal(new Set(visited).size, 3);
+    const reply = (await call(base + "/messages/" + conversation.id + "/reply", { method: "POST", data: {}, expected: 201 })).message;
+    assert.equal((await call(base + "/threads?folder_id=inbox")).messages.find((entry) => entry.thread_id === conversation.thread_id).message_count, 3);
+    assert.equal((await call(base + "/threads/" + conversation.thread_id)).messages.some((entry) => entry.id === reply.id), true);
+    const summary = (await call(base + "/summary")).summary;
+    assert.deepEqual(summary.folders.inbox, { total: 5, unread: 5 });
+    assert.ok(summary.folders.drafts.total > 0);
+    await call(base + "/messages/" + conversation.id, { method: "PATCH", data: { version: conversation.version, snoozed_until: Math.floor(Date.now() / 1000) + 3600 } });
+    assert.equal((await call(base + "/threads/" + conversation.thread_id)).messages.length, 4);
+    const snoozed = (await call(base + "/summary")).summary;
+    assert.equal(snoozed.snoozed, 1);
+    assert.deepEqual(snoozed.folders.inbox, {total:4,unread:4});
+  });
+});

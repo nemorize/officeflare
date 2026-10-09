@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../lib/api";
 import { mailboxPath, type Address, type MailRight, type MailSettings } from "../lib/mail";
+import { MailSettingsNav } from "../components/mail-settings-nav";
+import { MailPreferenceFields } from "../components/mail-chrome";
+import { FolderManager } from "../components/mail-context";
 import { useMail } from "../components/mail-context";
 import { MailReady } from "./mail";
 import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailTextarea, MailFieldset, MailSelect } from "../components/mail-common";
@@ -11,7 +14,7 @@ import { Check, Confirm } from "../components/console-shared";
 import { useAccess } from "../components/console-access";
 export function MailManagePage({ page }: { page: string }) {
   const mail = useMail();
-  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
+  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}><MailSettingsNav/>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
 }
 function Rules() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), resource = useMailResource<{ "blocked-senders": { email_address: string }[] }>(path + "/blocked-senders"), action = useMailAction(), [email, setEmail] = useState(""), [test, setTest] = useState({ from: "", to: "", subject: "", body: "" }), [result, setResult] = useState<{ folder_id: string; is_read: boolean; is_starred: boolean; is_spam: boolean; matched_rules: string[] } | null>(null);
@@ -21,7 +24,9 @@ function Rules() {
 }
 function Settings() {
   const mail = useMail(), permissions = useAccess().permissions, path = mailboxPath(mail.box!.id), resource = useMailResource<{ settings: MailSettings }>(mail.box!.access?.read ? path + "/settings" : null), addresses = useMailResource<{ addresses: Address[] }>(mail.box!.access?.read ? path + "/addresses" : null);
-  return <><MailPageHeader title="Mailbox settings" description={`Settings and folders apply to everyone using ${mail.box!.name}. Drafts remain private to their author.`} />
+  return <><MailPageHeader title="Mail settings" description={`Settings and folders apply to everyone using ${mail.box!.name}. Drafts remain private to their author.`} />
+    <MailSection title="Your experience" description="These preferences apply only to your account."><MailPreferenceFields showLink={false}/></MailSection>
+    {mail.box!.access?.write && <MailSection title="Folders" description="Folders are shared by everyone using this mailbox." action={<FolderManager/>}><div className="mail-settings-folder-list">{mail.folders.map((folder) => <span className="mail-badge" key={folder.id}>{folder.name}</span>)}</div></MailSection>}
     {mail.box!.access?.read && <><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />{resource.data && <SettingsForm key={mail.box!.id} initial={resource.data.settings} path={path} canManage={!!mail.box!.access?.manage} />}<MailSection title="Addresses" description="Receive mail at these addresses and choose an enabled address when sending." action={permissions.includes("admin.mail.domains.read") && <Button nativeButton={false} render={<Link to="/console/mail/domains" />}>Manage domain addresses</Button>}><MailState loading={addresses.loading && !addresses.data} error={addresses.error} retry={addresses.reload} /><div className="mail-record-list">{addresses.data?.addresses.map((address) => <div key={address.id} className="mail-record"><div><strong>{address.email_address}</strong><p>{address.is_primary ? "Primary · " : ""}{address.receive_enabled ? "Receives mail" : "Receive disabled"} · {address.send_enabled ? "Can send" : "Send disabled"}</p></div></div>)}</div>{addresses.data && !addresses.data.addresses.length && <p className="mail-hint">An administrator needs to assign a domain address to this mailbox.</p>}</MailSection></>}
     {mail.box!.access?.manage ? <Members path={path} /> : <MailSection title="Sharing"><p className="mail-hint">Your permissions do not include managing mailbox members.</p></MailSection>}
   </>;

@@ -1,3 +1,4 @@
+import { MailSettingsNav } from "../components/mail-settings-nav";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../lib/api";
@@ -8,7 +9,7 @@ import { MailMeter, MailField, MailModal, MailNotice, MailPageHeader, MailSectio
 import { Check, Confirm } from "../components/console-shared";
 import { Button } from "../components/ui";
 export function MailDataPage({ page }: { page: string }) {
-  const mail = useMail(); return <MailReady><div className="mail-manage-page" key={mail.box?.id}>{page === "activity" ? <Activity /> : <DataJobs />}</div></MailReady>;
+  const mail = useMail(); return <MailReady><div className="mail-manage-page" key={mail.box?.id}><MailSettingsNav/>{page === "activity" ? <Activity /> : <DataJobs />}</div></MailReady>;
 }
 function DataJobs() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), navigate = useNavigate(), action = useMailAction(), [poll, setPoll] = useState(false), resource = useMailResource<{ jobs: Job[] }>(path + "/jobs", mail.revision, poll);

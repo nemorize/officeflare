@@ -1,6 +1,19 @@
 import type { SVGProps } from "react";
 
 const paths = {
+  menu: "M4 6h16 M4 12h16 M4 18h16",
+  refresh: "M20 8a8 8 0 1 0 0 8 M20 3v5h-5",
+  back: "M19 12H5 m6-6-6 6 6 6",
+  reply: "m9 5-6 6 6 6 M3 11h10a8 8 0 0 1 8 8",
+  replyAll: "m7 5-5 6 5 6 m5-12-5 6 5 6 M7 11h7a7 7 0 0 1 7 7",
+  forward: "m15 5 6 6-6 6 M21 11h-10a8 8 0 0 0-8 8",
+  clock: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 7v5l3 2",
+  more: "M5 12h.01 M12 12h.01 M19 12h.01",
+  attachment: "m8 16 8-8a3 3 0 0 1 4 4L10 22a5 5 0 0 1-7-7L14 4a2 2 0 0 1 3 3L6 18",
+  expand: "M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5",
+  minimize: "M5 12h14",
+  sidebar: "M3 4h18v16H3z M9 4v16",
+
   search: "m21 21-4.5-4.5 M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
   grid: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   controls: "M4 7h16 M4 17h16 M8 4v6 M16 14v6",

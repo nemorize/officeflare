@@ -12,6 +12,7 @@ import {
   type MessageInput,
   type MessageQuery,
   type MessageRow,
+  type ThreadRow,
   type Submission,
   type DeliveryTask,
   publicSubmission,
@@ -326,7 +327,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       submissions: rows<Submission>(this.sql, "SELECT * FROM submissions WHERE message_id=? ORDER BY created_at DESC LIMIT 20", messageId).map(publicSubmission),
     };
   }
-  query(query: MessageQuery) {
+  private queryPlan(query: MessageQuery) {
     const filters = ["(m.draft_owner_id IS NULL OR m.draft_owner_id=?)"],
       bindings: (string | number)[] = [query.actor_id];
     if (!query.include_snoozed && !query.snoozed_only) {
@@ -362,14 +363,31 @@ export class MailPartitionDO extends DurableObject<Env> {
         bindings.push(term.startsWith("-") ? term.slice(1) : term);
       }
     }
-    return rows<MessageRow>(
-      this.sql,
-      "SELECT m.* FROM messages m WHERE " +
-        filters.join(" AND ") +
-        " ORDER BY m.received_at DESC,m.id DESC LIMIT ?",
-      ...bindings,
-      query.limit,
-    );
+    if (query.view === "all") filters.push("m.folder_id NOT IN ('trash','spam','drafts')");
+    if (query.exclude_drafts) filters.push("m.draft_owner_id IS NULL");
+    if (query.editable_drafts) filters.push("EXISTS(SELECT 1 FROM drafts d WHERE d.message_id=m.id AND d.state='editable')");
+    if (query.view === "scheduled") filters.push("EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','retry_wait'))");
+    return { filters, bindings };
+  }
+  query(query: MessageQuery) {
+    const { filters, bindings } = this.queryPlan(query);
+    return rows<MessageRow & { recipient_summary: string }>(this.sql,
+      "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" + (query.view === "scheduled" ? ",(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at" : "") + " FROM messages m WHERE " + filters.join(" AND ") + " ORDER BY m.received_at DESC,m.id DESC LIMIT ?", ...bindings, query.limit);
+  }
+  threadPage(query: MessageQuery, ids?: string[]): ThreadRow[] {
+    const { filters, bindings } = this.queryPlan({ ...query, before: undefined });
+    if (ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(ids)); }
+    const before = !ids && query.before ? " AND (received_at<? OR (received_at=? AND id<?))" : "";
+    return rows<ThreadRow>(this.sql,
+      "WITH matched AS (SELECT m.* FROM messages m WHERE " + filters.join(" AND ") + "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,id DESC) rn FROM matched), totals AS (SELECT thread_id,count(*) message_count,sum(1-is_read) unread_count,sum(is_starred) starred_count,max(has_attachments) thread_attachments,group_concat(DISTINCT nullif(from_address,'')) participants FROM matched GROUP BY thread_id) SELECT r.*,t.message_count,t.unread_count,t.starred_count,t.thread_attachments,t.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=r.id AND kind='to') recipient_summary FROM ranked r JOIN totals t USING(thread_id) WHERE rn=1" + before + " ORDER BY received_at DESC,id DESC" + (ids ? "" : " LIMIT ?"), ...bindings, ...(!ids && query.before ? [query.before.received_at,query.before.received_at,query.before.id] : []), ...(!ids ? [query.limit] : [])
+    ).map(({ rn: _rank, thread_attachments, ...entry }: ThreadRow & { rn?: number; thread_attachments?: number }) => ({ ...entry, has_attachments: thread_attachments ?? entry.has_attachments }));
+  }
+  summary(actorId: string) {
+    const folders = rows<{folder_id:string;total:number;unread:number}>(this.sql,"SELECT folder_id,count(*) total,sum(1-is_read) unread FROM messages WHERE (draft_owner_id IS NULL OR draft_owner_id=?) AND (snoozed_until IS NULL OR snoozed_until<=?) GROUP BY folder_id",actorId,epoch());
+    const counts = row<{ starred: number; snoozed: number; scheduled: number }>(this.sql,
+      "SELECT coalesce(sum(is_starred),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN 1 ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled FROM messages WHERE draft_owner_id IS NULL OR draft_owner_id=?",epoch(),actorId,actorId)!;
+    const drafts = row<{ n: number }>(this.sql,"SELECT count(*) n FROM drafts d JOIN messages m ON m.id=d.message_id WHERE d.state='editable' AND m.draft_owner_id=?",actorId)!.n;
+    return { folders: folders.map((folder) => folder.folder_id === "drafts" ? { ...folder, total: drafts, unread: 0 } : folder), ...counts };
   }
   findThread(references: string[]) {
     for (const reference of references.slice(-100).reverse()) {
