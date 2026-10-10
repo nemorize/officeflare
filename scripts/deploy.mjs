@@ -62,6 +62,11 @@ export async function ensureProfileResources(config, flags, wrangler = runWrangl
   if (bucket) await ensureBucket(bucket, flags, wrangler);
 }
 
+export async function ensureDriveResources(config, flags, wrangler = runWrangler) {
+  const bucket = config.r2_buckets?.find((entry) => entry.binding === "DRIVE_BUCKET");
+  if (bucket) await ensureBucket(bucket, flags, wrangler);
+}
+
 export async function ensureMailResources(config, flags, wrangler = runWrangler, provisionQueues = true) {
   const bucket = config.r2_buckets?.find((entry) => entry.binding === "MAIL_BUCKET");
   if (bucket) await ensureBucket(bucket, flags, wrangler);
@@ -130,6 +135,8 @@ export async function deploy(options = {}, {
   await ensureQueueResources(config, flags, wrangler);
   log("Preparing the profile image R2 bucket...");
   await ensureProfileResources(config, flags, wrangler);
+  log("Preparing the drive R2 bucket...");
+  await ensureDriveResources(config, flags, wrangler);
   await bindDatabase(config, options, database, async (path) => {
     const boundFlags = ["--config", path, ...(options.env ? ["--env", options.env] : [])];
     log("Applying D1 migrations...");

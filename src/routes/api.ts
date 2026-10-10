@@ -8,6 +8,8 @@ import me from "./me";
 import users from "./users";
 import mail from "./mail";
 import notifications from "./notifications";
+import drive from "./drive";
+import { PART_BYTES } from "../drive/types";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
@@ -27,11 +29,13 @@ api.use("*", async (c, next) => {
   const largeUpload = /^\/api\/mail\/mailboxes\/[^/]+\/imports$/.test(path);
   const mailBody = path.startsWith("/api/mail/");
   const profileImage = path === "/api/me/profile-image";
-  const maxSize = profileImage ? 2 * 1024 * 1024 : largeUpload ? 26 * 1024 * 1024 : mailBody ? 5 * 1024 * 1024 : 64 * 1024;
+  const driveUpload = /^\/api\/drive\/uploads\/[^/]+\/(?:content|parts\/[^/]+)$/.test(path);
+  const maxSize = driveUpload ? PART_BYTES : profileImage ? 2 * 1024 * 1024 : largeUpload ? 26 * 1024 * 1024 : mailBody ? 5 * 1024 * 1024 : 64 * 1024;
   return bodyLimit({ maxSize, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } })(c, next);
 });
 api.route("/mail", mail);
 api.route("/notifications", notifications);
+api.route("/drive", drive);
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("admin.roles.read"), (c) => c.json({

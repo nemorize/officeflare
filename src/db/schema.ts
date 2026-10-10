@@ -380,3 +380,59 @@ export const notificationWsTickets = sqliteTable("notification_ws_tickets", {
   session_id: text().notNull().references(() => userSessions.id, { onDelete: "cascade" }),
   auth_version: integer().notNull(), expires_at: integer().notNull(),
 });
+
+export const driveAccounts = sqliteTable("drive_accounts", {
+  user_id: text().primaryKey().notNull().references(() => users.id), quota_bytes: integer().notNull(),
+  used_bytes: integer().notNull().default(0), reserved_bytes: integer().notNull().default(0), created_at: timestamp("created_at"),
+});
+export const driveItems = sqliteTable("drive_items", {
+  id: text().primaryKey().notNull(), owner_user_id: text().notNull().references(() => users.id),
+  parent_id: text().references((): AnySQLiteColumn => driveItems.id), kind: text({ enum: ["file", "folder"] }).notNull(),
+  name: text().notNull(), description: text().notNull().default(""), current_version_id: text(),
+  version: integer().notNull().default(1), created_by: text().notNull().references(() => users.id),
+  created_at: timestamp("created_at"), updated_at: timestamp("updated_at"), trashed_at: integer(), purged_at: integer(),
+}, table => [index("drive_items_parent").on(table.parent_id, table.updated_at, table.id), index("drive_items_owner").on(table.owner_user_id, table.updated_at, table.id)]);
+export const driveVersions = sqliteTable("drive_versions", {
+  id: text().primaryKey().notNull(), item_id: text().notNull().references(() => driveItems.id), blob_key: text().notNull(),
+  size: integer().notNull(), content_type: text().notNull(), etag: text().notNull(), sha256: text(),
+  created_by: text().notNull().references(() => users.id), created_at: timestamp("created_at"),
+}, table => [index("drive_versions_item").on(table.item_id, table.created_at, table.id), index("drive_versions_blob").on(table.blob_key)]);
+export const drivePermissions = sqliteTable("drive_permissions", {
+  item_id: text().notNull().references(() => driveItems.id), user_id: text().notNull().references(() => users.id),
+  role: text({ enum: ["viewer", "commenter", "editor"] }).notNull(), expires_at: integer(),
+  created_by: text().notNull().references(() => users.id), created_at: timestamp("created_at"),
+}, table => [primaryKey({ columns: [table.item_id, table.user_id] }), index("drive_permissions_user").on(table.user_id, table.item_id)]);
+export const driveLinks = sqliteTable("drive_links", {
+  id: text().primaryKey().notNull(), item_id: text().notNull().references(() => driveItems.id), token_hash: text().notNull().unique(),
+  password_hash: text(), allow_download: integer().notNull().default(1), expires_at: integer(), revoked_at: integer(),
+  created_by: text().notNull().references(() => users.id), created_at: timestamp("created_at"),
+});
+export const driveUploads = sqliteTable("drive_uploads", {
+  id: text().primaryKey().notNull(), owner_user_id: text().notNull().references(() => driveAccounts.user_id), created_by: text().notNull().references(() => users.id),
+  item_id: text().notNull(), parent_id: text().references(() => driveItems.id), name: text().notNull(), base_version: integer().notNull(),
+  size: integer().notNull(), content_type: text().notNull(), sha256: text(), mode: text({ enum: ["single", "multipart"] }).notNull(),
+  blob_key: text().notNull().unique(), multipart_id: text(), status: text().notNull(), lease_token: text(), lease_until: integer().notNull().default(0),
+  expires_at: integer().notNull(), created_at: timestamp("created_at"), completed_at: integer(),
+});
+export const driveUploadParts = sqliteTable("drive_upload_parts", {
+  upload_id: text().notNull().references(() => driveUploads.id, { onDelete: "cascade" }), part_number: integer().notNull(), size: integer().notNull(), etag: text().notNull(),
+}, table => [primaryKey({ columns: [table.upload_id, table.part_number] })]);
+export const driveActivity = sqliteTable("drive_activity", {
+  seq: integer().primaryKey({ autoIncrement: true }), operation_id: text().notNull().unique(), item_id: text().notNull().references(() => driveItems.id),
+  owner_user_id: text().notNull().references(() => users.id), actor_user_id: text().references(() => users.id), link_id: text().references(() => driveLinks.id),
+  action: text().notNull(), details_json: text().notNull(), created_at: timestamp("created_at"),
+});
+export const driveOperations = sqliteTable("drive_operations", { id: text().primaryKey().notNull(), actor_user_id: text().notNull().references(() => users.id), created_at: timestamp("created_at") });
+export const driveChanges = sqliteTable("drive_changes", {
+  seq: integer().primaryKey({ autoIncrement: true }), user_id: text().notNull().references(() => users.id), item_id: text().notNull().references(() => driveItems.id), kind: text().notNull(), created_at: timestamp("created_at"),
+});
+export const driveStars = sqliteTable("drive_stars", { user_id: text().notNull().references(() => users.id), item_id: text().notNull().references(() => driveItems.id), created_at: timestamp("created_at") }, table => [primaryKey({ columns: [table.user_id, table.item_id] })]);
+export const driveRecents = sqliteTable("drive_recents", { user_id: text().notNull().references(() => users.id), item_id: text().notNull().references(() => driveItems.id), viewed_at: timestamp("viewed_at") }, table => [primaryKey({ columns: [table.user_id, table.item_id] })]);
+export const driveComments = sqliteTable("drive_comments", {
+  id: text().primaryKey().notNull(), item_id: text().notNull().references(() => driveItems.id), parent_id: text().references((): AnySQLiteColumn => driveComments.id), author_user_id: text().notNull().references(() => users.id),
+  body: text().notNull(), resolved: integer().notNull().default(0), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"), deleted_at: integer(),
+});
+export const driveAccessRequests = sqliteTable("drive_access_requests", {
+  id: text().primaryKey().notNull(), item_id: text().notNull().references(() => driveItems.id), user_id: text().notNull().references(() => users.id), role: text().notNull(), message: text().notNull().default(""), status: text().notNull().default("pending"), created_at: timestamp("created_at"), decided_at: integer(),
+});
+export const driveGarbage = sqliteTable("drive_garbage", { blob_key: text().primaryKey().notNull(), not_before: timestamp("not_before"), lease_until: integer().notNull().default(0) });

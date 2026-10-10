@@ -4,12 +4,27 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstable_readConfig as readConfig } from "wrangler";
-import { deploy, deploymentOptions, ensureDatabase, ensureMailResources, ensureProfileResources, ensureQueueResources, withDatabaseConfig } from "../scripts/deploy.mjs";
+import { deploy, deploymentOptions, ensureDatabase, ensureDriveResources, ensureMailResources, ensureProfileResources, ensureQueueResources, withDatabaseConfig } from "../scripts/deploy.mjs";
 
 const database = { name: "officeflare-user-accounts", uuid: "00000000-0000-0000-0000-000000000001" };
 const config = { configPath: "/test/wrangler.jsonc", name: "officeflare", d1_databases: [{ binding: "DB", database_name: database.name }] };
 const flags = ["--config", config.configPath, "--env", "production"];
 const boundFlags = ["--config", "/test/.officeflare-deploy.jsonc", "--env", "production"];
+
+test("Drive provisions its own private R2 bucket and stops on unconfirmed resources", async () => {
+  const selected = { r2_buckets: [{ binding: "MAIL_BUCKET", bucket_name: "mail" }, { binding: "DRIVE_BUCKET", bucket_name: "drive" }] };
+  const calls = []; let existing = false;
+  const wrangler = async args => {
+    calls.push(args.slice(0, 4)); assert.equal(args[3], "drive");
+    if (args[2] === "create") { existing = true; return "created"; }
+    if (!existing) throw new Error("The specified bucket does not exist.");
+    return JSON.stringify({ name: "drive" });
+  };
+  await ensureDriveResources(selected, [], wrangler); assert.deepEqual(calls.map(args => args[2]), ["info", "create", "info"]);
+  calls.length = 0; await ensureDriveResources(selected, [], wrangler); assert.deepEqual(calls.map(args => args[2]), ["info"]);
+  await assert.rejects(ensureDriveResources(selected, [], async () => { throw new Error("Authentication failed"); }), /Authentication failed/);
+  await assert.rejects(ensureDriveResources(selected, [], async () => JSON.stringify({ name: "other" })), /identity could not be confirmed/);
+});
 
 test("shared Queue provisioning prepares notification work and dead-letter queues once", async () => {
   const names = [];

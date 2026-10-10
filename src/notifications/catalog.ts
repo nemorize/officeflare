@@ -1,6 +1,10 @@
 export const notificationTypes = {
   "security.sign_in": { service: "account", category: "security", label: "New sign-ins", required: true },
   "system.announcement": { service: "system", category: "updates", label: "Workspace announcements", required: false },
+  "drive.shared": { service: "drive", category: "sharing", label: "Drive sharing changes", required: false },
+  "drive.updated": { service: "drive", category: "activity", label: "Drive file updates", required: false },
+  "drive.comment": { service: "drive", category: "comments", label: "Drive comments", required: false },
+  "drive.access_requested": { service: "drive", category: "sharing", label: "Drive access requests", required: false },
 } as const;
 export type NotificationType = keyof typeof notificationTypes;
 export const knownType = (value: string): value is NotificationType => Object.hasOwn(notificationTypes, value);

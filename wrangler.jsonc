@@ -13,6 +13,7 @@
 		"AUTH_ISSUER": "officeflare",
 		"AUTH_AUDIENCE": "officeflare-api",
 		"NOTIFICATION_QUEUE_NAME": "officeflare-notifications",
+		"DRIVE_QUOTA_BYTES": "10737418240",
 		"MAIL_PARTITION_TARGET_BYTES": "6000000000"
 	},
 	"secrets": {
@@ -44,7 +45,8 @@
 	],
 	"r2_buckets": [
 		{ "binding": "MAIL_BUCKET", "bucket_name": "officeflare-mail" },
-		{ "binding": "PROFILE_BUCKET", "bucket_name": "officeflare-profiles" }
+		{ "binding": "PROFILE_BUCKET", "bucket_name": "officeflare-profiles" },
+		{ "binding": "DRIVE_BUCKET", "bucket_name": "officeflare-drive" }
 	],
 	"send_email": [{ "name": "EMAIL" }],
 	"queues": {

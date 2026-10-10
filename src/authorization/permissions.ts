@@ -15,7 +15,7 @@ export const permissionCatalog = {
   "console.access": { label: "Access Console", description: "Open system settings. Management actions require their own permissions.", group: "services", requires: [] },
   "mail.access": { label: "Access Mail", description: "Use Mail with owned or explicitly shared mailboxes. Does not grant mail administration.", group: "services", requires: [] },
   "calendar.access": { label: "Access Calendar", description: "Open the Calendar workspace.", group: "services", requires: [] },
-  "drive.access": { label: "Access Drive", description: "Open the Drive workspace.", group: "services", requires: [] },
+  "drive.access": { label: "Access Drive", description: "Use owned and explicitly shared files and folders. Does not grant access to other users' files.", group: "services", requires: [] },
   "admin.users.read": { label: "View administrative user records", description: "Inspect account details, status and sign-in activity in Console.", group: "users", requires: ["console.access"] },
   "admin.users.create": { label: "Create user accounts", description: "Create accounts with approved roles and a personal mailbox when Mail is enabled. Changing those roles requires assignment permissions.", group: "users", requires: userRead },
   "admin.users.profile.update": { label: "Edit user profiles", description: "Change user display names and profile photos.", group: "users", requires: userRead },

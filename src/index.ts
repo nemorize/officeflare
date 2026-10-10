@@ -6,6 +6,7 @@ import type { AppEnv } from "./auth/types";
 import { receive } from "./mail/service";
 import { consume, recover } from "./mail/jobs";
 import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
+import { recoverDrive } from "./drive/jobs";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
 export { NotificationHubDO } from "./notifications/hub";
@@ -53,6 +54,6 @@ export default {
     else await consume(batch, env);
   },
   scheduled: async (_event, env, ctx) => {
-    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env)]));
+    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env)]));
   },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;
