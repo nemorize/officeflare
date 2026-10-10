@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { api } from "../lib/api";
 import { mailboxPath, type Mailbox, type Capabilities, type Folder, type MailPreferences, type MailSummary } from "../lib/mail";
@@ -85,16 +85,34 @@ const links = [
   ["/mail", "Inbox", "inbox"], ["/mail/starred", "Starred", "star"], ["/mail/snoozed", "Snoozed", "clock"], ["/mail/sent", "Sent", "arrow"], ["/mail/drafts", "Drafts", "file"], ["/mail/archive", "Archive", "archive"], ["/mail/spam", "Spam", "shield"], ["/mail/trash", "Trash", "trash"],
 ] as const;
 export function MailSidebar() {
-  const mail = useMail(), [more,setMore] = useState(false), custom = mail.folders.filter((folder) => !folder.system_key);
+  const mail = useMail(), location = useLocation(), extraId = useId(), custom = mail.folders.filter((folder) => !folder.system_key);
   const extra = [["/mail/all","All mail","mail"],["/mail/scheduled","Scheduled","clock"],["/mail/archive","Archive","archive"],["/mail/spam","Spam","shield"],["/mail/trash","Trash","trash"]] as const;
+  const extraActive = extra.some(([path]) => path === location.pathname);
+  const [more, setMore] = useState(extraActive);
+  useEffect(() => { if (extraActive) setMore(true); }, [extraActive, location.pathname]);
   const primary = links.filter(([path]) => !["/mail/archive","/mail/spam","/mail/trash"].includes(path));
   const count = (path: string) => path === "/mail/drafts" ? mail.summary?.folders.drafts?.total : path === "/mail/scheduled" ? mail.summary?.scheduled : path === "/mail/snoozed" ? mail.summary?.snoozed : mail.summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
   const nav = (items: readonly (readonly [string,string,import("./ui").IconProps["name"]])[]) => items.map(([path,name,icon]) => <NavLink end key={path} to={mail.href(path)} onClick={() => mail.setMobileMenu(false)}><Icon name={icon}/><span>{name}</span>{!!count(path) && <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>{count(path)}</small>}</NavLink>);
   return <div className="mail-sidebar-content">
-    <MailField className="mail-box-picker" label="Mailbox">{mail.boxes.length > 1 ? <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/> : <div className="mail-single-box"><Icon name="mail"/><span>{mail.box?.name ?? "Your mailbox"}</span></div>}</MailField>
-    <Button className="mail-compose-button" variant="primary" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); mail.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
-    <nav className="workspace-nav" aria-label="Mail navigation">{nav(primary)}<Button variant="ghost" className="mail-more-link" aria-expanded={more} onClick={() => setMore(!more)}><Icon name="down" style={{ transform:more ? "rotate(180deg)" : undefined }}/>{more ? "Less" : "More"}</Button>{more && nav(extra)}<div className="mail-folder-heading"><h2>Folders</h2>{mail.box?.access?.write && <FolderManager/>}</div>{custom.map((folder) => <NavLink key={folder.id} to={mail.href(`/mail/folders/${encodeURIComponent(folder.id)}`)} onClick={() => mail.setMobileMenu(false)}><Icon name="folder"/><span>{folder.name}</span>{!!mail.summary?.folders[folder.id]?.unread && <small>{mail.summary?.folders[folder.id]?.unread}</small>}</NavLink>)}{!custom.length && <p className="mail-folder-empty">Organize mail with folders.</p>}</nav>
-    <div className="mail-sidebar-bottom"><NavLink to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/>Mail settings</NavLink><span className="mail-connection"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : "Checking for updates"}</span></div>
+    <div className="mail-sidebar-actions">
+      <MailField className="mail-box-picker" label="Mailbox">
+        {mail.boxes.length > 1 ? <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/> : <div className="mail-single-box"><Icon name="mail"/><span title={mail.box?.name}>{mail.box?.name ?? "Your mailbox"}</span></div>}
+      </MailField>
+      <Button className="mail-compose-button" variant="primary" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); mail.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
+    </div>
+    <nav className="workspace-nav" aria-label="Mail navigation">
+      <div className="mail-nav-group">
+        {nav(primary)}
+        <Button variant="ghost" className="mail-more-link" aria-expanded={more} aria-controls={extraId} onClick={() => setMore(!more)}><Icon name="down" style={{ transform:more ? "rotate(180deg)" : undefined }}/><span>{more ? "Less" : "More"}</span></Button>
+      </div>
+      <div id={extraId} className="mail-nav-group" hidden={!more}>{nav(extra)}</div>
+      <div className="mail-nav-group mail-custom-folders">
+        <div className="mail-folder-heading"><h2>Folders</h2>{mail.box?.access?.write && <FolderManager/>}</div>
+        {custom.map((folder) => <NavLink key={folder.id} to={mail.href(`/mail/folders/${encodeURIComponent(folder.id)}`)} onClick={() => mail.setMobileMenu(false)}><Icon name="folder"/><span title={folder.name}>{folder.name}</span>{!!mail.summary?.folders[folder.id]?.unread && <small>{mail.summary?.folders[folder.id]?.unread}</small>}</NavLink>)}
+        {!mail.loading && !custom.length && <p className="mail-folder-empty">{mail.box?.access?.write ? "Create folders to organize mail." : "No custom folders."}</p>}
+      </div>
+    </nav>
+    <div className="mail-sidebar-bottom"><NavLink to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : "Checking for updates"}</span></div>
   </div>;
 }
 export function FolderManager() {
