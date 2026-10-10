@@ -17,16 +17,18 @@ import { Button } from "./ui";
 export function MailHtml({
   message,
   path,
+  content = message.body.html,
 }: {
   message: MessageDetail;
   path: string;
+  content?: string;
 }) {
-  const [html, setHtml] = useState(message.body.html),
+  const [html, setHtml] = useState(content),
     [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController(),
       urls: string[] = [];
-    setHtml(message.body.html);
+    setHtml(content);
     setError("");
     const inline = message.attachments.filter(
       (file) => file.content_id && file.content_type.startsWith("image/"),
@@ -45,21 +47,21 @@ export function MailHtml({
       }),
     ).then((results) => {
       if (controller.signal.aborted) return;
-      let content = message.body.html;
+      let formatted = content;
       for (const result of results)
         if (result.status === "fulfilled" && result.value)
-          content = content.replaceAll(result.value.source, result.value.url);
+          formatted = formatted.replaceAll(result.value.source, result.value.url);
       if (results.some((result) => result.status === "rejected"))
         setError(
           "Some inline images could not be loaded. You can download the attachments below.",
         );
-      setHtml(content);
+      setHtml(formatted);
     });
     return () => {
       controller.abort();
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [message.id, message.body.html, path]);
+  }, [message.id, content, path]);
   return (
     <>
       <p className="mail-html-note">External images are blocked for privacy.</p>

@@ -2,6 +2,7 @@ import { queryThreads, mailboxSummary } from "../mail/views";
 import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
+import { attachEditorImages, composedBody, editorBody, imageAssetKey, imageContentId, validateSignatureImages } from "../mail/editor";
 import { Hono } from "hono";
 import {
   all,
@@ -58,6 +59,7 @@ import {
   id,
   locator,
   publicSubmission,
+  type MailBody,
   type Address,
   type Attachment,
   type Connection,
@@ -883,6 +885,7 @@ mail.patch("/mailboxes/:m/settings", async (c) => {
   await authorize(c.env, actor(c), resource(c), "manage");
   const data = await input(c, [
       "signature",
+      "signature_html",
       "retention_days",
       "auto_reply_enabled",
       "auto_reply_subject",
@@ -897,6 +900,11 @@ mail.patch("/mailboxes/:m/settings", async (c) => {
         f === "auto_reply_subject" ? 998 : 10000,
         true,
       );
+  if ("signature_html" in data) {
+    values.signature_html = cleanHtml(text(data.signature_html, "signature_html", 100000, true), {}, true);
+    await validateSignatureImages(c.env, resource(c), values.signature_html as string);
+    values.signature = values.signature_html ? htmlText(values.signature_html) : String(values.signature ?? "");
+  } else if ("signature" in data) values.signature_html = "";
   if ("auto_reply_enabled" in data)
     values.auto_reply_enabled = flag(
       data.auto_reply_enabled,
@@ -1138,6 +1146,31 @@ mail.post("/mailboxes/:m/messages/:id/permanent-delete", async (c) => {
   await flushOutbox(c.env, resource(c), locator(c.req.param("id")));
   return c.body(null, 204);
 });
+mail.post("/mailboxes/:m/images", async (c) => {
+  await authorize(c.env, actor(c), resource(c), "read");
+  await authorize(c.env, actor(c), resource(c), "write");
+  const length = Number(c.req.header("content-length"));
+  if (!Number.isSafeInteger(length) || length <= 0 || length > 5 * 1024 ** 2) fail(413, "Choose an image up to 5 MiB");
+  const type = c.req.header("content-type")?.toLowerCase();
+  if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type ?? "")) fail(415, "Use a PNG, JPEG, GIF or WebP image");
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length !== length) fail(400, "Image length does not match Content-Length");
+  const starts = (...prefix: number[]) => prefix.every((byte, index) => bytes[index] === byte);
+  const valid = type === "image/png" ? starts(137,80,78,71,13,10,26,10) : type === "image/jpeg" ? starts(255,216,255) : type === "image/gif" ? /^GIF8[79]a$/.test(new TextDecoder().decode(bytes.slice(0,6))) : starts(82,73,70,70) && new TextDecoder().decode(bytes.slice(8,12)) === "WEBP";
+  if (!valid) fail(415, "The file is not a supported image");
+  let filename = "image";
+  try { filename = decodeURIComponent(c.req.header("x-filename-encoded") ?? "image"); } catch { fail(400, "Invalid filename"); }
+  filename = text(filename, "filename", 255);
+  const imageId = id();
+  await c.env.MAIL_BUCKET.put(imageAssetKey(resource(c), imageId), bytes, { httpMetadata: { contentType: type! }, customMetadata: { filename } });
+  return c.json({ image: { id: imageId, content_id: imageContentId(imageId), filename, size_bytes: length } }, 201);
+});
+mail.get("/mailboxes/:m/images/:id", async (c) => {
+  await authorize(c.env, actor(c), resource(c), "read");
+  const object = await c.env.MAIL_BUCKET.get(imageAssetKey(resource(c), strictId(c.req.param("id"))));
+  if (!object) fail(404, "Image not found");
+  return new Response(object.body, { headers: { "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600" } });
+});
 mail.post("/mailboxes/:m/uploads", async (c) => {
   await authorize(c.env, actor(c), resource(c), "write");
   const length = Number(c.req.header("content-length"));
@@ -1191,6 +1224,7 @@ mail.post("/mailboxes/:m/drafts", async (c) => {
     "reply_to_message_id",
     "include_signature",
     "compose_state",
+    "editor_body",
   ]);
   return c.json(
     { message: await createDraft(c.env, actor(c), resource(c), data, key(c)) },
@@ -1217,22 +1251,18 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
       "attachment_ids",
       "retained_attachment_ids",
       "compose_state",
+      "editor_body",
+      "include_quoted_body",
     ]),
     store = partition(c.env, locator(c.req.param("id"))),
     current = await store.get(c.req.param("id"), actor(c).user_id),
     old = await readBody(c.env, current.body_r2_key);
-  const version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER),
-    body = {
-      ...(data.compose_state === undefined ? old.compose_state ? { compose_state: old.compose_state } : {} : { compose_state: composeState(data.compose_state) }),
-      text:
-        data.text === undefined
-          ? old.text
-          : text(data.text, "text", 2 * 1024 * 1024, true),
-      html:
-        data.html === undefined
-          ? old.html
-          : cleanHtml(text(data.html, "html", 2 * 1024 * 1024, true)),
-    };
+  const version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
+  const includeQuote = data.include_quoted_body === undefined ? old.include_quoted_body ?? true : !!flag(data.include_quoted_body, "include_quoted_body");
+  const edited = data.editor_body !== undefined || data.include_quoted_body !== undefined && old.quoted_body
+    ? composedBody(data.editor_body === undefined ? old.editor_body ?? old : editorBody(data.editor_body), old.quoted_body, includeQuote)
+    : data.text === undefined && data.html === undefined ? old : editorBody({ text: data.text ?? old.text, html: data.html ?? old.html });
+  const body: MailBody = { ...edited, ...(data.compose_state === undefined ? old.compose_state ? { compose_state: old.compose_state } : {} : { compose_state: composeState(data.compose_state) }) };
   const select = (kind: string) =>
       current.recipients
         .filter((r) => r.kind === kind)
@@ -1259,6 +1289,7 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
       attachments.push({ id: fileId, filename: upload.customMetadata?.filename ?? "attachment", content_type: upload.httpMetadata?.contentType ?? "application/octet-stream", size_bytes: upload.size, content_id: null, r2_key: r2Key, disposition: "attachment" });
     }
   }
+  attachments = await attachEditorImages(c.env, resource(c), current.id, body.html + (body.quoted_body?.html ?? ""), attachments ?? current.attachments, addedKeys);
   const keyBody = bodyKey(resource(c), current.id, id());
   addedKeys.push(keyBody);
   await c.env.MAIL_BUCKET.put(keyBody, JSON.stringify(body), {
@@ -1733,8 +1764,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
               ]),
             ].filter((address) => !own.has(address.toLowerCase()));
     const requestKey = key(c), uploads: string[] = [];
-    if (operation === "forward")
-      for (const file of source.attachments) {
+    for (const file of source.attachments.filter((file) => operation === "forward" || file.disposition === "inline")) {
         const object = await c.env.MAIL_BUCKET.get(file.r2_key);
         if (!object) fail(503, "Attachment unavailable");
         const digest = await hash(JSON.stringify([actor(c).user_id, requestKey, sourceId, file.id]));
@@ -1747,6 +1777,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
             customMetadata: {
               filename: file.filename,
               expires_at: String(epoch() + 86400),
+              ...(file.content_id ? { content_id: file.content_id } : {}),
             },
           },
         );
@@ -1766,12 +1797,12 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
       {
         subject,
         to,
-        text:
-          text(data.text ?? "", "text", 10000, true) + "\n\n" + (content.text || htmlText(content.html)),
+        text: text(data.text ?? "", "text", 10000, true),
         attachment_ids: uploads,
         ...(operation !== "forward" ? { reply_to_message_id: sourceId } : {}),
       },
       requestKey,
+      { text: content.text || htmlText(content.html), html: cleanHtml(content.html, Object.fromEntries(source.attachments.filter((file) => file.content_id).map((file) => [file.content_id!, "cid:" + file.content_id]))) },
     );
     return c.json({ message: draft }, 201);
   });

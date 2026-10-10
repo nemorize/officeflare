@@ -4,60 +4,51 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { bytes, mailboxPath, MailOperation, parseRecipients, scheduledTime, submissionLabel, type Address, type Attachment, type MailSettings, type MessageDetail, type Submission } from "../lib/mail";
 import { useMail } from "./mail-context";
-import { MailField, MailInput, MailNotice, MailState, useMailAction, useMailResource, MailForm, MailFieldset, MailSelect, MailTextarea, MailFileInput } from "./mail-common";
+import { MailField, MailInput, MailNotice, MailState, useMailAction, useMailResource, MailForm, MailFieldset, MailSelect, MailFileInput } from "./mail-common";
 import { Button, Icon } from "./ui";
 import { MailIconButton, MailMenu } from "./mail-controls";
 import { RecipientField } from "./mail-recipients";
 import { Menu } from "./ui";
 import { Confirm } from "./console-shared";
-function editableHtml(value: string) {
-  const doc = new DOMParser().parseFromString(value, "text/html");
-  const tags = new Set(["P", "DIV", "BR", "B", "STRONG", "I", "EM", "U", "S", "UL", "OL", "LI", "BLOCKQUOTE", "A"]);
-  for (const element of [...doc.body.querySelectorAll("*")]) {
-    if (["SCRIPT", "STYLE", "IFRAME", "OBJECT", "SVG", "MATH"].includes(element.tagName)) { element.remove(); continue; }
-    if (!tags.has(element.tagName)) { element.replaceWith(...element.childNodes); continue; }
-    const href = element.tagName === "A" ? element.getAttribute("href") : null;
-    for (const attribute of [...element.attributes]) element.removeAttribute(attribute.name);
-    if (href && /^(https?:|mailto:)/i.test(href)) element.setAttribute("href", href);
-  }
-  return doc.body.innerHTML;
-}
+import { MailEditor } from "./mail-editor";
+import { MailHtml } from "./mail-body";
+import { normalizedEditorHtml, plainMailHtml, storedEditorHtml } from "../lib/mail-editor";
 export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { mailboxId: string; draftId?: string; inline?: boolean; onClose: () => void }) {
   const mail = useMail(), location = useLocation(), path = mailboxPath(mailboxId), action = useMailAction();
   const initial = useMailResource<{ message: MessageDetail }>(draftId ? `${path}/drafts/${draftId}` : null);
   const addresses = useMailResource<{ addresses: Address[] }>(path + "/addresses"), settings = useMailResource<{ settings: MailSettings }>(path + "/settings");
-  const [draft, setDraft] = useState<MessageDetail | null>(null), [ready, setReady] = useState(false), [to, setTo] = useState(""), [cc, setCc] = useState(""), [bcc, setBcc] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [rich, setRich] = useState(false), [html, setHtml] = useState("");
+  const [draft, setDraft] = useState<MessageDetail | null>(null), [ready, setReady] = useState(false), [to, setTo] = useState(""), [cc, setCc] = useState(""), [bcc, setBcc] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [html, setHtml] = useState("");
   const [files, setFiles] = useState<(Attachment & { upload?: boolean })[]>([]), [sender, setSender] = useState(""), [mode, setMode] = useState("send_as"), [schedule, setSchedule] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false), [includeCc, setIncludeCc] = useState(false), [unknown, setUnknown] = useState(false);
   const [minimized,setMinimized] = useState(false), [expanded,setExpanded] = useState(false), [docked,setDocked] = useState(!inline), [autosaving,setAutosaving] = useState(false), [closing,setClosing] = useState(false), [deleteDraft,setDeleteDraft] = useState(false), [scheduleOpen,setScheduleOpen] = useState(false), [inlineHost,setInlineHost] = useState<HTMLElement | null>(null);
+  const [includeQuote, setIncludeQuote] = useState(true), [imageUploading, setImageUploading] = useState(false);
   const generation = useRef(0), draftRef = useRef<MessageDetail | null>(null);
   const surface = useRef<HTMLElement>(null);
-  const editor = useRef<HTMLDivElement>(null), createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null), editorHtml = useRef("");
+  const createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null);
   const pendingEdit = useRef<{ version: number; payload: object; matches: (message: MessageDetail) => boolean } | null>(null);
   const rights = mail.boxes.find((box) => box.id === mailboxId)?.access, canSend = rights?.send_as || rights?.send_on_behalf;
   useEffect(() => {
     if (ready || (draftId ? !initial.data : !settings.data)) return;
     const message = initial.data?.message;
-    if (message) { setDraft(message); setTo(message.recipients.filter((r) => r.kind === "to").map((r) => r.email_address).join(", ")); setCc(message.recipients.filter((r) => r.kind === "cc").map((r) => r.email_address).join(", ")); setBcc(message.recipients.filter((r) => r.kind === "bcc").map((r) => r.email_address).join(", ")); setIncludeCc(message.recipients.some((r) => r.kind !== "to")); setSubject(message.subject); setText(message.body.text); const clean = editableHtml(message.body.html); editorHtml.current = clean; setHtml(clean); setRich(!!clean); setFiles(message.attachments); }
-    else setText(settings.data!.settings.signature ? `\n\n${settings.data!.settings.signature}` : "");
+    if (message) { setDraft(message); setTo(message.recipients.filter((r) => r.kind === "to").map((r) => r.email_address).join(", ")); setCc(message.recipients.filter((r) => r.kind === "cc").map((r) => r.email_address).join(", ")); setBcc(message.recipients.filter((r) => r.kind === "bcc").map((r) => r.email_address).join(", ")); setIncludeCc(message.recipients.some((r) => r.kind !== "to")); setSubject(message.subject); const editable = message.body.editor_body ?? message.body; setText(editable.text); setHtml(editable.html || plainMailHtml(editable.text)); setIncludeQuote(message.body.include_quoted_body !== false); setFiles(message.attachments); }
+    else { const signature = settings.data!.settings; setText(signature.signature ? `\n\n${signature.signature}` : ""); setHtml(signature.signature_html || signature.signature ? "<p></p>" + (signature.signature_html || plainMailHtml(signature.signature)) : ""); }
     const stored = message?.body.compose_state;
     if (stored) { setTo(stored.to); setCc(stored.cc); setBcc(stored.bcc); setIncludeCc(!!stored.cc || !!stored.bcc); if (stored.address_id) setSender(stored.address_id); if (stored.send_mode) setMode(stored.send_mode); if (stored.schedule) setSchedule(stored.schedule); }
     draftRef.current = message ?? null;
     setReady(true);
   }, [draftId, initial.data, settings.data, ready]);
-  useEffect(() => { if (editor.current && rich) editor.current.innerHTML = editorHtml.current || editableHtml(text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll("\n", "<br>")); }, [rich, ready]);
   useEffect(() => { const primary = addresses.data?.addresses.find((address) => address.send_enabled && address.is_primary) ?? addresses.data?.addresses.find((address) => address.send_enabled); if (!sender && primary) setSender(primary.id); }, [addresses.data, sender]);
   useEffect(() => { if (!rights?.send_as && rights?.send_on_behalf) setMode("send_on_behalf"); }, [rights?.send_as, rights?.send_on_behalf]);
   useEffect(() => { if (!dirty && !unknown) return; const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent); }, [dirty, unknown]);
   useEffect(() => { const host = document.getElementById("mail-reply-host"); setInlineHost(host); if (inline && !host) setDocked(true); },[inline,docked,location.pathname,location.search]);
   useEffect(() => { const focus = () => { setMinimized(false); }; window.addEventListener("officeflare:focus-composer",focus); return () => window.removeEventListener("officeflare:focus-composer",focus); },[]);
   const mark = () => { generation.current++; setDirty(true); };
-  const close = async () => { if (unknown) { setDiscard(true); return; } if (!dirty) { onClose(); return; } if (action.busy) return; setClosing(true); const success = await action.run(async () => { await save(); onClose(); }); if (!success) setClosing(false); };
+  const close = async () => { if (imageUploading) return; if (unknown) { setDiscard(true); return; } if (!dirty) { onClose(); return; } if (action.busy) return; setClosing(true); const success = await action.run(async () => { await save(); onClose(); }); if (!success) setClosing(false); };
 
   const values = (strict = false) => {
     const valid = (value: string) => strict ? parseRecipients(value) : value.split(/[,;\n]+/).flatMap((token) => { try { return parseRecipients(token); } catch { return []; } });
     const recipients = { to: valid(to), cc: valid(cc), bcc: valid(bcc) };
     if (Object.values(recipients).flat().length > 50) throw new Error("A message can have at most 50 recipients.");
-    return { subject, text, html: rich ? html : "", compose_state: { to,cc,bcc,address_id:sender,send_mode:mode,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
+    return { subject, editor_body: { text, html: storedEditorHtml(html, mailboxId, files) }, include_quoted_body: includeQuote, compose_state: { to,cc,bcc,address_id:sender,send_mode:mode,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
   };
   async function save(): Promise<MessageDetail> {
     if (!ready) throw new Error("Wait for the draft to finish loading.");
@@ -72,15 +63,16 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         else if (latest.draft?.version !== pendingEdit.current.version) throw new Error("This draft changed in another request. Copy your changes and reopen the saved draft before continuing.");
         else result = await patchDraft(draft.id);
       } else {
-        const expectedFiles = files.map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort();
+        const expectedFiles = files.filter((file) => file.disposition !== "inline").map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort();
         const recipientKey = (entries: { kind: string; email_address: string }[]) => entries.map((entry) => `${entry.kind}:${entry.email_address}`).sort().join("\n");
         const expectedRecipients = recipientKey((["to", "cc", "bcc"] as const).flatMap((kind) => data[kind].map((email_address) => ({ kind, email_address }))));
-        pendingEdit.current = { version: draft.draft.version, payload: { ...data, version: draft.draft.version, retained_attachment_ids: files.filter((file) => !file.upload).map((file) => file.id) }, matches: (latest) => latest.subject === data.subject && latest.body.text === data.text && editableHtml(latest.body.html) === editableHtml(data.html) && JSON.stringify(latest.body.compose_state) === JSON.stringify(data.compose_state) && recipientKey(latest.recipients) === expectedRecipients && JSON.stringify(latest.attachments.map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort()) === JSON.stringify(expectedFiles) };
+        pendingEdit.current = { version: draft.draft.version, payload: { ...data, version: draft.draft.version, retained_attachment_ids: files.filter((file) => !file.upload).map((file) => file.id) }, matches: (latest) => latest.subject === data.subject && (latest.body.editor_body ?? latest.body).text === data.editor_body.text && normalizedEditorHtml((latest.body.editor_body ?? latest.body).html, mailboxId, latest.attachments) === normalizedEditorHtml(data.editor_body.html, mailboxId, files) && (latest.body.include_quoted_body !== false) === data.include_quoted_body && JSON.stringify(latest.body.compose_state) === JSON.stringify(data.compose_state) && recipientKey(latest.recipients) === expectedRecipients && JSON.stringify(latest.attachments.filter((file) => file.disposition !== "inline").map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort()) === JSON.stringify(expectedFiles) };
         result = await patchDraft(draft.id);
       }
       pendingEdit.current = null;
     } else {
-      pendingCreate.current ??= { ...data, include_signature: false };
+      const { include_quoted_body: _includeQuote, ...creation } = data;
+      pendingCreate.current ??= { ...creation, include_signature: false };
       try { result = await api(`${path}/drafts`, { method: "POST", body: pendingCreate.current, headers: createOperation.current.headers(pendingCreate.current) }); }
       catch (failure) { setUnknown(true); if (failure instanceof ApiError && failure.status < 500) { pendingCreate.current = null; createOperation.current.complete(); setUnknown(false); } throw failure; }
       createOperation.current.complete(); pendingCreate.current = null;
@@ -95,6 +87,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     catch (failure) { setUnknown(true); if (failure instanceof ApiError && failure.status < 500) { pendingEdit.current = null; setUnknown(false); } throw failure; }
   }
   async function send() {
+    if (imageUploading) throw new Error("Wait for the image upload to finish.");
     if (!pendingSend.current) {
       const recipients = values(true); if (!recipients.to.length && !recipients.cc.length && !recipients.bcc.length) throw new Error("Add at least one recipient.");
       if (!sender || !canSend) throw new Error("Choose an available sending address. Your mailbox needs send permission.");
@@ -121,20 +114,19 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
       setFiles((old) => [...old, { ...result.upload, upload: true }]); mark();
     }
   }
-  function format(command: string) { editor.current?.focus(); document.execCommand(command); if (editor.current) { setText(editor.current.innerText); editorHtml.current = editableHtml(editor.current.innerHTML); setHtml(editorHtml.current); mark(); } }
-  useEffect(() => { if (!ready || !dirty || unknown || action.busy || closing || draft?.draft?.state === "submitted") return; const timer=setTimeout(() => { setAutosaving(true); void action.run(async () => { await save(); }).finally(() => setAutosaving(false)); },1500); return () => clearTimeout(timer); },[ready,dirty,unknown,action.busy,closing,to,cc,bcc,subject,text,html,files,sender,mode,schedule]);
+  useEffect(() => { if (!ready || !dirty || unknown || action.busy || closing || draft?.draft?.state === "submitted") return; const timer=setTimeout(() => { setAutosaving(true); void action.run(async () => { await save(); }).finally(() => setAutosaving(false)); },1500); return () => clearTimeout(timer); },[ready,dirty,unknown,action.busy,closing,to,cc,bcc,subject,text,html,files,sender,mode,schedule,includeQuote]);
   useEffect(() => { const key=(event:KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !action.busy) { event.preventDefault(); void action.run(send); } }; window.addEventListener("keydown",key); return () => window.removeEventListener("keydown",key); });
   useEffect(() => {
     if (!ready || minimized) return;
     if (!docked && inlineHost) {
       const container = inlineHost.closest<HTMLElement>(".mail-conversation-content");
       if (container && surface.current) container.scrollTo({ top: container.scrollTop + surface.current.getBoundingClientRect().top - container.getBoundingClientRect().top - 16 });
-      surface.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus({preventScroll:true});
+      surface.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus({preventScroll:true});
     } else if (!draftId) surface.current?.querySelector<HTMLInputElement>('input[inputmode="email"]')?.focus({preventScroll:true});
   },[ready,docked,inlineHost,minimized]);
   const locked = closing || (action.busy && !autosaving) || unknown || !!draft && draft.draft?.state !== "editable";
   const content = <section ref={surface} className={`${!docked && inlineHost ? "mail-compose-inline" : "mail-compose-window"}${minimized ? " is-minimized" : ""}${expanded ? " is-expanded" : ""}`} aria-label="Compose message">
-    <div className="mail-compose-titlebar"><Button variant="ghost" className="mail-compose-title" onClick={() => setMinimized(!minimized)}>{!docked ? "Reply" : draftId ? "Edit draft" : "New message"}</Button><span>{mail.boxes.find((box) => box.id === mailboxId)?.name}</span><MailIconButton icon="minimize" label={minimized ? "Restore composer" : "Minimize composer"} onClick={() => setMinimized(!minimized)}/><MailIconButton icon={expanded ? "minimize" : "expand"} label={expanded ? "Exit full screen" : !docked ? "Open in compose window" : "Expand composer"} onClick={() => { if (!docked) setDocked(true); else setExpanded(!expanded); setMinimized(false); }}/><MailIconButton icon="close" label="Save and close draft" disabled={action.busy || closing} onClick={() => { void close(); }}/></div>
+    <div className="mail-compose-titlebar"><Button variant="ghost" className="mail-compose-title" disabled={imageUploading} onClick={() => setMinimized(!minimized)}>{!docked ? "Reply" : draftId ? "Edit draft" : "New message"}</Button><span>{mail.boxes.find((box) => box.id === mailboxId)?.name}</span><MailIconButton icon="minimize" label={minimized ? "Restore composer" : "Minimize composer"} disabled={imageUploading} onClick={() => setMinimized(!minimized)}/><MailIconButton icon={expanded ? "minimize" : "expand"} label={expanded ? "Exit full screen" : !docked ? "Open in compose window" : "Expand composer"} disabled={imageUploading} onClick={() => { if (!docked) setDocked(true); else setExpanded(!expanded); setMinimized(false); }}/><MailIconButton icon="close" label="Save and close draft" disabled={action.busy || closing || imageUploading} onClick={() => { void close(); }}/></div>
     {!minimized && <div className="mail-compose-content">
     <MailState loading={!ready} error={initial.error || settings.error} retry={() => { initial.reload(); settings.reload(); }} />
     {ready && <MailForm className="mail-composer" onSubmit={(event) => { event.preventDefault(); void action.run(send); }}>
@@ -145,14 +137,14 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
         {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/></> : null}
         <MailInput label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />
-        <div className="mail-editor-toolbar"><Button variant="ghost" size="sm" onClick={() => { if (rich) { editorHtml.current = ""; setHtml(""); } setRich(!rich); mark(); }}>{rich ? "Plain text" : "Formatting"}</Button></div>
-        {rich ? <><div className="mail-format-actions" role="toolbar" aria-label="Message formatting">{([["bold", "Bold"], ["italic", "Italic"], ["underline", "Underline"], ["insertUnorderedList", "Bullet list"], ["removeFormat", "Clear format"]] as const).map(([command, label]) => <Button key={command} size="sm" variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)}>{label}</Button>)}</div><div ref={editor} className="mail-rich-editor mail-compose-body" contentEditable={!locked} role="textbox" aria-label="Message body" aria-multiline suppressContentEditableWarning onPaste={(event) => { event.preventDefault(); document.execCommand("insertText", false, event.clipboardData.getData("text/plain")); }} onInput={() => { if (editor.current) { setText(editor.current.innerText); editorHtml.current = editableHtml(editor.current.innerHTML); setHtml(editorHtml.current); mark(); } }} /></> : <MailField label="Message" className="mail-compose-body"><MailTextarea className="mail-compose-text" value={text} maxLength={2 * 1024 ** 2} onChange={(event) => { setText(event.target.value); mark(); }} /></MailField>}
-        <div className="mail-attachments">{files.map((file) => <div key={file.id}><span>{file.filename} <small>{bytes(file.size_bytes)}</small></span><Button variant="ghost" size="sm" aria-label={`Remove ${file.filename}`} onClick={() => { setFiles(files.filter((item) => item.id !== file.id)); mark(); }}>×</Button></div>)}</div>
+        <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
+        {draft?.body.quoted_body && <div className="mail-quote-section"><Button size="sm" variant="ghost" disabled={locked} aria-pressed={includeQuote} onClick={() => { setIncludeQuote(!includeQuote); mark(); }}>{includeQuote ? "Remove quoted message" : "Include quoted message"}</Button>{includeQuote && <details className="mail-quoted-body"><summary>Quoted message</summary>{draft.body.quoted_body.html ? <MailHtml message={draft} path={path} content={draft.body.quoted_body.html} /> : <pre>{draft.body.quoted_body.text}</pre>}</details>}</div>}
+        <div className="mail-attachments">{files.filter((file) => file.disposition !== "inline").map((file) => <div key={file.id}><span>{file.filename} <small>{bytes(file.size_bytes)}</small></span><Button variant="ghost" size="sm" aria-label={`Remove ${file.filename}`} onClick={() => { setFiles(files.filter((item) => item.id !== file.id)); mark(); }}>×</Button></div>)}</div>
         <MailField label="Attach files" hint={`Up to ${bytes(mail.capabilities?.limits.max_upload_bytes ?? 5 * 1024 ** 2)} per file.`}><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>
         {scheduleOpen && <div className="mail-schedule-panel"><div className="mail-schedule-presets">{[["Tomorrow",24],["Next week",168]].map(([label,hours]) => <Button key={label} size="sm" onClick={() => { const date=new Date(Date.now()+Number(hours)*3600000); setSchedule(new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16)); mark(); }}>{label}</Button>)}</div><MailInput label="Send at" hint="Uses your local timezone." type="datetime-local" value={schedule} onChange={(event) => { setSchedule(event.target.value); mark(); }}/>{schedule && <Button variant="ghost" size="sm" onClick={() => { setSchedule(""); mark(); }}>Remove schedule</Button>}</div>}
       </MailFieldset>
       <MailNotice error={action.error} />{unknown && <p className="mail-hint" role="status">The server response was lost. Retry the same request to check its outcome.</p>}
-      <div className="mail-compose-footer"><div className="mail-send-group"><Button variant="primary" type="submit" disabled={action.busy || !canSend || !sender || !!draft && draft.draft?.state !== "editable" && !pendingSend.current}>{pendingSend.current ? "Check send outcome" : schedule ? "Schedule send" : "Send"}<Icon name="arrow"/></Button><MailMenu icon="down" label="More send options"><Menu.Item disabled={locked || action.busy} onClick={() => setScheduleOpen(!scheduleOpen)}>Schedule send</Menu.Item></MailMenu></div><span className="mail-save-status" role="status">{autosaving ? "Saving…" : dirty ? "Unsaved changes" : draft ? "Draft saved" : ""}</span>{unknown && <Button className="mail-retry-save" size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await save(); }); }}>Retry save</Button>}<MailIconButton icon="trash" label="Discard draft" disabled={action.busy || draft?.draft?.state === "submitted"} onClick={() => setDeleteDraft(true)}/></div>
+      <div className="mail-compose-footer"><div className="mail-send-group"><Button variant="primary" type="submit" disabled={action.busy || imageUploading || !canSend || !sender || !!draft && draft.draft?.state !== "editable" && !pendingSend.current}>{pendingSend.current ? "Check send outcome" : schedule ? "Schedule send" : "Send"}<Icon name="arrow"/></Button><MailMenu icon="down" label="More send options"><Menu.Item disabled={locked || action.busy} onClick={() => setScheduleOpen(!scheduleOpen)}>Schedule send</Menu.Item></MailMenu></div><span className="mail-save-status" role="status">{autosaving ? "Saving…" : dirty ? "Unsaved changes" : draft ? "Draft saved" : ""}</span>{unknown && <Button className="mail-retry-save" size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await save(); }); }}>Retry save</Button>}<MailIconButton icon="trash" label="Discard draft" disabled={action.busy || imageUploading || draft?.draft?.state === "submitted"} onClick={() => setDeleteDraft(true)}/></div>
     </MailForm>}
     </div>}
     <Confirm open={deleteDraft} title="Discard this draft?" description="The draft and its attachments will be permanently removed." label="Discard draft" destructive onClose={() => setDeleteDraft(false)} onConfirm={async () => { if (draftRef.current) await api(`${path}/drafts/${draftRef.current.id}`,{method:"DELETE"}); mail.refresh(); onClose(); }}/>

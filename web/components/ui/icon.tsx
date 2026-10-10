@@ -1,6 +1,16 @@
 import type { SVGProps } from "react";
 
 const paths = {
+  undo: "M3 10h10a7 7 0 0 1 0 14 M3 10l5-5 M3 10l5 5",
+  redo: "M21 10H11a7 7 0 0 0 0 14 M21 10l-5-5 M21 10l-5 5",
+  align: "M4 5h16 M4 10h10 M4 15h16 M4 20h10",
+  bulletList: "M9 6h12 M9 12h12 M9 18h12 M3 6h.01 M3 12h.01 M3 18h.01",
+  numberedList: "M10 6h11 M10 12h11 M10 18h11 M3 4h1v5 M3 12c0-3 4-3 4 0l-4 5h4 M3 20h4",
+  quote: "M4 6h6v7H4z M14 6h6v7h-6z M10 13c0 4-2 5-5 5 M20 13c0 4-2 5-5 5",
+  link: "m10 13 4-4 M9 15l-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0 M15 9l2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0",
+  image: "M3 3h18v18H3z M7 8h.01 M3 18l6-6 4 4 3-3 5 5",
+  table: "M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v18 M15 3v18",
+  clearFormat: "M5 4h14 M12 4l-4 16 M3 20h10 M16 15l5 6 M21 15l-5 6",
   menu: "M4 6h16 M4 12h16 M4 18h16",
   refresh: "M20 8a8 8 0 1 0 0 8 M20 3v5h-5",
   back: "M19 12H5 m6-6-6 6 6 6",

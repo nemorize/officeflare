@@ -1,6 +1,7 @@
 import { incomingRoute } from "./routing";
 import { putStream } from "./objects";
 import { queueWebhooks } from "./jobs";
+import { attachEditorImages, composedBody, editorBody, inlineContentIds, textHtml } from "./editor";
 import PostalMime, { type Address as MimeAddress } from "postal-mime";
 import { all, authorize, first, resolveRecipient, sender } from "./control";
 import {
@@ -79,7 +80,11 @@ export async function getMessage(
   return {
     ...result,
     attachments: message.attachments.map(({ r2_key: _key, ...file }) => file),
-    body: { text: content.text, html: cleanHtml(content.html, cid), ...(message.draft && content.compose_state ? { compose_state: content.compose_state } : {}) },
+    body: { text: content.text, html: cleanHtml(content.html, cid), ...(message.draft ? {
+      ...(content.compose_state ? { compose_state: content.compose_state } : {}),
+      ...(content.editor_body ? { editor_body: { text: content.editor_body.text, html: cleanHtml(content.editor_body.html, cid) } } : {}),
+      ...(content.quoted_body ? { quoted_body: { text: content.quoted_body.text, html: cleanHtml(content.quoted_body.html, cid) }, include_quoted_body: content.include_quoted_body ?? true } : {}),
+    } : {}) },
   };
 }
 export async function belongs(
@@ -134,14 +139,12 @@ export async function createDraft(
   mailboxId: string,
   data: Record<string, unknown>,
   key: string,
+  quotedBody?: MailBody["quoted_body"],
 ) {
   await authorize(env, actor, mailboxId, "read");
   await authorize(env, actor, mailboxId, "write");
   const subject = text(data.subject ?? "", "subject", 998, true),
-    content: MailBody = {
-      text: text(data.text ?? "", "text", 2 * 1024 * 1024, true),
-      html: text(data.html ?? "", "html", 2 * 1024 * 1024, true),
-    };
+    content: MailBody = composedBody(editorBody(data.editor_body ?? { text: data.text ?? "", html: data.html ?? "" }), quotedBody);
   if (data.compose_state !== undefined) content.compose_state = composeState(data.compose_state);
   const to = recipients(data.to, "to"),
     cc = recipients(data.cc, "cc"),
@@ -173,22 +176,16 @@ export async function createDraft(
     data.include_signature === undefined
       ? true
       : !!flag(data.include_signature, "include_signature");
-  const signature = includeSignature
-    ? String((await mailbox(env, mailboxId).settings()).signature)
-    : "";
-  if (signature) {
-    content.text += "\n\n" + signature;
-    if (content.html)
-      content.html +=
-        "<p>" +
-        signature
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll("\n", "<br>") +
-        "</p>";
+  const settings = includeSignature ? await mailbox(env, mailboxId).settings() : null;
+  if (settings?.signature || settings?.signature_html) {
+    const editable = content.editor_body ?? { text: content.text, html: content.html };
+    const signature = String(settings.signature), signatureHtml = String(settings.signature_html ?? "");
+    Object.assign(content, composedBody({ text: editable.text + "\n\n" + signature, html: editable.html || signatureHtml ? (editable.html || textHtml(editable.text)) + (signatureHtml || textHtml(signature)) : "" }, quotedBody));
   }
-  const files: Attachment[] = [];
+  let files: Attachment[] = [];
+  const createdKeys: string[] = [];
+  let committed = false;
+  try {
   if (
     data.attachment_ids !== undefined &&
     (!Array.isArray(data.attachment_ids) || data.attachment_ids.length > 32)
@@ -207,6 +204,7 @@ export async function createDraft(
       fail(400, "Upload is missing or expired");
     const fileId = id(),
       r2Key = "attachments/" + mailboxId + "/" + resourceId + "/" + fileId;
+    createdKeys.push(r2Key);
     await env.MAIL_BUCKET.put(r2Key, upload.body, {
       httpMetadata: upload.httpMetadata,
     });
@@ -216,9 +214,9 @@ export async function createDraft(
       content_type:
         upload.httpMetadata?.contentType ?? "application/octet-stream",
       size_bytes: upload.size,
-      content_id: null,
+      content_id: upload.customMetadata?.content_id ?? null,
       r2_key: r2Key,
-      disposition: "attachment",
+      disposition: upload.customMetadata?.content_id ? "inline" : "attachment",
     });
   }
   let threadId = id(),
@@ -240,8 +238,10 @@ export async function createDraft(
       ...(original.rfc_message_id ? [original.rfc_message_id] : []),
     ].slice(-100);
   }
-  content.html = cleanHtml(content.html);
+  content.html = cleanHtml(content.html, {}, true);
+  files = await attachEditorImages(env, mailboxId, resourceId, content.html, files, createdKeys);
   const keyBody = bodyKey(mailboxId, resourceId, requestHash);
+  createdKeys.push(keyBody);
   await env.MAIL_BUCKET.put(keyBody, JSON.stringify(content), {
     httpMetadata: { contentType: "application/json" },
   });
@@ -274,9 +274,14 @@ export async function createDraft(
     operation,
     requestHash,
   );
+  committed = true;
   await mailbox(env, mailboxId).completeAllocation(operation);
   await flushOutbox(env, mailboxId, partitionId);
   return getMessage(env, actor, mailboxId, resourceId);
+  } catch (error) {
+    if (!committed) await Promise.allSettled(createdKeys.map((key) => env.MAIL_BUCKET.delete(key)));
+    throw error;
+  }
 }
 export async function submitDraft(
   env: Env,
@@ -355,10 +360,11 @@ export async function submitDraft(
     bcc = select("bcc");
   if (!to.length && !cc.length && !bcc.length)
     fail(400, "At least one recipient is required");
+  const referencedImages = inlineContentIds(content.html), attachments = message.attachments.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id));
   // Base64 expansion, multipart headers and JSON bodies all consume provider message budget.
   const size =
     new TextEncoder().encode(content.text + content.html).length +
-    message.attachments.reduce(
+    attachments.reduce(
       (n, f) => n + Math.ceil(f.size_bytes / 3) * 4 + 1024,
       0,
     ) +
@@ -381,7 +387,7 @@ export async function submitDraft(
     subject: message.subject,
     ...content,
     headers,
-    attachments: message.attachments,
+    attachments,
   };
   if (mode === "send_on_behalf") {
     const user = await first<{ email_address: string }>(

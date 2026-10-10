@@ -61,6 +61,9 @@ export interface Attachment {
 export interface ComposeState { to: string; cc: string; bcc: string; address_id?: string; send_mode?: string; schedule?: string; }
 export interface MailBody {
   compose_state?: ComposeState;
+  editor_body?: { text: string; html: string };
+  quoted_body?: { text: string; html: string };
+  include_quoted_body?: boolean;
   text: string;
   html: string;
 }

@@ -1,6 +1,7 @@
 import { putStream } from "./objects";
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
+import { inlineContentIds, imageAssetKey } from "./editor";
 import { hash, text } from "./input";
 import { ingest, readBody, flushOutbox } from "./service";
 import {
@@ -270,7 +271,7 @@ export async function renderMime(
   env: Env,
   message: MessageRow & {
     recipients: { kind: string; email_address: string }[];
-    attachments: { filename: string; content_type: string; r2_key: string }[];
+    attachments: { filename: string; content_type: string; r2_key: string; content_id?: string | null; disposition?: string }[];
   },
   body: { text: string; html: string },
 ) {
@@ -337,9 +338,10 @@ export async function renderMime(
     lines.push(
       "--" + boundary,
       "Content-Type: " + header(file.content_type),
-      'Content-Disposition: attachment; filename="' +
+      'Content-Disposition: ' + (file.disposition === 'inline' ? 'inline' : 'attachment') + '; filename="' +
         header(file.filename).replaceAll('"', "'") +
         '"',
+      ...(file.content_id ? ["Content-ID: <" + header(file.content_id) + ">"] : []),
       "Content-Transfer-Encoding: base64",
       "",
       btoa(binary).replace(/.{76}/g, "$&\r\n"),
@@ -464,6 +466,7 @@ async function restorePage(
     settings: Record<string, string | number | null>;
     rules: Rule[];
     blocked_senders: { email_address: string }[];
+    signature_images?: { id: string; key: string }[];
   }>();
   if (manifest.format !== "officeflare-mail-v1")
     fail(400, "Unsupported backup format");
@@ -488,8 +491,15 @@ async function restorePage(
         auto_reply_subject,
         auto_reply_text,
       } = manifest.settings;
+      for (const image of manifest.signature_images ?? []) {
+        if (!/^[a-f0-9-]{36}$/.test(image.id) || image.key !== `signature-${image.id}.image`) fail(400, "Invalid signature image in backup");
+        const object = await env.MAIL_BUCKET.get(job.source_r2_key! + image.key);
+        if (!object) fail(503, "Backup signature image unavailable");
+        await env.MAIL_BUCKET.put(imageAssetKey(mailboxId, image.id), object.body, { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata });
+      }
       await coordinator.updateSettings({
         signature: signature!,
+        signature_html: manifest.settings.signature_html ?? "",
         retention_days: retention_days!,
         auto_reply_enabled: auto_reply_enabled!,
         auto_reply_subject: auto_reply_subject!,
@@ -646,7 +656,17 @@ async function backupManifest(
   prefix: string,
   count: number,
 ) {
-  const coordinator = mailbox(env, mailboxId);
+  const coordinator = mailbox(env, mailboxId), settings = await coordinator.settings();
+  const signatureImages: { id: string; key: string }[] = [];
+  for (const cid of inlineContentIds(String(settings.signature_html ?? ""))) {
+    const imageId = /^([a-f0-9-]{36})@officeflare\.image$/.exec(cid)?.[1];
+    if (!imageId) continue;
+    const object = await env.MAIL_BUCKET.get(imageAssetKey(mailboxId, imageId));
+    if (!object) fail(503, "Signature image unavailable during backup");
+    const key = `signature-${imageId}.image`;
+    await env.MAIL_BUCKET.put(prefix + key, object.body, { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata });
+    signatureImages.push({ id: imageId, key });
+  }
   await env.MAIL_BUCKET.put(
     prefix + "manifest.json",
     JSON.stringify({
@@ -655,7 +675,8 @@ async function backupManifest(
       consistency: "per-message",
       created_at: epoch(),
       message_count: count,
-      settings: await coordinator.settings(),
+      settings,
+      signature_images: signatureImages,
       folders: await coordinator.folders(),
       rules: await coordinator.rules(),
       blocked_senders: await coordinator.blockedSenders(),

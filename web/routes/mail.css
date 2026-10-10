@@ -373,17 +373,9 @@
 .mail-composer fieldset > .mail-field:has(input) { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 8px; border-bottom: 1px solid var(--ui-border); padding: 0; min-height: 44px; flex-shrink: 0; }
 .mail-composer fieldset > .mail-field:has(input) [data-ui="field-label"] { font-size: 12px; font-weight: 400; color: var(--ui-muted); }
 .mail-composer fieldset > .mail-field:has(input) input { border: 0; height: 36px; padding: 0; border-radius: 0; box-shadow: none; font-size: 12px; }
-.mail-editor-toolbar { display: flex; flex-shrink: 0; padding: 4px 0; }
-.mail-editor-toolbar button { color: var(--ui-muted); }
 .mail-compose-body { flex: 1 0 200px; min-height: 200px; }
 .mail-field.mail-compose-body { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; }
 .mail-compose-body [data-ui="field-label"] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.mail-composer textarea.mail-compose-text { flex: 1; min-height: 200px; height: auto; width: 100%; border: 0; padding: 12px 0; border-radius: 0; resize: none; box-shadow: none; font-size: 13px; line-height: 1.8; }
-.mail-rich-editor { overflow: auto; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
-.mail-composer .mail-rich-editor { border: 0; padding: 12px 0; border-radius: 0; }
-.mail-rich-editor blockquote { border-left: 2px solid var(--ui-border); padding-left: 16px; color: var(--ui-muted); }
-.mail-rich-editor:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
-.mail-format-actions { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; padding: 4px 0; }
 .mail-composer .mail-attachments { margin-top: 8px; flex-shrink: 0; }
 .mail-composer .mail-attachments:empty { display: none; }
 .mail-composer fieldset > .mail-field:has(.mail-file-input) { padding: 8px 0 12px; display: flex; gap: 4px; align-items: flex-start; border: 0; flex-shrink: 0; }
@@ -482,8 +474,6 @@
   .mail-recipient-controls .mail-recipient-chip > button:last-child { width: 44px; height: 44px; min-height: 44px; }
   .mail-recipient-chip > button:first-child { max-width: calc(100% - 44px); }
   .mail-composer .mail-add-recipients[data-ui-button],
-  .mail-editor-toolbar [data-ui-button][data-size="sm"],
-  .mail-format-actions [data-ui-button][data-size="sm"],
   .mail-schedule-presets [data-ui-button][data-size="sm"],
   .mail-file-input > [data-ui-button] { min-height: 44px; }
   .mail-composer fieldset > .mail-field:has(input) input { height: 44px; }

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import schema from "./mailbox.sql";
 import removeContacts from "./mailbox-v2.sql";
 import removeTemplates from "./mailbox-v3.sql";
+import htmlSignatures from "./mailbox-v4.sql";
 import { migrate } from "./migrations";
 import { authorize } from "./control";
 import { hash } from "./input";
@@ -40,7 +41,7 @@ export class MailboxDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, removeContacts, removeTemplates]);
+      migrate(ctx.storage, [schema, removeContacts, removeTemplates, htmlSignatures]);
     });
   }
   async initialize(mailboxId: string) {
@@ -314,6 +315,7 @@ export class MailboxDO extends DurableObject<Env> {
   updateSettings(data: Record<string, string | number | null>) {
     const allowed = [
       "signature",
+      "signature_html",
       "retention_days",
       "auto_reply_enabled",
       "auto_reply_subject",
