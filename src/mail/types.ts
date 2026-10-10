@@ -58,7 +58,7 @@ export interface Attachment {
   r2_key: string;
   disposition: "inline" | "attachment";
 }
-export interface ComposeState { to: string; cc: string; bcc: string; address_id?: string; send_mode?: string; schedule?: string; }
+export interface ComposeState { to: string; cc: string; bcc: string; reply_to?: string; address_id?: string; send_mode?: string; schedule?: string; }
 export interface MailBody {
   compose_state?: ComposeState;
   editor_body?: { text: string; html: string };

@@ -32,7 +32,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
   const enabled = permissions.includes("mail.access") && (location.pathname === "/mail" || location.pathname.startsWith("/mail/") || !!composer);
   const boxes = useMailResource<{ mailboxes: Mailbox[] }>(enabled ? "/api/mail/mailboxes" : null);
   const caps = useMailResource<Capabilities>(enabled ? "/api/mail/capabilities" : null);
-  const requested = params.get("mailbox"), boxesList = boxes.data?.mailboxes ?? [], box = boxesList.find((entry) => entry.id === requested) ?? (!requested ? boxesList.find((entry) => entry.kind === "personal" && entry.owner_user_id === user?.id) ?? boxesList[0] : null) ?? null;
+  const requested = params.get("mailbox"), boxesList = boxes.data?.mailboxes ?? [], box = boxesList.find((entry) => entry.id === requested) ?? (boxesList.length === 1 ? boxesList[0] : !requested ? boxesList.find((entry) => entry.kind === "personal" && entry.owner_user_id === user?.id) ?? boxesList[0] : null) ?? null;
   const prefs = useMailResource<{ preferences: MailPreferences }>(enabled ? "/api/mail/preferences" : null);
   useEffect(() => { if (prefs.data) setPreferencesState(prefs.data.preferences); },[prefs.data]);
   const setPreferences = async (changes: Partial<MailPreferences>) => {
@@ -95,9 +95,9 @@ export function MailSidebar() {
   const nav = (items: readonly (readonly [string,string,import("./ui").IconProps["name"]])[]) => items.map(([path,name,icon]) => <NavLink end key={path} to={mail.href(path)} onClick={() => mail.setMobileMenu(false)}><Icon name={icon}/><span>{name}</span>{!!count(path) && <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>{count(path)}</small>}</NavLink>);
   return <div className="mail-sidebar-content">
     <div className="mail-sidebar-actions">
-      <MailField className="mail-box-picker" label="Mailbox">
-        {mail.boxes.length > 1 ? <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/> : <div className="mail-single-box"><Icon name="mail"/><span title={mail.box?.name}>{mail.box?.name ?? "Your mailbox"}</span></div>}
-      </MailField>
+      {mail.boxes.length > 1 && <MailField className="mail-box-picker" label="Mailbox">
+        <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/>
+      </MailField>}
       <Button className="mail-compose-button" variant="primary" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); mail.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
     </div>
     <nav className="workspace-nav" aria-label="Mail navigation">

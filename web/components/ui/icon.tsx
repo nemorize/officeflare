@@ -22,6 +22,7 @@ const paths = {
   more: "M5 12h.01 M12 12h.01 M19 12h.01",
   attachment: "m8 16 8-8a3 3 0 0 1 4 4L10 22a5 5 0 0 1-7-7L14 4a2 2 0 0 1 3 3L6 18",
   expand: "M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5",
+  shrink: "M3 8h5V3 M16 3v5h5 M3 16h5v5 M16 21v-5h5",
   minimize: "M5 12h14",
   sidebar: "M3 4h18v16H3z M9 4v16",
 

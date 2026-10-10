@@ -1374,6 +1374,69 @@ test("shared mailbox address and membership save atomically with safe retries an
 
 });
 
+test("draft Reply-To addresses survive editing and reach outgoing mail", async (t) => {
+  const { call, base, draft, mf, address, tokens } = await fixture(t, "6000000000", true);
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const state = { to: "recipient@example.test", cc: "", bcc: "", reply_to: "Support@Example.test", address_id: address.id, schedule: "" };
+  const message = await draft({ subject: "Custom Reply-To", reply_to: " Support@Example.test ", compose_state: state });
+  assert.equal(message.reply_to_address, "support@example.test");
+  assert.deepEqual(message.body.compose_state, state);
+  const preserved = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 1, text: "Updated body" } })).message;
+  assert.equal(preserved.reply_to_address, "support@example.test");
+  assert.deepEqual(preserved.body.compose_state, state);
+  const updated = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: preserved.draft.version, reply_to: "replies@example.test", compose_state: { ...state, reply_to: "replies@example.test" } } })).message;
+  assert.equal(updated.reply_to_address, "replies@example.test");
+  const reopened = (await call(base + "/drafts/" + message.id)).message;
+  assert.equal(reopened.reply_to_address, "replies@example.test");
+  const send = async (value, mode = "send_as", token = tokens.owner) => {
+    const submission = (await call(base + "/drafts/" + value.id + "/submissions", { method: "POST", token, data: { version: value.draft.version, address_id: address.id, send_mode: mode }, expected: 202 })).submission;
+    await eventually(() => call(base + "/submissions/" + submission.id, { token }), (result) => result.submission.status === "accepted", "Reply-To mail was not accepted");
+    const deliveries = await Promise.all((await bucket.list({ prefix: "test-sent/" })).objects.map(async (object) => (await bucket.get(object.key)).json()));
+    return deliveries.find((delivery) => delivery.subject === value.subject);
+  };
+  const sent = await send(reopened);
+  assert.equal(sent.replyTo, "replies@example.test");
+  assert.equal(sent.from, "owner@mail.test");
+  const reply = (await call(base + "/messages/" + message.id + "/reply", { method: "POST", data: {}, expected: 201 })).message;
+  assert.equal(reply.recipients.find((entry) => entry.kind === "to").email_address, "recipient@example.test");
+  const harness = await mf.getWorker("mail-harness");
+  const incoming = await harness.fetch("https://test/email", { method: "POST", body: ["From: Sender <sender@example.test>", "To: owner@mail.test", "Reply-To: replies@example.test", "Subject: Incoming custom Reply-To", "Content-Type: text/plain; charset=utf-8", "", "Reply here"].join("\r\n") });
+  assert.equal((await incoming.json()).rejected, null);
+  const inbox = await eventually(() => call(base + "/messages?folder_id=inbox"), (page) => page.messages.length === 1, "Reply-To inbound mail missing");
+  const receivedReply = (await call(base + "/messages/" + inbox.messages[0].id + "/reply", { method: "POST", data: {}, expected: 201 })).message;
+  assert.equal(receivedReply.recipients.find((entry) => entry.kind === "to").email_address, "replies@example.test");
+
+  const cleared = await draft({ subject: "Cleared Reply-To", reply_to: "old@example.test" });
+  const empty = (await call(base + "/drafts/" + cleared.id, { method: "PATCH", data: { version: 1, reply_to: null } })).message;
+  assert.equal(empty.reply_to_address, null);
+  assert.equal((await send(empty)).replyTo, undefined);
+  const whitespace = await draft({ reply_to: " " });
+  assert.equal(whitespace.reply_to_address, null);
+  const incomplete = await draft({ compose_state: { ...state, reply_to: "unfinished@" } });
+  assert.equal(incomplete.body.compose_state.reply_to, "unfinished@");
+  assert.equal(incomplete.reply_to_address, null);
+  for (const reply_to of ["unfinished@", "one@example.test,two@example.test", "safe@example.test\r\nBcc: attacker@example.test", "x".repeat(255), false]) {
+    await call(base + "/drafts", { method: "POST", data: { reply_to }, expected: 400 });
+    await call(base + "/drafts/" + whitespace.id, { method: "PATCH", data: { version: whitespace.draft.version, reply_to }, expected: 400 });
+  }
+  const headers = { "Idempotency-Key": "draft-reply-to" };
+  await draft({ reply_to: "first@example.test" }, headers);
+  await call(base + "/drafts", { method: "POST", headers, data: { subject: "A mail test", text: "Hello searchable mail", to: ["recipient@example.test"], reply_to: "second@example.test" }, expected: 409 });
+
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true, send_on_behalf: true } });
+  const delegated = (await call(base + "/drafts", { method: "POST", token: tokens.reader, data: { subject: "Default reply address", to: ["recipient@example.test"] }, expected: 201 })).message;
+  await call(base + "/drafts/" + delegated.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: address.id, send_mode: "send_as" }, expected: 403 });
+  const delegatedSent = await send(delegated, "send_on_behalf", tokens.reader);
+  assert.equal(delegatedSent.replyTo, undefined);
+  assert.equal(delegatedSent.headers["X-Officeflare-Sent-On-Behalf-Of"], "reader");
+
+  const exported = (await call(base + "/exports", { method: "POST", expected: 202 })).job;
+  await eventually(() => call(base + "/jobs/" + exported.id), (result) => result.job.status === "completed", "Reply-To export did not finish");
+  const exportObjects = await bucket.list({ prefix: `data-jobs/${base.split("/").at(-1)}/${exported.id}/` });
+  const exportedText = (await Promise.all(exportObjects.objects.filter((file) => file.key.endsWith(".mbox")).map(async (file) => (await bucket.get(file.key)).text()))).join("");
+  assert.match(exportedText, /Reply-To: replies@example\.test/);
+});
+
 test("mail experience preferences, draft recovery and conversation paging", async (t) => {
   const { call, base, draft, mf, tokens, address } = await fixture(t, "250000", true);
   await t.test("personal preferences merge fields and remain scoped to the signed-in user", async () => {

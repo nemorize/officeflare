@@ -5,7 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { bytes, mailboxPath, MailOperation, parseRecipients, scheduledTime, submissionLabel, type Address, type Attachment, type MailSettings, type MessageDetail, type Submission } from "../lib/mail";
 import { useMail } from "./mail-context";
 import { MailField, MailInput, MailNotice, MailState, useMailAction, useMailResource, MailForm, MailFieldset, MailSelect, MailFileInput } from "./mail-common";
-import { Button, Icon } from "./ui";
+import { Button, Icon, Tooltip, TooltipPopup } from "./ui";
 import { MailIconButton, MailMenu } from "./mail-controls";
 import { RecipientField } from "./mail-recipients";
 import { Menu } from "./ui";
@@ -18,7 +18,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const initial = useMailResource<{ message: MessageDetail }>(draftId ? `${path}/drafts/${draftId}` : null);
   const addresses = useMailResource<{ addresses: Address[] }>(path + "/addresses"), settings = useMailResource<{ settings: MailSettings }>(path + "/settings");
   const [draft, setDraft] = useState<MessageDetail | null>(null), [ready, setReady] = useState(false), [to, setTo] = useState(""), [cc, setCc] = useState(""), [bcc, setBcc] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [html, setHtml] = useState("");
-  const [files, setFiles] = useState<(Attachment & { upload?: boolean })[]>([]), [sender, setSender] = useState(""), [mode, setMode] = useState("send_as"), [schedule, setSchedule] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false), [includeCc, setIncludeCc] = useState(false), [unknown, setUnknown] = useState(false);
+  const [files, setFiles] = useState<(Attachment & { upload?: boolean })[]>([]), [sender, setSender] = useState(""), [replyTo, setReplyTo] = useState(""), [schedule, setSchedule] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false), [includeCc, setIncludeCc] = useState(false), [unknown, setUnknown] = useState(false);
   const [minimized,setMinimized] = useState(false), [expanded,setExpanded] = useState(false), [docked,setDocked] = useState(!inline), [autosaving,setAutosaving] = useState(false), [closing,setClosing] = useState(false), [deleteDraft,setDeleteDraft] = useState(false), [scheduleOpen,setScheduleOpen] = useState(false), [inlineHost,setInlineHost] = useState<HTMLElement | null>(null);
   const [includeQuote, setIncludeQuote] = useState(true), [imageUploading, setImageUploading] = useState(false);
   const generation = useRef(0), draftRef = useRef<MessageDetail | null>(null);
@@ -26,18 +26,18 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null);
   const pendingEdit = useRef<{ version: number; payload: object; matches: (message: MessageDetail) => boolean } | null>(null);
   const rights = mail.boxes.find((box) => box.id === mailboxId)?.access, canSend = rights?.send_as || rights?.send_on_behalf;
+  const mode = rights?.send_as ? "send_as" : "send_on_behalf";
   useEffect(() => {
     if (ready || (draftId ? !initial.data : !settings.data)) return;
     const message = initial.data?.message;
-    if (message) { setDraft(message); setTo(message.recipients.filter((r) => r.kind === "to").map((r) => r.email_address).join(", ")); setCc(message.recipients.filter((r) => r.kind === "cc").map((r) => r.email_address).join(", ")); setBcc(message.recipients.filter((r) => r.kind === "bcc").map((r) => r.email_address).join(", ")); setIncludeCc(message.recipients.some((r) => r.kind !== "to")); setSubject(message.subject); const editable = message.body.editor_body ?? message.body; setText(editable.text); setHtml(editable.html || plainMailHtml(editable.text)); setIncludeQuote(message.body.include_quoted_body !== false); setFiles(message.attachments); }
+    if (message) { setDraft(message); setTo(message.recipients.filter((r) => r.kind === "to").map((r) => r.email_address).join(", ")); setCc(message.recipients.filter((r) => r.kind === "cc").map((r) => r.email_address).join(", ")); setBcc(message.recipients.filter((r) => r.kind === "bcc").map((r) => r.email_address).join(", ")); setReplyTo(message.reply_to_address ?? ""); setIncludeCc(message.recipients.some((r) => r.kind !== "to") || !!message.reply_to_address); setSubject(message.subject); const editable = message.body.editor_body ?? message.body; setText(editable.text); setHtml(editable.html || plainMailHtml(editable.text)); setIncludeQuote(message.body.include_quoted_body !== false); setFiles(message.attachments); }
     else { const signature = settings.data!.settings; setText(signature.signature ? `\n\n${signature.signature}` : ""); setHtml(signature.signature_html || signature.signature ? "<p></p>" + (signature.signature_html || plainMailHtml(signature.signature)) : ""); }
     const stored = message?.body.compose_state;
-    if (stored) { setTo(stored.to); setCc(stored.cc); setBcc(stored.bcc); setIncludeCc(!!stored.cc || !!stored.bcc); if (stored.address_id) setSender(stored.address_id); if (stored.send_mode) setMode(stored.send_mode); if (stored.schedule) setSchedule(stored.schedule); }
+    if (stored) { setTo(stored.to); setCc(stored.cc); setBcc(stored.bcc); setIncludeCc(!!stored.cc || !!stored.bcc || !!(stored.reply_to ?? message?.reply_to_address)); if (stored.reply_to !== undefined) setReplyTo(stored.reply_to); if (stored.address_id) setSender(stored.address_id); if (stored.schedule) setSchedule(stored.schedule); }
     draftRef.current = message ?? null;
     setReady(true);
   }, [draftId, initial.data, settings.data, ready]);
   useEffect(() => { const primary = addresses.data?.addresses.find((address) => address.send_enabled && address.is_primary) ?? addresses.data?.addresses.find((address) => address.send_enabled); if (!sender && primary) setSender(primary.id); }, [addresses.data, sender]);
-  useEffect(() => { if (!rights?.send_as && rights?.send_on_behalf) setMode("send_on_behalf"); }, [rights?.send_as, rights?.send_on_behalf]);
   useEffect(() => { if (!dirty && !unknown) return; const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent); }, [dirty, unknown]);
   useEffect(() => { const host = document.getElementById("mail-reply-host"); setInlineHost(host); if (inline && !host) setDocked(true); },[inline,docked,location.pathname,location.search]);
   useEffect(() => { const focus = () => { setMinimized(false); }; window.addEventListener("officeflare:focus-composer",focus); return () => window.removeEventListener("officeflare:focus-composer",focus); },[]);
@@ -48,7 +48,15 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     const valid = (value: string) => strict ? parseRecipients(value) : value.split(/[,;\n]+/).flatMap((token) => { try { return parseRecipients(token); } catch { return []; } });
     const recipients = { to: valid(to), cc: valid(cc), bcc: valid(bcc) };
     if (Object.values(recipients).flat().length > 50) throw new Error("A message can have at most 50 recipients.");
-    return { subject, editor_body: { text, html: storedEditorHtml(html, mailboxId, files) }, include_quoted_body: includeQuote, compose_state: { to,cc,bcc,address_id:sender,send_mode:mode,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
+    let replyToAddress: string | null = null;
+    if (replyTo.trim()) {
+      try {
+        const addresses = parseRecipients(replyTo);
+        if (addresses.length !== 1 || /[,;\r\n]/.test(replyTo)) throw new Error();
+        replyToAddress = addresses[0]!;
+      } catch { if (strict) throw new Error("Enter a single valid Reply-To email address."); }
+    }
+    return { subject, reply_to: replyToAddress, editor_body: { text, html: storedEditorHtml(html, mailboxId, files) }, include_quoted_body: includeQuote, compose_state: { to,cc,bcc,reply_to:replyTo,address_id:sender,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
   };
   async function save(): Promise<MessageDetail> {
     if (!ready) throw new Error("Wait for the draft to finish loading.");
@@ -66,7 +74,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         const expectedFiles = files.filter((file) => file.disposition !== "inline").map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort();
         const recipientKey = (entries: { kind: string; email_address: string }[]) => entries.map((entry) => `${entry.kind}:${entry.email_address}`).sort().join("\n");
         const expectedRecipients = recipientKey((["to", "cc", "bcc"] as const).flatMap((kind) => data[kind].map((email_address) => ({ kind, email_address }))));
-        pendingEdit.current = { version: draft.draft.version, payload: { ...data, version: draft.draft.version, retained_attachment_ids: files.filter((file) => !file.upload).map((file) => file.id) }, matches: (latest) => latest.subject === data.subject && (latest.body.editor_body ?? latest.body).text === data.editor_body.text && normalizedEditorHtml((latest.body.editor_body ?? latest.body).html, mailboxId, latest.attachments) === normalizedEditorHtml(data.editor_body.html, mailboxId, files) && (latest.body.include_quoted_body !== false) === data.include_quoted_body && JSON.stringify(latest.body.compose_state) === JSON.stringify(data.compose_state) && recipientKey(latest.recipients) === expectedRecipients && JSON.stringify(latest.attachments.filter((file) => file.disposition !== "inline").map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort()) === JSON.stringify(expectedFiles) };
+        pendingEdit.current = { version: draft.draft.version, payload: { ...data, version: draft.draft.version, retained_attachment_ids: files.filter((file) => !file.upload).map((file) => file.id) }, matches: (latest) => latest.subject === data.subject && latest.reply_to_address === data.reply_to && (latest.body.editor_body ?? latest.body).text === data.editor_body.text && normalizedEditorHtml((latest.body.editor_body ?? latest.body).html, mailboxId, latest.attachments) === normalizedEditorHtml(data.editor_body.html, mailboxId, files) && (latest.body.include_quoted_body !== false) === data.include_quoted_body && JSON.stringify(latest.body.compose_state) === JSON.stringify(data.compose_state) && recipientKey(latest.recipients) === expectedRecipients && JSON.stringify(latest.attachments.filter((file) => file.disposition !== "inline").map((file) => `${file.filename}:${file.size_bytes}:${file.content_type}`).sort()) === JSON.stringify(expectedFiles) };
         result = await patchDraft(draft.id);
       }
       pendingEdit.current = null;
@@ -114,7 +122,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
       setFiles((old) => [...old, { ...result.upload, upload: true }]); mark();
     }
   }
-  useEffect(() => { if (!ready || !dirty || unknown || action.busy || closing || draft?.draft?.state === "submitted") return; const timer=setTimeout(() => { setAutosaving(true); void action.run(async () => { await save(); }).finally(() => setAutosaving(false)); },1500); return () => clearTimeout(timer); },[ready,dirty,unknown,action.busy,closing,to,cc,bcc,subject,text,html,files,sender,mode,schedule,includeQuote]);
+  useEffect(() => { if (!ready || !dirty || unknown || action.busy || closing || draft?.draft?.state === "submitted") return; const timer=setTimeout(() => { setAutosaving(true); void action.run(async () => { await save(); }).finally(() => setAutosaving(false)); },1500); return () => clearTimeout(timer); },[ready,dirty,unknown,action.busy,closing,to,cc,bcc,replyTo,subject,text,html,files,sender,schedule,includeQuote]);
   useEffect(() => { const key=(event:KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !action.busy) { event.preventDefault(); void action.run(send); } }; window.addEventListener("keydown",key); return () => window.removeEventListener("keydown",key); });
   useEffect(() => {
     if (!ready || minimized) return;
@@ -125,17 +133,27 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     } else if (!draftId) surface.current?.querySelector<HTMLInputElement>('input[inputmode="email"]')?.focus({preventScroll:true});
   },[ready,docked,inlineHost,minimized]);
   const locked = closing || (action.busy && !autosaving) || unknown || !!draft && draft.draft?.state !== "editable";
-  const content = <section ref={surface} className={`${!docked && inlineHost ? "mail-compose-inline" : "mail-compose-window"}${minimized ? " is-minimized" : ""}${expanded ? " is-expanded" : ""}`} aria-label="Compose message">
-    <div className="mail-compose-titlebar"><Button variant="ghost" className="mail-compose-title" disabled={imageUploading} onClick={() => setMinimized(!minimized)}>{!docked ? "Reply" : draftId ? "Edit draft" : "New message"}</Button><span>{mail.boxes.find((box) => box.id === mailboxId)?.name}</span><MailIconButton icon="minimize" label={minimized ? "Restore composer" : "Minimize composer"} disabled={imageUploading} onClick={() => setMinimized(!minimized)}/><MailIconButton icon={expanded ? "minimize" : "expand"} label={expanded ? "Exit full screen" : !docked ? "Open in compose window" : "Expand composer"} disabled={imageUploading} onClick={() => { if (!docked) setDocked(true); else setExpanded(!expanded); setMinimized(false); }}/><MailIconButton icon="close" label="Save and close draft" disabled={action.busy || closing || imageUploading} onClick={() => { void close(); }}/></div>
+  const fullSize = expanded && !minimized;
+  const collapseLabel = minimized ? "Restore composer" : "Minimize composer";
+  const content = <section ref={surface} className={`${!docked && inlineHost ? "mail-compose-inline" : "mail-compose-window"}${minimized ? " is-minimized" : ""}${fullSize ? " is-expanded" : ""}`} aria-label="Compose message">
+    <div className="mail-compose-titlebar">
+      <Tooltip.Root>
+        <Tooltip.Trigger render={<Button variant="ghost" className="mail-compose-title" aria-label={collapseLabel} aria-expanded={!minimized} disabled={imageUploading} onClick={() => setMinimized(!minimized)} />}>
+          <Icon name="down" className="mail-compose-chevron"/><span>{!docked ? "Reply" : draftId ? "Edit draft" : "New message"}</span>
+        </Tooltip.Trigger>
+        <TooltipPopup>{collapseLabel}</TooltipPopup>
+      </Tooltip.Root>
+      <span>{mail.boxes.find((box) => box.id === mailboxId)?.name}</span>
+      <MailIconButton icon={fullSize ? "shrink" : "expand"} label={fullSize ? "Restore default size" : !docked ? "Open in compose window" : "Expand composer"} disabled={imageUploading} onClick={() => { if (!docked) setDocked(true); else setExpanded(!fullSize); setMinimized(false); }}/>
+      <MailIconButton icon="close" label="Save and close draft" disabled={action.busy || closing || imageUploading} onClick={() => { void close(); }}/>
+    </div>
     {!minimized && <div className="mail-compose-content">
     <MailState loading={!ready} error={initial.error || settings.error} retry={() => { initial.reload(); settings.reload(); }} />
     {ready && <MailForm className="mail-composer" onSubmit={(event) => { event.preventDefault(); void action.run(send); }}>
       <MailFieldset disabled={locked}>
-        <div className="mail-compose-sender"><MailField label="From"><MailSelect value={sender} onValueChange={(nextValue) => { setSender(nextValue); mark(); }} options={[{ value: "", label: "Select sending address" }, ...(addresses.data?.addresses.filter((address) => address.send_enabled).map((address) => ({ value: address.id, label: address.email_address })) || [])]} /></MailField>
-          {rights?.send_as && rights?.send_on_behalf && <MailField label="Send mode"><MailSelect value={mode} onValueChange={(nextValue) => { setMode(nextValue); mark(); }} options={[{ value: "send_as", label: "Send as mailbox" }, { value: "send_on_behalf", label: "Send on behalf of mailbox" }]} /></MailField>}
-        </div><MailNotice error={addresses.error} />{addresses.data && !addresses.data.addresses.some((address) => address.send_enabled) && <p className="mail-hint">No sending address is configured. You can save this message as a draft.</p>}
+        {mail.boxes.length > 1 && <div className="mail-compose-sender"><MailField label="From"><MailSelect value={sender} onValueChange={(nextValue) => { setSender(nextValue); mark(); }} options={[{ value: "", label: "Select sending address" }, ...(addresses.data?.addresses.filter((address) => address.send_enabled).map((address) => ({ value: address.id, label: address.email_address })) || [])]} /></MailField></div>}<MailNotice error={addresses.error} />{addresses.data && !addresses.data.addresses.some((address) => address.send_enabled) && <p className="mail-hint">No sending address is configured. You can save this message as a draft.</p>}
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
-        {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/></> : null}
+        {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/><MailInput label="Reply-To" type="email" inputMode="email" autoComplete="off" maxLength={254} placeholder="Same as From" value={replyTo} onChange={(event) => { setReplyTo(event.target.value); mark(); }} /></> : null}
         <MailInput label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />
         <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
         {draft?.body.quoted_body && <div className="mail-quote-section"><Button size="sm" variant="ghost" disabled={locked} aria-pressed={includeQuote} onClick={() => { setIncludeQuote(!includeQuote); mark(); }}>{includeQuote ? "Remove quoted message" : "Include quoted message"}</Button>{includeQuote && <details className="mail-quoted-body"><summary>Quoted message</summary>{draft.body.quoted_body.html ? <MailHtml message={draft} path={path} content={draft.body.quoted_body.html} /> : <pre>{draft.body.quoted_body.text}</pre>}</details>}</div>}

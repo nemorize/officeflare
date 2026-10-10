@@ -29,6 +29,7 @@ import {
   jsonBody,
   localPart,
   recipients,
+  replyToAddress,
   strictId,
   text,
 } from "../mail/input";
@@ -1220,6 +1221,7 @@ mail.post("/mailboxes/:m/drafts", async (c) => {
     "to",
     "cc",
     "bcc",
+    "reply_to",
     "attachment_ids",
     "reply_to_message_id",
     "include_signature",
@@ -1248,6 +1250,7 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
       "to",
       "cc",
       "bcc",
+      "reply_to",
       "attachment_ids",
       "retained_attachment_ids",
       "compose_state",
@@ -1269,7 +1272,8 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
         .map((r) => r.email_address),
     to = data.to === undefined ? select("to") : recipients(data.to, "to"),
     cc = data.cc === undefined ? select("cc") : recipients(data.cc, "cc"),
-    bcc = data.bcc === undefined ? select("bcc") : recipients(data.bcc, "bcc");
+    bcc = data.bcc === undefined ? select("bcc") : recipients(data.bcc, "bcc"),
+    replyTo = data.reply_to === undefined ? current.reply_to_address : replyToAddress(data.reply_to);
   if (to.length + cc.length + bcc.length > 50) fail(400, "Too many recipients");
   if (!current.draft || current.draft.state !== "editable" || current.draft.version !== version) fail(409, "Draft version changed or is not editable");
   let attachments: Attachment[] | undefined;
@@ -1303,6 +1307,7 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
     to,
     cc,
     bcc,
+    reply_to_address: replyTo,
     body_r2_key: keyBody,
     snippet: (body.text || htmlText(body.html)).slice(0, 200),
     search_text: body.text || htmlText(body.html),

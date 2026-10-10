@@ -13,6 +13,7 @@ import {
   hash,
   htmlText,
   recipients,
+  replyToAddress,
   rfcId,
   text,
 } from "./input";
@@ -148,7 +149,8 @@ export async function createDraft(
   if (data.compose_state !== undefined) content.compose_state = composeState(data.compose_state);
   const to = recipients(data.to, "to"),
     cc = recipients(data.cc, "cc"),
-    bcc = recipients(data.bcc, "bcc");
+    bcc = recipients(data.bcc, "bcc"),
+    replyTo = replyToAddress(data.reply_to);
   if (to.length + cc.length + bcc.length > 50) fail(400, "Too many recipients");
   const operation = actor.user_id + ":draft:" + key;
   const partitionId = await mailbox(env, mailboxId).allocate(operation);
@@ -160,6 +162,7 @@ export async function createDraft(
         to,
         cc,
         bcc,
+        ...(data.reply_to !== undefined ? { reply_to: replyTo } : {}),
         ...(content.compose_state ? { compose_state: content.compose_state } : {}),
         attachments: data.attachment_ids ?? [],
         reply_to_message_id: data.reply_to_message_id ?? null,
@@ -252,6 +255,7 @@ export async function createDraft(
     folder_id: "drafts",
     subject,
     from_address: "",
+    reply_to_address: replyTo,
     to,
     cc,
     bcc,
@@ -381,6 +385,7 @@ export async function submitDraft(
   }
   const snapshot: SubmissionSnapshot = {
     from: address.email_address,
+    ...(message.reply_to_address ? { reply_to: message.reply_to_address } : {}),
     to,
     cc,
     bcc,
@@ -390,12 +395,6 @@ export async function submitDraft(
     attachments,
   };
   if (mode === "send_on_behalf") {
-    const user = await first<{ email_address: string }>(
-      env,
-      "SELECT email_address FROM users WHERE id=?",
-      actor.user_id,
-    );
-    snapshot.reply_to = user!.email_address;
     snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"] = actor.user_id;
   }
   if (data.auto_reply) {

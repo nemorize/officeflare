@@ -284,6 +284,7 @@ export async function renderMime(
   const alternative = boundary + "-alternative";
   const lines = [
     "From: " + header(message.from_address),
+    ...(message.reply_to_address ? ["Reply-To: " + header(message.reply_to_address)] : []),
     "To: " +
       message.recipients
         .filter((r) => r.kind === "to")

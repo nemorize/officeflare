@@ -452,6 +452,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       to: string[];
       cc: string[];
       bcc: string[];
+      reply_to_address?: string | null;
       body_r2_key: string;
       snippet: string;
       search_text: string;
@@ -464,10 +465,11 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (message.draft.version !== version) fail(409, "Draft version changed");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
-        "UPDATE messages SET subject=?,body_r2_key=?,snippet=?,version=version+1,updated_at=? WHERE id=?",
+        "UPDATE messages SET subject=?,body_r2_key=?,snippet=?,reply_to_address=?,version=version+1,updated_at=? WHERE id=?",
         input.subject,
         input.body_r2_key,
         input.snippet,
+        input.reply_to_address === undefined ? message.reply_to_address : input.reply_to_address,
         epoch(),
         messageId,
       );
