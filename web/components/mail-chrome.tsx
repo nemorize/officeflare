@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useMail, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
+import { useAccess } from "./console-access";
+import { workspaceApps } from "../lib/workspace-navigation";
 import {
   Button,
   Drawer,
   DrawerPopup,
   Icon,
+  OfficeflareMark,
   Input,
   Popover,
   PopoverPopup,
@@ -17,8 +20,11 @@ import {
   MailSelect,
   MailForm,
   MailCheckbox,
+  useMailMobile,
 } from "./mail-common";
 export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
+  const mobile = useMailMobile(),
+    access = useAccess();
   const mail = useMail(),
     navigate = useNavigate(),
     location = useLocation(),
@@ -112,6 +118,72 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
     navigate(`/mail?${next}`);
     setFilters(false);
   };
+  const filterForm = (
+    <MailForm
+      className="mail-filter-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        submit(true);
+      }}
+    >
+      {!mobile && <h2>Search filters</h2>}
+      <div className="mail-filter-fields">
+        <div className="mail-form-grid">
+          <MailInput
+            label="From"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+          <MailInput
+            label="To"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+          <MailInput
+            label="Subject"
+            fieldClassName="mail-filter-subject"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          />
+          <MailInput
+            label="After"
+            type="date"
+            value={after}
+            onChange={(e) => setAfter(e.target.value)}
+          />
+          <MailInput
+            label="Before"
+            type="date"
+            value={before}
+            onChange={(e) => setBefore(e.target.value)}
+          />
+        </div>
+        <div className="mail-filter-checks">
+          <label>
+            <MailCheckbox
+              checked={unread}
+              onCheckedChange={(v) => setUnread(!!v)}
+            />
+            Unread only
+          </label>
+          <label>
+            <MailCheckbox
+              checked={attached}
+              onCheckedChange={(v) => setAttached(!!v)}
+            />
+            Has attachments
+          </label>
+        </div>
+      </div>
+      <div className="mail-filter-footer">
+        <span>Search in {mail.box?.name ?? "this mailbox"}</span>
+        <Button variant="primary" type="submit">
+          Search
+        </Button>
+      </div>
+    </MailForm>
+  );
   return (
     <header className="mail-topbar">
       <MailIconButton
@@ -162,81 +234,37 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             }}
           />
         )}
-        <Popover.Root open={filters} onOpenChange={openFilters}>
-          <Popover.Trigger
-            render={
-              <Button variant="ghost" size="icon" aria-label="Search filters" />
-            }
+        {mobile ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Search filters"
+            aria-haspopup="dialog"
+            onClick={() => openFilters(true)}
           >
             <Icon name="controls" />
-          </Popover.Trigger>
-          <PopoverPopup
-            className="mail-filter-popup"
-            positionerProps={{ side: "bottom", align: "end", sideOffset: 12 }}
-          >
-            <MailForm
-              className="mail-filter-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                submit(true);
-              }}
+          </Button>
+        ) : (
+          <Popover.Root open={filters} onOpenChange={openFilters}>
+            <Popover.Trigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Search filters"
+                />
+              }
             >
-              <h2>Search filters</h2>
-              <div className="mail-form-grid">
-                <MailInput
-                  label="From"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-                <MailInput
-                  label="To"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-                <MailInput
-                  label="Subject"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                />
-                <MailInput
-                  label="After"
-                  type="date"
-                  value={after}
-                  onChange={(e) => setAfter(e.target.value)}
-                />
-                <MailInput
-                  label="Before"
-                  type="date"
-                  value={before}
-                  onChange={(e) => setBefore(e.target.value)}
-                />
-              </div>
-              <div className="mail-filter-checks">
-                <label>
-                  <MailCheckbox
-                    checked={unread}
-                    onCheckedChange={(v) => setUnread(!!v)}
-                  />
-                  Unread only
-                </label>
-                <label>
-                  <MailCheckbox
-                    checked={attached}
-                    onCheckedChange={(v) => setAttached(!!v)}
-                  />
-                  Has attachments
-                </label>
-              </div>
-              <div className="mail-filter-footer">
-                <span>Search in {mail.box?.name ?? "this mailbox"}</span>
-                <Button variant="primary" type="submit">
-                  Search
-                </Button>
-              </div>
-            </MailForm>
-          </PopoverPopup>
-        </Popover.Root>
+              <Icon name="controls" />
+            </Popover.Trigger>
+            <PopoverPopup
+              className="mail-filter-popup"
+              positionerProps={{ side: "bottom", align: "end", sideOffset: 12 }}
+            >
+              {filterForm}
+            </PopoverPopup>
+          </Popover.Root>
+        )}
       </MailForm>
       <div className="mail-topbar-identity">
         {mail.box?.kind === "shared" && (
@@ -250,6 +278,31 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         onClick={() => setSettings(true)}
       />
       <Drawer.Provider>
+        <Drawer.Root
+          open={filters && mobile}
+          onOpenChange={openFilters}
+          swipeDirection="right"
+        >
+          <DrawerPopup
+            className="mail-search-drawer"
+            viewportProps={{
+              className: "mail-drawer-viewport mail-drawer-right",
+            }}
+          >
+            <div className="mail-drawer-heading">
+              <Drawer.Title>Search filters</Drawer.Title>
+              <MailIconButton
+                icon="close"
+                label="Close search filters"
+                onClick={() => openFilters(false)}
+              />
+            </div>
+            <Drawer.Description className="mail-sr-only">
+              Find messages in this mailbox.
+            </Drawer.Description>
+            {filterForm}
+          </DrawerPopup>
+        </Drawer.Root>
         <Drawer.Root
           open={mail.mobileMenu}
           onOpenChange={mail.setMobileMenu}
@@ -272,7 +325,44 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             <Drawer.Description className="mail-sr-only">
               Mailbox navigation
             </Drawer.Description>
-            {mobileAccount}
+            <div className="mail-mobile-workspace">
+              <nav aria-label="Applications">
+                <Link
+                  to="/"
+                  aria-label="Officeflare home"
+                  onClick={() => mail.setMobileMenu(false)}
+                >
+                  <OfficeflareMark />
+                </Link>
+                {workspaceApps
+                  .filter((app) => access.permissions.includes(app.permission))
+                  .map((app) => (
+                    <Link
+                      key={app.path}
+                      to={app.path}
+                      aria-label={app.name}
+                      aria-current={
+                        location.pathname.startsWith(app.path)
+                          ? "page"
+                          : undefined
+                      }
+                      onClick={() => mail.setMobileMenu(false)}
+                    >
+                      <Icon name={app.icon} />
+                    </Link>
+                  ))}
+                {access.permissions.includes("console.access") && (
+                  <Link
+                    to="/console"
+                    aria-label="Console"
+                    onClick={() => mail.setMobileMenu(false)}
+                  >
+                    <Icon name="console" />
+                  </Link>
+                )}
+              </nav>
+              {mobileAccount}
+            </div>
             <MailSidebar />
           </DrawerPopup>
         </Drawer.Root>

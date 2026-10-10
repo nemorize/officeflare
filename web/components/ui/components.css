@@ -7,6 +7,10 @@
   font-size: 12px; font-weight: 500; line-height: 1.35; white-space: nowrap;
   transition: background 120ms, border-color 120ms, box-shadow 120ms;
 }
+/* Preserve component typography when the page resets native control fonts. */
+:is([data-ui-button], [data-ui$="-trigger"]:where(:not([data-ui$="-submenu-trigger"])), [data-ui="toggle"], [data-ui="toolbar-button"], [data-ui="toolbar-link"]) {
+  font-size: 12px; font-weight: 500; line-height: 1.35;
+}
 :where([data-ui-button], [data-ui$="-trigger"], [data-ui="toggle"], [data-ui="toolbar-button"], [data-ui="toolbar-link"]):hover:not(:disabled):not([data-disabled]) { background: var(--ui-surface); border-color: var(--ui-control-border); }
 :where([data-ui-button], [data-ui$="-trigger"]):active:not(:disabled) { background: var(--ui-hover); }
 [data-ui$="-trigger"][data-popup-open] { background: var(--ui-surface); border-color: var(--ui-control-border); }

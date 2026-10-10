@@ -45,7 +45,7 @@ export function MailMenu({
       >
         <Icon name={icon} />
       </Menu.Trigger>
-      <MenuPopup>{children}</MenuPopup>
+      <MenuPopup className="mail-action-menu">{children}</MenuPopup>
     </Menu.Root>
   );
 }

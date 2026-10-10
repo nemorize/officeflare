@@ -1,14 +1,17 @@
 import { useId } from "react";
+import type { ReactNode } from "react";
 import { parseRecipients } from "../lib/mail";
 import { Button, Icon, Input, Field } from "./ui";
 export function RecipientField({
   label,
   value,
   onChange,
+  action,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  action?: ReactNode;
 }) {
   const id = useId(),
     parts = value.split(/[,;\n]/),
@@ -94,6 +97,7 @@ export function RecipientField({
           }}
         />
       </div>
+      {action}
       {chips.some((chip) => !valid(chip)) && (
         <Field.Description>
           Check the highlighted email addresses before sending.

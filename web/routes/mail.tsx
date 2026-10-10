@@ -22,8 +22,16 @@ import {
   useMailAction,
   useMailResource,
   MailCheckbox,
+  useMailMobile,
 } from "../components/mail-common";
-import { Button, Icon, Menu, Popover, PopoverPopup } from "../components/ui";
+import {
+  Button,
+  Icon,
+  Menu,
+  MenuPopup,
+  Popover,
+  PopoverPopup,
+} from "../components/ui";
 import { useAccount } from "../components/account-context";
 import { useAccess } from "../components/console-access";
 import { Confirm } from "../components/console-shared";
@@ -157,7 +165,8 @@ function MailList({
     [params, setParams] = useSearchParams(),
     path = mailboxPath(mail.box!.id),
     action = useMailAction(),
-    canWrite = !!mail.box!.access?.write;
+    canWrite = !!mail.box!.access?.write,
+    mobile = useMailMobile();
   const grouped =
     mail.preferences.conversation_view &&
     !query &&
@@ -553,63 +562,150 @@ function MailList({
               : run(rows, { folder_id: "trash" })
           }
         />
-        <MailIconButton
-          icon="mail"
-          label={rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
-          disabled={!canWrite || action.busy}
-          onClick={() => run(rows, { is_read: !rows.every((m) => m.is_read) })}
-        />
-        <MailMenu label="Move to folder" icon="folder">
-          {mail.folders
-            .filter((f) => !["drafts", "sent"].includes(f.system_key ?? ""))
-            .map((f) => (
-              <Menu.Item
-                key={f.id}
-                disabled={
-                  !canWrite ||
-                  action.busy ||
-                  rows.some((row) => !!row.draft_owner_id)
-                }
-                onClick={() => run(rows, { folder_id: f.id })}
-              >
-                <Icon name="folder" />
-                {f.name}
-              </Menu.Item>
-            ))}
-        </MailMenu>
-        <MailMenu label="Snooze" icon="clock">
-          {[
-            ["Later today", 3 * 3600],
-            ["Tomorrow", 24 * 3600],
-            ["Next week", 7 * 86400],
-          ].map(([label, seconds]) => (
-            <Menu.Item
-              key={label}
-              disabled={
-                !canWrite ||
-                rows.some((row) => !!row.draft_owner_id) ||
-                action.busy
-              }
-              onClick={() =>
-                run(rows, {
-                  snoozed_until:
-                    Math.floor(Date.now() / 1000) + Number(seconds),
-                })
-              }
-            >
-              {label}
-            </Menu.Item>
-          ))}
-          {section === "snoozed" && (
-            <Menu.Item
+        {!mobile && (
+          <>
+            <MailIconButton
+              icon="mail"
+              label={rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
               disabled={!canWrite || action.busy}
-              onClick={() => run(rows, { snoozed_until: null })}
-            >
-              Unsnooze
-            </Menu.Item>
-          )}
-        </MailMenu>
+              onClick={() =>
+                run(rows, { is_read: !rows.every((m) => m.is_read) })
+              }
+            />
+            <MailMenu label="Move to folder" icon="folder">
+              {mail.folders
+                .filter((f) => !["drafts", "sent"].includes(f.system_key ?? ""))
+                .map((f) => (
+                  <Menu.Item
+                    key={f.id}
+                    disabled={
+                      !canWrite ||
+                      action.busy ||
+                      rows.some((row) => !!row.draft_owner_id)
+                    }
+                    onClick={() => run(rows, { folder_id: f.id })}
+                  >
+                    <Icon name="folder" />
+                    {f.name}
+                  </Menu.Item>
+                ))}
+            </MailMenu>
+            <MailMenu label="Snooze" icon="clock">
+              {[
+                ["Later today", 3 * 3600],
+                ["Tomorrow", 24 * 3600],
+                ["Next week", 7 * 86400],
+              ].map(([label, seconds]) => (
+                <Menu.Item
+                  key={label}
+                  disabled={
+                    !canWrite ||
+                    rows.some((row) => !!row.draft_owner_id) ||
+                    action.busy
+                  }
+                  onClick={() =>
+                    run(rows, {
+                      snoozed_until:
+                        Math.floor(Date.now() / 1000) + Number(seconds),
+                    })
+                  }
+                >
+                  {label}
+                </Menu.Item>
+              ))}
+              {section === "snoozed" && (
+                <Menu.Item
+                  disabled={!canWrite || action.busy}
+                  onClick={() => run(rows, { snoozed_until: null })}
+                >
+                  Unsnooze
+                </Menu.Item>
+              )}
+            </MailMenu>
+          </>
+        )}
         <MailMenu>
+          {mobile && (
+            <>
+              <Menu.Item
+                disabled={!canWrite || action.busy}
+                onClick={() =>
+                  run(rows, { is_read: !rows.every((m) => m.is_read) })
+                }
+              >
+                <Icon name="mail" />
+                {rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
+              </Menu.Item>
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger>
+                  <Icon name="folder" />
+                  Move to folder
+                  <Icon name="chevron" />
+                </Menu.SubmenuTrigger>
+                <MenuPopup className="mail-action-menu">
+                  {mail.folders
+                    .filter(
+                      (f) => !["drafts", "sent"].includes(f.system_key ?? ""),
+                    )
+                    .map((f) => (
+                      <Menu.Item
+                        key={f.id}
+                        disabled={
+                          !canWrite ||
+                          action.busy ||
+                          rows.some((row) => !!row.draft_owner_id)
+                        }
+                        onClick={() => run(rows, { folder_id: f.id })}
+                      >
+                        <Icon name="folder" />
+                        {f.name}
+                      </Menu.Item>
+                    ))}
+                </MenuPopup>
+              </Menu.SubmenuRoot>
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger>
+                  <Icon name="clock" />
+                  Snooze
+                  <Icon name="chevron" />
+                </Menu.SubmenuTrigger>
+                <MenuPopup className="mail-action-menu">
+                  {[
+                    ["Later today", 3 * 3600],
+                    ["Tomorrow", 24 * 3600],
+                    ["Next week", 7 * 86400],
+                  ].map(([label, seconds]) => (
+                    <Menu.Item
+                      key={label}
+                      disabled={
+                        !canWrite ||
+                        rows.some((row) => !!row.draft_owner_id) ||
+                        action.busy
+                      }
+                      onClick={() =>
+                        run(rows, {
+                          snoozed_until:
+                            Math.floor(Date.now() / 1000) + Number(seconds),
+                        })
+                      }
+                    >
+                      {label}
+                    </Menu.Item>
+                  ))}
+                  {section === "snoozed" && (
+                    <Menu.Item
+                      disabled={!canWrite || action.busy}
+                      onClick={() => run(rows, { snoozed_until: null })}
+                    >
+                      Unsnooze
+                    </Menu.Item>
+                  )}
+                </MenuPopup>
+              </Menu.SubmenuRoot>
+              <Menu.Separator />
+            </>
+          )}
+
           <Menu.Item
             disabled={!canWrite || action.busy}
             onClick={() => run(rows, { is_starred: true })}
@@ -661,7 +757,9 @@ function MailList({
               <span className="mail-selection-count">
                 {selected.length} selected
               </span>
-              {actions(selectedRows)}
+              <div className="mail-toolbar-actions">
+                {actions(selectedRows)}
+              </div>
             </>
           ) : (
             <>
@@ -723,7 +821,7 @@ function MailList({
                   setParams(next);
                 }}
               >
-                {chip}
+                <span>{chip}</span>
                 <Icon name="close" width="12" height="12" />
               </Button>
             ))}
@@ -888,15 +986,13 @@ function MailList({
       </section>
       {selectedId && (
         <div className="mail-reader-pane">
-          {active && !active.draft_owner_id && (
-            <div className="mail-detail-actions">
-              {actions([active])}
-              <MailNotice error={action.error} />
-            </div>
-          )}
           <ConversationReader
             key={`${mail.box!.id}:${selectedId}`}
             id={selectedId}
+            actions={
+              active && !active.draft_owner_id ? actions([active]) : undefined
+            }
+            actionError={action.error}
             onClose={() => open(null)}
             onPrevious={
               readerIndex > 0

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
 import {
   bytes,
@@ -25,11 +25,15 @@ export function ConversationReader({
   onClose,
   onPrevious,
   onNext,
+  actions,
+  actionError,
 }: {
   id: string;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
+  actions?: ReactNode;
+  actionError?: string;
 }) {
   const mail = useMail(),
     path = mailboxPath(mail.box!.id),
@@ -83,27 +87,45 @@ export function ConversationReader({
           label="Back to messages"
           onClick={onClose}
         />
-        <span className="mail-conversation-mailbox">{mail.box?.name}</span>
+        {actions && <div className="mail-toolbar-actions">{actions}</div>}
         <div className="mail-toolbar-spacer" />
-        <MailIconButton
-          icon="layers"
-          label={expandAll ? "Collapse conversation" : "Expand conversation"}
-          onClick={() => setExpandAll(!expandAll)}
-        />
-        <MailIconButton
-          icon="back"
-          label="Previous conversation"
-          disabled={!onPrevious}
-          onClick={onPrevious}
-        />
-        <MailIconButton
-          icon="arrow"
-          label="Next conversation"
-          disabled={!onNext}
-          onClick={onNext}
-        />
+        <div className="mail-conversation-navigation">
+          <MailIconButton
+            icon="layers"
+            label={expandAll ? "Collapse conversation" : "Expand conversation"}
+            onClick={() => setExpandAll(!expandAll)}
+          />
+          <MailIconButton
+            icon="back"
+            label="Previous conversation"
+            disabled={!onPrevious}
+            onClick={onPrevious}
+          />
+          <MailIconButton
+            icon="arrow"
+            label="Next conversation"
+            disabled={!onNext}
+            onClick={onNext}
+          />
+        </div>
+        <div className="mail-conversation-mobile-menu">
+          <MailMenu icon="layers" label="Conversation navigation">
+            <Menu.Item onClick={() => setExpandAll(!expandAll)}>
+              {expandAll ? "Collapse conversation" : "Expand conversation"}
+            </Menu.Item>
+            <Menu.Item disabled={!onPrevious} onClick={onPrevious}>
+              <Icon name="back" />
+              Previous conversation
+            </Menu.Item>
+            <Menu.Item disabled={!onNext} onClick={onNext}>
+              <Icon name="arrow" />
+              Next conversation
+            </Menu.Item>
+          </MailMenu>
+        </div>
       </div>
       <div className="mail-conversation-content">
+        <MailNotice error={actionError ?? ""} />
         <MailState
           loading={initial.loading && !message}
           error={initial.error}

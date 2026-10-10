@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button, Checkbox, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, Select, SelectPopup } from "./ui";
 import { api, ApiError } from "../lib/api";
 import { mailFailure } from "../lib/mail";
@@ -42,6 +42,15 @@ export function MailField({ label, hint, children, className = "" }: { label: st
 }
 export const MailForm = Form;
 export const MailFieldset = Fieldset.Root;
+const mobileQuery = "(max-width: 760px)";
+function subscribeMobile(listener: () => void) {
+  const query = window.matchMedia(mobileQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+export function useMailMobile() {
+  return useSyncExternalStore(subscribeMobile, () => window.matchMedia(mobileQuery).matches, () => false);
+}
 interface MailSelectOption { value: string; label: ReactNode; disabled?: boolean; }
 export function MailSelect({ options, value = "", onValueChange, className = "", ...props }: {
   options: MailSelectOption[]; value?: string; onValueChange: (value: string) => void;
@@ -66,14 +75,14 @@ export function MailFileInput({ onChange, multiple, disabled, ...props }: Omit<R
 export function MailMeter({ value, max, label }: { value: number; max: number; label: string }) {
   return <Meter.Root value={value} min={0} max={max} aria-label={label}><Meter.Track><Meter.Indicator /></Meter.Track></Meter.Root>;
 }
-export function MailInput({ label, hint, ...props }: React.ComponentProps<"input"> & { label: string; hint?: string }) {
+export function MailInput({ label, hint, fieldClassName, ...props }: React.ComponentProps<"input"> & { label: string; hint?: string; fieldClassName?: string }) {
   const id = useId();
   const dateInput = props.type === "date" || props.type === "datetime-local";
-  return <MailField label={label} hint={hint}><Input id={id} {...props} onInput={dateInput ? (event) => { props.onInput?.(event); props.onChange?.(event as unknown as React.ChangeEvent<HTMLInputElement>); } : props.onInput} /></MailField>;
+  return <MailField label={label} hint={hint} className={fieldClassName}><Input id={id} {...props} onInput={dateInput ? (event) => { props.onInput?.(event); props.onChange?.(event as unknown as React.ChangeEvent<HTMLInputElement>); } : props.onInput} /></MailField>;
 }
 export function MailModal({ open, title, description, children, onClose, busy, wide }: { open: boolean; title: string; description?: ReactNode; children: ReactNode; onClose: () => void; busy?: boolean; wide?: boolean }) {
   return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}><DialogPopup className={`mail-modal${wide ? " mail-modal-wide" : ""}`}>
-    <div className="mail-modal-heading"><Dialog.Title>{title}</Dialog.Title><Button size="icon" variant="ghost" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</Button></div>
+    <div className="mail-modal-heading"><Dialog.Title>{title}</Dialog.Title><Button size="icon" variant="ghost" aria-label="Close dialog" disabled={busy} onClick={onClose}><Icon name="close" /></Button></div>
     <Dialog.Description>{description ?? ""}</Dialog.Description>{children}
   </DialogPopup></Dialog.Root>;
 }
