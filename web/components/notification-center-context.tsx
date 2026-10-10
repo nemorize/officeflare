@@ -86,8 +86,10 @@ export function useNotificationList(state: NotificationState, service = "", enab
   const { revision } = useNotificationCenter();
   const [items, setItems] = useState<NotificationItem[]>([]), [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [loadedSnapshot, setLoadedSnapshot] = useState<string | null>(null);
   const active = useRef<AbortController | null>(null), generation = useRef(0), pending = useRef(false);
   const query = new URLSearchParams({ state, limit: String(limit), ...(service ? { service } : {}) }).toString();
+  const snapshot = JSON.stringify([query, revision]);
   const previousQuery = useRef(query);
   useEffect(() => {
     const id = ++generation.current;
@@ -97,11 +99,11 @@ export function useNotificationList(state: NotificationState, service = "", enab
     if (!enabled) { setLoading(false); return; }
     const controller = new AbortController(); active.current = controller; setLoading(true); pending.current = true;
     void api<NotificationPage>(`/api/notifications?${query}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
-      .then((page) => { if (!controller.signal.aborted && generation.current === id) { setItems(page.notifications); setNext(page.next_cursor); } })
+      .then((page) => { if (!controller.signal.aborted && generation.current === id) { setItems(page.notifications); setNext(page.next_cursor); setLoadedSnapshot(snapshot); } })
       .catch((failure) => { if (!controller.signal.aborted && generation.current === id) setError(errorMessage(failure)); })
       .finally(() => { if (!controller.signal.aborted && generation.current === id) { setLoading(false); pending.current = false; } });
     return () => { controller.abort(); active.current?.abort(); generation.current++; };
-  }, [query, revision, enabled]);
+  }, [query, revision, enabled, snapshot]);
   async function loadMore() {
     if (!next || pending.current) return;
     const id = generation.current, controller = new AbortController(); active.current = controller; pending.current = true; setLoading(true); setError("");
@@ -112,5 +114,5 @@ export function useNotificationList(state: NotificationState, service = "", enab
     finally { if (generation.current === id && !controller.signal.aborted) { pending.current = false; setLoading(false); } }
   }
   useEffect(() => () => active.current?.abort(), []);
-  return { items, loading, error, next, loadMore };
+  return { items, loading, stale: enabled && loadedSnapshot !== snapshot, error, next, loadMore };
 }

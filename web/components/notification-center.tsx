@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { Button, Icon, Popover, PopoverPopup, useNotifications } from "@/components/ui";
 import { errorMessage } from "../lib/api";
@@ -6,13 +6,14 @@ import { notificationDate, notificationTarget, type NotificationItem, type Notif
 import { useNotificationCenter, useNotificationList } from "./notification-center-context";
 import "./notification-center.css";
 
-export function NotificationCard({ item, compact = false }: { item: NotificationItem; compact?: boolean }) {
+export function NotificationCard({ item, compact = false, stale = false }: { item: NotificationItem; compact?: boolean; stale?: boolean }) {
   const center = useNotificationCenter(), toast = useNotifications(), [busy, setBusy] = useState(false);
+  const pending = useRef(false), disabled = busy || stale;
   const target = notificationTarget(item.target_path);
   async function change(update: NotificationUpdate) {
-    if (busy) return; setBusy(true);
+    if (pending.current || stale) return; pending.current = true; setBusy(true);
     try { await center.update(item, update); } catch (failure) { toast.error(errorMessage(failure)); }
-    finally { setBusy(false); }
+    finally { pending.current = false; setBusy(false); }
   }
   return <li className="notification-card" data-unread={item.read_at === null}>
     <span className="notification-card-icon"><Icon name={item.category === "security" ? "shield" : "bell"} width="18" height="18" /></span>
@@ -23,11 +24,11 @@ export function NotificationCard({ item, compact = false }: { item: Notification
       {item.snoozed_until && item.snoozed_until > Date.now() / 1000 && <span className="notification-snooze-label">Snoozed until {notificationDate(item.snoozed_until)}</span>}
       <div className="notification-card-actions">
         {target && <Link to={target} onClick={() => { if (item.read_at === null) void change({ read: true }); }}>View details<Icon name="arrow" width="12" height="12" /></Link>}
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => { void change({ read: item.read_at === null }); }}>{item.read_at === null ? "Mark read" : "Mark unread"}</Button>
+        <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { void change({ read: item.read_at === null }); }}>{item.read_at === null ? "Mark read" : "Mark unread"}</Button>
         {!compact && <>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => { void change({ archived: item.archived_at === null, snoozed_until: null }); }}>{item.archived_at === null ? "Archive" : "Restore"}</Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => { void change({ snoozed_until: item.snoozed_until && item.snoozed_until > Date.now() / 1000 ? null : Math.floor(Date.now() / 1000) + 3600, archived: false }); }}>{item.snoozed_until && item.snoozed_until > Date.now() / 1000 ? "Unsnooze" : "Snooze 1h"}</Button>
-          <Button variant="ghost" size="icon" disabled={busy} aria-label={`Delete notification: ${item.title}`} title="Delete" onClick={() => { void change({ deleted: true }); }}><Icon name="trash" /></Button>
+          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { void change({ archived: item.archived_at === null, snoozed_until: null }); }}>{item.archived_at === null ? "Archive" : "Restore"}</Button>
+          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { void change({ snoozed_until: item.snoozed_until && item.snoozed_until > Date.now() / 1000 ? null : Math.floor(Date.now() / 1000) + 3600, archived: false }); }}>{item.snoozed_until && item.snoozed_until > Date.now() / 1000 ? "Unsnooze" : "Snooze 1h"}</Button>
+          <Button variant="ghost" size="icon" disabled={disabled} aria-label={`Delete notification: ${item.title}`} title="Delete" onClick={() => { void change({ deleted: true }); }}><Icon name="trash" /></Button>
         </>}
       </div>
     </div>
@@ -49,7 +50,7 @@ function NotificationPreview({ open, close }: { open: boolean; close: () => void
     <div className="notification-popup-list">
       {(list.error || center.error) && <p className="notification-error" role="alert">{list.error || center.error}<Button size="sm" onClick={() => { void center.refresh(true); }}>Retry</Button></p>}
       {list.loading && !list.items.length ? <p className="notification-empty" role="status">Loading notifications…</p> : <>
-        <ul>{list.items.map((item) => <NotificationCard key={item.id} item={item} compact />)}</ul>
+        <ul>{list.items.map((item) => <NotificationCard key={item.id} item={item} compact stale={list.stale} />)}</ul>
         {!list.error && !list.items.length && <div className="notification-empty"><Icon name="check" width="24" height="24" /><strong>You’re all caught up</strong><p>New updates will appear here.</p></div>}
       </>}
     </div>

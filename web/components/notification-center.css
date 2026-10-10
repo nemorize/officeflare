@@ -33,10 +33,9 @@
 .notification-page-list { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-panel); overflow: hidden; }
 .notification-load-more { display: flex; justify-content: center; padding-block: 20px; }
 .notification-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 18px; border-block-end: 1px solid var(--ui-border); }
-.notification-setting span { display: grid; gap: 5px; }
+.notification-setting-content { display: grid; gap: 5px; }
 .notification-setting strong { font-size: 12px; font-weight: 500; }
 .notification-setting small { color: var(--ui-muted); font-size: 11px; }
-.notification-setting input { width: 16px; height: 16px; accent-color: var(--ui-primary); }
 .notification-mobile-actions { display: flex; align-items: center; gap: 10px; }
 @media (max-width: 640px) {
   .notification-toolbar { gap: 10px; }

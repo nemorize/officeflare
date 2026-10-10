@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Button, Icon, useNotifications } from "@/components/ui";
+import { Button, Checkbox, Icon, useNotifications } from "@/components/ui";
 import { NotificationCard, ReadAllButton } from "../components/notification-center";
 import { useNotificationCenter, useNotificationList } from "../components/notification-center-context";
 import { api, errorMessage } from "../lib/api";
@@ -27,7 +27,7 @@ export function NotificationsPage() {
     </div>
     {(list.error || center.error) && <p className="notification-error" role="alert">{list.error || center.error}<Button size="sm" onClick={() => { void center.refresh(true); }}>Retry</Button></p>}
     <div className="notification-page-list" aria-busy={list.loading}>
-      <ul>{list.items.map((item) => <NotificationCard key={item.id} item={item} />)}</ul>
+      <ul>{list.items.map((item) => <NotificationCard key={item.id} item={item} stale={list.stale} />)}</ul>
       {list.loading && <p className="notification-empty" role="status">Loading notifications…</p>}
       {!list.loading && !list.error && !list.items.length && <div className="notification-empty"><Icon name={state === "archived" ? "archive" : state === "snoozed" ? "clock" : "bell"} width="28" height="28" /><strong>No notifications here</strong><p>Updates will appear as activity happens.</p></div>}
     </div>
@@ -61,11 +61,16 @@ export function NotificationSettingsPage() {
     {!settings ? !error && <p role="status">Loading settings…</p> : <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <section className="account-panel">
         <div className="account-panel-header"><h2>In-app notifications</h2><p>Security notifications are always delivered to help protect your account.</p></div>
-        <label className="notification-setting"><span><strong>Receive workspace updates by default</strong><small>Individual choices below override this default.</small></span><input type="checkbox" checked={settings.enabled} disabled={busy} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} /></label>
-        {types.map((item) => <label key={item.type} className="notification-setting"><span><strong>{item.label}</strong><small>{item.required ? "Always on" : `${item.service === "account" ? "Account" : "System"} · ${item.category}`}</small></span>
-          <input type="checkbox" checked={item.required || (settings.rules[`type:${item.type}`] ?? settings.rules[`category:${item.service}:${item.category}`] ?? settings.rules[`service:${item.service}`] ?? settings.enabled)} disabled={busy || item.required}
-            onChange={(event) => setSettings({ ...settings, rules: { ...settings.rules, [`type:${item.type}`]: event.target.checked } })} /></label>)}
-        <div className="account-actions"><Link to="/notifications">Open notification center</Link><Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
+        <label className="notification-setting"><span className="notification-setting-content"><strong>Receive workspace updates by default</strong><small>Individual choices below override this default.</small></span>
+          <Checkbox.Root checked={settings.enabled} disabled={busy} onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked })}>
+            <Checkbox.Indicator aria-hidden="true"><Icon name="check" width="12" height="12" /></Checkbox.Indicator>
+          </Checkbox.Root></label>
+        {types.map((item) => <label key={item.type} className="notification-setting"><span className="notification-setting-content"><strong>{item.label}</strong><small>{item.required ? "Always on" : `${item.service === "account" ? "Account" : "System"} · ${item.category}`}</small></span>
+          <Checkbox.Root checked={item.required || (settings.rules[`type:${item.type}`] ?? settings.rules[`category:${item.service}:${item.category}`] ?? settings.rules[`service:${item.service}`] ?? settings.enabled)} disabled={busy || item.required}
+            onCheckedChange={(checked) => setSettings({ ...settings, rules: { ...settings.rules, [`type:${item.type}`]: checked } })}>
+            <Checkbox.Indicator aria-hidden="true"><Icon name="check" width="12" height="12" /></Checkbox.Indicator>
+          </Checkbox.Root></label>)}
+        <div className="account-actions"><Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
       </section>
     </form>}
   </section>;
