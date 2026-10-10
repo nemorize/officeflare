@@ -13,6 +13,8 @@ const UIPreviewPage = import.meta.env.DEV ? lazy(() => import("./routes/ui-previ
 const ProfilePage = lazy(() => import("./routes/profile").then((module) => ({ default: module.ProfilePage })));
 const SecurityPage = lazy(() => import("./routes/security").then((module) => ({ default: module.SecurityPage })));
 const SessionsPage = lazy(() => import("./routes/sessions").then((module) => ({ default: module.SessionsPage })));
+const NotificationsPage = lazy(() => import("./routes/notifications").then((module) => ({ default: module.NotificationsPage })));
+const NotificationSettingsPage = lazy(() => import("./routes/notifications").then((module) => ({ default: module.NotificationSettingsPage })));
 const UsersPage = lazy(() => import("./routes/console-users").then((module) => ({ default: module.UsersPage })));
 const UserEditorPage = lazy(() => import("./routes/console-users").then((module) => ({ default: module.UserEditorPage })));
 const RolesPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RolesPage })));
@@ -45,6 +47,8 @@ root.render(
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/security" element={<SecurityPage />} />
             <Route path="/profile/sessions" element={<SessionsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
             <Route path="/console" element={<ConsoleGate />}>
               <Route index element={<ConsoleHome />} />
               <Route path="users" element={<ConsoleGate permissions={userPermissions}><UsersPage /></ConsoleGate>} />

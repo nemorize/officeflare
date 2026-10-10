@@ -4,12 +4,21 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstable_readConfig as readConfig } from "wrangler";
-import { deploy, deploymentOptions, ensureDatabase, ensureMailResources, ensureProfileResources, withDatabaseConfig } from "../scripts/deploy.mjs";
+import { deploy, deploymentOptions, ensureDatabase, ensureMailResources, ensureProfileResources, ensureQueueResources, withDatabaseConfig } from "../scripts/deploy.mjs";
 
 const database = { name: "officeflare-user-accounts", uuid: "00000000-0000-0000-0000-000000000001" };
 const config = { configPath: "/test/wrangler.jsonc", name: "officeflare", d1_databases: [{ binding: "DB", database_name: database.name }] };
 const flags = ["--config", config.configPath, "--env", "production"];
 const boundFlags = ["--config", "/test/.officeflare-deploy.jsonc", "--env", "production"];
+
+test("shared Queue provisioning prepares notification work and dead-letter queues once", async () => {
+  const names = [];
+  await ensureQueueResources({ queues: {
+    producers: [{ binding: "NOTIFICATION_QUEUE", queue: "notifications" }, { binding: "MAIL_QUEUE", queue: "mail" }],
+    consumers: [{ queue: "notifications", dead_letter_queue: "notifications-dlq" }, { queue: "mail", dead_letter_queue: "mail-dlq" }],
+  } }, [], async (args) => { assert.equal(args[1], "info"); names.push(args[2]); return `Queue Name: ${args[2]}\nQueue ID: 0123abcd\n`; });
+  assert.deepEqual(names, ["notifications", "mail", "notifications-dlq", "mail-dlq"]);
+});
 
 test("profile image storage is provisioned and an existing bucket is reused", async () => {
   const selected = { r2_buckets: [{ binding: "MAIL_BUCKET", bucket_name: "mail" }, { binding: "PROFILE_BUCKET", bucket_name: "profiles" }] };

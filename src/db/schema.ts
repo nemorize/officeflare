@@ -349,3 +349,34 @@ export const mailControlOperations = sqliteTable(
 );
 
 export const userMailPreferences = sqliteTable("user_mail_preferences", { user_id: text().primaryKey().notNull().references(() => users.id, { onDelete: "cascade" }), preferences_json: text().notNull(), updated_at: timestamp("updated_at") });
+
+export const notificationEvents = sqliteTable("notification_events", {
+  id: text().primaryKey().notNull(), source_key: text().notNull().unique(), type: text().notNull(),
+  title: text().notNull(), body: text().notNull(), target_path: text(), created_at: timestamp("created_at"),
+});
+export const notificationInbox = sqliteTable("notification_inbox", {
+  seq: integer().primaryKey({ autoIncrement: true }), id: text().notNull().unique(),
+  user_id: text().notNull().references(() => users.id, { onDelete: "cascade" }),
+  event_id: text().notNull().references(() => notificationEvents.id), read_at: integer(), archived_at: integer(),
+  snoozed_until: integer(), deleted_at: integer(), version: integer().notNull().default(1),
+  created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, (table) => [uniqueIndex("notification_inbox_user_event").on(table.user_id, table.event_id)]);
+export const notificationRecipients = sqliteTable("notification_recipients", {
+  event_id: text().notNull().references(() => notificationEvents.id),
+  user_id: text().notNull().references(() => users.id, { onDelete: "cascade" }),
+  decision: text({ enum: ["deliver", "suppressed"] }).notNull(), created_at: timestamp("created_at"),
+}, (table) => [primaryKey({ columns: [table.event_id, table.user_id] })]);
+export const notificationPreferences = sqliteTable("notification_preferences", {
+  user_id: text().primaryKey().notNull().references(() => users.id, { onDelete: "cascade" }),
+  enabled: integer().notNull().default(1), rules_json: text().notNull().default("{}"),
+  version: integer().notNull().default(1), updated_at: timestamp("updated_at"),
+});
+export const notificationChanges = sqliteTable("notification_changes", {
+  seq: integer().primaryKey({ autoIncrement: true }), user_id: text().notNull().references(() => users.id, { onDelete: "cascade" }),
+  notification_id: text(), kind: text().notNull(), created_at: timestamp("created_at"),
+});
+export const notificationWsTickets = sqliteTable("notification_ws_tickets", {
+  token_hash: text().primaryKey().notNull(), user_id: text().notNull().references(() => users.id, { onDelete: "cascade" }),
+  session_id: text().notNull().references(() => userSessions.id, { onDelete: "cascade" }),
+  auth_version: integer().notNull(), expires_at: integer().notNull(),
+});

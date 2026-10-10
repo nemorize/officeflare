@@ -5,8 +5,10 @@ import { renderPage } from "./routes/web";
 import type { AppEnv } from "./auth/types";
 import { receive } from "./mail/service";
 import { consume, recover } from "./mail/jobs";
+import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
+export { NotificationHubDO } from "./notifications/hub";
 
 const app = new Hono<AppEnv>();
 
@@ -46,6 +48,11 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   email: receive,
-  queue: consume,
-  scheduled: async (_event, env, ctx) => { ctx.waitUntil(recover(env)); },
+  queue: async (batch, env) => {
+    if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications")) await consumeNotifications(batch, env);
+    else await consume(batch, env);
+  },
+  scheduled: async (_event, env, ctx) => {
+    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env)]));
+  },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;

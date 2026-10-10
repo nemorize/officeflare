@@ -7,6 +7,7 @@ import auth from "./auth";
 import me from "./me";
 import users from "./users";
 import mail from "./mail";
+import notifications from "./notifications";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
@@ -30,6 +31,7 @@ api.use("*", async (c, next) => {
   return bodyLimit({ maxSize, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } })(c, next);
 });
 api.route("/mail", mail);
+api.route("/notifications", notifications);
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("admin.roles.read"), (c) => c.json({

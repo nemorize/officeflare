@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useMail, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
@@ -18,7 +18,7 @@ import {
   MailForm,
   MailCheckbox,
 } from "./mail-common";
-export function MailTopbar() {
+export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
   const mail = useMail(),
     navigate = useNavigate(),
     location = useLocation(),
@@ -272,6 +272,7 @@ export function MailTopbar() {
             <Drawer.Description className="mail-sr-only">
               Mailbox navigation
             </Drawer.Description>
+            {mobileAccount}
             <MailSidebar />
           </DrawerPopup>
         </Drawer.Root>

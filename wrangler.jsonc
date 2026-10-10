@@ -12,6 +12,7 @@
 	"vars": {
 		"AUTH_ISSUER": "officeflare",
 		"AUTH_AUDIENCE": "officeflare-api",
+		"NOTIFICATION_QUEUE_NAME": "officeflare-notifications",
 		"MAIL_PARTITION_TARGET_BYTES": "6000000000"
 	},
 	"secrets": {
@@ -33,10 +34,14 @@
 	"durable_objects": {
 		"bindings": [
 			{ "name": "MAILBOX", "class_name": "MailboxDO" },
-			{ "name": "MAIL_PARTITION", "class_name": "MailPartitionDO" }
+			{ "name": "MAIL_PARTITION", "class_name": "MailPartitionDO" },
+			{ "name": "NOTIFICATION_HUB", "class_name": "NotificationHubDO" }
 		]
 	},
-	"migrations": [{ "tag": "mail-v1", "new_sqlite_classes": ["MailboxDO", "MailPartitionDO"] }],
+	"migrations": [
+		{ "tag": "mail-v1", "new_sqlite_classes": ["MailboxDO", "MailPartitionDO"] },
+		{ "tag": "notifications-v1", "new_sqlite_classes": ["NotificationHubDO"] }
+	],
 	"r2_buckets": [
 		{ "binding": "MAIL_BUCKET", "bucket_name": "officeflare-mail" },
 		{ "binding": "PROFILE_BUCKET", "bucket_name": "officeflare-profiles" }
@@ -44,10 +49,12 @@
 	"send_email": [{ "name": "EMAIL" }],
 	"queues": {
 		"producers": [
-			{ "binding": "MAIL_QUEUE", "queue": "officeflare-mail" }
+			{ "binding": "MAIL_QUEUE", "queue": "officeflare-mail" },
+			{ "binding": "NOTIFICATION_QUEUE", "queue": "officeflare-notifications" }
 		],
 		"consumers": [
-			{ "queue": "officeflare-mail", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "officeflare-mail-dlq" }
+			{ "queue": "officeflare-mail", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "officeflare-mail-dlq" },
+			{ "queue": "officeflare-notifications", "max_batch_size": 100, "max_retries": 5, "dead_letter_queue": "officeflare-notifications-dlq" }
 		]
 	},
 	"triggers": { "crons": ["*/5 * * * *"] },

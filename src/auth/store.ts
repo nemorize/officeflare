@@ -8,6 +8,8 @@ import { coalesce, increment } from "../db/expressions";
 import { insertWhen } from "../db/conditional-insert";
 import { authRateLimits, users, userAuthChallenges, userMfaMethods, userRefreshTokens, userSessions } from "../db/schema";
 import { ACCESS_TTL, CHALLENGE_TTL, SESSION_TTL, now, uuid, type AppEnv, type AuthContext, type Challenge, type Session, type User } from "./types";
+import { prepareNotification } from "../notifications/service";
+import { recoverNotifications } from "../notifications/jobs";
 
 export const requireAccess = createMiddleware<AppEnv>(async (c, next) => {
   const token = bearer(c);
@@ -157,12 +159,17 @@ export async function completeLogin(c: AuthContext, challenge: Challenge, token:
     return c.json({ next: "password_reset", token_type: "Bearer", challenge_token: token, expires_at: challenge.expires_at });
   }
   const pair = await prepareSession(c, challenge), operation = uuid();
+  const sessionCreated = exists(db.select({ id: userSessions.id }).from(userSessions).where(eq(userSessions.id, pair.session.id)));
   const results = await db.batch([
     claim(c, challenge, operation), ...pair.statements(operation),
     db.update(users).set({ last_login_at: now() }).where(and(eq(users.id, user.id),
       exists(db.select({ id: userSessions.id }).from(userSessions).where(eq(userSessions.id, pair.session.id))))),
+    ...prepareNotification(db, { source_key: `security.sign_in:${pair.session.id}`, type: "security.sign_in",
+      title: "New sign-in to your account", body: "A new session signed in. Review your active sessions if you do not recognize this activity.",
+      target_path: "/profile/sessions", recipient_ids: [user.id] }, sessionCreated),
   ]);
   if (results[1].meta.changes !== 1) unauthorized();
+  if (c.env.NOTIFICATION_QUEUE) c.executionCtx.waitUntil(recoverNotifications(c.env).catch((error) => console.error("Notification recovery failed", error)));
   return c.json(pair.response);
 }
 
