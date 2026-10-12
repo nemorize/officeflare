@@ -1,14 +1,17 @@
 import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
-import { isPermission, missingPrerequisites, permissionCatalog, permissionClosure } from "../../src/authorization/permissions.ts";
+import { driveUserPermissions, isPermission, missingPrerequisites, permissionCatalog, permissionClosure } from "../../src/authorization/permissions.ts";
 export { defaultEligible, permissionCatalog, permissionClosure, permissionGroups, togglePermission } from "../../src/authorization/permissions.ts";
+export { driveUserPermissions } from "../../src/authorization/permissions.ts";
 export type { PermissionDefinition } from "../../src/authorization/permissions.ts";
 
 export const userPermissions = Object.keys(permissionCatalog).filter((key) => key.startsWith("admin.users."));
 export const rolePermissions = Object.keys(permissionCatalog).filter((key) => key.startsWith("admin.roles."));
+export const driveAdminPermissions = Object.keys(permissionCatalog).filter((key) => key.startsWith("admin.drive."));
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [
   { path: "/console/users", name: "Users", icon: "users", permissions: ["admin.users.read"] },
   { path: "/console/roles", name: "Roles", icon: "shield", permissions: ["admin.roles.read"] },
+  { path: "/console/drive", name: "Drive", icon: "drive", permissions: driveAdminPermissions },
   { path: "/console/mail/domains", name: "Mail domains", icon: "mail", permissions: ["admin.mail.domains.read"] },
   { path: "/console/mail/mailboxes", name: "Shared mailboxes", icon: "inbox", permissions: ["admin.mail.mailboxes.read"] },
 ];
@@ -17,6 +20,10 @@ export const canGrant = (permissions: readonly string[], grants: readonly string
 export const managedPermissions = (permissions: readonly string[]) => permissions.filter(isPermission);
 export const roleTemplates = [
   { key: "mail-user", label: "Mail user", permissions: ["mail.access"] },
+  { key: "drive-user", label: "Drive user", permissions: [...driveUserPermissions] },
+  { key: "drive-reader", label: "Drive read-only user", permissions: ["drive.access", "drive.files.download"] },
+  { key: "drive-manager", label: "Drive manager", permissions: permissionClosure(driveAdminPermissions) },
+  { key: "drive-auditor", label: "Drive auditor", permissions: permissionClosure(["admin.drive.accounts.read", "admin.drive.items.read", "admin.drive.sharing.read", "admin.drive.audit.read"]) },
   { key: "account-viewer", label: "Account viewer", permissions: permissionClosure(["admin.users.read"]) },
   { key: "account-support", label: "Account support", permissions: permissionClosure(["mail.access", "admin.users.credentials.reset"]) },
   { key: "access-manager", label: "Access manager", permissions: permissionClosure(["admin.roles.create", "admin.roles.update", "admin.users.roles.assign", "admin.users.roles.remove"]) },

@@ -51,6 +51,20 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
 .console-facts dd { margin: 0; text-align: right; }
 .console-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .console-mobile-nav { display: none; }
+.console-drive-tabs { overflow-x: auto; margin-block-end: 24px; }
+.console-drive-tabs > [data-ui="tabs-list"] { width: max-content; min-width: 100%; }
+.console-drive-summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 16px; }
+.console-drive-summary-grid > .account-panel { margin: 0; }
+.console-drive-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin-block: 20px; }
+.console-drive-filters > [data-ui="field-root"] { flex: 1; min-width: 160px; }
+.console-drive-form-grid, .console-drive-confirm-fields { display: grid; gap: 16px; }
+.console-drive-confirm-fields { margin-block-start: 18px; }
+.console-drive-policy-review { margin-block: 20px; }
+.console-drive-row-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.console-drive-job { display: flex; justify-content: space-between; gap: 16px; margin-block-start: 20px; }
+.console-drive-job > div { min-width: 0; overflow-wrap: anywhere; }
+.console-drive-audit-json { max-height: 55dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 640px) { .console-drive-job { flex-direction: column; } .console-drive-filters { align-items: stretch; flex-direction: column; } .console-drive-filters > [data-ui="field-root"] { min-width: 0; } }
 @media (max-width: 900px) { .console-date-column { display: none; } .console-table th, .console-table td { padding-inline: 16px; } }
 @media (max-width: 640px) {
   .console-page-header { align-items: flex-start; }
@@ -58,7 +72,7 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
   .console-page-header p { font-size: 12px; }
   .console-pagination { align-items: flex-start; flex-direction: column; }
   .console-table td { padding-block: 16px; }
-  .console-mobile-nav { display: flex; gap: 8px; padding: 10px 16px; border-block-end: 1px solid var(--ui-border); }
+  .console-mobile-nav { display: flex; overflow-x: auto; flex-shrink: 0; gap: 8px; padding: 10px 16px; border-block-end: 1px solid var(--ui-border); }
   .console-mobile-nav a { font-size: 12px; padding: 6px 10px; border-radius: 6px; }
   .console-mobile-nav a[aria-current] { background: var(--ui-hover); }
 }

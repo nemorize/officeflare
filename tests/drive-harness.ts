@@ -11,6 +11,9 @@ export default {
     const beforeBatch = request.headers.get("x-test-before-batch");
     const afterStorage = request.headers.get("x-test-after-storage");
     const failBatch = request.headers.get("x-test-fail-batch");
+    const transferFault = request.headers.get("x-test-before-transfer");
+    const transferChunk = Number(request.headers.get("x-test-transfer-chunk") ?? 1);
+    let transferChunks = 0;
     const sql = new WeakMap<object, string>();
     const prepared = (value: D1PreparedStatement, query: string): D1PreparedStatement => {
       const wrapped = new Proxy(value, { get(target, key) {
@@ -27,7 +30,8 @@ export default {
           if (key === "prepare") return (query: string) => prepared(targetSession.prepare(query), query);
           if (key === "batch") return async (statements: D1PreparedStatement[]) => {
             const queries = statements.map(value => sql.get(value) ?? "").join(" ");
-            if (!injected && beforeBatch && queries.includes("WITH snapshot")) { injected = true; await env.DB.prepare(beforeBatch).run(); }
+            if (!injected && beforeBatch && (queries.includes("WITH snapshot") || queries.includes("INSERT INTO drive_admin_activity"))) { injected = true; await env.DB.prepare(beforeBatch).run(); }
+            if (queries.includes("UPDATE drive_items SET owner_user_id") && ++transferChunks === transferChunk && transferFault) await env.DB.prepare(transferFault).run();
             if (failBatch && queries.includes(failBatch)) return targetSession.batch([...statements, targetSession.prepare("INSERT INTO deliberately_missing_table VALUES(1)")]);
             return targetSession.batch(statements);
           };

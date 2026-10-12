@@ -3,10 +3,14 @@ import { first, rows, session, statement } from "./access";
 import { purgeStatements } from "./lifecycle";
 import { treeChanges } from "./mutations";
 import type { DriveEnv } from "./types";
+import { settings } from "./policy";
+import { recoverAdminTransfers } from "./transfers";
 
 // Recovery is bounded and repeatable. D1 owns the upload lifecycle; R2 remains private.
 export async function recoverDrive(env: DriveEnv) {
   if (!env.DRIVE_BUCKET) return;
+  await recoverAdminTransfers(env);
+  const policy = await settings(env);
   const timestamp = now();
   const expired = await rows<{ id: string }>(env, `SELECT id FROM drive_uploads WHERE status NOT IN ('completed','cancelled')
     AND expires_at<=? AND lease_until<=? ORDER BY expires_at LIMIT 100`, timestamp, timestamp);
@@ -15,12 +19,12 @@ export async function recoverDrive(env: DriveEnv) {
       AND lease_until<=? AND status NOT IN ('completed','cancelled') ON CONFLICT(blob_key) DO UPDATE SET not_before=MAX(not_before,excluded.not_before)`, timestamp, id, timestamp, timestamp),
     statement(env, `UPDATE drive_uploads SET status='cancelled' WHERE id=? AND expires_at<=? AND lease_until<=? AND status NOT IN ('completed','cancelled')`, id, timestamp, timestamp),
   ]);
-  const trash = await rows<{ id: string }>(env, "SELECT id FROM drive_items WHERE trashed_at<=? AND purged_at IS NULL ORDER BY trashed_at LIMIT 20", timestamp - 30 * 86400);
+  const trash = await rows<{ id: string }>(env, "SELECT id FROM drive_items WHERE trashed_at<=? AND purged_at IS NULL AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=drive_items.owner_user_id OR target_user_id=drive_items.owner_user_id) AND status IN ('queued','running','failed')) ORDER BY trashed_at LIMIT 20", timestamp - policy.trash_retention_days * 86400);
   for (const { id } of trash) {
     const operation = uuid(), proof = `EXISTS(SELECT 1 FROM drive_activity WHERE operation_id='${operation}')`;
     await session(env).batch([
       statement(env, `INSERT INTO drive_activity(operation_id,item_id,owner_user_id,action,details_json)
-        SELECT ?,id,owner_user_id,'trash_expired','{}' FROM drive_items WHERE id=? AND trashed_at<=? AND purged_at IS NULL`, operation, id, timestamp - 30 * 86400),
+        SELECT ?,id,owner_user_id,'trash_expired','{}' FROM drive_items WHERE id=? AND trashed_at<=? AND purged_at IS NULL AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=drive_items.owner_user_id OR target_user_id=drive_items.owner_user_id) AND status IN ('queued','running','failed'))`, operation, id, timestamp - policy.trash_retention_days * 86400),
       treeChanges(env, id, "removed", [], proof), ...purgeStatements(env, id, proof),
     ]);
   }

@@ -1,6 +1,7 @@
 import { now } from "../auth/types";
 import type { Bind, Condition, DriveContext, DriveEnv, DriveItem } from "./types";
 import { fail } from "./input";
+import { permissionClosure, type Permission } from "../authorization/permissions";
 
 export const session = (env: DriveEnv) => env.DB.withSession("first-primary");
 export const statement = (env: DriveEnv, query: string, ...args: Bind[]) => session(env).prepare(query).bind(...args);
@@ -9,7 +10,12 @@ export async function rows<T>(env: DriveEnv, query: string, ...args: Bind[]) { r
 export const condition = (sql: string, ...args: Bind[]): Condition => ({ sql, args });
 export const combine = (...checks: Condition[]): Condition => ({ sql: checks.map(check => `(${check.sql})`).join(" AND ") || "1", args: checks.flatMap(check => check.args) });
 export const activeUser = (alias: string) => `${alias}.disabled_at IS NULL AND ${alias}.deleted_at IS NULL AND ${alias}.password_hash IS NOT NULL AND ${alias}.password_reset_required=0`;
-export const driveEnabled = (alias: string) => `EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=${alias}.id AND rp.permission_key='drive.access')`;
+export const driveEnabled = (alias: string) => `EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=${alias}.id AND rp.permission_key='drive.access') AND NOT EXISTS(SELECT 1 FROM drive_accounts da WHERE da.user_id=${alias}.id AND da.status='suspended')`;
+export function permission(user: string, key: Permission): Condition {
+  return condition(`NOT EXISTS(SELECT 1 FROM json_each(?) required WHERE NOT EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=? AND rp.permission_key=required.value))`, JSON.stringify(permissionClosure([key])), user);
+}
+export const writableOwner = (owner: string) => condition(`NOT EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND status<>'active') AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=? OR target_user_id=?) AND status IN ('queued','running','failed'))`, owner, owner, owner);
+export const availableItem = (ref: string) => `NOT EXISTS(SELECT 1 FROM drive_admin_job_items ji JOIN drive_admin_jobs j ON j.id=ji.job_id WHERE ji.item_id=${ref} AND j.status IN ('queued','running','failed'))`;
 export const ancestors = (ref: string) => `WITH RECURSIVE ancestors(id,parent_id,owner_user_id,trashed_at,purged_at) AS (
   SELECT id,parent_id,owner_user_id,trashed_at,purged_at FROM drive_items WHERE id=${ref}
   UNION ALL SELECT p.id,p.parent_id,p.owner_user_id,p.trashed_at,p.purged_at FROM drive_items p JOIN ancestors a ON p.id=a.parent_id
@@ -21,18 +27,30 @@ export const cleanPath = (ref: string, trash = false) => `NOT EXISTS(${ancestors
 export function access(userId: string, action: "read" | "comment" | "edit" | "owner" = "read", ref = "d.id", trash = false): Condition {
   const roles = action === "read" ? "'viewer','commenter','editor'" : action === "comment" ? "'commenter','editor'" : "'editor'";
   return condition(`EXISTS(SELECT 1 FROM drive_items resource JOIN users owner ON owner.id=resource.owner_user_id
-    WHERE resource.id=${ref} AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath(ref, trash)}
+    WHERE resource.id=${ref} AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath(ref, trash)} AND ${availableItem(ref)}
+    ${action === "edit" || action === "comment" ? "AND NOT EXISTS(SELECT 1 FROM drive_accounts da WHERE da.user_id=owner.id AND da.status<>'active') AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs j WHERE (j.source_user_id=owner.id OR j.target_user_id=owner.id) AND j.status IN ('queued','running','failed'))" : ""}
     AND (resource.owner_user_id=?${action === "owner" || trash ? "" : ` OR EXISTS(SELECT 1 FROM drive_permissions grant_access
-      WHERE grant_access.user_id=? AND grant_access.role IN (${roles}) AND (grant_access.expires_at IS NULL OR grant_access.expires_at>unixepoch())
+      WHERE (SELECT internal_sharing_enabled FROM drive_settings WHERE id=1)=1 AND grant_access.user_id=? AND grant_access.role IN (${roles}) AND (grant_access.expires_at IS NULL OR grant_access.expires_at>unixepoch())
       AND grant_access.item_id IN (${ancestors(ref)} SELECT id FROM ancestors))`}))`, userId,
     ...(action === "owner" || trash ? [] : [userId]));
 }
-export function identity(c: DriveContext) {
+export function sessionIdentity(c: DriveContext) {
   const { user, session: actorSession } = c.get("identity");
   return condition(`EXISTS(SELECT 1 FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND u.id=? AND s.auth_version=?
-    AND s.auth_version=u.auth_version AND s.revoked_at IS NULL AND s.expires_at>? AND ${activeUser("u")} AND ${driveEnabled("u")}
+    AND s.auth_version=u.auth_version AND s.revoked_at IS NULL AND s.expires_at>? AND ${activeUser("u")}
     AND (s.mfa_authenticated_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM user_mfa_methods m WHERE m.user_id=u.id AND m.verified_at IS NOT NULL AND m.revoked_at IS NULL)))`,
     actorSession.id, user.id, user.auth_version, now());
+}
+export function actionCondition(c: DriveContext): Condition {
+  const user = c.get("identity").user.id, actions = c.get("driveAction") ?? [];
+  return combine(...actions.map(key => permission(user, key)),
+    ...(actions.some(key => key !== "drive.files.download") ? [writableOwner(user)] : []),
+    ...(actions.includes("drive.sharing.internal") ? [condition("(SELECT internal_sharing_enabled FROM drive_settings WHERE id=1)=1")] : []),
+    ...(actions.includes("drive.sharing.public") ? [condition("(SELECT public_sharing_enabled FROM drive_settings WHERE id=1)=1")] : []));
+}
+export function identity(c: DriveContext) {
+  const user = c.get("identity").user.id;
+  return combine(sessionIdentity(c), permission(user, "drive.access"), actionCondition(c), condition("NOT EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND status='suspended')", user));
 }
 export async function requireItem(c: DriveContext, id: string, action: "read" | "comment" | "edit" | "owner" = "read", trash = false) {
   const check = access(c.get("identity").user.id, action, "d.id", trash);

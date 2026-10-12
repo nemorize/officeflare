@@ -3,17 +3,16 @@ import { digest } from "../auth/crypto";
 import { body, unauthorized } from "../auth/input";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
-import { audience, condition, first, identity, itemCondition, requireItem, rows, statement } from "./access";
+import { audience, combine, condition, first, identity, itemCondition, requireItem, rows, statement, writableOwner } from "./access";
 import { checksum, fail, identifier, integer, mime, name } from "./input";
 import { mutate } from "./mutations";
-import { DEFAULT_QUOTA_BYTES, MAX_FILE_BYTES, PART_BYTES, type Condition, type DriveContext, type DriveUpload } from "./types";
+import { MAX_FILE_BYTES, PART_BYTES, type Condition, type DriveContext, type DriveUpload } from "./types";
+import { settings, uploadPolicy } from "./policy";
 
 export async function account(c: DriveContext, owner = c.get("identity").user.id) {
-  const configured = Number(c.env.DRIVE_QUOTA_BYTES ?? DEFAULT_QUOTA_BYTES);
-  const quota = Number.isSafeInteger(configured) && configured >= 0 ? configured : DEFAULT_QUOTA_BYTES;
   const check = identity(c);
-  await statement(c.env, `INSERT OR IGNORE INTO drive_accounts(user_id,quota_bytes) SELECT ?,? WHERE ${check.sql}`, owner, quota, ...check.args).run();
-  const result = await first<{ user_id: string; quota_bytes: number; used_bytes: number; reserved_bytes: number }>(c.env, "SELECT user_id,quota_bytes,used_bytes,reserved_bytes FROM drive_accounts WHERE user_id=?", owner);
+  await statement(c.env, `INSERT OR IGNORE INTO drive_accounts(user_id,quota_bytes,updated_at) SELECT ?,default_quota_bytes,unixepoch() FROM drive_settings WHERE id=1 AND ${check.sql}`, owner, ...check.args).run();
+  const result = await first<{ user_id: string; quota_bytes: number; used_bytes: number; reserved_bytes: number; status: string; version: number; quota_override_bytes: number | null }>(c.env, "SELECT user_id,quota_bytes,used_bytes,reserved_bytes,status,version,quota_override_bytes FROM drive_accounts WHERE user_id=?", owner);
   if (!result) unauthorized();
   return result;
 }
@@ -26,7 +25,7 @@ export async function destination(c: DriveContext, parent: unknown) {
     check: condition(`EXISTS(SELECT 1 FROM drive_items d WHERE d.id=? AND d.kind='folder' AND d.owner_user_id=?)`, folder.id, folder.owner_user_id),
     access: itemCondition(c, folder.id, undefined, "edit") };
 }
-export const quotaCondition = (owner: string, size: number) => condition("EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND used_bytes+reserved_bytes+?<=quota_bytes)", owner, size);
+export const quotaCondition = (owner: string, size: number) => combine(writableOwner(owner), condition("EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND used_bytes+reserved_bytes+?<=quota_bytes)", owner, size));
 export async function ensureCapacity(c: DriveContext, owner: string, size: number) {
   const quota = (await account(c, owner))!;
   if (quota.used_bytes + quota.reserved_bytes + size > quota.quota_bytes) fail(413, "Drive storage quota exceeded");
@@ -47,7 +46,7 @@ async function uploadTarget(c: DriveContext, upload: DriveUpload) {
   else if (upload.owner_user_id !== c.get("identity").user.id) fail(404, "Upload not found");
 }
 function uploadChecks(c: DriveContext, upload: DriveUpload, states: string[], final = false, lease?: string): Condition[] {
-  const checks = [condition(`EXISTS(SELECT 1 FROM drive_uploads WHERE id=? AND created_by=? AND owner_user_id=? AND expires_at>?
+  const checks = [uploadPolicy(upload.size), writableOwner(upload.owner_user_id), condition(`EXISTS(SELECT 1 FROM drive_uploads WHERE id=? AND created_by=? AND owner_user_id=? AND expires_at>?
     AND status IN (${states.map(() => "?").join(",")})${lease ? " AND lease_token=?" : ""})`,
     upload.id, c.get("identity").user.id, upload.owner_user_id, now(), ...states, ...(lease ? [lease] : []))];
   if (upload.base_version > 0) checks.push(itemCondition(c, upload.item_id, final ? upload.base_version : undefined, "edit"),
@@ -55,6 +54,7 @@ function uploadChecks(c: DriveContext, upload: DriveUpload, states: string[], fi
   else if (upload.parent_id) checks.push(itemCondition(c, upload.parent_id, undefined, "edit"),
     condition("EXISTS(SELECT 1 FROM drive_items WHERE id=? AND kind='folder' AND owner_user_id=?)", upload.parent_id, upload.owner_user_id));
   else checks.push(condition("?=?", upload.owner_user_id, c.get("identity").user.id));
+  if (final) checks.push(quotaCondition(upload.owner_user_id, 0));
   return checks;
 }
 async function payload(c: DriveContext, expected: number) {
@@ -71,6 +71,7 @@ export const uploads = new Hono<AppEnv>();
 uploads.post("/", async c => {
   const data = await body(c, ["item_id", "version", "parent_id", "name", "size", "content_type", "mode", "sha256"]);
   const size = integer(data.size, "size", 0, MAX_FILE_BYTES), contentType = mime(data.content_type), hash = checksum(data.sha256);
+  if (size > (await settings(c.env)).max_file_bytes) fail(413, "File exceeds the workspace file size limit");
   const mode = data.mode ?? (size <= PART_BYTES ? "single" : "multipart");
   if (mode !== "single" && mode !== "multipart") fail(400, "Invalid upload mode");
   if (mode === "single" && size > PART_BYTES || mode === "multipart" && size === 0) fail(400, "Invalid upload size for this mode");
@@ -83,14 +84,14 @@ uploads.post("/", async c => {
   const uploadName = existing?.name ?? name(data.name), base = existing ? integer(data.version, "version", 1) : 0;
   await ensureCapacity(c, target.owner_user_id, size);
   const key = `drive/objects/${target.owner_user_id}/${id}`, expires = now() + 86400;
-  await mutate(c, [target.check, ...("access" in target && target.access ? [target.access] : []), quotaCondition(target.owner_user_id, size)], proof => [
+  await mutate(c, [uploadPolicy(size), target.check, ...("access" in target && target.access ? [target.access] : []), quotaCondition(target.owner_user_id, size)], proof => [
     statement(c.env, `INSERT INTO drive_uploads(id,owner_user_id,created_by,item_id,parent_id,name,base_version,size,content_type,sha256,mode,blob_key,status,expires_at)
       SELECT ?,?,?,?,?,?,?,?,?,?,?,?,'allocating',? WHERE ${proof}`, id, target.owner_user_id, c.get("identity").user.id, itemId, target.parent_id, uploadName, base, size, contentType, hash, mode, key, expires),
   ]);
   let multipart: R2MultipartUpload | null = null;
   try {
     multipart = mode === "multipart" ? await c.env.DRIVE_BUCKET.createMultipartUpload(key, { httpMetadata: { contentType }, customMetadata: { upload_id: id } }) : null;
-    await mutate(c, [condition("EXISTS(SELECT 1 FROM drive_uploads WHERE id=? AND status='allocating')", id), target.check,
+    await mutate(c, [uploadPolicy(size), writableOwner(target.owner_user_id), condition("EXISTS(SELECT 1 FROM drive_uploads WHERE id=? AND status='allocating')", id), target.check,
       ...("access" in target && target.access ? [target.access] : [])], proof => [statement(c.env,
         `UPDATE drive_uploads SET status='open',multipart_id=? WHERE id=? AND ${proof}`, multipart?.uploadId ?? null, id)]);
   } catch (error) {

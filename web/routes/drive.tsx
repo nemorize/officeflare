@@ -129,9 +129,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
   const [breadcrumbs, setBreadcrumbs] = useState<DriveItem[]>([]),
     [dragging, setDragging] = useState(false),
     dragDepth = useRef(0);
-  const writable = folder
-    ? !!folderResource.data && canEdit(folderResource.data.item)
-    : view === "my" && !query;
+  const writable = drive.can("create") && (folder
+    ? !!folderResource.data && (folderResource.data.item.actions?.create ?? canEdit(folderResource.data.item))
+    : view === "my" && !query);
   const title = query
     ? "Search results"
     : (folderResource.data?.item.name ??
@@ -306,7 +306,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       if (
         event.key === "Delete" &&
         selected.length &&
-        selected.every((item) => item.effective_role === "owner")
+        selected.every((item) => item.effective_role === "owner" && item.actions?.delete !== false)
       ) {
         event.preventDefault();
         operate(view === "trash" ? "delete" : "trash", selected);
@@ -443,7 +443,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         {view === "trash" && (
           <div className="drive-trash-notice">
             <Icon name="trash" />
-            <span>Items in trash are automatically deleted after 30 days.</span>
+            <span>Items in trash are automatically deleted after {drive.capabilities?.trash_retention_days ?? "the configured number of"} days.</span>
           </div>
         )}
         <div className="drive-toolbar-slot">
@@ -559,8 +559,8 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={action.busy}
                     onClick={() => operate("restore", selected)}
+                    disabled={!selected.every(item => item.actions?.update !== false)}
                   >
                     <Icon name="undo" />
                     Restore
@@ -569,6 +569,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     variant="danger"
                     size="sm"
                     onClick={() => operate("delete", selected)}
+                    disabled={!selected.every(item => item.actions?.delete !== false)}
                   >
                     <Icon name="trash" />
                     Delete forever
@@ -600,19 +601,20 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   <DriveIconButton
                     icon="copy"
                     label="Copy selected items"
+                    disabled={!selected.every(item => item.actions?.copy !== false)}
                     onClick={() => operate("copy", selected)}
                   />
                   {selected.length === 1 && selected[0]!.kind === "file" && (
                     <DriveIconButton
                       icon="download"
                       label="Download selected file"
-                      disabled={action.busy}
+                      disabled={action.busy || selected[0]?.actions?.download === false}
                       onClick={() => operate("download", selected)}
                     />
                   )}
                   <span className="drive-toolbar-separator" />
                   {selected.every(
-                    (item) => item.effective_role === "owner",
+                    (item) => item.effective_role === "owner" && item.actions?.delete !== false,
                   ) && (
                     <DriveIconButton
                       icon="trash"
@@ -981,6 +983,8 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       {preview && (
         <DrivePreview
           item={preview}
+          canDownload={preview.actions?.download !== false}
+          canPreview={preview.actions?.download !== false || ["text/plain", "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"].includes(preview.current_version?.content_type ?? preview.content_type ?? "")}
           onClose={() => setPreview(null)}
           onShare={
             preview.effective_role === "owner"
@@ -1066,7 +1070,7 @@ function DriveMenuItems({
     Separator = context ? ContextMenu.Separator : Menu.Separator;
   return trash ? (
     <>
-      <Item onClick={() => onAction("restore")}>
+      <Item disabled={item.actions?.update === false} onClick={() => onAction("restore")}>
         <Icon name="undo" />
         Restore
       </Item>
@@ -1075,7 +1079,7 @@ function DriveMenuItems({
         File information
       </Item>
       <Separator />
-      <Item data-variant="danger" onClick={() => onAction("delete")}>
+      <Item disabled={item.actions?.delete === false} data-variant="danger" onClick={() => onAction("delete")}>
         <Icon name="trash" />
         Delete forever
       </Item>
@@ -1092,7 +1096,7 @@ function DriveMenuItems({
           Share
         </Item>
       )}
-      {item.kind === "file" && (
+      {item.kind === "file" && item.actions?.download !== false && (
         <Item onClick={() => onAction("download")}>
           <Icon name="download" />
           Download
@@ -1111,7 +1115,7 @@ function DriveMenuItems({
           </Item>
         </>
       )}
-      <Item onClick={() => onAction("copy")}>
+      <Item disabled={item.actions?.copy === false} onClick={() => onAction("copy")}>
         <Icon name="copy" />
         Make a copy
       </Item>
@@ -1126,7 +1130,7 @@ function DriveMenuItems({
       {item.effective_role === "owner" && (
         <>
           <Separator />
-          <Item data-variant="danger" onClick={() => onAction("trash")}>
+          <Item disabled={item.actions?.delete === false} data-variant="danger" onClick={() => onAction("trash")}>
             <Icon name="trash" />
             Move to trash
           </Item>

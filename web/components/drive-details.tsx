@@ -378,7 +378,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                     Reply
                   </Button>
                 )}
-                {!comment.parent_id && canEdit(item) && (
+                {!comment.parent_id && canEdit(item) && canComment(item) && (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -401,7 +401,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                     {comment.resolved ? "Reopen" : "Resolve"}
                   </Button>
                 )}
-                {comment.author_user_id === account.user?.id && (
+                {comment.author_user_id === account.user?.id && canComment(item) && (
                   <>
                     <Button
                       size="sm"
@@ -564,7 +564,7 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={action.busy}
+                disabled={action.busy || item.actions?.download === false}
                 onClick={() =>
                   void action.run(() =>
                     downloadDriveItem(
@@ -585,7 +585,7 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
                   Restore
                 </Button>
               )}
-              {!version.current && item.effective_role === "owner" && (
+              {!version.current && item.effective_role === "owner" && canEdit(item) && (
                 <DriveIconButton
                   icon="trash"
                   label="Delete previous version"

@@ -33,6 +33,7 @@ import {
   uploadDriveFile,
   type DriveItem,
   type DriveQuota,
+  type DriveCapabilities,
   type UploadEntry,
 } from "../lib/drive";
 
@@ -40,6 +41,8 @@ interface DriveContextValue {
   revision: number;
   refresh: () => void;
   quota: DriveQuota | null;
+  capabilities: DriveCapabilities | null;
+  can: (action: "create" | "update" | "delete" | "download" | "comment" | "internal_share" | "public_share") => boolean;
   target: { parent: string | null; writable: boolean };
   setTarget: (target: { parent: string | null; writable: boolean }) => void;
   chooseFiles: (folder?: boolean, item?: DriveItem) => void;
@@ -100,6 +103,13 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     active ? "/api/drive/quota" : null,
     revision,
   );
+  const capabilities = useDriveResource<DriveCapabilities>(active ? "/api/drive/capabilities" : null, revision);
+  const can: DriveContextValue["can"] = (action) => {
+    const value = capabilities.data;
+    if (!value || value.account_status === "suspended") return false;
+    const keys = { create: "drive.files.create", update: "drive.files.update", delete: "drive.files.delete", download: "drive.files.download", comment: "drive.comments.create", internal_share: "drive.sharing.internal", public_share: "drive.sharing.public" };
+    return value.permissions.includes(keys[action]) && (action === "download" || value.account_status === "active" && !value.write_locked) && (action !== "internal_share" || value.internal_sharing_enabled) && (action !== "public_share" || value.public_sharing_enabled);
+  };
   const filesInput = useRef<HTMLInputElement>(null),
     folderInput = useRef<HTMLInputElement>(null),
     replacement = useRef<DriveItem | undefined>(undefined),
@@ -187,9 +197,11 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     }
   }, [entries, refresh, update]);
   const enqueue = (files: File[], parent: string | null, item?: DriveItem) => {
-    const accepted = files.filter((file) => file.size <= 5 * 1024 ** 3);
+    if (!can(item ? "update" : "create")) { notify.error("Your role or Drive policy does not allow this upload."); return; }
+    const maximum = capabilities.data?.max_file_bytes ?? 0;
+    const accepted = files.filter((file) => file.size <= maximum);
     if (accepted.length !== files.length)
-      notify.error("Files must be 5 GB or smaller.");
+      notify.error(`Files must be ${formatBytes(maximum)} or smaller.`);
     if (item && files.length !== 1) {
       notify.error("Choose one file to replace this version.");
       return;
@@ -208,6 +220,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     setCollapsed(false);
   };
   const chooseFiles = (folder = false, item?: DriveItem) => {
+    if (!can(item ? "update" : "create")) return;
     replacement.current = item;
     inputParent.current = target.parent;
     (folder ? folderInput : filesInput).current?.click();
@@ -267,11 +280,14 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         revision,
         refresh,
         quota: quota.data,
-        target,
+        capabilities: capabilities.data,
+        can,
+        target: { ...target, writable: target.writable && can("create") },
         setTarget,
         chooseFiles,
         enqueue,
         newFolder: () => {
+          if (!can("create")) return;
           setFolderParent(target.parent);
           setFolderName("");
           folderAction.setError("");

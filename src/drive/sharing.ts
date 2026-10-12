@@ -6,6 +6,7 @@ import { now, uuid, type AppEnv } from "../auth/types";
 import { activeUser, ancestors, audience, condition, driveEnabled, first, itemCondition, requireItem, rows, statement } from "./access";
 import { bool, expiry, fail, identifier, integer, role, text } from "./input";
 import { mutate } from "./mutations";
+import { linkPolicy } from "./policy";
 
 export const sharing = new Hono<AppEnv>();
 const itemId = (c: Parameters<typeof requireItem>[0]) => identifier(c.req.param("itemId"));
@@ -53,7 +54,9 @@ sharing.post("/:itemId/links", async c => {
   const password = data.password === undefined || data.password === null ? null : text(data.password, "password", 128);
   if (password !== null && password.length < 8) fail(400, "Link passwords need at least 8 characters");
   const hash = password ? await hashPassword(password) : null, tokenHash = await digest(token);
-  await mutate(c, [itemCondition(c, id, expected(data), "owner")], proof => [
+  const policy = linkPolicy(!!hash, expires);
+  if (!await first(c.env, `SELECT 1 WHERE ${policy.sql}`, ...policy.args)) fail(403, "Public link must satisfy the workspace password and expiry policy");
+  await mutate(c, [policy, itemCondition(c, id, expected(data), "owner")], proof => [
     statement(c.env, `INSERT INTO drive_links(id,item_id,token_hash,password_hash,allow_download,expires_at,created_by) SELECT ?,?,?,?,?,?,? WHERE ${proof}`,
       link, id, tokenHash, hash, +allow, expires, c.get("identity").user.id),
     statement(c.env, `UPDATE drive_items SET version=version+1,updated_at=? WHERE id=? AND ${proof}`, now(), id),
@@ -65,12 +68,16 @@ sharing.patch("/:itemId/links/:linkId", async c => {
   const data = await body(c, ["version", "expires_at", "password", "allow_download", "revoked"]), id = itemId(c), linkId = identifier(c.req.param("linkId"));
   await requireItem(c, id, "owner");
   if (Object.keys(data).length < 2) fail(400, "No changes supplied");
+  const current = await first<{ password_hash: string | null; expires_at: number | null; created_at: number }>(c.env, "SELECT password_hash,expires_at,created_at FROM drive_links WHERE id=? AND item_id=? AND revoked_at IS NULL", linkId, id);
+  if (!current) fail(404, "Share link not found");
+  const policy = data.revoked === true ? condition("1") : linkPolicy(data.password === undefined ? !!current.password_hash : data.password !== null, data.expires_at === undefined ? current.expires_at : expiry(data.expires_at), current.created_at);
+  if (!await first(c.env, `SELECT 1 WHERE ${policy.sql}`, ...policy.args)) fail(403, "Public link must satisfy the workspace password and expiry policy");
   const updates: string[] = [], args: (string | number | null)[] = [];
   if (data.expires_at !== undefined) { updates.push("expires_at=?"); args.push(expiry(data.expires_at)); }
   if (data.allow_download !== undefined) { updates.push("allow_download=?"); args.push(+bool(data.allow_download, "allow_download")); }
   if (data.revoked !== undefined) { if (!bool(data.revoked, "revoked")) fail(400, "Revoked links cannot be restored"); updates.push("revoked_at=?"); args.push(now()); }
   if (data.password !== undefined) { const password = data.password === null ? null : text(data.password, "password", 128); if (password !== null && password.length < 8) fail(400, "Link passwords need at least 8 characters"); updates.push("password_hash=?"); args.push(password ? await hashPassword(password) : null); }
-  await mutate(c, [itemCondition(c, id, expected(data), "owner"), condition("EXISTS(SELECT 1 FROM drive_links WHERE id=? AND item_id=? AND revoked_at IS NULL)", linkId, id)], proof => [
+  await mutate(c, [policy, itemCondition(c, id, expected(data), "owner"), condition("EXISTS(SELECT 1 FROM drive_links WHERE id=? AND item_id=? AND revoked_at IS NULL)", linkId, id)], proof => [
     statement(c.env, `UPDATE drive_links SET ${updates.join(",")} WHERE id=? AND item_id=? AND ${proof}`, ...args, linkId, id),
     statement(c.env, `UPDATE drive_items SET version=version+1,updated_at=? WHERE id=? AND ${proof}`, now(), id),
   ], { item_id: id, action: data.revoked ? "link_revoked" : "link_updated", details: { link_id: linkId, ...(data.expires_at === undefined ? {} : { expires_at: data.expires_at }),

@@ -4,17 +4,18 @@ import { Check } from "./console-shared";
 import { canGrant, defaultEligible, permissionCatalog, permissionGroups, togglePermission } from "../lib/console";
 import type { PermissionDefinition } from "../../src/authorization/permissions.ts";
 
-export function PermissionPicker({ selected, onChange, editable = false, owned = [], busy = false, defaultOnly = false }: {
+export function PermissionPicker({ selected, onChange, editable = false, owned = [], busy = false, defaultOnly = false, keys }: {
   selected: string[]; onChange?: (permissions: string[]) => void; editable?: boolean; owned?: string[]; busy?: boolean; defaultOnly?: boolean;
+  keys?: readonly string[];
 }) {
   const [query, setQuery] = useState("");
-  const definitions = Object.entries(permissionCatalog).map(([key, definition]) => ({ key, ...definition as PermissionDefinition }));
+  const definitions = Object.entries(permissionCatalog).filter(([key]) => !keys || keys.includes(key)).map(([key, definition]) => ({ key, ...definition as PermissionDefinition }));
   const needle = query.trim().toLowerCase();
   const allowed = (key: string) => canGrant(owned, [key]) && (!defaultOnly || defaultEligible([key]));
   const visible = definitions.filter((item) => `${item.label} ${item.description} ${item.key}`.toLowerCase().includes(needle));
   return <div className="console-permission-picker">
     <TextField label="Find permissions" name="permission_search" type="search" value={query} onValueChange={setQuery} placeholder="Search by action or service" />
-    <p className="console-subtext">{selected.length} permissions selected · Service and administration permissions apply across this workspace. Mailbox sharing is checked separately.</p>
+    <p className="console-subtext">{selected.length} permissions selected · Service and administration permissions apply across this workspace. Mailbox and Drive item sharing are checked separately. Drive administration does not grant file content access.</p>
     {defaultOnly && <p className="console-subtext">Default roles can grant service access only. Remove the default setting before adding administrative permissions.</p>}
     <div className="console-permissions">{Object.entries(permissionGroups).map(([group, title]) => {
       const rows = visible.filter((item) => item.group === group), all = definitions.filter((item) => item.group === group);

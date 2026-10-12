@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
 import type { AppEnv } from "../auth/types";
-import { access, activeUser, driveEnabled, rows } from "../drive/access";
+import { access, activeUser, driveEnabled, first, rows, writableOwner } from "../drive/access";
 import { text } from "../drive/input";
 import { collaboration } from "../drive/collaboration";
 import { privateContent } from "../drive/content";
@@ -11,14 +11,27 @@ import { createFolder, items, limit } from "../drive/items";
 import { publicDrive } from "../drive/public";
 import { sharing } from "../drive/sharing";
 import { account, uploads } from "../drive/storage";
-import { MAX_FILE_BYTES, PART_BYTES } from "../drive/types";
+import { PART_BYTES } from "../drive/types";
+import { adminDrive } from "../drive/admin";
+import { requireDriveAction, settings } from "../drive/policy";
+import { permissionsFor } from "../authorization/access";
 
 const drive = new Hono<AppEnv>();
+drive.route("/admin", adminDrive);
 drive.route("/public", publicDrive);
 drive.use("*", requireAccess, requirePermission("drive.access"));
-drive.get("/capabilities", c => c.json({ max_file_bytes: MAX_FILE_BYTES, part_bytes: PART_BYTES,
-  upload_lifetime_seconds: 86400, trash_retention_days: 30, max_tree_operation_items: 200,
-  sharing_roles: ["viewer", "commenter", "editor"], public_links: "read_only" }));
+drive.use("*", requireDriveAction);
+drive.get("/capabilities", async c => {
+  const policy = await settings(c.env), quota = await account(c);
+  return c.json({ max_file_bytes: policy.max_file_bytes, part_bytes: PART_BYTES,
+    upload_lifetime_seconds: 86400, trash_retention_days: policy.trash_retention_days, max_tree_operation_items: 200,
+    sharing_roles: ["viewer", "commenter", "editor"], public_links: "read_only",
+    internal_sharing_enabled: !!policy.internal_sharing_enabled, public_sharing_enabled: !!policy.public_sharing_enabled,
+    public_link_password_required: !!policy.public_link_password_required, public_link_max_days: policy.public_link_max_days,
+    write_locked: !await first(c.env, `SELECT 1 WHERE ${writableOwner(c.get("identity").user.id).sql}`, ...writableOwner(c.get("identity").user.id).args),
+    permissions: (await permissionsFor(c.get("db"), c.get("identity").user.id)).filter(key => key.startsWith("drive.")),
+    account_status: (quota as typeof quota & { status?: string }).status ?? "active" });
+});
 drive.get("/people", async c => {
   const q = text(c.req.query("q") ?? "", "q", 255).trim();
   if (q.length < 2) return c.json({ people: [] });

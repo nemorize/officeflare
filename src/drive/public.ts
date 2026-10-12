@@ -2,14 +2,15 @@ import { Hono } from "hono";
 import { digest } from "../auth/crypto";
 import { verifyPassword } from "../auth/password";
 import { now, type AppEnv } from "../auth/types";
-import { activeUser, cleanPath, condition, descendants, driveEnabled, first, rows } from "./access";
+import { activeUser, availableItem, cleanPath, condition, descendants, driveEnabled, first, rows } from "./access";
+import { publicLinkPolicy } from "./policy";
 import { content } from "./content";
 import { cursor, readCursor } from "./cursor";
 import { fail, identifier, integer } from "./input";
 import type { DriveContext, DriveItem } from "./types";
 interface Link { id: string; item_id: string; token_hash: string; password_hash: string | null; allow_download: number; expires_at: number | null }
 const scope = (hash: string, item: string, password: string | null, reference = false) => condition(`EXISTS(SELECT 1 FROM drive_links l JOIN drive_items root ON root.id=l.item_id JOIN users owner ON owner.id=root.owner_user_id
-  WHERE l.token_hash=? AND l.password_hash IS ? AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at>unixepoch())
+  WHERE l.token_hash=? AND l.password_hash IS ? AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at>unixepoch()) AND ${publicLinkPolicy("l")} AND ${availableItem("root.id")}
   AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath("root.id")} AND ${reference ? item : "?"} IN (${descendants("l.item_id")})
   AND ${cleanPath(reference ? item : "?")})`, hash, password, ...(reference ? [] : [item, item]));
 async function validate(c: DriveContext) {
@@ -19,7 +20,7 @@ async function validate(c: DriveContext) {
   const rate = await first<{ attempts: number }>(c.env, `INSERT INTO auth_rate_limits(bucket,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1 RETURNING attempts`, limitKey, now() + 900);
   if (rate && rate.attempts > 60) { c.header("Retry-After", "900"); fail(429, "Too many share link requests"); }
   const link = await first<Link>(c.env, `SELECT l.id,l.item_id,l.token_hash,l.password_hash,l.allow_download,l.expires_at FROM drive_links l JOIN drive_items root ON root.id=l.item_id JOIN users owner ON owner.id=root.owner_user_id
-    WHERE l.token_hash=? AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at>unixepoch()) AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath("root.id")}`, hash);
+    WHERE l.token_hash=? AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at>unixepoch()) AND ${publicLinkPolicy("l")} AND ${availableItem("root.id")} AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath("root.id")}`, hash);
   if (!link) fail(404, "Share link not found");
   if (link.password_hash) {
     const password = c.req.header("x-drive-link-password");

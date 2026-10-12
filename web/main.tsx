@@ -6,7 +6,7 @@ import { UIProvider } from "@/components/ui";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
 import { workspaceApps } from "./lib/workspace-navigation";
 import { ConsoleGate, ConsoleHome, ServiceGate, WorkspaceHome } from "./components/console-access";
-import { userPermissions, rolePermissions } from "./lib/console";
+import { userPermissions, rolePermissions, driveAdminPermissions } from "./lib/console";
 import "./styles.css";
 
 const UIPreviewPage = import.meta.env.DEV ? lazy(() => import("./routes/ui-preview")) : null;
@@ -19,6 +19,9 @@ const UsersPage = lazy(() => import("./routes/console-users").then((module) => (
 const UserEditorPage = lazy(() => import("./routes/console-users").then((module) => ({ default: module.UserEditorPage })));
 const RolesPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RolesPage })));
 const RoleEditorPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RoleEditorPage })));
+const DriveConsoleLayout = lazy(() => import("./routes/console-drive").then(module => ({ default: module.DriveConsoleLayout })));
+const DriveConsolePage = lazy(() => import("./routes/console-drive").then(module => ({ default: module.DriveConsolePage })));
+const DriveAccountEditorPage = lazy(() => import("./routes/console-drive").then(module => ({ default: module.DriveAccountEditorPage })));
 const DrivePage = lazy(() => import("./routes/drive").then((module) => ({ default: module.DrivePage })));
 const DriveLinkedItemPage = lazy(() => import("./routes/drive").then((module) => ({ default: module.DriveLinkedItemPage })));
 const PublicDrivePage = lazy(() => import("./routes/drive-public").then((module) => ({ default: module.PublicDrivePage })));
@@ -63,6 +66,11 @@ root.render(
               <Route path="roles" element={<ConsoleGate permissions={rolePermissions}><RolesPage /></ConsoleGate>} />
               <Route path="roles/new" element={<ConsoleGate permissions={["admin.roles.create"]}><RoleEditorPage key="new" creating /></ConsoleGate>} />
               <Route path="roles/:id" element={<ConsoleGate permissions={["admin.roles.read"]}><RoleEditorPage /></ConsoleGate>} />
+              <Route path="drive" element={<ConsoleGate permissions={driveAdminPermissions}><DriveConsoleLayout /></ConsoleGate>}>
+                <Route index element={<DriveConsolePage page="home" />} />
+                {["overview", "accounts", "items", "sharing", "settings", "activity"].map(page => <Route key={page} path={page} element={<DriveConsolePage key={page} page={page} />} />)}
+                <Route path="accounts/:id" element={<ConsoleGate permissions={["admin.drive.accounts.read"]}><DriveAccountEditorPage /></ConsoleGate>} />
+              </Route>
               {["domains", "mailboxes"].map((page) => <Route key={page} path={`mail/${page}`} element={<ConsoleGate permissions={[`admin.mail.${page}.read`]}><MailConsolePage key={page} page={page} /></ConsoleGate>} />)}
               <Route path="mail/domains/new" element={<ConsoleGate permissions={["admin.mail.domains.manage"]}><MailDomainEditorPage key="new" creating /></ConsoleGate>} />
               <Route path="mail/domains/:id" element={<ConsoleGate permissions={["admin.mail.domains.read"]}><MailDomainEditorPage /></ConsoleGate>} />

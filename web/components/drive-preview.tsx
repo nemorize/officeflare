@@ -68,6 +68,7 @@ export function DrivePreview({
   onClose,
   onShare,
   canDownload = true,
+  canPreview = canDownload,
   loader = privateDriveContent,
   basePath = `/api/drive/items/${item.id}`,
 }: {
@@ -75,13 +76,14 @@ export function DrivePreview({
   onClose: () => void;
   onShare?: () => void;
   canDownload?: boolean;
+  canPreview?: boolean;
   loader?: DriveContentLoader;
   basePath?: string;
 }) {
   const notify = useNotifications(),
     kind = previewKind(item);
   const [content, setContent] = useState<{ url?: string; text?: string }>({}),
-    [loading, setLoading] = useState(!!kind && canDownload),
+    [loading, setLoading] = useState(!!kind && canPreview),
     [error, setError] = useState(""),
     [downloading, setDownloading] = useState(false);
   useEffect(() => {
@@ -89,8 +91,8 @@ export function DrivePreview({
     let url: string | undefined;
     setContent({});
     setError("");
-    setLoading(!!kind && canDownload);
-    if (kind && canDownload)
+    setLoading(!!kind && canPreview);
+    if (kind && canPreview)
       void loader(
         `${basePath}/${kind === "text" && !["text/plain"].includes(item.current_version?.content_type ?? item.content_type ?? "") ? "content" : "preview"}`,
         controller.signal,
@@ -116,7 +118,7 @@ export function DrivePreview({
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [item.id, basePath, kind, canDownload, loader]);
+  }, [item.id, basePath, kind, canPreview, loader]);
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <DialogPopup padding="none" data-ui-theme="neutral"

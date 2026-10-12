@@ -13,7 +13,6 @@
 		"AUTH_ISSUER": "officeflare",
 		"AUTH_AUDIENCE": "officeflare-api",
 		"NOTIFICATION_QUEUE_NAME": "officeflare-notifications",
-		"DRIVE_QUOTA_BYTES": "10737418240",
 		"MAIL_PARTITION_TARGET_BYTES": "6000000000"
 	},
 	"secrets": {

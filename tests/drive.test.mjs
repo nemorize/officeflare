@@ -7,17 +7,19 @@ import { build } from "esbuild";
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { hashPassword } from "../src/auth/password.ts";
 import { workerModules } from "./worker-modules.mjs";
+import { driveUserPermissions } from "../src/authorization/permissions.ts";
+import { permissionCatalog, permissionClosure } from "../src/authorization/permissions.ts";
 
 const PASSWORD = "a long password for drive integration tests";
 const timestamp = () => Math.floor(Date.now() / 1000), partBytes = 8 * 1024 * 1024;
 const harness = await build({ entryPoints: ["tests/drive-harness.ts"], bundle: true, write: false, format: "esm", platform: "browser",
   external: ["cloudflare:workers", "../dist/index.js"], target: "es2022" });
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const bindings = { AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
     MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
-    AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api", DRIVE_QUOTA_BYTES: "10737418240" };
+    AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api" };
   const common = { compatibilityDate: "2026-09-29", d1Databases: { DB: "drive-tests" }, r2Buckets: { DRIVE_BUCKET: "drive-tests" }, bindings };
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [
     { ...common, name: "officeflare", modules: workerModules },
@@ -26,6 +28,7 @@ async function fixture(t) {
   t.after(() => mf.dispose());
   const db = await mf.getD1Database("DB"), bucket = await mf.getR2Bucket("DRIVE_BUCKET"), faults = await mf.getWorker("drive-harness");
   for (const file of (await readdir("migrations")).sort()) {
+    if (file === "0017_drive_administration.sql" && options.beforeAdminMigration) await options.beforeAdminMigration(db);
     let statement = "", trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {
       if (!line.trim() || line.trim().startsWith("--")) continue;
@@ -37,7 +40,7 @@ async function fixture(t) {
   }
   const hash = await hashPassword(PASSWORD);
   await db.prepare("INSERT INTO roles(id,key,label) VALUES('drive-test','drive-test','Drive test')").run();
-  await db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('drive-test','drive.access')").run();
+  await db.batch(driveUserPermissions.map(key => db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('drive-test',?)").bind(key)));
   for (const id of ["owner", "editor", "viewer", "commenter", "outsider", "no-drive", "admin"]) {
     await db.prepare("INSERT INTO users(id,email_address,password_hash) VALUES(?,?,?)").bind(id, `${id}@office.test`, hash).run();
     if (id !== "no-drive") await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)").bind(id, id === "admin" ? "system-administrator" : "drive-test").run();
@@ -422,4 +425,217 @@ test('Drive UI API supports safe account search, roles and complete ordered pagi
   const permissions = (await f.call(`/items/${b.id}/permissions`)).permissions;
   assert.equal(permissions[0].display_name,'Team Viewer'); assert.equal(permissions[0].source_name,'Shared documents'); assert.equal(permissions[0].inherited,1);
   await f.call(`/items/${c.id}/comments`,{actor:'viewer',method:'POST',data:{body:'No'},expected:404});
+});
+
+const adminCall = (f, path, options = {}) => f.call(`/admin${path}`, { actor: "admin", ...options });
+const patchSettings = async (f, changes, options = {}) => adminCall(f, "/settings", { method: "PATCH", data: { version: (await adminCall(f, "/settings")).settings.version, reason: "Administrative integration test", ...changes }, ...options });
+const patchAccount = async (f, user, changes, options = {}) => adminCall(f, `/accounts/${user}`, { method: "PATCH", data: { version: (await adminCall(f, `/accounts/${user}`)).account.version, reason: "Storage and availability test", ...changes }, ...options });
+const testRole = async (f, user, keys) => {
+  const id = `role-${user}`;
+  await f.db.prepare("INSERT OR IGNORE INTO roles(id,key,label) VALUES(?,?,?)").bind(id, id, id).run();
+  await f.db.prepare("DELETE FROM user_roles WHERE user_id=?").bind(user).run();
+  await f.db.batch(permissionClosure(keys).map(key => f.db.prepare("INSERT OR IGNORE INTO role_permissions(role_id,permission_key) VALUES(?,?)").bind(id, key)));
+  await f.db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)").bind(user, id).run();
+};
+
+test("Drive administration migration preserves old quotas and usage grants", async t => {
+  const f = await fixture(t, { beforeAdminMigration: async db => {
+    await db.prepare("INSERT INTO users(id,email_address,password_hash) VALUES('legacy','legacy@office.test','migration-fixture')").run();
+    await db.prepare("INSERT INTO roles(id,key,label) VALUES('legacy-drive','legacy-drive','Existing Drive role')").run();
+    await db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('legacy-drive','drive.access')").run();
+    await db.prepare("INSERT INTO drive_accounts(user_id,quota_bytes) VALUES('legacy',12345)").run();
+  } });
+  const legacy = await f.db.prepare("SELECT * FROM drive_accounts WHERE user_id='legacy'").first();
+  assert.equal(legacy.quota_bytes, 12345); assert.equal(legacy.quota_override_bytes, 12345);
+  const grants = (await f.db.prepare("SELECT permission_key FROM role_permissions WHERE role_id='legacy-drive' ORDER BY permission_key").all()).results;
+  assert.deepEqual(grants.map(row => row.permission_key), [...driveUserPermissions].sort());
+  const system = (await f.db.prepare("SELECT permission_key FROM role_permissions WHERE role_id='system-administrator' ORDER BY permission_key").all()).results;
+  assert.deepEqual(system.map(row => row.permission_key), Object.keys(permissionCatalog).sort());
+  assert.equal((await adminCall(f, "/settings")).settings.default_quota_bytes, 10 * 1024 ** 3);
+});
+
+test("Drive console permissions work independently of personal Drive access", async t => {
+  const f = await fixture(t);
+  const file = await f.upload("Private administrator audit.txt");
+  await adminCall(f, "/overview", { actor: "owner", expected: 403 });
+  await f.call(`/items/${file.id}`, { actor: "admin", expected: 404 });
+  await testRole(f, "no-drive", ["admin.drive.accounts.read", "admin.drive.items.read", "admin.drive.sharing.read", "admin.drive.audit.read"]);
+  assert.equal((await adminCall(f, "/accounts", { actor: "no-drive" })).items.length, 7);
+  assert.equal((await adminCall(f, "/items", { actor: "no-drive" })).items[0].name, file.name);
+  await adminCall(f, "/sharing", { actor: "no-drive" }); await adminCall(f, "/activity", { actor: "no-drive" });
+  await adminCall(f, "/settings", { actor: "no-drive", expected: 403 });
+  await adminCall(f, "/accounts/owner", { actor: "no-drive", method: "PATCH", data: { version: 1, quota_override_bytes: 1000, reason: "Not permitted" }, expected: 403 });
+  await f.call("/quota", { actor: "no-drive", expected: 403 });
+  await f.call(`/items/${file.id}/content`, { actor: "no-drive", expected: 403 });
+});
+
+test("Drive database defaults, overrides, concurrency and suspension are enforced", async t => {
+  const f = await fixture(t), file = await f.upload("Storage.txt", "stored bytes"), shared = await f.link(file.id);
+  const initial = (await adminCall(f, "/settings")).settings;
+  await patchSettings(f, { default_quota_bytes: 1024 * 1024 });
+  assert.equal((await f.call("/quota")).quota_bytes, 1024 * 1024);
+  assert.equal((await f.call("/quota", { actor: "viewer" })).quota_bytes, 1024 * 1024);
+  await patchAccount(f, "owner", { quota_override_bytes: 1234 });
+  await patchSettings(f, { default_quota_bytes: 2048 });
+  assert.equal((await f.call("/quota")).quota_bytes, 1234);
+  assert.equal((await f.call("/quota", { actor: "viewer" })).quota_bytes, 2048);
+  await adminCall(f, "/settings", { method: "PATCH", data: { version: initial.version, public_sharing_enabled: false, reason: "Stale snapshot" }, expected: 412 });
+  await patchAccount(f, "owner", { quota_override_bytes: null, status: "read_only" });
+  const dto = await f.item(file.id); assert.equal(dto.actions.update, false); assert.equal(dto.actions.download, true);
+  await f.call("/folders", { method: "POST", data: { name: "Forbidden" }, expected: 403 });
+  assert.equal((await f.raw(`/items/${file.id}/content`)).status, 200);
+  await patchAccount(f, "owner", { status: "suspended" });
+  await f.call("/quota", { expected: 403 }); await f.call(`/public/${shared.token}`, { actor: null, expected: 404 });
+  await patchAccount(f, "owner", { status: "active", quota_override_bytes: 1 });
+  await f.call("/uploads", { method: "POST", data: { name: "too much", size: 1 }, expected: 413 });
+  assert.equal((await f.item(file.id)).current_version.size, Buffer.byteLength("stored bytes"));
+  await assert.rejects(f.db.prepare("UPDATE drive_admin_activity SET action='forged'").run(), /immutable/);
+  await assert.rejects(f.db.prepare("DELETE FROM drive_admin_activity").run(), /immutable/);
+  const logs = await adminCall(f, "/activity?kind=admin&action=account_updated&owner=owner");
+  assert.equal(logs.items.length, 4); assert.ok(logs.items.every(entry => entry.details.reason));
+});
+
+test("Drive read-only roles, shared ACLs and policy changes guard actual bytes", async t => {
+  const f = await fixture(t), root = await f.folder("Access checks"), file = await f.upload("Readable.txt", "read-only bytes", root.id);
+  await f.share(root.id, "viewer", "viewer");
+  await testRole(f, "owner", ["drive.access", "drive.files.download"]);
+  assert.equal((await f.item(file.id)).actions.create, false);
+  assert.equal((await f.raw(`/items/${file.id}/preview`)).status, 200); assert.equal((await f.raw(`/items/${file.id}/content`)).status, 200);
+  await f.call(`/items/${file.id}`, { method: "PATCH", data: { version: file.version, name: "Changed" }, expected: 403 });
+  await f.call(`/items/${file.id}/copy`, { method: "POST", data: { version: file.version }, expected: 403 });
+  await f.call(`/items/${file.id}/comments`, { method: "POST", data: { body: "Not allowed" }, expected: 403 });
+  await patchSettings(f, { internal_sharing_enabled: false });
+  await f.call(`/items/${file.id}`, { actor: "viewer", expected: 404 }); await f.item(file.id);
+  await patchSettings(f, { internal_sharing_enabled: true });
+  const bytes = await f.raw(`/items/${file.id}/content`, { actor: "viewer", fault: true, headers: { "X-Test-After-Storage": "UPDATE drive_settings SET internal_sharing_enabled=0 WHERE id=1" } });
+  assert.equal(bytes.status, 404);
+  await testRole(f, "owner", [...driveUserPermissions]);
+  await patchSettings(f, { internal_sharing_enabled: true });
+  const upload = await f.start({ name: "Policy race.txt", size: 3, content_type: "text/plain" });
+  await f.call(`/uploads/${upload.id}/content`, { method: "PUT", bytes: Buffer.from("abc"), fault: true, headers: { "X-Test-After-Storage": "UPDATE drive_settings SET max_file_bytes=1 WHERE id=1" }, expected: 412 });
+  await f.call("/uploads", { method: "POST", data: { name: "Too big", size: 2 }, expected: 413 });
+});
+
+test("Drive public policies apply to existing links and admin revocation is immediate", async t => {
+  const f = await fixture(t), file = await f.upload("Link policy.txt"), old = await f.link(file.id);
+  await patchSettings(f, { public_link_password_required: true, public_link_max_days: 7 });
+  await f.call(`/public/${old.token}`, { actor: null, expected: 404 });
+  await f.call(`/items/${file.id}/links`, { method: "POST", data: { version: (await f.item(file.id)).version }, expected: 403 });
+  const link = await f.link(file.id, { password: "workspace-password", expires_at: timestamp() + 6 * 86400 });
+  await f.call(`/public/${link.token}`, { actor: null, headers: { "X-Drive-Link-Password": "workspace-password" } });
+  const all = await adminCall(f, "/sharing?kind=links&state=all");
+  assert.equal(all.items.length, 2); assert.ok(!JSON.stringify(all).includes("password_hash")); assert.ok(!JSON.stringify(all).includes(link.token));
+  const expired = await f.link(file.id, { password: "workspace-password", expires_at: timestamp() + 6 * 86400 });
+  await f.db.prepare("UPDATE drive_links SET expires_at=unixepoch()-1 WHERE id=?").bind(expired.id).run();
+  assert.equal((await adminCall(f, "/sharing?kind=links&state=all")).items.find(entry => entry.id === expired.id).policy_allowed, 0);
+  await adminCall(f, `/items/${file.id}/links/${link.id}/revoke`, { method: "POST", data: { version: (await f.item(file.id)).version, reason: "External link revoked" } });
+  await f.call(`/public/${link.token}`, { actor: null, headers: { "X-Drive-Link-Password": "workspace-password" }, expected: 404 });
+  const race = await f.link(file.id, { password: "workspace-password", expires_at: timestamp() + 6 * 86400 });
+  await f.call(`/public/${race.token}/items/${file.id}/content`, { actor: null, fault: true, headers: { "X-Drive-Link-Password": "workspace-password", "X-Test-After-Storage": "UPDATE drive_settings SET public_sharing_enabled=0 WHERE id=1" }, expected: 404 });
+  await f.call(`/items/${file.id}/links/${race.id}`, { method: "PATCH", data: { version: (await f.item(file.id)).version, revoked: true } });
+  assert.equal((await adminCall(f, "/activity?kind=admin&action=link_revoked")).items.length, 1);
+});
+
+test("Drive administrative grants, trash, audit filters and revoked admin rights stay atomic", async t => {
+  const f = await fixture(t), root = await f.folder("Admin grant source"), file = await f.upload("Audit searchable.txt", "contents", root.id);
+  await adminCall(f, `/items/${root.id}/permissions`, { method: "POST", data: { version: root.version, user_id: "viewer", role: "commenter", reason: "Grant inherited access" } });
+  assert.equal((await f.item(file.id, "viewer")).effective_role, "commenter");
+  await adminCall(f, `/items/${root.id}/permissions/viewer`, { method: "DELETE", data: { version: (await f.item(root.id)).version, reason: "Remove inherited access" } });
+  await f.call(`/items/${file.id}`, { actor: "viewer", expected: 404 });
+  await f.edit(root.id, { trashed: true });
+  await adminCall(f, `/items/${root.id}/restore`, { method: "POST", data: { version: (await f.item(root.id, "owner", "?include_trashed=true")).version, reason: "Recover folder" } });
+  await f.item(file.id);
+  await f.edit(root.id, { trashed: true });
+  await adminCall(f, `/items/${root.id}/purge`, { method: "POST", data: { version: (await f.item(root.id, "owner", "?include_trashed=true")).version, reason: "Remove old folder" } });
+  await f.call(`/items/${file.id}`, { expected: 404 });
+  assert.equal((await f.call("/quota")).used_bytes, 0);
+  const first = await adminCall(f, "/activity?limit=1&kind=all"); assert.ok(first.next_cursor);
+  const next = await adminCall(f, `/activity?limit=1&kind=all&cursor=${encodeURIComponent(first.next_cursor)}`); assert.notEqual(first.items[0].page_id, next.items[0].page_id);
+  await adminCall(f, `/activity?kind=admin&cursor=${encodeURIComponent(first.next_cursor)}`, { expected: 400 });
+  assert.ok((await adminCall(f, "/activity?q=admin@office.test&kind=admin")).items.length >= 4);
+  const before = await f.db.prepare("SELECT COUNT(*) count FROM drive_admin_activity").first();
+  await patchSettings(f, { default_quota_bytes: 54321 }, { fault: true, headers: { "X-Test-Before-Batch": "DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='admin.drive.settings.manage'" }, expected: 403 });
+  assert.deepEqual(await f.db.prepare("SELECT COUNT(*) count FROM drive_admin_activity").first(), before);
+  assert.equal((await adminCall(f, "/settings")).settings.default_quota_bytes, 10 * 1024 ** 3);
+});
+
+test("Drive handover moves large trees from disabled owners without copying R2 objects", async t => {
+  const f = await fixture(t), root = await f.folder("Former owner files"), file = await f.upload("Retained.txt", "retained", root.id), link = await f.link(root.id);
+  await f.share(root.id, "viewer", "viewer");
+  await f.db.batch(Array.from({ length: 250 }, (_, index) => f.db.prepare("INSERT INTO drive_items(id,owner_user_id,parent_id,kind,name,created_by) VALUES(?,'owner',?,'folder',?,'owner')").bind(`handover-child-${index}`, root.id, `Folder ${index}`)));
+  const original = await f.db.prepare("SELECT blob_key FROM drive_versions WHERE item_id=?").bind(file.id).first();
+  await f.db.prepare("UPDATE users SET disabled_at=unixepoch() WHERE id='owner'").run();
+  const account = (await adminCall(f, "/accounts/owner")).account;
+  const created = await adminCall(f, "/transfers", { method: "POST", data: { source_user_id: "owner", target_user_id: "editor", version: account.version, reason: "Former owner handover" }, expected: 202 });
+  for (let pass = 0; pass < 4; pass++) { await f.recover(); if ((await f.db.prepare("SELECT status FROM drive_admin_jobs WHERE id=?").bind(created.job.id).first()).status === "completed") break; }
+  const job = await f.db.prepare("SELECT * FROM drive_admin_jobs WHERE id=?").bind(created.job.id).first();
+  assert.equal(job.status, "completed"); assert.equal(job.total_items, 252); assert.equal(job.processed_items, 252); assert.equal(job.reserved_bytes, 0);
+  assert.equal((await f.item(file.id, "editor")).effective_role, "owner"); assert.equal((await f.item(file.id, "viewer")).effective_role, "viewer");
+  assert.equal(await (await f.raw(`/items/${file.id}/content`, { actor: "editor" })).text(), "retained");
+  assert.equal((await f.call("/quota", { actor: "editor" })).used_bytes, Buffer.byteLength("retained"));
+  assert.equal((await f.db.prepare("SELECT used_bytes FROM drive_accounts WHERE user_id='owner'").first()).used_bytes, 0);
+  assert.equal((await f.bucket.list()).objects.length, 1); assert.ok(await f.bucket.head(original.blob_key));
+  await f.call(`/public/${link.token}`, { actor: null, expected: 404 });
+  assert.equal((await adminCall(f, "/activity?kind=admin&action=transfer_completed")).items.length, 1);
+  assert.ok((await f.call("/api/notifications?service=drive", { actor: "editor" })).notifications.some(entry => entry.type === "drive.shared"));
+});
+
+test("Drive transfer failures retain reservations, freeze partial trees and resume after reauthorization", async t => {
+  const f = await fixture(t), root = await f.folder("Resumable handover"), file = await f.upload("Recover.txt", "recover", root.id);
+  await f.db.batch(Array.from({ length: 40 }, (_, index) => f.db.prepare("INSERT INTO drive_items(id,owner_user_id,parent_id,kind,name,created_by) VALUES(?,'owner',?,'folder',?,'owner')").bind(`resume-child-${index}`, root.id, `Folder ${index}`)));
+  const started = await adminCall(f, "/transfers", { method: "POST", fault: true, headers: { "X-Test-Before-Transfer": "DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='admin.drive.ownership.transfer'", "X-Test-Transfer-Chunk": "2" }, data: { item_id: root.id, target_user_id: "editor", version: (await f.item(root.id)).version, reason: "Test permission removal during handover" }, expected: 202 });
+  await f.recover();
+  let job = await f.db.prepare("SELECT * FROM drive_admin_jobs WHERE id=?").bind(started.job.id).first();
+  assert.equal(job.status, "failed"); assert.ok(job.processed_items > 0 && job.processed_items < job.total_items);
+  await f.call(`/items/${root.id}`, { actor: "editor", expected: 404 });
+  await f.call("/folders", { actor: "owner", method: "POST", data: { name: "Locked source" }, expected: 403 });
+  await f.call("/folders", { actor: "editor", method: "POST", data: { name: "Locked destination" }, expected: 403 });
+  await adminCall(f, `/transfers/${job.id}/retry`, { method: "POST", data: { version: job.version, reason: "Unauthorized retry" }, expected: 403 });
+  await f.db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('system-administrator','admin.drive.ownership.transfer')").run();
+  await adminCall(f, `/transfers/${job.id}/cancel`, { method: "POST", data: { version: job.version, reason: "Unsafe cancellation" }, expected: 409 });
+  await adminCall(f, `/transfers/${job.id}/retry`, { method: "POST", data: { version: job.version, reason: "Resume with valid authorization" } });
+  await f.recover();
+  job = await f.db.prepare("SELECT * FROM drive_admin_jobs WHERE id=?").bind(job.id).first();
+  assert.equal(job.status, "completed"); assert.equal(job.reserved_bytes, 0);
+  assert.equal((await f.item(file.id, "editor")).owner_user_id, "editor");
+  assert.equal((await f.call("/quota", { actor: "editor" })).reserved_bytes, 0);
+  await f.folder("Unlocked destination", null, "editor");
+});
+
+test("Drive handover keeps inherited trash and avoids unaudited account initialization", async t => {
+  const f = await fixture(t), parent = await f.folder("Trashed source"), child = await f.folder("Keep in trash", parent.id);
+  await f.share(parent.id, "viewer", "viewer");
+  await f.edit(parent.id, { trashed: true });
+  const trash = await adminCall(f, "/items?state=trash");
+  assert.equal(trash.items.find(entry => entry.id === child.id).in_trash, 1);
+  // A legacy folder-only account can have inventory without a quota row.
+  await f.db.prepare("DELETE FROM drive_accounts WHERE user_id='owner'").run();
+  assert.equal((await adminCall(f, "/accounts/owner")).account.version, 0);
+  await adminCall(f, "/transfers", { method: "POST", data: { source_user_id: "owner", target_user_id: "editor", version: 0, reason: "Claim must be authorized" }, fault: true, headers: { "X-Test-Before-Batch": "DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='admin.drive.ownership.transfer'" }, expected: 403 });
+  assert.equal((await f.db.prepare("SELECT COUNT(*) count FROM drive_accounts").first()).count, 0);
+  await f.db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('system-administrator','admin.drive.ownership.transfer')").run();
+  const created = await adminCall(f, "/transfers", { method: "POST", data: { item_id: child.id, target_user_id: "editor", version: child.version, reason: "Preserve trash during ownership change" }, expected: 202 });
+  await f.recover();
+  assert.equal((await f.db.prepare("SELECT status FROM drive_admin_jobs WHERE id=?").bind(created.job.id).first()).status, "completed");
+  const moved = await f.item(child.id, "editor", "?include_trashed=true");
+  assert.ok(moved.trashed_at); assert.equal(moved.parent_id, null); assert.equal(moved.owner_user_id, "editor");
+  await f.call(`/items/${child.id}`, { actor: "editor", expected: 404 });
+  await f.call(`/items/${child.id}`, { actor: "viewer", expected: 404 });
+});
+
+test("Drive administrators can safely release former owners' unfinished uploads before handover", async t => {
+  const f = await fixture(t), folder = await f.folder("Handover after cancellation"), upload = await f.start({ name: "Unfinished.txt", size: 3, content_type: "text/plain" });
+  await f.call(`/uploads/${upload.id}/content`, { method: "PUT", bytes: Buffer.from("abc") });
+  await f.db.prepare("UPDATE users SET disabled_at=unixepoch() WHERE id='owner'").run();
+  const account = (await adminCall(f, "/accounts/owner")).account;
+  assert.equal(account.active_uploads, 1); assert.equal(account.reserved_bytes, 3);
+  await adminCall(f, "/transfers", { method: "POST", data: { source_user_id: "owner", target_user_id: "editor", version: account.version, reason: "Wait for pending upload cleanup" }, expected: 409 });
+  await adminCall(f, "/accounts/owner/cancel-uploads", { method: "POST", data: { version: account.version, reason: "Former owner's incomplete upload" }, actor: "viewer", expected: 403 });
+  await adminCall(f, "/accounts/owner/cancel-uploads", { method: "POST", data: { version: account.version, reason: "Former owner's incomplete upload" } });
+  assert.equal((await adminCall(f, "/accounts/owner")).account.reserved_bytes, 0);
+  await adminCall(f, "/transfers", { method: "POST", data: { source_user_id: "owner", target_user_id: "editor", version: account.version, reason: "Handover after safe cancellation" }, expected: 202 });
+  await f.recover();
+  assert.equal((await f.item(folder.id, "editor")).effective_role, "owner");
+  assert.equal((await f.bucket.list()).objects.length, 0);
+  assert.equal((await adminCall(f, "/activity?kind=admin&action=uploads_cancelled")).items.length, 1);
 });

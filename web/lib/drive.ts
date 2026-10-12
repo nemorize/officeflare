@@ -14,6 +14,7 @@ export interface DriveItem {
   owner_user_id: string;
   owner?: DrivePerson;
   effective_role?: DriveRole | null;
+  actions?: { create: boolean; update: boolean; delete: boolean; download: boolean; copy: boolean; comment: boolean; internal_share: boolean; public_share: boolean };
   description: string;
   version: number;
   current_version_id: string | null;
@@ -39,6 +40,13 @@ export interface DriveQuota {
   reserved_bytes: number;
   quota_bytes: number;
   available_bytes: number;
+  status?: "active" | "read_only" | "suspended";
+}
+export interface DriveCapabilities {
+  max_file_bytes: number; trash_retention_days: number; permissions: string[];
+  account_status: "active" | "read_only" | "suspended"; write_locked: boolean;
+  internal_sharing_enabled: boolean; public_sharing_enabled: boolean;
+  public_link_password_required: boolean; public_link_max_days: number;
 }
 export interface DriveGrant {
   item_id: string;
@@ -91,9 +99,9 @@ export const driveType = (item: DriveItem) =>
   item.content_type ??
   "application/octet-stream";
 export const canEdit = (item: DriveItem) =>
-  item.effective_role === "owner" || item.effective_role === "editor";
+  item.actions?.update ?? (item.effective_role === "owner" || item.effective_role === "editor");
 export const canComment = (item: DriveItem) =>
-  canEdit(item) || item.effective_role === "commenter";
+  item.actions?.comment ?? (item.effective_role === "owner" || item.effective_role === "editor" || item.effective_role === "commenter");
 export function formatBytes(value: number) {
   if (!value) return "0 B";
   const unit = Math.min(

@@ -384,6 +384,16 @@ export const notificationWsTickets = sqliteTable("notification_ws_tickets", {
 export const driveAccounts = sqliteTable("drive_accounts", {
   user_id: text().primaryKey().notNull().references(() => users.id), quota_bytes: integer().notNull(),
   used_bytes: integer().notNull().default(0), reserved_bytes: integer().notNull().default(0), created_at: timestamp("created_at"),
+  quota_override_bytes: integer(), status: text({ enum: ["active", "read_only", "suspended"] }).notNull().default("active"),
+  version: integer().notNull().default(1), updated_at: timestamp("updated_at"),
+});
+// Operational defaults live in D1; migration 0017 seeds the singleton settings row.
+export const driveSettings = sqliteTable("drive_settings", {
+  id: integer().primaryKey(), default_quota_bytes: integer().notNull(), max_file_bytes: integer().notNull(),
+  internal_sharing_enabled: integer().notNull(), public_sharing_enabled: integer().notNull(),
+  public_link_password_required: integer().notNull(), public_link_max_days: integer().notNull(),
+  trash_retention_days: integer().notNull(), version: integer().notNull().default(1), updated_at: timestamp("updated_at"),
+  updated_by: text().references(() => users.id),
 });
 export const driveItems = sqliteTable("drive_items", {
   id: text().primaryKey().notNull(), owner_user_id: text().notNull().references(() => users.id),
@@ -423,6 +433,23 @@ export const driveActivity = sqliteTable("drive_activity", {
   action: text().notNull(), details_json: text().notNull(), created_at: timestamp("created_at"),
 });
 export const driveOperations = sqliteTable("drive_operations", { id: text().primaryKey().notNull(), actor_user_id: text().notNull().references(() => users.id), created_at: timestamp("created_at") });
+export const driveAdminActivity = sqliteTable("drive_admin_activity", {
+  seq: integer().primaryKey({ autoIncrement: true }), operation_id: text().notNull().unique(),
+  actor_user_id: text().notNull().references(() => users.id), action: text().notNull(),
+  target_type: text().notNull(), target_id: text(), details_json: text().notNull(), created_at: timestamp("created_at"),
+}, table => [index("drive_admin_activity_time").on(table.created_at, table.seq)]);
+export const driveAdminJobs = sqliteTable("drive_admin_jobs", {
+  id: text().primaryKey().notNull(), source_user_id: text().notNull().references(() => users.id),
+  target_user_id: text().notNull().references(() => users.id), root_item_id: text().references(() => driveItems.id), root_trashed_at: integer(),
+  actor_user_id: text().notNull().references(() => users.id), reason: text().notNull(),
+  status: text({ enum: ["queued", "running", "failed", "completed", "cancelled"] }).notNull(),
+  total_items: integer().notNull(), processed_items: integer().notNull().default(0), reserved_bytes: integer().notNull(),
+  error: text(), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [index("drive_admin_jobs_status").on(table.status, table.created_at), index("drive_admin_jobs_source").on(table.source_user_id, table.status), index("drive_admin_jobs_target").on(table.target_user_id, table.status)]);
+export const driveAdminJobItems = sqliteTable("drive_admin_job_items", {
+  job_id: text().notNull().references(() => driveAdminJobs.id), item_id: text().notNull().references(() => driveItems.id),
+  parent_id: text(), item_version: integer().notNull(), size: integer().notNull(), processed: integer().notNull().default(0),
+}, table => [primaryKey({ columns: [table.job_id, table.item_id] }), index("drive_admin_job_items_item").on(table.item_id, table.processed)]);
 export const driveChanges = sqliteTable("drive_changes", {
   seq: integer().primaryKey({ autoIncrement: true }), user_id: text().notNull().references(() => users.id), item_id: text().notNull().references(() => driveItems.id), kind: text().notNull(), created_at: timestamp("created_at"),
 });

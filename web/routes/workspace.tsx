@@ -91,7 +91,7 @@ function WorkspaceChrome() {
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
         {isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
-          <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
+          <h2>{isConsole ? "Administration" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>}
         <div className="workspace-sidebar-footer"><Icon name={isNotifications ? "bell" : isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>

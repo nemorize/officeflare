@@ -508,7 +508,8 @@ export function DriveShareDialog({
           <Tabs.Tab value="links">Public links</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="people">
-          <DrivePeoplePicker selected={person} onSelect={setPerson} />
+          {item.actions?.internal_share !== false && <DrivePeoplePicker selected={person} onSelect={setPerson} />}
+          {item.actions?.internal_share === false && <p className="drive-muted">Adding or changing internal access is restricted by your role or workspace policy. You can still remove direct grants.</p>}
           {person && (
             <div className="drive-invite-options">
               <DriveSelect
@@ -525,7 +526,7 @@ export function DriveShareDialog({
               />
               <Button
                 variant="primary"
-                disabled={action.busy}
+                disabled={action.busy || item.actions?.internal_share === false}
                 onClick={() =>
                   mutate(
                     (current) =>
@@ -598,7 +599,7 @@ export function DriveShareDialog({
                     label={`Role for ${grant.display_name}`}
                     value={grant.role}
                     options={roles}
-                    disabled={action.busy}
+                    disabled={action.busy || item.actions?.internal_share === false}
                     onChange={(next) =>
                       mutate(
                         (current) =>
@@ -618,6 +619,7 @@ export function DriveShareDialog({
                     }
                   />
                   <MenuForPerson
+                    canTransfer={item.actions?.internal_share !== false}
                     grant={grant}
                     disabled={action.busy}
                     onRemove={() =>
@@ -657,7 +659,7 @@ export function DriveShareDialog({
                   <div>
                     <Button
                       size="sm"
-                      disabled={action.busy}
+                      disabled={action.busy || item.actions?.internal_share === false}
                       onClick={() =>
                         mutate(
                           (current) =>
@@ -680,7 +682,7 @@ export function DriveShareDialog({
                     <Button
                       size="sm"
                       variant="primary"
-                      disabled={action.busy}
+                      disabled={action.busy || item.actions?.internal_share === false}
                       onClick={() =>
                         mutate(
                           (current) =>
@@ -730,9 +732,11 @@ export function DriveShareDialog({
               </p>
             </div>
           </div>
+          {item.actions?.public_share === false && <p className="drive-muted">Creating or changing public links is restricted by your role or workspace policy. Existing links can still be revoked.</p>}
+          {drive.capabilities?.public_link_max_days ? <p className="drive-muted">Links must expire within {drive.capabilities.public_link_max_days} days of creation.</p> : null}
           <div className="drive-link-fields">
             <DriveField
-              label="Link password (optional)"
+              label={drive.capabilities?.public_link_password_required ? "Link password (required)" : "Link password (optional)"}
               type="password"
               autoComplete="new-password"
               value={password}
@@ -742,7 +746,7 @@ export function DriveShareDialog({
               hint="Use at least 8 characters."
             />
             <DriveField
-              label="Link expires (optional)"
+              label={drive.capabilities?.public_link_max_days ? "Link expires (required)" : "Link expires (optional)"}
               type="datetime-local"
               value={linkExpiry}
               onChange={(event) => setLinkExpiry(event.target.value)}
@@ -757,7 +761,7 @@ export function DriveShareDialog({
           </CheckboxLabel>
           <Button
             variant="primary"
-            disabled={action.busy || (!!password && password.length < 8)}
+            disabled={action.busy || item.actions?.public_share === false || (!!password && password.length < 8) || (!!drive.capabilities?.public_link_password_required && password.length < 8) || (!!drive.capabilities?.public_link_max_days && !linkExpiry)}
             onClick={() =>
               mutate(async (current) => {
                 const result = await api<{
@@ -934,6 +938,7 @@ export function DriveShareDialog({
 }
 import { Menu, MenuPopup } from "./ui";
 function MenuForPerson({
+  canTransfer,
   grant,
   disabled,
   onRemove,
@@ -943,6 +948,7 @@ function MenuForPerson({
   disabled: boolean;
   onRemove: () => void;
   onTransfer: () => void;
+  canTransfer: boolean;
 }) {
   return (
     <Menu.Root>
@@ -954,7 +960,7 @@ function MenuForPerson({
         <Icon name="more" />
       </Menu.Trigger>
       <MenuPopup data-ui-theme="neutral" positionerProps={{ align: "end" }}>
-        <Menu.Item onClick={onTransfer}>
+        <Menu.Item disabled={!canTransfer} onClick={onTransfer}>
           <Icon name="user" />
           Transfer ownership
         </Menu.Item>
