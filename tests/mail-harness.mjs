@@ -7,8 +7,13 @@ export class FakeEmail extends WorkerEntrypoint {
       "test-sent/" + messageId + ".json",
       JSON.stringify(message),
     );
-    const mode = await this.env.MAIL_BUCKET.get("test-mode.json");
-    if (mode && (await mode.text()) === "unknown")
+    let mode = await (await this.env.MAIL_BUCKET.get("test-mode.json"))?.text();
+    for (let attempt = 0; mode === "hold" && attempt < 200; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      mode = await (await this.env.MAIL_BUCKET.get("test-mode.json"))?.text();
+    }
+    if (mode === "hold") throw new Error("Test send timed out");
+    if (mode === "unknown")
       throw new Error("Connection lost after acceptance");
     return { messageId };
   }

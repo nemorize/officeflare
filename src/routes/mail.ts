@@ -967,12 +967,12 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
     search: c.req.query("q"),
     folder_id: c.req.query("folder_id"),
     thread_id: c.req.param("thread") ? strictId(c.req.param("thread")) : c.req.query("thread_id"),
-    view: c.req.query("view") as "all" | "scheduled" | undefined,
+    view: c.req.query("view") as "all" | "scheduled" | "outbox" | undefined,
     editable_drafts: c.req.query("folder_id") === "drafts",
     include_snoozed: c.req.query("include_snoozed") === "true" || !!c.req.param("thread") && c.req.query("include_snoozed") !== "false",
     snoozed_only: c.req.query("snoozed_only") === "true",
   };
-  if (query.view && !["all", "scheduled"].includes(query.view)) fail(400, "Invalid view");
+  if (query.view && !["all", "scheduled", "outbox"].includes(query.view)) fail(400, "Invalid view");
   let cursor:
     | {
         before: { received_at: number; id: string };

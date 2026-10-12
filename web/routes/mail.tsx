@@ -10,6 +10,8 @@ import { api } from "../lib/api";
 import {
   mailboxPath,
   mailDate,
+  cancelableSubmission,
+  submissionLabel,
   type Message,
   type MessageDetail,
 } from "../lib/mail";
@@ -126,7 +128,7 @@ export function MailPage() {
         starred: "Starred",
         snoozed: "Snoozed",
         all: "All mail",
-        scheduled: "Scheduled",
+        scheduled: "Outbox",
       }[section] ?? "Inbox");
   return (
     <MailReady>
@@ -191,7 +193,7 @@ function MailList({
   )
     options.set("folder_id", folder ?? section);
   if (section === "all" || section === "scheduled") {
-    options.set("view", section);
+    options.set("view", section === "scheduled" ? "outbox" : section);
     options.set("include_snoozed", "true");
   }
   if (section === "starred" && !query) options.set("q", "is:starred");
@@ -496,6 +498,8 @@ function MailList({
         size="sm"
         disabled={
           action.busy ||
+          !rows.length ||
+          rows.some((row) => !cancelableSubmission(row.submission_status ?? "")) ||
           !(mail.box!.access?.send_as || mail.box!.access?.send_on_behalf)
         }
         onClick={() => {
@@ -526,13 +530,13 @@ function MailList({
                 `${failed} sends could not be canceled. They may already be processing.`,
               );
             mail.feedback(
-              "Scheduled sends canceled. Messages moved to Drafts.",
+              "Pending sends canceled. Messages moved to Drafts.",
             );
           });
         }}
       >
         <Icon name="close" />
-        Cancel scheduled send
+        Cancel send
       </Button>
     ) : (
       <>
@@ -804,6 +808,13 @@ function MailList({
             }}
           />
         </div>
+        {section === "scheduled" && !query && (
+          <p className="mail-outbox-hint">
+            Scheduled and sending messages stay here until sending is confirmed.
+            Open a message to check its status. An unknown outcome may mean it was
+            already sent; check before sending another copy.
+          </p>
+        )}
         {query && (
           <div className="mail-search-chips">
             {chips.map((chip, index) => (
@@ -894,6 +905,11 @@ function MailList({
                   )}
                 </span>
                 <span className="mail-row-content">
+                  {section === "scheduled" && message.submission_status && (
+                    <span className="mail-badge" data-status={message.submission_status}>
+                      {submissionLabel(message.submission_status)}
+                    </span>
+                  )}
                   <strong>{message.subject || "(No subject)"}</strong>
                   <span className="mail-row-snippet">
                     {" "}
@@ -913,7 +929,7 @@ function MailList({
                     month: "short",
                     day: "numeric",
                   })}
-                  {section === "scheduled" && message.scheduled_at && (
+                  {section === "scheduled" && message.submission_status === "scheduled" && message.scheduled_at && (
                     <small className="mail-row-schedule-time">
                       {new Date(message.scheduled_at * 1000).toLocaleTimeString(
                         undefined,

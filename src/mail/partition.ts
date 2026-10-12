@@ -367,12 +367,16 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (query.exclude_drafts) filters.push("m.draft_owner_id IS NULL");
     if (query.editable_drafts) filters.push("EXISTS(SELECT 1 FROM drafts d WHERE d.message_id=m.id AND d.state='editable')");
     if (query.view === "scheduled") filters.push("EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','retry_wait'))");
+    if (query.view === "outbox") filters.push("EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','processing','retry_wait','unknown'))");
     return { filters, bindings };
   }
   query(query: MessageQuery) {
     const { filters, bindings } = this.queryPlan(query);
+    const submission = query.view === "scheduled" || query.view === "outbox"
+      ? ",(SELECT status FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','processing','retry_wait','unknown') ORDER BY created_at DESC,id DESC LIMIT 1) submission_status,(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at"
+      : "";
     return rows<MessageRow & { recipient_summary: string }>(this.sql,
-      "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" + (query.view === "scheduled" ? ",(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at" : "") + " FROM messages m WHERE " + filters.join(" AND ") + " ORDER BY m.received_at DESC,m.id DESC LIMIT ?", ...bindings, query.limit);
+      "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" + submission + " FROM messages m WHERE " + filters.join(" AND ") + " ORDER BY m.received_at DESC,m.id DESC LIMIT ?", ...bindings, query.limit);
   }
   threadPage(query: MessageQuery, ids?: string[]): ThreadRow[] {
     const { filters, bindings } = this.queryPlan({ ...query, before: undefined });
@@ -384,8 +388,8 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   summary(actorId: string) {
     const folders = rows<{folder_id:string;total:number;unread:number}>(this.sql,"SELECT folder_id,count(*) total,sum(1-is_read) unread FROM messages WHERE (draft_owner_id IS NULL OR draft_owner_id=?) AND (snoozed_until IS NULL OR snoozed_until<=?) GROUP BY folder_id",actorId,epoch());
-    const counts = row<{ starred: number; snoozed: number; scheduled: number }>(this.sql,
-      "SELECT coalesce(sum(is_starred),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN 1 ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled FROM messages WHERE draft_owner_id IS NULL OR draft_owner_id=?",epoch(),actorId,actorId)!;
+    const counts = row<{ starred: number; snoozed: number; scheduled: number; outbox: number }>(this.sql,
+      "SELECT coalesce(sum(is_starred),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN 1 ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','processing','retry_wait','unknown') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) outbox FROM messages WHERE draft_owner_id IS NULL OR draft_owner_id=?",epoch(),actorId,actorId,actorId)!;
     const drafts = row<{ n: number }>(this.sql,"SELECT count(*) n FROM drafts d JOIN messages m ON m.id=d.message_id WHERE d.state='editable' AND m.draft_owner_id=?",actorId)!.n;
     return { folders: folders.map((folder) => folder.folder_id === "drafts" ? { ...folder, total: drafts, unread: 0 } : folder), ...counts };
   }

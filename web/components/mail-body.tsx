@@ -83,7 +83,7 @@ export function SendStatus({ submission }: { submission: Submission }) {
     resource = useMailResource<{ submission: Submission }>(
       `${path}/submissions/${submission.id}`,
       mail.revision,
-      ["scheduled", "queued", "processing", "retry_wait"].includes(
+      ["scheduled", "queued", "processing", "retry_wait", "unknown"].includes(
         submission.status,
       ),
     );
@@ -119,6 +119,11 @@ export function SendStatus({ submission }: { submission: Submission }) {
         ))}
       </div>
       <div className="mail-actions">
+        {value.status === "unknown" && (
+          <Button size="sm" disabled={resource.loading} onClick={resource.reload}>
+            Check status
+          </Button>
+        )}
         {cancelableSubmission(value.status) && (
           <Button
             size="sm"

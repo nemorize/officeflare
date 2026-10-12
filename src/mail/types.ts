@@ -95,7 +95,8 @@ export interface MessageInput {
   is_spam?: boolean;
 }
 export interface MessageRow {
-  scheduled_at?: number;
+  scheduled_at?: number | null;
+  submission_status?: Submission["status"] | null;
   draft_state?: string | null;
   id: string;
   thread_id: string;
@@ -132,7 +133,7 @@ export interface MessageQuery {
   search?: string;
   include_snoozed?: boolean;
   snoozed_only?: boolean;
-  view?: "all" | "scheduled";
+  view?: "all" | "scheduled" | "outbox";
   exclude_drafts?: boolean;
   editable_drafts?: boolean;
 }

@@ -136,8 +136,9 @@ export function ConversationReader({
             <div className="mail-conversation-title">
               <h1>{message.subject || "(No subject)"}</h1>
               <span className="mail-badge">
-                {mail.folders.find((folder) => folder.id === message.folder_id)
-                  ?.name ?? message.folder_id}
+                {message.draft?.state === "submitted" ? "Outbox" :
+                  mail.folders.find((folder) => folder.id === message.folder_id)
+                    ?.name ?? message.folder_id}
               </span>
             </div>
             {thread.data?.next_cursor && (

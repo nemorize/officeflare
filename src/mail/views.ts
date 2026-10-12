@@ -133,11 +133,13 @@ export async function mailboxSummary(
   const folders: Record<string, { total: number; unread: number }> = {};
   let starred = 0,
     snoozed = 0,
-    scheduled = 0;
+    scheduled = 0,
+    outbox = 0;
   for (const summary of summaries) {
     starred += summary.starred;
     snoozed += summary.snoozed;
     scheduled += summary.scheduled;
+    outbox += summary.outbox;
     for (const item of summary.folders) {
       const old = folders[item.folder_id] ?? { total: 0, unread: 0 };
       folders[item.folder_id] = {
@@ -146,5 +148,5 @@ export async function mailboxSummary(
       };
     }
   }
-  return { folders, starred, snoozed, scheduled };
+  return { folders, starred, snoozed, scheduled, outbox };
 }

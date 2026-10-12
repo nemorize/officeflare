@@ -194,6 +194,8 @@
 .mail-row-sender small { color: var(--ui-muted); font-size: 11px; }
 .mail-row-content { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mail-row-content strong { font-weight: 400; }
+.mail-row-content .mail-badge { margin-right: 8px; }
+.mail-outbox-hint { margin: 0; padding: 12px var(--mail-inset); color: var(--ui-muted); font-size: 12px; border-bottom: 1px solid var(--ui-border); }
 .mail-unread .mail-row-sender,
 .mail-unread .mail-row-content strong { font-weight: 600; }
 .mail-row-snippet { color: var(--ui-muted); font-weight: 400; }

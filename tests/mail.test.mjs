@@ -790,6 +790,68 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
     expected: 409,
   });
 });
+test("outbox keeps processing and unknown sends visible, private and safe to reconcile", async (t) => {
+  const { mf, call, base, mailbox, address, draft, tokens } = await fixture(t, "6000000000", true);
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET"), queue = await mf.getQueueProducer("MAIL_QUEUE");
+  await call(base + "/members/reader", { method: "PUT", data: { read: true } });
+  await bucket.put("test-mode.json", "hold");
+  const message = await draft({ subject: "Visible uncertain send" });
+  const { submission } = await call(base + "/drafts/" + message.id + "/submissions", {
+    method: "POST", data: { address_id: address.id, version: 1 }, expected: 202,
+  });
+  const processing = await eventually(
+    () => call(base + "/messages?view=outbox"),
+    (page) => page.messages.some((entry) => entry.id === message.id && entry.submission_status === "processing"),
+    "Processing send disappeared from the outbox",
+  );
+  assert.equal(processing.messages[0].draft_state, "submitted");
+  assert.equal(processing.messages[0].scheduled_at, null);
+  assert.equal((await call(base + "/summary")).summary.outbox, 1);
+  await call(base + "/submissions/" + submission.id + "/cancel", { method: "POST", expected: 409 });
+  await bucket.put("test-mode.json", "unknown");
+  const unknown = await eventually(
+    () => call(base + "/messages?view=outbox"),
+    (page) => page.messages.some((entry) => entry.id === message.id && entry.submission_status === "unknown"),
+    "Unknown send disappeared from the outbox",
+  );
+  assert.deepEqual(unknown.messages.map((entry) => entry.id), [message.id]);
+  assert.equal(unknown.messages[0].body_r2_key, undefined);
+  assert.equal(unknown.messages[0].snapshot_r2_key, undefined);
+  assert.equal((await call(base + "/summary")).summary.outbox, 1);
+  assert.equal((await call(base + "/summary")).summary.scheduled, 0);
+  assert.equal((await call(base + "/messages?view=scheduled")).messages.length, 0);
+  assert.equal((await call(base + "/messages?folder_id=drafts")).messages.length, 0);
+  assert.equal((await call(base + "/messages/" + message.id)).message.submissions[0].status, "unknown");
+  assert.equal((await call(base + "/messages?view=outbox", { token: tokens.reader })).messages.length, 0);
+  assert.equal((await call(base + "/summary", { token: tokens.reader })).summary.outbox, 0);
+  await call(base + "/messages/" + message.id, { token: tokens.reader, expected: 404 });
+  for (const action of ["retry", "cancel"])
+    await call(base + "/submissions/" + submission.id + "/" + action, { method: "POST", expected: 409 });
+  await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 1, text: "Do not resend" }, expected: 409 });
+  const scheduledDraft = await draft({ subject: "Also scheduled" });
+  const scheduled = (await call(base + "/drafts/" + scheduledDraft.id + "/submissions", {
+    method: "POST", data: { address_id: address.id, version: 1, scheduled_at: Math.floor(Date.now() / 1000) + 3600 }, expected: 202,
+  })).submission;
+  assert.equal((await call(base + "/summary")).summary.outbox, 2);
+  const first = await call(base + "/messages?view=outbox&limit=1");
+  assert.ok(first.next_cursor);
+  const second = await call(base + "/messages?view=outbox&limit=1&cursor=" + encodeURIComponent(first.next_cursor));
+  assert.equal(second.next_cursor, null);
+  assert.deepEqual(new Set([...first.messages, ...second.messages].map((entry) => entry.id)), new Set([message.id, scheduledDraft.id]));
+  await call(base + "/submissions/" + scheduled.id + "/cancel", { method: "POST" });
+  assert.equal((await call(base + "/summary")).summary.outbox, 1);
+  const sent = (await bucket.list({ prefix: "test-sent/" })).objects;
+  assert.equal(sent.length, 1);
+  const providerMessageId = sent[0].key.slice("test-sent/".length, -".json".length);
+  await bucket.put("accepted/" + mailbox.id + "/" + submission.id + ".json", JSON.stringify({ provider_message_id: providerMessageId }));
+  await queue.send({ kind: "send", mailbox_id: mailbox.id, partition_id: message.id.split(".")[0], reference_id: submission.id });
+  await eventually(() => call(base + "/submissions/" + submission.id), (result) => result.submission.status === "accepted", "Acceptance receipt was not reconciled");
+  assert.equal((await call(base + "/messages?view=outbox")).messages.length, 0);
+  assert.equal((await call(base + "/summary")).summary.outbox, 0);
+  assert.equal((await call(base + "/messages?folder_id=sent")).messages[0].id, message.id);
+  assert.equal((await bucket.list({ prefix: "test-sent/" })).objects.length, 1);
+});
+
 test("imports, backups, restore, JMAP and MCP use the same permission boundary", async (t) => {
   const { mf, tokens, call, admin, base, mailbox, draft } = await fixture(
     t,

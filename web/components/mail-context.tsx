@@ -82,16 +82,16 @@ export function MailProvider({ children }: { children: ReactNode }) {
   return <MailContext value={value}>{children}{composer && <MailComposer key={`${composer.box}:${composer.id ?? "new"}`} mailboxId={composer.box} draftId={composer.id} inline={composer.inline} onClose={() => { composerRef.current = null; setComposer(null); refresh(); }} />}{notice && <Snackbar className="mail-snackbar"><span>{notice.text}</span>{notice.action && <Button variant="inverse" size="sm" disabled={noticeBusy} onClick={async () => { setNoticeBusy(true); try { await notice.action!(); setNotice(null); } catch (error) { feedback(error instanceof Error ? error.message : "Unable to undo this action."); } finally { setNoticeBusy(false); } }}>{noticeBusy ? "Working…" : notice.label}</Button>}<Button variant="inverse" size="icon" aria-label="Dismiss message" onClick={() => setNotice(null)}><Icon name="close" /></Button></Snackbar>}</MailContext>;
 }
 const links = [
-  ["/mail", "Inbox", "inbox"], ["/mail/starred", "Starred", "star"], ["/mail/snoozed", "Snoozed", "clock"], ["/mail/sent", "Sent", "arrow"], ["/mail/drafts", "Drafts", "file"], ["/mail/archive", "Archive", "archive"], ["/mail/spam", "Spam", "shield"], ["/mail/trash", "Trash", "trash"],
+  ["/mail", "Inbox", "inbox"], ["/mail/starred", "Starred", "star"], ["/mail/snoozed", "Snoozed", "clock"], ["/mail/sent", "Sent", "arrow"], ["/mail/drafts", "Drafts", "file"], ["/mail/scheduled", "Outbox", "clock"], ["/mail/archive", "Archive", "archive"], ["/mail/spam", "Spam", "shield"], ["/mail/trash", "Trash", "trash"],
 ] as const;
 export function MailSidebar() {
   const mail = useMail(), location = useLocation(), extraId = useId(), custom = mail.folders.filter((folder) => !folder.system_key);
-  const extra = [["/mail/all","All mail","mail"],["/mail/scheduled","Scheduled","clock"],["/mail/archive","Archive","archive"],["/mail/spam","Spam","shield"],["/mail/trash","Trash","trash"]] as const;
+  const extra = [["/mail/all","All mail","mail"],["/mail/archive","Archive","archive"],["/mail/spam","Spam","shield"],["/mail/trash","Trash","trash"]] as const;
   const extraActive = extra.some(([path]) => path === location.pathname);
   const [more, setMore] = useState(extraActive);
   useEffect(() => { if (extraActive) setMore(true); }, [extraActive, location.pathname]);
   const primary = links.filter(([path]) => !["/mail/archive","/mail/spam","/mail/trash"].includes(path));
-  const count = (path: string) => path === "/mail/drafts" ? mail.summary?.folders.drafts?.total : path === "/mail/scheduled" ? mail.summary?.scheduled : path === "/mail/snoozed" ? mail.summary?.snoozed : mail.summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
+  const count = (path: string) => path === "/mail/drafts" ? mail.summary?.folders.drafts?.total : path === "/mail/scheduled" ? mail.summary?.outbox : path === "/mail/snoozed" ? mail.summary?.snoozed : mail.summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
   const nav = (items: readonly (readonly [string,string,import("./ui").IconProps["name"]])[]) => items.map(([path,name,icon]) => <NavLink end key={path} to={mail.href(path)} onClick={() => mail.setMobileMenu(false)}><Icon name={icon}/><span>{name}</span>{!!count(path) && <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>{count(path)}</small>}</NavLink>);
   return <div className="mail-sidebar-content">
     <div className="mail-sidebar-actions">
