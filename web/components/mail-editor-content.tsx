@@ -20,6 +20,8 @@ const emptyAttachments: Attachment[] = [];
 const emailStyles: Record<string, string> = { paragraph: "margin:0 0 12px", blockquote: "border-left:2px solid #dddddd;padding-left:16px;margin:16px 0", table: "border-collapse:collapse;width:100%", tableCell: "border:1px solid #dddddd;padding:8px", tableHeader: "border:1px solid #dddddd;padding:8px;background-color:#f5f5f5" };
 const EmailStyles = Extension.create({ name: "emailStyles", addGlobalAttributes() { return Object.entries(emailStyles).map(([type, style]) => ({ types: [type], attributes: { emailStyle: { default: style, rendered: true, parseHTML: () => style, renderHTML: () => ({ style }) } } })); } });
 
+function editorFormatting(instance: Editor | null) { return instance ? { bold: instance.isActive("bold"), italic: instance.isActive("italic"), underline: instance.isActive("underline"), strike: instance.isActive("strike"), bullet: instance.isActive("bulletList"), ordered: instance.isActive("orderedList"), quote: instance.isActive("blockquote"), align: instance.getAttributes("paragraph").textAlign ?? "left", font: instance.getAttributes("textStyle").fontFamily ?? "", size: instance.getAttributes("textStyle").fontSize ?? "", link: instance.isActive("link"), href: instance.getAttributes("link").href ?? "", table: instance.isActive("table"), image: instance.isActive("image"), undo: instance.can().undo(), redo: instance.can().redo() } : null; }
+
 export function MailEditor({ value, onChange, onUploadingChange, maxImageBytes, onImageUploaded, mailboxId, attachments = emptyAttachments, disabled = false, label = "Message body", className = "" }: MailEditorProps) {
   const limits = useMailResource<{ limits: { max_upload_bytes: number } }>(maxImageBytes === undefined ? mailboxPath(mailboxId) + "/addresses" : null);
   const imageMaximum = maxImageBytes ?? limits.data?.limits.max_upload_bytes ?? 0;
@@ -43,13 +45,13 @@ export function MailEditor({ value, onChange, onUploadingChange, maxImageBytes, 
     } },
     onUpdate: ({ editor: next }) => current.current.onChange(next.isEmpty ? "" : storedEditorHtml(next.getHTML(), mailboxId, current.current.attachments), next.getText({ blockSeparator: "\n\n" }).replace(/\n{3,}/g, "\n\n")),
   }, [mailboxId]);
-  useEffect(() => { editor?.setEditable(!disabled); }, [editor, disabled]);
+  useEffect(() => { editor?.setEditable(!disabled, false); }, [editor, disabled]);
   useEffect(() => {
     if (!editor) return;
     const stored = editor.isEmpty ? "" : storedEditorHtml(editor.getHTML(), mailboxId, attachments);
     if (stored !== value) editor.commands.setContent(displayEditorHtml(value, mailboxId), { emitUpdate: false });
   }, [editor, value, mailboxId, attachments]);
-  const state = useEditorState({ editor, selector: ({ editor: instance }) => instance ? { bold: instance.isActive("bold"), italic: instance.isActive("italic"), underline: instance.isActive("underline"), strike: instance.isActive("strike"), bullet: instance.isActive("bulletList"), ordered: instance.isActive("orderedList"), quote: instance.isActive("blockquote"), align: instance.getAttributes("paragraph").textAlign ?? "left", font: instance.getAttributes("textStyle").fontFamily ?? "", size: instance.getAttributes("textStyle").fontSize ?? "", link: instance.isActive("link"), href: instance.getAttributes("link").href ?? "", table: instance.isActive("table"), image: instance.isActive("image"), undo: instance.can().undo(), redo: instance.can().redo() } : null });
+  const state = useEditorState({ editor, selector: ({ editor: instance }) => editorFormatting(instance) }) ?? editorFormatting(editor);
   async function uploadImages(files: File[]) {
     if (current.current.disabled || !editor || editor.isDestroyed) return;
     uploadCount.current++; setUploading(true); setError("");

@@ -28,7 +28,7 @@ export function RecipientField({
     if (pending.trim()) onChange([...chips, pending.trim(), ""].join(", "));
   };
   return (
-    <Field.Root className="mail-recipient-field">
+    <Field.Root className="mail-recipient-field" invalid={chips.some(chip => !valid(chip))}>
       <Field.Label htmlFor={id}>{label}</Field.Label>
       <div className="mail-recipient-controls">
         {chips.map((chip, index) => (
@@ -39,14 +39,14 @@ export function RecipientField({
             <Button
               variant="ghost"
               size="sm"
-              aria-label={`Edit ${chip}`}
+              aria-label={`Edit ${chip}${valid(chip) ? "" : ", invalid email address"}`}
               onClick={() =>
                 onChange(
                   [...chips.filter((_, i) => i !== index), chip].join(", "),
                 )
               }
             >
-              {chip}
+              {!valid(chip) && <Icon name="info" width="12" height="12" />} {chip}
             </Button>
             <Button
               variant="ghost"
@@ -100,7 +100,7 @@ export function RecipientField({
       {action}
       {chips.some((chip) => !valid(chip)) && (
         <Field.Description>
-          Check the highlighted email addresses before sending.
+          Invalid addresses: {chips.filter(chip => !valid(chip)).join(", ")}. Edit or remove them before sending.
         </Field.Description>
       )}
     </Field.Root>

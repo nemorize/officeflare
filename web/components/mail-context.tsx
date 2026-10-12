@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { api } from "../lib/api";
-import { mailboxPath, type Mailbox, type Capabilities, type Folder, type MailPreferences, type MailSummary } from "../lib/mail";
+import { mailboxPath, type Mailbox, type Capabilities, type Folder, type MailPreferences, type MailSummary, type Message } from "../lib/mail";
 import { useAccess } from "./console-access";
 import { Snackbar, Button, Icon } from "./ui";
 import { MailField, MailInput, MailModal, MailNotice, useMailAction, useMailResource, MailSelect, MailForm } from "./mail-common";
 import { MailComposer } from "./mail-composer";
+import { useMailCache } from "./mail-resource-context";
+import { applyReadReceipt } from "../lib/mail-resource-data";
 import { useAccount } from "./account-context";
 import { Confirm } from "./console-shared";
 import "../routes/mail.css";
@@ -15,13 +17,14 @@ interface MailContextValue {
   setPreferences: (changes: Partial<MailPreferences>) => Promise<void>; mobileMenu: boolean; setMobileMenu: (value: boolean) => void;
   feedback: (text: string, action?: () => Promise<void>, label?: string, timeout?: number) => void;
   selectBox: (id: string) => void; href: (path: string) => string; refresh: (target?: "messages" | "folders" | "summary") => void;
+  recordRead: (message: Message, version: number) => void;
   refreshBoxes: () => void; compose: (id?: string, inline?: boolean) => void;
 }
 const MailContext = createContext<MailContextValue | null>(null);
 export function useMail() { const context = useContext(MailContext); if (!context) throw new Error("Mail context is unavailable"); return context; }
 export function MailProvider({ children }: { children: ReactNode }) {
   const { permissions } = useAccess(), location = useLocation(), navigate = useNavigate(), [params, setParams] = useSearchParams();
-  const { user } = useAccount();
+  const { user } = useAccount(), cache = useMailCache();
   const [composer, setComposer] = useState<{ box: string; id?: string; inline?: boolean } | null>(null);
   const composerRef = useRef(composer); composerRef.current = composer;
   const [mobileMenu, setMobileMenu] = useState(false), [preferences, setPreferencesState] = useState<MailPreferences>({ density: "comfortable", conversation_view: true, reading_pane: "none", shortcuts: false, undo_seconds: 10, sidebar_collapsed: false });
@@ -33,17 +36,24 @@ export function MailProvider({ children }: { children: ReactNode }) {
   const boxes = useMailResource<{ mailboxes: Mailbox[] }>(enabled ? "/api/mail/mailboxes" : null);
   const caps = useMailResource<Capabilities>(enabled ? "/api/mail/capabilities" : null);
   const requested = params.get("mailbox"), boxesList = boxes.data?.mailboxes ?? [], box = boxesList.find((entry) => entry.id === requested) ?? (boxesList.length === 1 ? boxesList[0] : !requested ? boxesList.find((entry) => entry.kind === "personal" && entry.owner_user_id === user?.id) ?? boxesList[0] : null) ?? null;
+  const activeMailboxPath = useRef<string | null>(null); activeMailboxPath.current = box ? mailboxPath(box.id) : null;
   const prefs = useMailResource<{ preferences: MailPreferences }>(enabled ? "/api/mail/preferences" : null);
   useEffect(() => { if (prefs.data) setPreferencesState(prefs.data.preferences); },[prefs.data]);
   const setPreferences = async (changes: Partial<MailPreferences>) => {
     setPreferencesState((old) => ({ ...old,...changes }));
-    try { await api("/api/mail/preferences", { method: "PATCH", body: changes }); }
+    try { const result = await api<{ preferences: MailPreferences }>("/api/mail/preferences", { method: "PATCH", body: changes }); cache.replace("/api/mail/preferences", result); }
     catch (failure) { prefs.reload(); feedback(failure instanceof Error ? failure.message : "Settings could not be saved."); }
   };
 
   const [revision, setRevision] = useState(0), [realtime, setRealtime] = useState("Connecting");
   const [folderRevision, setFolderRevision] = useState(0), [summaryRevision,setSummaryRevision] = useState(0);
-  const refresh = useCallback((target: "messages" | "folders" | "summary" = "messages") => { if (target === "messages") setRevision((value) => value + 1); if (target === "folders") setFolderRevision((value) => value + 1); setSummaryRevision((value) => value + 1); }, []);
+  const refresh = useCallback((target: "messages" | "folders" | "summary" = "messages") => {
+    const path = activeMailboxPath.current;
+    if (path) cache.invalidateInactive(key => key === path + "/summary" || target === "folders" && key === path + "/folders" || target === "messages" && key.startsWith(path + "/") && /\/(?:messages|threads|drafts|submissions|storage|audit-logs|jobs)(?:\/|\?|$)/.test(key.slice(path.length)));
+    if (target === "messages") setRevision(value => value + 1);
+    if (target === "folders") setFolderRevision(value => value + 1);
+    setSummaryRevision(value => value + 1);
+  }, [cache]);
   const summary = useMailResource<{ summary: MailSummary }>(box?.access?.read ? mailboxPath(box.id) + "/summary" : null,summaryRevision);
 
   const folders = useMailResource<{ folders: Folder[] }>(box?.access?.read ? mailboxPath(box.id) + "/folders" : null, folderRevision);
@@ -52,7 +62,8 @@ export function MailProvider({ children }: { children: ReactNode }) {
   }, [enabled]);
   useEffect(() => { const refreshAccess = () => boxes.reload(); window.addEventListener("officeflare:mail-access-changed", refreshAccess); return () => window.removeEventListener("officeflare:mail-access-changed", refreshAccess); }, [boxes.reload]);
   useEffect(() => {
-    if (!box?.access?.read || !caps.data?.features.realtime) { setRealtime("Offline"); return; }
+    if (!box?.access?.read || !caps.data) { setRealtime(boxes.loading || caps.loading ? "Connecting" : "Unavailable"); return; }
+    if (!caps.data.features.realtime) { setRealtime("Manual"); return; }
     let stopped = false, socket: WebSocket | null = null, timer: ReturnType<typeof setTimeout>, heartbeat: ReturnType<typeof setInterval>, attempt = 0;
     const controller = new AbortController();
     const connect = async () => {
@@ -71,9 +82,14 @@ export function MailProvider({ children }: { children: ReactNode }) {
     const visibility = () => { clearTimeout(timer); if (document.hidden) { socket?.close(); clearInterval(heartbeat); } else { refresh(); if (!socket) void connect(); } };
     document.addEventListener("visibilitychange", visibility); void connect();
     return () => { stopped = true; controller.abort(); clearTimeout(timer); clearInterval(heartbeat); socket?.close(); document.removeEventListener("visibilitychange", visibility); };
-  }, [box?.id, box?.access?.read, caps.data?.features.realtime, refresh, boxes.reload]);
+  }, [box?.id, box?.access?.read, caps.data?.features.realtime, caps.loading, boxes.loading, refresh, boxes.reload]);
   const value: MailContextValue = {
     boxes: boxes.data?.mailboxes ?? [], box, folders: (folders.data?.folders ?? []).map((folder) => ({ ...folder, name: folder.system_key ? {inbox:"Inbox",sent:"Sent",drafts:"Drafts",archive:"Archive",spam:"Spam",trash:"Trash"}[folder.system_key] ?? folder.name : folder.name })), capabilities: caps.data,
+    recordRead: (message, version) => {
+      const path = mailboxPath(box!.id);
+      cache.update(key => key === path + "/messages/" + message.id || key.startsWith(path + "/threads/" + message.thread_id + "?"), data => applyReadReceipt(data, message.id, version));
+      cache.invalidate(key => key === path + "/summary" || key.startsWith(path + "/messages?") || key.startsWith(path + "/threads?"));
+    },
     composing: !!composer, activeDraftId: composer?.id ?? null, loading: boxes.loading || caps.loading || folders.loading, error: boxes.error || caps.error || folders.error || (requested && boxes.data && !box ? "This mailbox is unavailable. Choose another mailbox." : ""), revision, realtime, summary: summary.data?.summary ?? null, preferences, setPreferences, mobileMenu, setMobileMenu, feedback,
     selectBox: (id) => { const next = new URLSearchParams(params); next.set("mailbox", id); next.delete("message"); next.delete("q"); if (location.pathname.startsWith("/mail/folders/")) navigate(`/mail?${next}`); else setParams(next); },
     href: (path) => `${path}${box ? `?mailbox=${encodeURIComponent(box.id)}` : ""}`, refresh, refreshBoxes: boxes.reload,
@@ -112,7 +128,7 @@ export function MailSidebar() {
         {!mail.loading && !custom.length && <p className="mail-folder-empty">{mail.box?.access?.write ? "Create folders to organize mail." : "No custom folders."}</p>}
       </div>
     </nav>
-    <div className="mail-sidebar-bottom"><NavLink className="workspace-nav-item" to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : "Checking for updates"}</span></div>
+    <div className="mail-sidebar-bottom"><NavLink className="workspace-nav-item" to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection" role="status"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : mail.realtime === "Connecting" ? "Connecting…" : mail.realtime === "Manual" ? "Updates on refresh" : "Live updates unavailable"}</span></div>
   </div>;
 }
 export function FolderManager() {

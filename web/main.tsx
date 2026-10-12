@@ -1,6 +1,6 @@
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router";
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Link, Navigate, Route } from "react-router";
 import { LoginPage } from "./routes/login";
 import { UIProvider } from "@/components/ui";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
@@ -35,11 +35,8 @@ const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((mo
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
 if (import.meta.hot) import.meta.hot.data.root = root;
-root.render(
-  <StrictMode>
-    <UIProvider>
-      <BrowserRouter>
-        <Routes>
+const router = createBrowserRouter(createRoutesFromElements(<>
+
           <Route path="/login" element={<LoginPage />} />
           <Route path="/share/drive/:token" element={<Suspense fallback={<p className="empty-page">Opening shared files…</p>}><PublicDrivePage /></Suspense>} />
           <Route element={<WorkspaceLayout />}>
@@ -88,8 +85,7 @@ root.render(
           {UIPreviewPage && <Route path="/dev/ui" element={
             <Suspense fallback={<p>Loading components…</p>}><UIPreviewPage /></Suspense>
           } />}
-        </Routes>
-      </BrowserRouter>
-    </UIProvider>
-  </StrictMode>,
-);
+
+</>));
+if (import.meta.hot) import.meta.hot.dispose(() => router.dispose());
+root.render(<StrictMode><UIProvider><RouterProvider router={router} /></UIProvider></StrictMode>);

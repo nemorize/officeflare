@@ -204,9 +204,14 @@ textarea[data-ui="input"] { height: auto; min-height: 86px; resize: vertical; li
 }
 
 [data-ui-theme="neutral"] { --ui-accent: var(--ui-primary); --ui-focus-ring: 0 0 0 1px var(--ui-accent); }
-[data-ui="search-field"] { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 40px; padding: 4px; border: 1px solid transparent; border-radius: var(--ui-radius-control); background: var(--ui-surface); }
-[data-ui="search-field"]:focus-within { background: var(--ui-background); border-color: var(--ui-control-border); box-shadow: var(--ui-focus-ring); }
-[data-ui="search-field"] > [data-ui="input"] { flex: 1; width: 0; min-width: 0; max-width: none; }
+[data-ui="search-field"] { display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 44px; min-height: 44px; margin: 0; padding: 0 4px 0 12px; border: 1px solid transparent; border-radius: var(--ui-radius-control); background: var(--ui-surface); box-shadow: none; transition: background 120ms; }
+[data-ui="search-field"]:hover { background: var(--ui-hover); }
+[data-ui="search-field"]:focus-within { background: var(--ui-background); border-color: #878b92; box-shadow: none; }
+[data-ui="search-field"] > [data-ui="input"][data-variant] { flex: 1; width: 0; min-width: 0; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; }
+[data-ui="search-field"] > svg { width: 18px; height: 18px; color: var(--ui-muted); }
+[data-ui="search-field"] > [data-ui-button][data-size="icon"] { width: 32px; height: 32px; min-height: 32px; padding: 0; border-color: transparent; box-shadow: none; transition: background 120ms; }
+[data-ui="search-field"]:has(> [data-ui-button]:focus-visible) { border-color: transparent; background: var(--ui-surface); }
+[data-ui="search-field"] > [data-ui-button][data-size="icon"]:focus-visible { border-color: #878b92; background: var(--ui-hover); box-shadow: none; }
 [data-ui="search-field"] > :is(svg, [data-ui-button]) { flex-shrink: 0; }
 [data-ui="snackbar"] { display: flex; align-items: center; gap: 16px; padding: 8px 12px 8px 16px; background: var(--ui-primary); color: white; border-radius: var(--ui-radius-panel); box-shadow: var(--ui-shadow-dialog); font-size: 12px; }
 [data-ui="snackbar"] > span { min-width: 0; overflow-wrap: anywhere; }
@@ -215,7 +220,9 @@ textarea[data-ui="input"] { height: auto; min-height: 86px; resize: vertical; li
 @media (max-width: 760px) {
   [data-ui-button][data-size], [data-ui="toggle"], [data-ui="toggle-group"] > [data-ui="toggle"], [data-ui="select-trigger"], [data-ui="tabs-tab"] { min-height: 44px; }
   [data-ui-button][data-size="icon"], [data-ui="toggle"][data-size="icon"] { width: 44px; height: 44px; }
-  input[data-ui="input"], [data-ui="search-field"] { min-height: 44px; }
+  input[data-ui="input"] { min-height: 44px; }
+  [data-ui="search-field"] { height: 48px; min-height: 48px; padding-inline-end: 2px; }
+  [data-ui="search-field"] > [data-ui-button][data-size="icon"] { width: 44px; height: 44px; min-height: 44px; }
   [data-ui="checkbox-hit-area"] { width: 44px; height: 44px; }
   [data-ui="checkbox-label"], [data-ui="field-label"]:has([data-ui="checkbox-root"], [data-ui="switch-root"]) { min-height: 44px; }
   :is([data-ui="menu-item"], [data-ui="menu-link-item"], [data-ui="menu-submenu-trigger"], [data-ui="context-menu-item"], [data-ui="select-item"]) { min-height: 44px; }
@@ -254,3 +261,8 @@ textarea[data-ui="input"] { height: auto; min-height: 86px; resize: vertical; li
 
 [data-ui="toggle-group"] > [data-ui="toggle"][data-size="icon"] { padding: 0; }
 [data-ui-button][data-variant="text"] { display: block; justify-content: flex-start; }
+
+/* Keep one border around the group, including while typing. */
+[data-ui="search-field"] > [data-ui="input"][data-variant]:focus { border: 0; box-shadow: none; outline: none; }
+
+@media (forced-colors: active) { [data-ui="search-field"]:focus-within { outline: 2px solid Highlight; outline-offset: 2px; } }

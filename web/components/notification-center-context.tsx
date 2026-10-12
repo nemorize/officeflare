@@ -47,7 +47,11 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
         socket.onclose = schedule;
       } catch { schedule(); }
     }
-    const visibleRefresh = () => { if (document.visibilityState !== "hidden") void refresh(); };
+    let lastForegroundRefresh = 0;
+    const visibleRefresh = () => {
+      if (document.visibilityState === "hidden" || Date.now() - lastForegroundRefresh < 250) return;
+      lastForegroundRefresh = Date.now(); void refresh();
+    };
     void refresh(); void connect();
     const poll = setInterval(visibleRefresh, 30_000);
     window.addEventListener("focus", visibleRefresh); window.addEventListener("online", visibleRefresh);

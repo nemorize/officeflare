@@ -3,26 +3,34 @@ import { Button, CheckboxControl, Dialog, DialogPopup, Field, Fieldset, Form, Ic
 import { api, ApiError } from "../lib/api";
 import { mailFailure } from "../lib/mail";
 import { useAccess } from "./console-access";
+import { useMailCache } from "./mail-resource-context";
+import { LoadingSkeleton } from "./loading-skeleton";
 export function useMailResource<T>(path: string | null, revision = 0, poll = false) {
-  const access = useAccess(), [reloadCount, setReloadCount] = useState(0);
-  const [state, setState] = useState<{ path: string | null; data: T | null; loading: boolean; error: string }>({ path: null, data: null, loading: false, error: "" });
-  const reload = useCallback(() => setReloadCount((count) => count + 1), []);
+  const access = useAccess(), cache = useMailCache();
+  const subscribe = useCallback((listener: () => void) => cache.subscribe(path, listener), [cache, path]);
+  const snapshot = useCallback(() => cache.snapshot(path), [cache, path]);
+  const state = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const previous = useRef({ cache, path, revision });
+  const reload = useCallback(() => { if (path) cache.invalidate(path); }, [cache, path]);
   useEffect(() => {
-    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
-    let initialized = false;
-    if (!path) { setState({ path, data: null, loading: false, error: "" }); return; }
-    const load = async () => {
-      if (initialized && poll && document.hidden) { timer = setTimeout(() => { void load(); }, 15_000); return; }
-      setState((old) => ({ path, data: old.path === path ? old.data : null, loading: true, error: "" }));
-      try { const data = await api<T>(path, { signal: controller.signal }); if (!controller.signal.aborted) setState({ path, data, loading: false, error: "" }); }
-      catch (failure) { if (!controller.signal.aborted) { setState((old) => ({ ...old, data: failure instanceof ApiError && [403, 404].includes(failure.status) ? null : old.data, loading: false, error: mailFailure(failure) })); if (failure instanceof ApiError && failure.status === 403) { access.refresh(); window.dispatchEvent(new Event("officeflare:mail-access-changed")); } } }
-      initialized = true;
-      if (poll && !controller.signal.aborted) timer = setTimeout(() => { void load(); }, 5000);
-    };
-    void load(); return () => { controller.abort(); clearTimeout(timer); };
-  }, [path, revision, reloadCount, poll, access.refresh]);
-  const current = state.path === path ? state : { path, data: null, loading: !!path, error: "" };
-  return { ...current, reload };
+    if (path) {
+      if (previous.current.cache === cache && previous.current.path === path && previous.current.revision !== revision) cache.revalidate(path, revision);
+      else void cache.load(path);
+    }
+    previous.current = { cache, path, revision };
+  }, [cache, path, revision]);
+  useEffect(() => {
+    if (!poll || !path) return;
+    const timer = setInterval(() => { if (!document.hidden) void cache.load(path, true); }, 5000);
+    return () => clearInterval(timer);
+  }, [cache, path, poll]);
+  useEffect(() => {
+    if (state.error instanceof ApiError && state.error.status === 403) {
+      access.refresh();
+      window.dispatchEvent(new Event("officeflare:mail-access-changed"));
+    }
+  }, [state.error, access.refresh]);
+  return { path, data: state.data as T | null, loading: state.loading, error: state.error ? mailFailure(state.error) : "", reload };
 }
 export function useMailAction() {
   const access = useAccess(), running = useRef(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -36,21 +44,13 @@ export function useMailAction() {
   return { busy, error, setError, run };
 }
 export function MailNotice({ error }: { error: string }) { return error ? <p className="mail-notice" role="alert">{error}</p> : null; }
-export function MailState({ loading, error, retry }: { loading: boolean; error: string; retry?: () => void }) { return error ? <div><MailNotice error={error} />{retry && <Button onClick={retry}>Try again</Button>}</div> : loading ? <p className="mail-empty" role="status">Loading…</p> : null; }
+export function MailState({ loading, error, retry, kind = "section" }: { loading: boolean; error: string; retry?: () => void; kind?: "section" | "list" | "reader" | "form" }) { return error ? <div><MailNotice error={error} />{retry && <Button onClick={retry}>Try again</Button>}</div> : loading ? <LoadingSkeleton kind={kind} label="Loading mail…" rows={kind === "list" ? 6 : 3} /> : null; }
 export function MailField({ label, hint, children, className = "" }: { label: string; hint?: string; children: ReactNode; className?: string }) {
   return <Field.Root className={`mail-field ${className}`}><Field.Label>{label}</Field.Label>{children}{hint && <Field.Description>{hint}</Field.Description>}</Field.Root>;
 }
 export const MailForm = Form;
 export const MailFieldset = Fieldset.Root;
-const mobileQuery = "(max-width: 760px)";
-function subscribeMobile(listener: () => void) {
-  const query = window.matchMedia(mobileQuery);
-  query.addEventListener("change", listener);
-  return () => query.removeEventListener("change", listener);
-}
-export function useMailMobile() {
-  return useSyncExternalStore(subscribeMobile, () => window.matchMedia(mobileQuery).matches, () => false);
-}
+export { useWorkspaceMobile as useMailMobile } from "../lib/workspace-responsive";
 interface MailSelectOption { value: string; label: ReactNode; disabled?: boolean; }
 export function MailSelect({ options, value = "", onValueChange, className = "", ...props }: {
   options: MailSelectOption[]; value?: string; onValueChange: (value: string) => void;

@@ -127,6 +127,7 @@ export function ConversationReader({
       <div className="mail-conversation-content">
         <MailNotice error={actionError ?? ""} />
         <MailState
+          kind="reader"
           loading={initial.loading && !message}
           error={initial.error}
           retry={initial.reload}
@@ -212,14 +213,11 @@ function MessageCard({
     )
       return;
     readAttempted.current = true;
-    void api(`${path}/messages/${message.id}`, {
+    void api<{ message: Message }>(`${path}/messages/${message.id}`, {
       method: "PATCH",
       body: { version: message.version, is_read: true },
     })
-      .then(() => {
-        resource.reload();
-        mail.refresh();
-      })
+      .then(result => { mail.recordRead(message, result.message.version); })
       .catch(() => {});
   }, [open, message]);
   const change = async (changes: object) => {

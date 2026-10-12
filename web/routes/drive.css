@@ -64,14 +64,14 @@
 .drive-topbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 70px;
+  gap: 8px;
+  min-height: var(--workspace-header-height);
   flex-shrink: 0;
-  padding: 14px 26px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--ui-border);
 }
 .drive-search {
-  max-width: 610px;
+  max-width: 680px;
   flex: 1;
 }
 .drive-search [data-ui="input"] {
@@ -1478,25 +1478,6 @@
 .drive-public-table .drive-file-row {
   grid-template-columns: minmax(160px, 1fr) 140px 90px 35px;
 }
-.drive-navigation-drawer [data-ui="drawer-title"] {
-  margin: 0 0 5px;
-}
-.drive-navigation-drawer [data-ui="drawer-description"] {
-  margin-bottom: 25px;
-}
-.drive-navigation-drawer {
-  max-width: 310px;
-}
-.drive-navigation-drawer .drive-storage {
-  margin-top: 30px;
-}
-.drive-navigation-drawer .drive-sidebar-new {
-  padding-left: 0;
-}
-.drive-navigation-drawer .workspace-nav {
-  padding-left: 0;
-  padding-right: 0;
-}
 @container (max-width:800px) {
   .drive-layout-list .drive-table-header,
   .drive-layout-list .drive-file-row {
@@ -1587,9 +1568,9 @@
     display: none;
   }
   .drive-topbar {
-    padding: 11px 13px;
-    gap: 7px;
-    min-height: 61px;
+    padding: 0 12px;
+    gap: 8px;
+    min-height: var(--workspace-header-height);
   }
   .drive-topbar-end {
     display: flex;

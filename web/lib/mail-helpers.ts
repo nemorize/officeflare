@@ -14,9 +14,31 @@ export function scheduledTime(value: string, now = Date.now()): number | undefin
 export const cancelableSubmission = (status: string) => ["scheduled", "queued", "retry_wait"].includes(status);
 export const retryableSubmission = (status: string) => status === "failed";
 export const submissionLabel = (status: string) => ({ accepted: "Accepted by provider", unknown: "Acceptance unknown", retry_wait: "Waiting to retry", processing: "Sending", queued: "Queued", scheduled: "Scheduled", canceled: "Canceled", failed: "Failed" }[status] ?? status);
+export function mailErrorDescription(code: string) {
+  const messages: Record<string, string> = {
+    message_too_large: "This message is too large. Remove attachments or shorten the message.",
+    E_CONTENT_TOO_LARGE: "This message is too large. Remove attachments or shorten the message.",
+    provider_unavailable: "The mail service is temporarily unavailable. Try again later.",
+    invalid_mbox_format: "This file is not a valid mailbox archive. Choose an MBOX file and try again.",
+    invalid_eml_format: "This file is not a valid email message. Choose an EML file and try again.",
+    rate_limited: "Too many requests. Wait a moment before trying again.",
+    quota_exceeded: "The mailbox is out of storage. Free up space or contact an administrator.",
+  };
+  return messages[code] ?? "This operation could not be completed. Try again or contact an administrator.";
+}
 export function mailFailure(failure: unknown) { return failure instanceof Error ? failure.message : "Unable to complete the request."; }
-export function htmlFrame(html: string) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}</body></html>`;
+export function htmlFrame(html: string, resizeNonce?: string) {
+  if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce)) throw new Error("Invalid frame nonce");
+  const policy = resizeNonce ? " script-src 'nonce-" + resizeNonce + "';" : "";
+  // Only this nonce-authorized script can run; the frame keeps an opaque origin.
+  const resize = resizeNonce ? '<script nonce="' + resizeNonce + '">(()=>{const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce:"' + resizeNonce + '",height},"*")};new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);addEventListener("load",report);report()})()</script>' : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${resize}</body></html>`;
+}
+export function mailFrameHeight(data: unknown, nonce: string, source: unknown, expectedSource: unknown): number | null {
+  if (!expectedSource || source !== expectedSource || !data || typeof data !== "object") return null;
+  const message = data as { type?: string; nonce?: string; height?: unknown };
+  if (message.type !== "officeflare:mail-body-height" || message.nonce !== nonce || typeof message.height !== "number" || !Number.isFinite(message.height)) return null;
+  return Math.max(96, Math.min(24_000, Math.ceil(message.height)));
 }
 // getRandomValues is also available on HTTP origins, unlike randomUUID.
 const operationKey = () => [...crypto.getRandomValues(new Uint8Array(32))].map((byte) => byte.toString(16).padStart(2, "0")).join("");

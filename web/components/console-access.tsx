@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet } from "react-router";
 import { api, errorMessage } from "../lib/api";
 import { consoleMenu } from "../lib/console";
 import { useSession } from "../lib/session";
+import { LoadingSkeleton } from "./loading-skeleton";
 import { workspaceApps } from "../lib/workspace-navigation";
 
 interface Access { permissions: string[]; status: "loading" | "ready" | "error"; error: string; refresh: () => void; }
@@ -24,10 +25,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     });
     return () => controller.abort();
   }, [sessionId, revision]);
+  const lastForegroundRefresh = useRef(0);
   useEffect(() => {
-    const visible = () => { if (document.visibilityState === "visible") refresh(); };
-    window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", visible);
-    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", visible); };
+    const visible = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastForegroundRefresh.current < 250) return;
+      lastForegroundRefresh.current = Date.now(); refresh();
+    };
+    window.addEventListener("focus", visible); document.addEventListener("visibilitychange", visible);
+    return () => { window.removeEventListener("focus", visible); document.removeEventListener("visibilitychange", visible); };
   }, [refresh]);
   const access = state.sessionId === sessionId ? state : { permissions: [], status: "loading" as const, error: "" };
   return <AccessContext value={{ ...access, refresh }}>{children}</AccessContext>;
@@ -38,7 +43,7 @@ export function AccessDenied() {
 }
 export function ConsoleGate({ children, permissions }: { children?: ReactNode; permissions?: string[] }) {
   const access = useAccess();
-  if (access.status === "loading") return <p className="account-page" role="status">Checking permissions…</p>;
+  if (access.status === "loading") return <LoadingSkeleton kind="page" label="Checking permissions…" />;
   if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p></section>;
   const allowed = access.permissions.includes("console.access") && (!permissions || permissions.some((permission) => access.permissions.includes(permission)));
   return allowed ? children ?? <Outlet /> : <AccessDenied />;
@@ -49,7 +54,7 @@ export function ConsoleHome() {
 }
 export function ServiceGate({ permission, children }: { permission: string; children: ReactNode }) {
   const access = useAccess();
-  if (access.status === "loading") return <p className="account-page" role="status">Checking permissions…</p>;
+  if (access.status === "loading") return <LoadingSkeleton kind="page" label="Checking permissions…" />;
   if (access.status === "error") return <section className="account-page"><p className="account-notice" role="alert">{access.error}</p></section>;
   return access.permissions.includes(permission) ? children : <AccessDenied />;
 }

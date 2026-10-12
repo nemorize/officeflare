@@ -3,14 +3,13 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useMail, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
 import { useAccess } from "./console-access";
-import { workspaceApps } from "../lib/workspace-navigation";
+import { WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { CheckboxLabel,
   Button,
   Drawer,
   DrawerPopup,
   SearchField,
   Icon,
-  OfficeflareMark,
   Input,
   Popover,
   PopoverPopup,
@@ -274,6 +273,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         <span>{mail.box?.name ?? "Mail"}</span>
       </div>
       <MailIconButton
+        className="mail-topbar-settings"
         icon="settings"
         label="Quick settings"
         onClick={() => setSettings(true)}
@@ -304,69 +304,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             {filterForm}
           </DrawerPopup>
         </Drawer.Root>
-        <Drawer.Root
-          open={mail.mobileMenu}
-          onOpenChange={mail.setMobileMenu}
-          swipeDirection="left"
-        >
-          <DrawerPopup side="left" padding="none"
-            className="mail-navigation-drawer"
-            viewportProps={{
-              className: "mail-drawer-viewport mail-drawer-left",
-            }}
-          >
-            <div className="mail-drawer-heading">
-              <Drawer.Title>Mail</Drawer.Title>
-              <MailIconButton
-                icon="close"
-                label="Close navigation"
-                onClick={() => mail.setMobileMenu(false)}
-              />
-            </div>
-            <Drawer.Description className="mail-sr-only">
-              Mailbox navigation
-            </Drawer.Description>
-            <div className="mail-mobile-workspace">
-              <nav aria-label="Applications">
-                <Link
-                  to="/"
-                  aria-label="Officeflare home"
-                  onClick={() => mail.setMobileMenu(false)}
-                >
-                  <OfficeflareMark />
-                </Link>
-                {workspaceApps
-                  .filter((app) => access.permissions.includes(app.permission))
-                  .map((app) => (
-                    <Link
-                      key={app.path}
-                      to={app.path}
-                      aria-label={app.name}
-                      aria-current={
-                        location.pathname.startsWith(app.path)
-                          ? "page"
-                          : undefined
-                      }
-                      onClick={() => mail.setMobileMenu(false)}
-                    >
-                      <Icon name={app.icon} />
-                    </Link>
-                  ))}
-                {access.permissions.includes("console.access") && (
-                  <Link
-                    to="/console"
-                    aria-label="Console"
-                    onClick={() => mail.setMobileMenu(false)}
-                  >
-                    <Icon name="console" />
-                  </Link>
-                )}
-              </nav>
-              {mobileAccount}
-            </div>
-            <MailSidebar />
-          </DrawerPopup>
-        </Drawer.Root>
+        <WorkspaceNavigationDrawer open={mail.mobileMenu} onOpenChange={mail.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailIconButton icon="settings" label="Quick settings" onClick={() => { mail.setMobileMenu(false); setSettings(true); }} />}><MailSidebar /></WorkspaceNavigationDrawer>
         <Drawer.Root
           open={settings}
           onOpenChange={setSettings}

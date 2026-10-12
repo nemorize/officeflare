@@ -37,6 +37,8 @@ import {
 } from "../components/ui";
 import { useAccount } from "../components/account-context";
 import { useAccess } from "../components/console-access";
+import { useSession } from "../lib/session";
+import { LoadingSkeleton } from "../components/loading-skeleton";
 import { Confirm } from "../components/console-shared";
 export function MailReady({
   children,
@@ -47,6 +49,7 @@ export function MailReady({
 }) {
   const mail = useMail(),
     access = useAccess();
+  if (!mail.box && mail.loading) return <div className="mail-list-loading"><div className="mail-loading-toolbar" aria-hidden="true"><span className="skeleton-avatar" /><span className="skeleton-line skeleton-short" /></div><LoadingSkeleton kind="list" label="Loading your mailbox…" rows={6} /></div>;
   if (!mail.box)
     return (
       <section className="mail-empty-state">
@@ -139,7 +142,7 @@ export function MailPage() {
         title={title}
         query={query}
       />
-      {mail.box?.access?.write && (
+      {mail.box?.access?.write && !mail.composing && (
         <Button
           className="mail-mobile-compose"
           variant="primary"
@@ -174,7 +177,8 @@ function MailList({
     mail.preferences.conversation_view &&
     !query &&
     !["drafts", "scheduled"].includes(section);
-  const cacheKey = `${user?.id}:${mail.box!.id}:${section}:${folder ?? ""}:${query}:${grouped}`,
+  const sessionId = useSession().session?.tokens.session_id;
+  const cacheKey = `${sessionId}:${user?.id}:${mail.box!.id}:${section}:${folder ?? ""}:${query}:${grouped}`,
     saved = snapshots.get(cacheKey);
   const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []),
     [selected, setSelected] = useState<string[]>(saved?.selected ?? []),
@@ -208,6 +212,7 @@ function MailList({
     next_cursor: string | null;
   }>(`${path}/${grouped ? "threads" : "messages"}?${options}`, mail.revision);
   useEffect(() => {
+    if (!resource.data && resource.error) setMessages([]);
     if (resource.data) {
       setMessages(resource.data.messages);
       const failed = failedSelections.current;
@@ -842,6 +847,7 @@ function MailList({
         )}
         <MailNotice error={action.error} />
         <MailState
+          kind="list"
           loading={resource.loading && !messages.length}
           error={resource.error}
           retry={resource.reload}

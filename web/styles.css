@@ -12,9 +12,9 @@
   --ui-control-border: #dedee0;
   --ui-text: #1a1c1f;
   --ui-muted: #6a6b6d;
-  --ui-subtle: #929395;
+  --ui-subtle: #676b73;
   --ui-primary: #0a0a0a;
-  --ui-accent: #377dff;
+  --ui-accent: #0a0a0a;
   --ui-focus-ring: 0 0 0 1px var(--ui-accent);
   --ui-danger: #db3636;
   --ui-danger-surface: #fff1f0;
@@ -93,3 +93,20 @@ svg { flex-shrink: 0; vertical-align: middle; }
 @media (forced-colors: active) {
   :where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 1px solid Highlight; outline-offset: 0; }
 }
+
+.loading-skeleton { padding: 16px; color: var(--ui-muted); }
+.loading-skeleton > [aria-hidden] { display: grid; gap: 16px; }
+.skeleton-row { display: flex; align-items: center; gap: 16px; min-height: 46px; }
+.skeleton-row > div { display: grid; gap: 8px; flex: 1; }
+.skeleton-line { display: block; height: 12px; max-width: 640px; width: 90%; border-radius: 5px; background: var(--ui-hover); }
+.skeleton-short { width: 58%; background: var(--ui-surface); }
+.skeleton-title { height: 22px; max-width: 360px; }
+.skeleton-avatar { width: 28px; height: 28px; background: var(--ui-hover); border-radius: 6px; flex-shrink: 0; }
+.skeleton-editor { height: 200px; background: var(--ui-surface); border-radius: 8px; }
+.loading-skeleton-list { padding: 0; }
+.loading-skeleton-list > [aria-hidden] { gap: 0; }
+.loading-skeleton-list .skeleton-row { height: var(--mail-row-height, 48px); padding: 8px 16px; border-bottom: 1px solid var(--ui-border); }
+.loading-skeleton-reader { padding: 24px 0; }
+.loading-skeleton-form { min-height: 520px; padding: 0; }
+.loading-skeleton-page { max-width: 1000px; padding: 40px 32px; }
+@media (max-width: 760px) { .loading-skeleton-list .skeleton-row { height: 80px; }.loading-skeleton-page { padding: 24px 16px; } }

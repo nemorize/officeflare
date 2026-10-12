@@ -28,7 +28,7 @@
 .mail-composer .mail-html-toolbar { padding-inline: 0; }
 .mail-composer .mail-html-content .tiptap { padding-inline: 0; }
 .mail-quoted-body { flex-shrink: 0; padding-block: 12px; border-top: 1px solid var(--ui-border); }
-.mail-quoted-body > summary { cursor: pointer; font-size: 11px; color: var(--ui-muted); }
+.mail-quoted-body > summary { cursor: pointer; font-size: 12px; color: var(--ui-muted); }
 .mail-quoted-body iframe { width: 100%; border: 0; height: 260px; margin-top: 12px; }
 .mail-quoted-body pre { white-space: pre-wrap; font: 12px/1.7 Arial, sans-serif; padding: 12px; }
 @media (max-width: 760px) {
@@ -38,3 +38,10 @@
   .mail-editor-colors { grid-template-columns: repeat(5, 44px); }
   .mail-quoted-body > summary { min-height: 44px; align-content: center; }
 }
+
+.mail-html-editor:focus-within { border-color: var(--ui-text); }
+.mail-html-toolbar .mail-select[data-ui="select-trigger"] { background: transparent; border-color: transparent; }
+.mail-html-toolbar .mail-select[data-ui="select-trigger"]:hover { background: var(--ui-surface); }
+
+.mail-html-toolbar [data-ui="toggle"][data-variant="ghost"] { border-color: transparent; background: transparent; }
+.mail-html-toolbar [data-ui="toggle"][data-variant="ghost"]:is(:hover, [data-pressed]) { background: var(--ui-surface); }

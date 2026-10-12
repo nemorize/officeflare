@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import {
   bytes,
+  mailErrorDescription,
   htmlFrame,
+  mailFrameHeight,
   mailboxPath,
   mailDate,
   cancelableSubmission,
@@ -23,6 +25,8 @@ export function MailHtml({
   path: string;
   content?: string;
 }) {
+  const frame = useRef<HTMLIFrameElement>(null), [height, setHeight] = useState(128);
+  const nonce = useMemo(() => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join(""), [message.id, content]);
   const [html, setHtml] = useState(content),
     [error, setError] = useState("");
   useEffect(() => {
@@ -62,33 +66,44 @@ export function MailHtml({
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [message.id, content, path]);
+  useLayoutEffect(() => {
+    setHeight(128);
+    const resize = (event: MessageEvent) => {
+      const next = mailFrameHeight(event.data, nonce, event.source, frame.current?.contentWindow);
+      if (next !== null) setHeight(next);
+    };
+    window.addEventListener("message", resize);
+    return () => window.removeEventListener("message", resize);
+  }, [nonce]);
   return (
     <>
       <p className="mail-html-note">External images are blocked for privacy.</p>
       <MailNotice error={error} />
       <iframe
+        ref={frame}
+        style={{ height }}
         className="mail-html-frame"
         title="Formatted email body"
-        sandbox=""
+        sandbox="allow-scripts"
         referrerPolicy="no-referrer"
-        srcDoc={htmlFrame(html)}
+        srcDoc={htmlFrame(html, nonce)}
       />
     </>
   );
 }
 export function SendStatus({ submission }: { submission: Submission }) {
+  const [poll, setPoll] = useState(["scheduled", "queued", "processing", "retry_wait", "unknown"].includes(submission.status));
   const mail = useMail(),
     path = mailboxPath(mail.box!.id),
     action = useMailAction(),
     resource = useMailResource<{ submission: Submission }>(
       `${path}/submissions/${submission.id}`,
       mail.revision,
-      ["scheduled", "queued", "processing", "retry_wait", "unknown"].includes(
-        submission.status,
-      ),
+      poll,
     );
   const value = resource.data?.submission ?? submission,
     canSend = !!mail.box?.access?.send;
+  useEffect(() => setPoll(["scheduled", "queued", "processing", "retry_wait", "unknown"].includes(value.status)), [value.status]);
   return (
     <div className="mail-send-status">
       <div>
@@ -100,7 +115,7 @@ export function SendStatus({ submission }: { submission: Submission }) {
           attempt(s)
         </p>
         {value.status === "scheduled" && <p>{mailDate(value.scheduled_at)}</p>}
-        {value.error_code && <p>{["message_too_large", "E_CONTENT_TOO_LARGE"].includes(value.error_code) ? "This message exceeds the current sending size limit. Reduce the draft’s size or ask an administrator to increase the limit." : value.error_code}</p>}
+        {value.error_code && <p>{mailErrorDescription(value.error_code)}</p>}
         {value.status === "accepted" && (
           <small>
             Provider acceptance does not confirm delivery to every recipient.

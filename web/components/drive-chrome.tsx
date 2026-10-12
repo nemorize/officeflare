@@ -5,10 +5,11 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { Button, Drawer, DrawerPopup, Icon, Input, Meter, SearchField } from "./ui";
+import { Icon, Input, Meter, SearchField } from "./ui";
 import { useDrive, DriveNewMenu } from "./drive-context";
 import { DriveIconButton } from "./drive-controls";
 import { workspaceApps } from "../lib/workspace-navigation";
+import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { formatBytes } from "../lib/drive";
 
 export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -109,28 +110,8 @@ export function DriveTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
   }, []);
   return (
     <header className="workspace-topbar drive-topbar">
-      <Drawer.Provider>
-        <Drawer.Root open={menu} onOpenChange={setMenu} swipeDirection="left">
-          <Drawer.Trigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="drive-mobile-menu"
-              />
-            }
-            aria-label="Open Drive navigation"
-          >
-            <Icon name="menu" />
-          </Drawer.Trigger>
-          <DrawerPopup side="left" data-ui-theme="neutral" className="drive-navigation-drawer">
-            <Drawer.Title>Drive</Drawer.Title>
-            <Drawer.Description>Your files and folders</Drawer.Description>
-            <DriveSidebar onNavigate={() => setMenu(false)} />
-            <Button onClick={() => setMenu(false)}>Close navigation</Button>
-          </DrawerPopup>
-        </Drawer.Root>
-      </Drawer.Provider>
+      <WorkspaceMenuButton label="Open Drive navigation" onClick={() => setMenu(true)} />
+      <WorkspaceNavigationDrawer open={menu} onOpenChange={setMenu} title="Drive" account={mobileAccount}><DriveSidebar onNavigate={() => setMenu(false)} /></WorkspaceNavigationDrawer>
       <SearchField
         className="drive-search"
         role="search"
@@ -166,10 +147,7 @@ export function DriveTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           <kbd>/</kbd>
         )}
       </SearchField>
-      <div className="drive-topbar-end">
-        <span className="drive-topbar-caption">Files, together.</span>
-        <div className="drive-mobile-account">{mobileAccount}</div>
-      </div>
+
     </header>
   );
 }

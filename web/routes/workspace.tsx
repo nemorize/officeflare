@@ -6,8 +6,11 @@ import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
 import { MailTopbar } from "../components/mail-chrome";
+import { MailResourceProvider } from "../components/mail-resource-context";
+import { LoadingSkeleton } from "../components/loading-skeleton";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
+import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "../components/workspace-navigation";
 import { NotificationBell } from "../components/notification-center";
 import { NotificationCenterProvider } from "../components/notification-center-context";
 import { consoleMenu } from "../lib/console";
@@ -52,7 +55,7 @@ function WorkspaceChrome() {
   const { pathname: locationPath } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [mobileMenu, setMobileMenu] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
@@ -61,13 +64,13 @@ function WorkspaceChrome() {
   const isNotifications = pathname === "/notifications";
   const access = useAccess(), systemMenu = consoleMenu(access.permissions);
   const visibleApps = workspaceApps.filter((app) => access.permissions.includes(app.permission));
-  const activeApp = visibleApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
+  const activeApp = workspaceApps.find((app) => pathname === app.path || pathname.startsWith(`${app.path}/`));
   const sidebarName = isNotifications ? "Notifications" : isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
   const sidebarMenu = isNotifications ? notificationMenu : isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
   const title = current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
-  useEffect(() => { content.current?.scrollTo(0, 0); }, [pathname]);
+  useEffect(() => { content.current?.scrollTo(0, 0); setMobileMenu(false); }, [pathname]);
 
   async function signOut() {
     if (busy) return;
@@ -77,7 +80,7 @@ function WorkspaceChrome() {
     finally { setBusy(false); }
   }
 
-  return <div data-ui-theme={isDrive ? "neutral" : undefined} className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
+  return <div data-ui-theme="neutral" className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
       <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
@@ -89,21 +92,22 @@ function WorkspaceChrome() {
     </aside>
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
-        <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
-        {isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
+        <div className="workspace-sidebar-header"><span>{sidebarName}</span></div>
+        {access.status === "loading" ? <LoadingSkeleton label="Loading navigation…" /> : isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "Administration" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>}
-        <div className="workspace-sidebar-footer"><Icon name={isNotifications ? "bell" : isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
+
       </aside>
       <div ref={content} className="workspace-content">
         {isDrive ? <DriveTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
+          <WorkspaceMenuButton label="Open navigation" onClick={() => setMobileMenu(true)} />
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>}
-        {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
+        {!isDrive && !isMail && <WorkspaceNavigationDrawer open={mobileMenu} onOpenChange={setMobileMenu} title={sidebarName} account={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}><nav aria-label={sidebarName + " navigation"} className="workspace-nav">{sidebarMenu.map(item => <NavLink key={item.path} to={item.path} end={!isConsole} onClick={() => setMobileMenu(false)}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}</nav></WorkspaceNavigationDrawer>}
         {auth.error && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
-          <Suspense fallback={<p className="account-page" role="status">Loading…</p>}><Outlet /></Suspense>
+          <Suspense fallback={<LoadingSkeleton kind="page" label="Opening page…" />}><Outlet /></Suspense>
         </main>
       </div>
     </div>
@@ -117,7 +121,7 @@ export function WorkspaceLayout() {
   if (!auth.session) return <main className="empty-page" aria-busy={auth.status === "loading"}>
     <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
   </main>;
-  return <AccountProvider><AccessProvider><NotificationCenterProvider key={auth.session.tokens.session_id}><MailProvider><DriveProvider key={auth.session.tokens.session_id}><WorkspaceChrome /></DriveProvider></MailProvider></NotificationCenterProvider></AccessProvider></AccountProvider>;
+  return <AccountProvider><AccessProvider><NotificationCenterProvider key={auth.session.tokens.session_id}><MailResourceProvider><MailProvider key={auth.session.tokens.session_id}><DriveProvider key={auth.session.tokens.session_id}><WorkspaceChrome /></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccessProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {

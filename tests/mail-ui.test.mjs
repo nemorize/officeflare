@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApiClient } from "../web/lib/api-client.ts";
-import { parseRecipients, scheduledTime, MailOperation, cancelableSubmission, retryableSubmission, htmlFrame } from "../web/lib/mail-helpers.ts";
+import { parseRecipients, scheduledTime, MailOperation, cancelableSubmission, retryableSubmission, htmlFrame, mailFrameHeight } from "../web/lib/mail-helpers.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
 test("mail uploads preserve bytes and encoded filenames through authentication refresh", async () => {
@@ -55,6 +55,23 @@ test("HTML email uses a restrictive frame policy that blocks remote images and s
   const frame = htmlFrame('<p>Mail body</p><img src="https://tracking.test/image">');
   assert.match(frame, /default-src 'none'/); assert.match(frame, /img-src blob: data:/); assert.match(frame, /form-action 'none'/); assert.match(frame, /base-uri 'none'/);
   assert.doesNotMatch(frame, /script-src.*unsafe-inline/);
+});
+test("email sizing permits only its nonce-authorized observer and rejects forged size messages", () => {
+  const nonce = "a".repeat(32), source = {};
+  const frame = htmlFrame('<script>alert("untrusted")</script><img src="https://tracking.test/image">', nonce);
+  const policy = frame.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  assert.match(policy, /default-src 'none'/);
+  assert.match(policy, /img-src blob: data:/);
+  assert.match(policy, /script-src 'nonce-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/);
+  assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline|script-src[^;]*https:/);
+  assert.throws(() => htmlFrame("", '"><script>'), /nonce/);
+  const data = { type: "officeflare:mail-body-height", nonce, height: 241.1 };
+  assert.equal(mailFrameHeight(data, nonce, source, source), 242);
+  assert.equal(mailFrameHeight(data, nonce, {}, source), null);
+  assert.equal(mailFrameHeight(data, "wrong", source, source), null);
+  assert.equal(mailFrameHeight({ ...data, height: Infinity }, nonce, source, source), null);
+  assert.equal(mailFrameHeight({ ...data, height: "300" }, nonce, source, source), null);
+  assert.equal(mailFrameHeight({ ...data, height: 1_000_000 }, nonce, source, source), 24_000);
 });
 test("new mail routes restore safely after login without accepting arbitrary paths", () => {
   for (const path of ["/mail/settings", "/mail/integrations", "/mail/data", "/mail/spam", "/mail/snoozed", "/mail/folders/abcd-1234", "/console/mail/domains", "/console/mail/domains/new", "/console/mail/domains/abcd-1234", "/console/mail/mailboxes", "/console/mail/mailboxes/new", "/console/mail/mailboxes/abcd-1234", "/console/mail/providers"]) assert.equal(returnToWorkspace(path), path);
