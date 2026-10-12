@@ -45,6 +45,8 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
   const initialProvider = (direction: "inbound" | "outbound") => existing ? existing[`${direction}_provider`] ?? (existing[`${direction}_connection_id`] ? "cloudflare" : "") : providers[0]?.provider ?? "";
   const [isDefault, setDefault] = useState(defaultDomain);
   const [name, setName] = useState(existing?.name ?? ""), [inbound, setInbound] = useState(initialProvider("inbound")), [outbound, setOutbound] = useState(initialProvider("outbound"));
+  const [sendLimit, setSendLimit] = useState(existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "");
+  const providerMaximum = providers.find((provider) => provider.provider === outbound)?.capabilities.max_send_bytes ?? 0;
   const [receive, setReceive] = useState(!!existing?.inbound_enabled), [send, setSend] = useState(!!existing?.outbound_enabled), [plus, setPlus] = useState(existing ? !!existing.plus_addressing : true), [catchAll, setCatchAll] = useState(existing?.catch_all_mailbox_id ?? "");
   const providerName = (provider: string) => provider === "cloudflare" ? "Cloudflare" : provider;
   const providerOptions = (direction: "receive" | "send", selected: string) => [
@@ -63,6 +65,7 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
         ...(!existing || inboundId !== existing.inbound_connection_id ? { inbound_connection_id: inboundId } : {}),
         ...(!existing || outboundId !== existing.outbound_connection_id ? { outbound_connection_id: outboundId } : {}),
         inbound_enabled: receive, outbound_enabled: send, plus_addressing: plus, is_default: isDefault,
+        max_send_bytes: outbound && sendLimit !== "" ? Math.round(Number(sendLimit) * 1024 ** 2) : null,
       },
     });
     onSaved(result.domain.id);
@@ -73,8 +76,9 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
         <MailInput label="Domain" placeholder="example.com" required disabled={!!existing} value={name} maxLength={253} onChange={(event) => setName(event.target.value)} />
         <div className="mail-form-grid">
           <MailField label="Receiving provider"><MailSelect value={inbound} onValueChange={(value) => { setInbound(value); if (!value) setReceive(false); }} options={providerOptions("receive", inbound)} /></MailField>
-          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { setOutbound(value); if (!value) setSend(false); }} options={providerOptions("send", outbound)} /></MailField>
+          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { setOutbound(value); if (!value) { setSend(false); setSendLimit(""); } else { const maximum = providers.find((provider) => provider.provider === value)?.capabilities.max_send_bytes ?? 0; if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum) setSendLimit(String(maximum / 1024 ** 2)); } }} options={providerOptions("send", outbound)} /></MailField>
         </div>
+        <MailInput label="Maximum message size (MiB)" hint={providerMaximum ? `Provider maximum: ${providerMaximum / 1024 ** 2} MiB. Leave empty to use that maximum. Includes the body, images and encoded attachments.` : "Choose a sending provider to set a message size limit."} type="number" min={1 / 1024 ** 2} max={providerMaximum / 1024 ** 2} step="any" disabled={!providerMaximum} placeholder={providerMaximum ? String(providerMaximum / 1024 ** 2) : ""} value={sendLimit} onChange={(event) => setSendLimit(event.target.value)} />
         {(inbound === "cloudflare" || outbound === "cloudflare") && <MailSection title="Cloudflare setup" description="This provider uses the deployed Worker bindings; no separate API key or connection is required.">
           <MailState loading={setup.loading} error={setup.error} retry={setup.reload} /><ul className="mail-setup-steps">
             {inbound === "cloudflare" && <li>{setup.data?.receive.action ?? "Enable Email Routing in Cloudflare and route incoming mail to this Worker"} for {name || "this domain"}.</li>}

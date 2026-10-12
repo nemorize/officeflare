@@ -13,20 +13,32 @@ import { Confirm } from "./console-shared";
 import { MailEditor } from "./mail-editor";
 import { MailHtml } from "./mail-body";
 import { normalizedEditorHtml, plainMailHtml, storedEditorHtml } from "../lib/mail-editor";
+import { estimatedMessageBytes } from "../../src/mail/size";
 export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { mailboxId: string; draftId?: string; inline?: boolean; onClose: () => void }) {
   const mail = useMail(), location = useLocation(), path = mailboxPath(mailboxId), action = useMailAction();
   const initial = useMailResource<{ message: MessageDetail }>(draftId ? `${path}/drafts/${draftId}` : null);
-  const addresses = useMailResource<{ addresses: Address[] }>(path + "/addresses"), settings = useMailResource<{ settings: MailSettings }>(path + "/settings");
+  const addresses = useMailResource<{ addresses: Address[]; limits: { max_upload_bytes: number } }>(path + "/addresses"), settings = useMailResource<{ settings: MailSettings }>(path + "/settings");
   const [draft, setDraft] = useState<MessageDetail | null>(null), [ready, setReady] = useState(false), [to, setTo] = useState(""), [cc, setCc] = useState(""), [bcc, setBcc] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [html, setHtml] = useState("");
   const [files, setFiles] = useState<(Attachment & { upload?: boolean })[]>([]), [sender, setSender] = useState(""), [replyTo, setReplyTo] = useState(""), [schedule, setSchedule] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false), [includeCc, setIncludeCc] = useState(false), [unknown, setUnknown] = useState(false);
   const [minimized,setMinimized] = useState(false), [expanded,setExpanded] = useState(false), [docked,setDocked] = useState(!inline), [autosaving,setAutosaving] = useState(false), [closing,setClosing] = useState(false), [deleteDraft,setDeleteDraft] = useState(false), [scheduleOpen,setScheduleOpen] = useState(false), [inlineHost,setInlineHost] = useState<HTMLElement | null>(null);
   const [includeQuote, setIncludeQuote] = useState(true), [imageUploading, setImageUploading] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<{ content_id: string; size_bytes: number; filename: string; content_type: string }[]>([]);
   const generation = useRef(0), draftRef = useRef<MessageDetail | null>(null);
   const surface = useRef<HTMLElement>(null);
   const createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null);
   const pendingEdit = useRef<{ version: number; payload: object; matches: (message: MessageDetail) => boolean } | null>(null);
   const rights = mail.boxes.find((box) => box.id === mailboxId)?.access,
     canSend = !!rights?.send && !!addresses.data?.addresses.some((address) => address.id === sender && address.can_send);
+  const fromAddress = addresses.data?.addresses.find((address) => address.id === sender);
+  const maximum = fromAddress?.max_send_bytes ?? 0;
+  const uploadMaximum = fromAddress?.max_upload_bytes ?? addresses.data?.limits.max_upload_bytes ?? mail.capabilities?.limits.max_upload_bytes ?? 0;
+  const quoted = includeQuote ? draft?.body.quoted_body : undefined;
+  const storedHtml = storedEditorHtml(html, mailboxId, files) + (quoted ? `<blockquote style="border-left:2px solid #dddddd;padding-left:16px;margin:16px 0">${storedEditorHtml(quoted.html || plainMailHtml(quoted.text), mailboxId, files)}</blockquote>` : "");
+  const referencedImages = new Set([...new DOMParser().parseFromString(storedHtml, "text/html").querySelectorAll('img[src^="cid:"]')].map((image) => image.getAttribute("src")!.slice(4)));
+  const sizeFiles = [...files.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id)), ...uploadedImages.filter((image) => referencedImages.has(image.content_id) && !files.some((file) => file.content_id === image.content_id))];
+  const referenceHeaders: Record<string, string> = draft?.references.length ? { "In-Reply-To": `<${draft.references.at(-1)}>`, References: draft.references.slice(-20).map((reference) => `<${reference}>`).join(" ") } : {};
+  const estimatedSize = estimatedMessageBytes({ text: text + (quoted ? "\n\n" + quoted.text : ""), html: storedHtml, subject, from: fromAddress?.email_address, reply_to: replyTo, to: to.split(/[,;\n]+/), cc: cc.split(/[,;\n]+/), bcc: bcc.split(/[,;\n]+/), headers: referenceHeaders, attachments: sizeFiles });
+  const tooLarge = maximum > 0 && estimatedSize > maximum;
   useEffect(() => {
     if (ready || (draftId ? !initial.data : !settings.data)) return;
     const message = initial.data?.message;
@@ -100,6 +112,10 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
       const recipients = values(true); if (!recipients.to.length && !recipients.cc.length && !recipients.bcc.length) throw new Error("Add at least one recipient.");
       if (!sender || !canSend) throw new Error("Choose an available sending address. Your mailbox needs send permission.");
       const scheduledAt = scheduledTime(schedule), message = await save();
+      const savedHtml = storedEditorHtml(message.body.html, mailboxId, message.attachments);
+      const referenced = new Set([...new DOMParser().parseFromString(savedHtml, "text/html").querySelectorAll('img[src^="cid:"]')].map((image) => image.getAttribute("src")!.slice(4)));
+      const size = estimatedMessageBytes({ ...message.body, html: savedHtml, subject: message.subject, from: fromAddress?.email_address, reply_to: message.reply_to_address ?? "", to: recipients.to, cc: recipients.cc, bcc: recipients.bcc, headers: referenceHeaders, attachments: message.attachments.filter((file) => file.disposition !== "inline" || !!file.content_id && referenced.has(file.content_id)) });
+      if (size > maximum) throw new Error(`Message is approximately ${bytes(size)}; this sending address allows ${bytes(maximum)} including encoded attachments and body.`);
       pendingSend.current = { id: message.id, payload: { version: message.draft!.version, address_id: sender, ...(scheduledAt ? { scheduled_at: scheduledAt } : { undo_window: mail.preferences.undo_seconds }) } };
     }
     const pending = pendingSend.current;
@@ -116,8 +132,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     if (!selected?.length) return;
     if (files.length + selected.length > 32) throw new Error("A draft can have at most 32 attachments.");
     for (const file of [...selected]) {
-      const maximum = mail.capabilities?.limits.max_upload_bytes ?? 5 * 1024 ** 2;
-      if (!file.size || file.size > maximum) throw new Error(`${file.name}: choose a non-empty file up to ${bytes(maximum)}.`);
+      if (!file.size || file.size > uploadMaximum) throw new Error(`${file.name}: choose a non-empty file up to ${bytes(uploadMaximum)}. The body and other attachments share the message limit.`);
       const result = await api<{ upload: Attachment }>(path + "/uploads", { method: "POST", body: file, headers: { "X-Filename-Encoded": encodeURIComponent(file.name) }, signal: AbortSignal.timeout(120_000) });
       setFiles((old) => [...old, { ...result.upload, upload: true }]); mark();
     }
@@ -155,10 +170,12 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
         {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/><MailInput variant="integrated" label="Reply-To" type="email" inputMode="email" autoComplete="off" maxLength={254} placeholder="Same as From" value={replyTo} onChange={(event) => { setReplyTo(event.target.value); mark(); }} /></> : null}
         <MailInput variant="integrated" label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />
-        <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
+        <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} maxImageBytes={uploadMaximum} onImageUploaded={(image) => setUploadedImages((previous) => [...previous, image])} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
         {draft?.body.quoted_body && <div className="mail-quote-section"><Button size="sm" variant="ghost" disabled={locked} aria-pressed={includeQuote} onClick={() => { setIncludeQuote(!includeQuote); mark(); }}>{includeQuote ? "Remove quoted message" : "Include quoted message"}</Button>{includeQuote && <details className="mail-quoted-body"><summary>Quoted message</summary>{draft.body.quoted_body.html ? <MailHtml message={draft} path={path} content={draft.body.quoted_body.html} /> : <pre>{draft.body.quoted_body.text}</pre>}</details>}</div>}
         <div className="mail-attachments">{files.filter((file) => file.disposition !== "inline").map((file) => <div key={file.id}><span>{file.filename} <small>{bytes(file.size_bytes)}</small></span><Button variant="ghost" size="sm" aria-label={`Remove ${file.filename}`} onClick={() => { setFiles(files.filter((item) => item.id !== file.id)); mark(); }}>×</Button></div>)}</div>
-        <MailField label="Attach files" hint={`Up to ${bytes(mail.capabilities?.limits.max_upload_bytes ?? 5 * 1024 ** 2)} per file.`}><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>
+        <MailField label="Attach files" hint={`Up to ${bytes(uploadMaximum)} per file. The body, images and all encoded attachments share the message limit.`}><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>
+        {maximum > 0 && <p className="mail-hint" role="status">Estimated message size: {bytes(estimatedSize)} / {bytes(maximum)}.</p>}
+        {tooLarge && <MailNotice error="This message exceeds the selected sending address’s size limit. Remove attachments or shorten the message." />}
         {scheduleOpen && <div className="mail-schedule-panel"><div className="mail-schedule-presets">{[["Tomorrow",24],["Next week",168]].map(([label,hours]) => <Button key={label} size="sm" onClick={() => { const date=new Date(Date.now()+Number(hours)*3600000); setSchedule(new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16)); mark(); }}>{label}</Button>)}</div><MailInput label="Send at" hint="Uses your local timezone." type="datetime-local" value={schedule} onChange={(event) => { setSchedule(event.target.value); mark(); }}/>{schedule && <Button variant="ghost" size="sm" onClick={() => { setSchedule(""); mark(); }}>Remove schedule</Button>}</div>}
       </MailFieldset>
       <MailNotice error={action.error} />{unknown && <p className="mail-hint" role="status">The server response was lost. Retry the same request to check its outcome.</p>}

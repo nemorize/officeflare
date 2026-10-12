@@ -1,4 +1,6 @@
 import { queryThreads, mailboxSummary } from "../mail/views";
+import { configuredSendLimit, mailboxSendingLimits, providerSendMaximum, sendingLimits } from "../mail/limits";
+import { maxAttachmentBytes } from "../mail/size";
 import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
@@ -190,7 +192,8 @@ mail.get("/capabilities", (c) =>
       mcp: true,
     },
     limits: {
-      max_upload_bytes: 5 * 1024 * 1024,
+      max_upload_bytes: maxAttachmentBytes(providerSendMaximum()),
+      max_send_bytes: providerSendMaximum(),
       max_inbound_bytes: 25 * 1024 * 1024,
       max_page_size: 100,
     },
@@ -286,6 +289,7 @@ mail.post("/domains", async (c) => {
       "outbound_connection_id",
       "inbound_enabled",
       "outbound_enabled",
+      "max_send_bytes",
       "plus_addressing",
       "is_default",
     ]),
@@ -307,7 +311,8 @@ mail.post("/domains", async (c) => {
           100,
         );
   if (inbound) await connection(c.env, inbound);
-  if (outbound) await connection(c.env, outbound);
+  const sendingConnection = outbound ? await connection(c.env, outbound) : null;
+  const maxSendBytes = configuredSendLimit(data.max_send_bytes ?? null, sendingConnection?.provider ?? null);
   const receive =
       data.inbound_enabled === undefined
         ? 0
@@ -323,7 +328,7 @@ mail.post("/domains", async (c) => {
   await domainDb.batch([
     ...(defaultFlag === 1 ? [domainDb.prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1").bind()] : []),
     domainDb.prepare(
-      "INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing) VALUES(?,?,?,?,?,?,?)",
+      "INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing,max_send_bytes) VALUES(?,?,?,?,?,?,?,?)",
     )
     .bind(
       domainId,
@@ -335,6 +340,7 @@ mail.post("/domains", async (c) => {
       data.plus_addressing === undefined
         ? 1
         : flag(data.plus_addressing, "plus_addressing"),
+      maxSendBytes,
     ),
     ...(defaultFlag !== 0 ? [domainDb.prepare("UPDATE mail_domains SET is_default=1 WHERE id=? AND NOT EXISTS(SELECT 1 FROM mail_domains WHERE is_default=1)").bind(domainId)] : []),
   ]);
@@ -356,6 +362,7 @@ mail.patch("/domains/:id", async (c) => {
     "outbound_connection_id",
     "inbound_enabled",
     "outbound_enabled",
+    "max_send_bytes",
     "plus_addressing",
     "catch_all_mailbox_id",
     "is_default",
@@ -406,6 +413,9 @@ mail.patch("/domains/:id", async (c) => {
       values.outbound_connection_id === undefined
         ? existing.outbound_connection_id
         : values.outbound_connection_id;
+  const sendingConnection = outbound ? await first<Connection>(c.env, "SELECT * FROM mail_provider_connections WHERE id=?", String(outbound)) : null;
+  const maxSendBytes = configuredSendLimit(data.max_send_bytes === undefined ? existing.max_send_bytes : data.max_send_bytes, sendingConnection?.provider ?? null);
+  if ("max_send_bytes" in data) values.max_send_bytes = maxSendBytes;
   if (
     ((values.inbound_enabled ?? existing.inbound_enabled) && !inbound) ||
     ((values.outbound_enabled ?? existing.outbound_enabled) && !outbound)
@@ -806,13 +816,14 @@ mail.get("/mailboxes/:m/addresses", async (c) => {
   let canSend = false;
   try { await authorize(c.env, actor(c), resource(c), "send"); canSend = true; }
   catch (error) { if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error; }
-  const addresses = await all<Address & { email_address: string; send_available: number }>(
+  const addresses = await all<Address & { email_address: string; send_available: number; provider: string | null; max_send_bytes: number | null }>(
     c.env,
-    "SELECT a.*,a.local_part||'@'||d.name email_address,(a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1 AND p.provider='cloudflare') send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id LEFT JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=?",
+    "SELECT a.*,a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,(a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1) send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id LEFT JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=?",
     resource(c),
   );
   return c.json({
-    addresses: addresses.map(({ send_available, ...address }) => ({ ...address, can_send: canSend && send_available === 1 })),
+    addresses: addresses.map(({ send_available, max_send_bytes, ...address }) => ({ ...address, can_send: canSend && send_available === 1 && providers.some((entry) => entry.id === address.provider && entry.capabilities.send), ...(address.provider && providers.some((entry) => entry.id === address.provider) ? sendingLimits(address.provider, max_send_bytes) : { max_send_bytes: 0, max_upload_bytes: 0 }) })),
+    limits: await mailboxSendingLimits(c.env, resource(c)),
   });
 });
 mail.post("/addresses", async (c) => {
@@ -1154,7 +1165,8 @@ mail.post("/mailboxes/:m/images", async (c) => {
   await authorize(c.env, actor(c), resource(c), "read");
   await authorize(c.env, actor(c), resource(c), "write");
   const length = Number(c.req.header("content-length"));
-  if (!Number.isSafeInteger(length) || length <= 0 || length > 5 * 1024 ** 2) fail(413, "Choose an image up to 5 MiB");
+  const maximum = (await mailboxSendingLimits(c.env, resource(c))).max_upload_bytes;
+  if (!Number.isSafeInteger(length) || length <= 0 || length > maximum) fail(413, `Choose an image up to ${maximum} bytes`);
   const type = c.req.header("content-type")?.toLowerCase();
   if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type ?? "")) fail(415, "Use a PNG, JPEG, GIF or WebP image");
   const bytes = new Uint8Array(await c.req.arrayBuffer());
@@ -1178,8 +1190,9 @@ mail.get("/mailboxes/:m/images/:id", async (c) => {
 mail.post("/mailboxes/:m/uploads", async (c) => {
   await authorize(c.env, actor(c), resource(c), "write");
   const length = Number(c.req.header("content-length"));
-  if (!Number.isSafeInteger(length) || length < 0 || length > 5 * 1024 * 1024)
-    fail(413, "Upload requires Content-Length and must not exceed 5 MiB");
+  const maximum = (await mailboxSendingLimits(c.env, resource(c))).max_upload_bytes;
+  if (!c.req.header("content-length") || !Number.isSafeInteger(length) || length < 0 || length > maximum)
+    fail(413, `Upload requires Content-Length and must not exceed ${maximum} bytes`);
   let suppliedFilename = c.req.header("x-filename") ?? "attachment";
   if (c.req.header("x-filename-encoded")) {
     try { suppliedFilename = decodeURIComponent(c.req.header("x-filename-encoded")!); }
@@ -1202,6 +1215,7 @@ mail.post("/mailboxes/:m/uploads", async (c) => {
       customMetadata: { filename, expires_at: String(epoch() + 86400) },
     },
     length,
+    maximum,
   );
   return c.json(
     {

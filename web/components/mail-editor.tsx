@@ -6,6 +6,8 @@ export interface MailEditorProps {
   value: string;
   onChange: (html: string, text: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
+  maxImageBytes?: number;
+  onImageUploaded?: (image: { content_id: string; size_bytes: number; filename: string; content_type: string }) => void;
   mailboxId: string;
   attachments?: Attachment[];
   disabled?: boolean;

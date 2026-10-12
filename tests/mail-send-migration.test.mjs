@@ -3,6 +3,22 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
+test("send size migration preserves existing domain configuration and defaults to the provider ceiling", (t) => {
+  const db = new DatabaseSync(":memory:");
+  t.after(() => db.close());
+  db.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(id TEXT PRIMARY KEY); CREATE TABLE role_permissions(role_id TEXT,permission_key TEXT);");
+  db.exec(readFileSync("migrations/0009_create_mail_control.sql", "utf8"));
+  db.exec("INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing) VALUES('domain','legacy.test','cloudflare-bindings','cloudflare-bindings',1,1,1);");
+  const before = db.prepare("SELECT * FROM mail_domains").get();
+  db.exec(readFileSync("migrations/0016_mail_send_limits.sql", "utf8"));
+  const { max_send_bytes, ...preserved } = db.prepare("SELECT * FROM mail_domains").get();
+  assert.equal(max_send_bytes, null);
+  assert.deepEqual(preserved, { ...before });
+  assert.throws(() => db.exec("UPDATE mail_domains SET max_send_bytes=0"), /CHECK constraint/);
+  assert.throws(() => db.exec("UPDATE mail_domains SET max_send_bytes=-1"), /CHECK constraint/);
+  assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
+});
+
 test("mail send migration merges historical grants and scopes without widening read or write access", (t) => {
   const db = new DatabaseSync(":memory:");
   t.after(() => db.close());

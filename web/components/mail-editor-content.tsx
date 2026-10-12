@@ -7,7 +7,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import { Button, Icon, Input, Menu, MenuPopup, Popover, PopoverPopup, Toggle } from "./ui";
-import { MailInput, MailNotice, MailSelect } from "./mail-common";
+import { MailInput, MailNotice, MailSelect, useMailResource } from "./mail-common";
 import { api } from "../lib/api";
 import { mailboxPath, type Attachment } from "../lib/mail";
 import { displayEditorHtml, storedEditorHtml } from "../lib/mail-editor";
@@ -20,8 +20,10 @@ const emptyAttachments: Attachment[] = [];
 const emailStyles: Record<string, string> = { paragraph: "margin:0 0 12px", blockquote: "border-left:2px solid #dddddd;padding-left:16px;margin:16px 0", table: "border-collapse:collapse;width:100%", tableCell: "border:1px solid #dddddd;padding:8px", tableHeader: "border:1px solid #dddddd;padding:8px;background-color:#f5f5f5" };
 const EmailStyles = Extension.create({ name: "emailStyles", addGlobalAttributes() { return Object.entries(emailStyles).map(([type, style]) => ({ types: [type], attributes: { emailStyle: { default: style, rendered: true, parseHTML: () => style, renderHTML: () => ({ style }) } } })); } });
 
-export function MailEditor({ value, onChange, onUploadingChange, mailboxId, attachments = emptyAttachments, disabled = false, label = "Message body", className = "" }: MailEditorProps) {
-  const current = useRef({ onChange, attachments, disabled }); current.current = { onChange, attachments, disabled };
+export function MailEditor({ value, onChange, onUploadingChange, maxImageBytes, onImageUploaded, mailboxId, attachments = emptyAttachments, disabled = false, label = "Message body", className = "" }: MailEditorProps) {
+  const limits = useMailResource<{ limits: { max_upload_bytes: number } }>(maxImageBytes === undefined ? mailboxPath(mailboxId) + "/addresses" : null);
+  const imageMaximum = maxImageBytes ?? limits.data?.limits.max_upload_bytes ?? 0;
+  const current = useRef({ onChange, attachments, disabled, imageMaximum, onImageUploaded }); current.current = { onChange, attachments, disabled, imageMaximum, onImageUploaded };
   const fileInput = useRef<HTMLInputElement>(null), uploadCount = useRef(0);
   const [uploading, setUploading] = useState(false), [error, setError] = useState("");
   useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
@@ -53,8 +55,11 @@ export function MailEditor({ value, onChange, onUploadingChange, mailboxId, atta
     uploadCount.current++; setUploading(true); setError("");
     try {
       for (const file of files) {
-        if (!["image/png","image/jpeg","image/gif","image/webp"].includes(file.type) || !file.size || file.size > 5 * 1024 ** 2) throw new Error("Choose a PNG, JPEG, GIF or WebP image up to 5 MiB.");
-        const result = await api<{ image: { id: string } }>(mailboxPath(mailboxId) + "/images", { method: "POST", body: file, headers: { "X-Filename-Encoded": encodeURIComponent(file.name) }, signal: AbortSignal.timeout(120000) });
+        const maximum = current.current.imageMaximum;
+        if (!maximum) throw new Error("Wait for the image size limit to load.");
+        if (!["image/png","image/jpeg","image/gif","image/webp"].includes(file.type) || !file.size || file.size > maximum) throw new Error(`Choose a PNG, JPEG, GIF or WebP image up to ${Math.floor(maximum / 1024)} KiB.`);
+        const result = await api<{ image: { id: string; content_id: string; size_bytes: number; filename: string } }>(mailboxPath(mailboxId) + "/images", { method: "POST", body: file, headers: { "X-Filename-Encoded": encodeURIComponent(file.name) }, signal: AbortSignal.timeout(120000) });
+        current.current.onImageUploaded?.({ ...result.image, content_type: file.type });
         if (!editor.isDestroyed && !current.current.disabled) editor.chain().focus().setImage({ src: mailboxPath(mailboxId) + "/images/" + result.image.id, alt: file.name }).run();
       }
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Image upload failed."); }

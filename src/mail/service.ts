@@ -1,4 +1,5 @@
 import { incomingRoute } from "./routing";
+import { sendingLimits, validateMessageSize } from "./limits";
 import { putStream } from "./objects";
 import { queueWebhooks } from "./jobs";
 import { attachEditorImages, composedBody, editorBody, inlineContentIds, textHtml } from "./editor";
@@ -367,16 +368,6 @@ export async function submitDraft(
   if (!to.length && !cc.length && !bcc.length)
     fail(400, "At least one recipient is required");
   const referencedImages = inlineContentIds(content.html), attachments = message.attachments.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id));
-  // Base64 expansion, multipart headers and JSON bodies all consume provider message budget.
-  const size =
-    new TextEncoder().encode(content.text + content.html).length +
-    attachments.reduce(
-      (n, f) => n + Math.ceil(f.size_bytes / 3) * 4 + 1024,
-      0,
-    ) +
-    16384;
-  if (size > 5 * 1024 * 1024)
-    fail(413, "Message exceeds Cloudflare's 5 MiB sending limit");
   const headers: Record<string, string> = {};
   if (message.references.length) {
     headers["In-Reply-To"] = "<" + message.references.at(-1) + ">";
@@ -400,6 +391,7 @@ export async function submitDraft(
     snapshot.headers["Auto-Submitted"] = "auto-replied";
     snapshot.headers["X-Officeflare-Autoreply"] = "1";
   }
+  validateMessageSize(snapshot, sendingLimits(address.provider, address.max_send_bytes).max_send_bytes);
   const snapshotKey =
     "submissions/" +
     mailboxId +

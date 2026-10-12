@@ -1,4 +1,6 @@
 import { renderMime } from "./data";
+import { mailboxSendingLimits } from "./limits";
+import { providers } from "./providers";
 import { putStream } from "./objects";
 import { Hono } from "hono";
 import PostalMime from "postal-mime";
@@ -69,6 +71,7 @@ jmap.get("/session", async (c) => {
     available = await accounts(c.env, owner),
     origin = new URL(c.req.url).origin;
   const readOnly: Record<string, boolean> = {};
+  const limits = Object.fromEntries(await Promise.all(available.map(async (entry) => [entry.id, await mailboxSendingLimits(c.env, entry.id)] as const)));
   for (const entry of available) {
     try {
       await authorize(c.env, owner, entry.id, "write");
@@ -80,7 +83,7 @@ jmap.get("/session", async (c) => {
   return c.json({
     capabilities: {
       [core]: {
-        maxSizeUpload: 5 * 1024 * 1024,
+        maxSizeUpload: Math.max(0, ...available.map((entry) => limits[entry.id]!.max_send_bytes || limits[entry.id]!.max_upload_bytes)),
         maxConcurrentUpload: 4,
         maxSizeRequest: 5 * 1024 * 1024,
         maxConcurrentRequests: 4,
@@ -104,7 +107,7 @@ jmap.get("/session", async (c) => {
               maxMailboxesPerEmail: 1,
               maxMailboxDepth: 1,
               maxSizeMailboxName: 100,
-              maxSizeAttachmentsPerEmail: 5 * 1024 * 1024,
+              maxSizeAttachmentsPerEmail: limits[entry.id]!.max_upload_bytes,
               emailQuerySortOptions: ["receivedAt"],
               mayCreateTopLevelMailbox: true,
             },
@@ -135,6 +138,7 @@ jmap.post("/upload/:account", async (c) => {
     actor = c.get("mail_actor");
   await authorize(c.env, actor, account, "write");
   if (!c.req.raw.body) fail(400, "Missing upload");
+  const limits = await mailboxSendingLimits(c.env, account), maximum = limits.max_send_bytes || limits.max_upload_bytes;
   const uploadId = id();
   const object = await putStream(
     c.env.MAIL_BUCKET,
@@ -149,12 +153,14 @@ jmap.post("/upload/:account", async (c) => {
         contentType: c.req.header("content-type") ?? "application/octet-stream",
       },
     },
+    undefined,
+    maximum,
   );
-  if (!object || object.size > 5 * 1024 * 1024) {
+  if (!object || object.size > maximum) {
     await c.env.MAIL_BUCKET.delete(
       "uploads/" + account + "/" + actor.user_id + "/" + uploadId,
     );
-    fail(413, "Upload exceeds 5 MiB");
+    fail(413, `Upload exceeds ${maximum} bytes`);
   }
   return c.json(
     {
@@ -564,17 +570,17 @@ async function jmapMethod(
     let canSend = false;
     try { await authorize(env, actor, account, "send"); canSend = true; }
     catch (error) { if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error; }
-    const addresses = canSend ? await all<{ id: string; email: string }>(
+    const addresses = canSend ? await all<{ id: string; email: string; provider: string }>(
       env,
-      "SELECT a.id,a.local_part||'@'||d.name email FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1 AND p.provider='cloudflare'",
+      "SELECT a.id,a.local_part||'@'||d.name email,p.provider FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
       account,
     ) : [];
     return {
       accountId: account,
       state: currentState,
       list: addresses
-        .filter((a) => !ids || (ids as string[]).includes(a.id))
-        .map((a) => ({
+        .filter((a) => providers.some((entry) => entry.id === a.provider && entry.capabilities.send) && (!ids || (ids as string[]).includes(a.id)))
+        .map(({ provider: _provider, ...a }) => ({
           ...a,
           name: "",
           replyTo: null,

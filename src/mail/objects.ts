@@ -6,7 +6,9 @@ export async function putStream(
   stream: ReadableStream<Uint8Array>,
   options: R2PutOptions = {},
   length?: number,
+  maximum = 26 * 1024 * 1024,
 ) {
+  if (length !== undefined && length > maximum) fail(413, "Mail object is too large");
   if (length !== undefined && Number.isSafeInteger(length) && length > 0) {
     const fixed = new FixedLengthStream(length);
     const results = await Promise.allSettled([
@@ -19,8 +21,7 @@ export async function putStream(
   }
   // Bound unknown-length input without relying on Content-Length supplied by a client.
   const reader = stream.getReader(),
-    chunks: Uint8Array[] = [],
-    maximum = 26 * 1024 * 1024;
+    chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
     const result = await reader.read();

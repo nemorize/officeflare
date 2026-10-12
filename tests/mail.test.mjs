@@ -7,6 +7,7 @@ import { generateKeyPair, exportJWK } from "jose";
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { hashPassword } from "../src/auth/password.ts";
 import { permissionClosure } from "../src/authorization/permissions.ts";
+import { maxAttachmentBytes } from "../src/mail/size.ts";
 const password = "a long password for mail backend tests";
 async function fixture(t, target = "6000000000", queues = false) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -206,6 +207,108 @@ async function fixture(t, target = "6000000000", queues = false) {
     draft,
   };
 }
+test("sending size limits follow the From provider and administrator configuration", async (t) => {
+  const { call, admin, base, mailbox, domain, address, draft, mf, tokens } = await fixture(t, "6000000000", true);
+  const providerMaximum = (await call("/providers")).providers[0].capabilities.max_send_bytes;
+  const oneMiB = 1024 ** 2, bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  let alternateDomain, alternateAddress, firstUpload, combinedDraft;
+  const upload = async (size, expected = 201, name = "budget.bin") => {
+    const response = await mf.dispatchFetch("https://office.test/api/mail" + base + "/uploads", { method: "POST", headers: { Authorization: "Bearer " + tokens.owner, "Content-Type": "application/octet-stream", "Content-Length": String(size), "X-Filename": name }, body: new Uint8Array(size) });
+    assert.equal(response.status, expected, await response.clone().text());
+    return response.json();
+  };
+  const submit = (message, addressId, expected = 202, schedule = Math.floor(Date.now() / 1000) + 3600) => call(base + "/drafts/" + message.id + "/submissions", { method: "POST", data: { version: message.draft.version, address_id: addressId, scheduled_at: schedule }, expected });
+  await t.test("domain settings validate permissions, provider ceilings and nullable defaults", async () => {
+    assert.equal(domain.max_send_bytes, null);
+    assert.equal((await call(base + "/addresses")).addresses[0].max_send_bytes, providerMaximum);
+    assert.equal((await call("/capabilities")).limits.max_upload_bytes, maxAttachmentBytes(providerMaximum));
+    await call("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB }, expected: 403 });
+    for (const value of [0, -1, 1.5, "1048576", providerMaximum + 1]) {
+      await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: value }, expected: 400 });
+      await admin("/domains", { method: "POST", data: { name: "invalid.test", max_send_bytes: value }, expected: 400 });
+    }
+    await admin("/domains", { method: "POST", data: { name: "no-provider.test", outbound_connection_id: null, max_send_bytes: oneMiB }, expected: 400 });
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: providerMaximum } });
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: null } });
+    assert.equal((await call(base + "/addresses")).addresses[0].max_send_bytes, providerMaximum);
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB } });
+    assert.equal((await admin("/domains")).domains.find((entry) => entry.id === domain.id).max_send_bytes, oneMiB);
+    const connection = (await admin("/provider-connections")).connections[0];
+    const disabled = (await admin("/provider-connections/" + connection.id, { method: "PATCH", data: { version: connection.version, enabled: false } })).connection;
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB } });
+    await admin("/provider-connections/" + connection.id, { method: "PATCH", data: { version: disabled.version, enabled: true } });
+  });
+  await t.test("REST, images and JMAP uploads advertise and enforce the configured budgets", async () => {
+    const limits = await call(base + "/addresses"), maximum = maxAttachmentBytes(oneMiB);
+    assert.equal(limits.addresses[0].max_send_bytes, oneMiB);
+    assert.equal(limits.addresses[0].max_upload_bytes, maximum);
+    assert.equal(limits.limits.max_upload_bytes, maximum);
+    const session = await call("/jmap/session");
+    assert.equal(session.capabilities["urn:ietf:params:jmap:core"].maxSizeUpload, oneMiB);
+    assert.equal(session.accounts[mailbox.id].accountCapabilities["urn:ietf:params:jmap:mail"].maxSizeAttachmentsPerEmail, maximum);
+    const before = (await bucket.list({ prefix: `uploads/${mailbox.id}/owner/` })).objects.length;
+    await upload(maximum + 1, 413);
+    const image = await mf.dispatchFetch("https://office.test/api/mail" + base + "/images", { method: "POST", headers: { Authorization: "Bearer " + tokens.owner, "Content-Type": "image/png", "Content-Length": String(maximum + 1) }, body: new Uint8Array(maximum + 1) });
+    assert.equal(image.status, 413);
+    const jmapUpload = await mf.dispatchFetch("https://office.test/api/mail/jmap/upload/" + mailbox.id, { method: "POST", headers: { Authorization: "Bearer " + tokens.owner, "Content-Type": "message/rfc822" }, body: new Uint8Array(oneMiB + 1) });
+    assert.equal(jmapUpload.status, 413, await jmapUpload.clone().text());
+    assert.equal((await bucket.list({ prefix: `uploads/${mailbox.id}/owner/` })).objects.length, before);
+    firstUpload = (await upload(400 * 1024)).upload;
+    await upload(maximum);
+  });
+  await t.test("combined attachments and multibyte bodies fail before freezing or queueing a draft", async () => {
+    const second = (await upload(400 * 1024, 201, "second.bin")).upload;
+    combinedDraft = await draft({ attachment_ids: [firstUpload.id, second.id] });
+    await submit(combinedDraft, address.id, 413);
+    const unchanged = (await call(base + "/drafts/" + combinedDraft.id)).message;
+    assert.equal(unchanged.draft.state, "editable");
+    assert.equal(unchanged.submissions.length, 0);
+    assert.equal((await bucket.list({ prefix: "test-sent/" })).objects.length, 0);
+    const unicode = await draft({ text: "서".repeat(300 * 1024), html: "" });
+    await submit(unicode, address.id, 413);
+    assert.equal((await call(base + "/drafts/" + unicode.id)).message.draft.state, "editable");
+  });
+  await t.test("each From address uses its domain limit and other addresses keep their own limit", async () => {
+    alternateDomain = (await admin("/domains", { method: "POST", data: { name: "large.test", outbound_enabled: true, max_send_bytes: 2 * oneMiB }, expected: 201 })).domain;
+    alternateAddress = (await admin("/addresses", { method: "POST", data: { domain_id: alternateDomain.id, mailbox_id: mailbox.id, local_part: "owner" }, expected: 201 })).address;
+    const addresses = await call(base + "/addresses");
+    assert.equal(addresses.addresses.find((entry) => entry.id === address.id).max_send_bytes, oneMiB);
+    assert.equal(addresses.addresses.find((entry) => entry.id === alternateAddress.id).max_send_bytes, 2 * oneMiB);
+    assert.equal(addresses.limits.max_upload_bytes, maxAttachmentBytes(2 * oneMiB));
+    const accepted = (await submit(combinedDraft, alternateAddress.id)).submission;
+    assert.equal(accepted.status, "scheduled");
+    await call(base + "/submissions/" + accepted.id + "/cancel", { method: "POST" });
+  });
+  await t.test("inline images share the same budget and removing an image frees that space", async () => {
+    const bytes = new Uint8Array(600 * 1024); bytes.set([137,80,78,71,13,10,26,10]);
+    const imageResponse = await mf.dispatchFetch("https://office.test/api/mail" + base + "/images", { method: "POST", headers: { Authorization: "Bearer " + tokens.owner, "Content-Type": "image/png", "Content-Length": String(bytes.length) }, body: bytes });
+    assert.equal(imageResponse.status, 201, await imageResponse.clone().text());
+    const { image } = await imageResponse.json();
+    const message = await draft({ text: "Body with an inline image", html: `<p>Body</p><img src="cid:${image.content_id}">`, attachment_ids: [firstUpload.id] });
+    assert.equal(message.attachments.length, 2);
+    await submit(message, address.id, 413);
+    const edited = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: message.draft.version, html: "<p>Body</p>", text: "Body" } })).message;
+    assert.equal(edited.attachments.length, 1);
+    const accepted = (await submit(edited, address.id)).submission;
+    await call(base + "/submissions/" + accepted.id + "/cancel", { method: "POST" });
+  });
+  await t.test("queued sends recheck a reduced limit before contacting the provider", async () => {
+    const message = await draft({ attachment_ids: [firstUpload.id] });
+    const job = (await submit(message, address.id, 202, Math.floor(Date.now() / 1000) + 3)).submission;
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: 64 * 1024 } });
+    const failed = await eventually(() => call(base + "/submissions/" + job.id), (result) => result.submission.status === "failed", "The scheduled send did not apply the reduced size limit");
+    assert.equal(failed.submission.error_code, "message_too_large");
+    assert.equal((await bucket.list({ prefix: "test-sent/" })).objects.length, 0);
+    const nowEditable = (await call(base + "/drafts/" + message.id)).message;
+    assert.equal(nowEditable.draft.state, "editable");
+    await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB } });
+    await call(base + "/submissions/" + job.id + "/retry", { method: "POST" });
+    const accepted = await eventually(() => call(base + "/submissions/" + job.id), (result) => result.submission.status === "accepted", "The send did not recover after restoring the size limit");
+    const sent = await (await bucket.get("test-sent/" + accepted.submission.provider_message_id + ".json")).json();
+    assert.equal(sent.from, "owner@mail.test");
+    assert.equal(sent.attachments.length, 1);
+  });
+});
 test("mail UI metadata, sharing, attachment editing and send recovery use authorized resources", async (t) => {
   const f = await fixture(t), { call, admin, base, mailbox, tokens, draft, mf, db, address } = f;
   await t.test("mail capabilities and endpoints no longer expose mailbox contacts", async () => {

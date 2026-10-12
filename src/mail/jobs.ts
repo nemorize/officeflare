@@ -1,4 +1,5 @@
 import { processDataJob } from "./data";
+import { sendingLimits, validateMessageSize } from "./limits";
 import { hash } from "./input";
 import { all, authorize, first, sender } from "./control";
 import { mailbox, partition } from "./mailbox";
@@ -72,11 +73,12 @@ export async function sendSubmission(
     delete snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"];
     if (snapshot.from !== selected.email_address)
       fail(409, "Sending address changed");
-  } catch {
+    validateMessageSize(snapshot, sendingLimits(selected.provider, selected.max_send_bytes).max_send_bytes);
+  } catch (error) {
     await store.failure(
       submissionId,
       "failed",
-      "authorization_or_configuration_changed",
+      error instanceof Error && error.message.startsWith("MAIL:413:") ? "message_too_large" : "authorization_or_configuration_changed",
     );
     await flushOutbox(env, mailboxId, partitionId);
     return;

@@ -100,7 +100,7 @@ export function SendStatus({ submission }: { submission: Submission }) {
           attempt(s)
         </p>
         {value.status === "scheduled" && <p>{mailDate(value.scheduled_at)}</p>}
-        {value.error_code && <p>{value.error_code}</p>}
+        {value.error_code && <p>{["message_too_large", "E_CONTENT_TOO_LARGE"].includes(value.error_code) ? "This message exceeds the current sending size limit. Reduce the draft’s size or ask an administrator to increase the limit." : value.error_code}</p>}
         {value.status === "accepted" && (
           <small>
             Provider acceptance does not confirm delivery to every recipient.

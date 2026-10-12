@@ -176,6 +176,7 @@ export const mailDomains = sqliteTable("mail_domains", {
   outbound_connection_id: text().references(() => mailProviderConnections.id),
   inbound_enabled: integer().notNull().default(0),
   outbound_enabled: integer().notNull().default(0),
+  max_send_bytes: integer(),
   plus_addressing: integer().notNull().default(1),
   catch_all_mailbox_id: text().references(
     (): AnySQLiteColumn => mailMailboxes.id,

@@ -15,6 +15,7 @@ import {
   type Connection,
 } from "./types";
 import { hash } from "./input";
+import { provider } from "./providers";
 
 export const control = (env: Env) => env.DB.withSession("first-primary");
 export async function first<T>(
@@ -130,8 +131,7 @@ export async function connection(env: Env, connectionId: string) {
     connectionId,
   );
   if (!result) fail(409, "Provider connection is disabled or missing");
-  if (result.provider !== "cloudflare")
-    fail(422, "Unsupported provider: " + result.provider);
+  provider(result.provider);
   return result;
 }
 export async function resolveRecipient(env: Env, destination: string) {
@@ -184,9 +184,9 @@ export async function sender(
   addressId: string,
 ) {
   await authorize(env, actor, mailboxId, "send");
-  const result = await first<{ email_address: string; connection_id: string }>(
+  const result = await first<{ email_address: string; connection_id: string; max_send_bytes: number | null }>(
     env,
-    "SELECT a.local_part||'@'||d.name email_address,d.outbound_connection_id connection_id FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1",
+    "SELECT a.local_part||'@'||d.name email_address,d.outbound_connection_id connection_id,d.max_send_bytes FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1",
     addressId,
     mailboxId,
   );

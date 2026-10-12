@@ -36,6 +36,7 @@ export interface Domain {
   outbound_connection_id: string | null;
   inbound_enabled: number;
   outbound_enabled: number;
+  max_send_bytes: number | null;
   plus_addressing: number;
   catch_all_mailbox_id: string | null;
 }
