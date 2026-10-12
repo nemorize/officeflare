@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./partition.sql";
+import unifiedSend from "./partition-v2.sql";
 import { migrate } from "./migrations";
 import { compileSearch } from "./search";
 import {
@@ -24,7 +25,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema]);
+      migrate(ctx.storage, [schema, unifiedSend]);
     });
   }
   initialize(mailboxId: string, partitionId: string) {
@@ -547,14 +548,13 @@ export class MailPartitionDO extends DurableObject<Env> {
       fail(409, "Draft version changed or submitted");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
-        "INSERT INTO submissions(id,message_id,actor_id,actor_auth_version,api_key_id,address_id,send_mode,provider,connection_id,request_hash,draft_version,snapshot_r2_key,status,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO submissions(id,message_id,actor_id,actor_auth_version,api_key_id,address_id,provider,connection_id,request_hash,draft_version,snapshot_r2_key,status,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         value.id,
         value.message_id,
         value.actor_id,
         value.actor_auth_version,
         value.api_key_id,
         value.address_id,
-        value.send_mode,
         value.provider,
         value.connection_id,
         value.request_hash,

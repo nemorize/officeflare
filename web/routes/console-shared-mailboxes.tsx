@@ -12,7 +12,7 @@ import "./console.css";
 import "./mail.css";
 
 type Person = { id: string; email_address: string; display_name: string | null };
-const rights = ["can_read", "can_write", "can_send_as", "can_send_on_behalf", "can_manage"] as const;
+const rights = ["can_read", "can_write", "can_send", "can_manage"] as const;
 type Rights = Record<typeof rights[number], boolean>;
 type Member = Person & { user_id: string } & Record<typeof rights[number], number>;
 type Assignment = { user_id: string; role: "viewer" | "member" | "manager" | "custom"; permissions?: Rights };
@@ -20,8 +20,8 @@ interface Configuration { mailbox: Mailbox; owner: Person | null; addresses: Add
 const roleOptions = [{ value: "viewer", label: "Read only" }, { value: "member", label: "Read, write & send" }, { value: "manager", label: "Mailbox manager" }, { value: "custom", label: "Custom access" }];
 function assignment(member: Member): Assignment {
   const permissions = Object.fromEntries(rights.map((key) => [key, !!member[key]])) as Rights;
-  const role = !member.can_send_on_behalf && member.can_read && !member.can_write && !member.can_send_as && !member.can_manage ? "viewer"
-    : !member.can_send_on_behalf && member.can_read && member.can_write && member.can_send_as ? member.can_manage ? "manager" : "member" : "custom";
+  const role = member.can_read && !member.can_write && !member.can_send && !member.can_manage ? "viewer"
+    : member.can_read && member.can_write && member.can_send ? member.can_manage ? "manager" : "member" : "custom";
   return { user_id: member.user_id, role, ...(role === "custom" ? { permissions } : {}) };
 }
 export function SharedMailboxes() {
@@ -82,8 +82,8 @@ function SharedMailboxForm({ existing, domains, users, onSaved }: { existing?: C
         <div className="console-mail-members">{people.filter((person) => `${person.display_name ?? ""} ${person.email_address}`.toLowerCase().includes(search.toLowerCase())).map((person) => {
           const entry = selected.find((entry) => entry.user_id === person.id), available = users.some((entry) => entry.id === person.id);
           return <div className="console-mail-member" key={person.id}><Check checked={!!entry} disabled={!available && !entry || !entry && selected.length >= 100} onChange={(checked) => { setMembersChanged(true); setSelected((current) => checked ? [...current, { user_id: person.id, role: "member" }] : current.filter((entry) => entry.user_id !== person.id)); }}><strong>{person.display_name || person.email_address}</strong><small>{person.display_name && person.email_address}{!available && " · Mail access unavailable"}</small></Check>
-            {entry && <MailSelect aria-label={`Access for ${person.email_address}`} value={entry.role} options={roleOptions} onValueChange={(role) => changeMember({ user_id: entry.user_id, role: role as Assignment["role"], ...(role === "custom" ? { permissions: { can_read: true, can_write: true, can_send_as: true, can_send_on_behalf: false, can_manage: false } } : {}) })} />}
-            {entry?.role === "custom" && <div className="console-mail-custom-rights">{rights.map((key) => <Check key={key} checked={!!entry.permissions?.[key]} onChange={(checked) => changeMember({ ...entry, permissions: { ...entry.permissions!, [key]: checked } })}>{({ can_read: "Read mail", can_write: "Change mail", can_send_as: "Send as mailbox", can_send_on_behalf: "Send on behalf", can_manage: "Manage mailbox" })[key]}</Check>)}</div>}
+            {entry && <MailSelect aria-label={`Access for ${person.email_address}`} value={entry.role} options={roleOptions} onValueChange={(role) => changeMember({ user_id: entry.user_id, role: role as Assignment["role"], ...(role === "custom" ? { permissions: { can_read: true, can_write: true, can_send: true, can_manage: false } } : {}) })} />}
+            {entry?.role === "custom" && <div className="console-mail-custom-rights">{rights.map((key) => <Check key={key} checked={!!entry.permissions?.[key]} onChange={(checked) => changeMember({ ...entry, permissions: { ...entry.permissions!, [key]: checked } })}>{({ can_read: "Read mail", can_write: "Change mail", can_send: "Send mail", can_manage: "Manage mailbox" })[key]}</Check>)}</div>}
           </div>;
         })}</div>
         {!people.length && <p className="mail-hint">No other users with Mail access.{permissions.includes("admin.users.create") && <> <Link to="/console/users/new">Add a user →</Link></>}</p>}

@@ -6,7 +6,7 @@ import { useMail } from "../components/mail-context";
 import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailFieldset } from "../components/mail-common";
 import { Check, Confirm } from "../components/console-shared";
 import { Button } from "../components/ui";
-const scopeLabels = { read: "Read", write: "Edit", send_as: "Send as", send_on_behalf: "Send on behalf" };
+const scopeLabels = { read: "Read", write: "Edit", send: "Send" };
 interface ApiKey { id: string; name: string; expires_at: number; revoked_at: number | null; created_at: number; }
 interface Scope { key_id?: string; mailbox_id: string; action: Exclude<MailRight, "manage">; }
 export function MailIntegrationsPage() {

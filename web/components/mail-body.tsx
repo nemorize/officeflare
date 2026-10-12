@@ -88,7 +88,7 @@ export function SendStatus({ submission }: { submission: Submission }) {
       ),
     );
   const value = resource.data?.submission ?? submission,
-    canSend = !!mail.box?.access?.[value.send_mode];
+    canSend = !!mail.box?.access?.send;
   return (
     <div className="mail-send-status">
       <div>

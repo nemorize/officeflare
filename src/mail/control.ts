@@ -94,8 +94,7 @@ export async function administrator(
 const columns = {
   read: "can_read",
   write: "can_write",
-  send_as: "can_send_as",
-  send_on_behalf: "can_send_on_behalf",
+  send: "can_send",
   manage: "can_manage",
 } as const;
 export async function authorize(
@@ -183,9 +182,8 @@ export async function sender(
   actor: MailActor,
   mailboxId: string,
   addressId: string,
-  mode: "send_as" | "send_on_behalf",
 ) {
-  await authorize(env, actor, mailboxId, mode);
+  await authorize(env, actor, mailboxId, "send");
   const result = await first<{ email_address: string; connection_id: string }>(
     env,
     "SELECT a.local_part||'@'||d.name email_address,d.outbound_connection_id connection_id FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1",

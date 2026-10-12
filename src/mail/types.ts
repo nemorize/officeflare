@@ -3,8 +3,7 @@ import type { AppEnv } from "../auth/types";
 export type MailAction =
   | "read"
   | "write"
-  | "send_as"
-  | "send_on_behalf"
+  | "send"
   | "manage";
 export interface MailActor {
   user_id: string;
@@ -58,7 +57,7 @@ export interface Attachment {
   r2_key: string;
   disposition: "inline" | "attachment";
 }
-export interface ComposeState { to: string; cc: string; bcc: string; reply_to?: string; address_id?: string; send_mode?: string; schedule?: string; }
+export interface ComposeState { to: string; cc: string; bcc: string; reply_to?: string; address_id?: string; schedule?: string; }
 export interface MailBody {
   compose_state?: ComposeState;
   editor_body?: { text: string; html: string };
@@ -144,7 +143,6 @@ export interface Submission {
   actor_auth_version: number;
   api_key_id: string | null;
   address_id: string;
-  send_mode: "send_as" | "send_on_behalf";
   provider: string;
   connection_id: string;
   provider_message_id: string | null;

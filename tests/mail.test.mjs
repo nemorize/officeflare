@@ -222,17 +222,17 @@ test("mail UI metadata, sharing, attachment editing and send recovery use author
   });
   await t.test("mailbox rights and the member picker expose only scoped, public account information", async () => {
     const owned = (await call("/mailboxes")).mailboxes.find((entry) => entry.id === mailbox.id);
-    assert.deepEqual(owned.access, { read: true, write: true, send_as: true, send_on_behalf: true, manage: true });
-    await call(base + "/members/reader", { method: "PUT", data: { read: true, send_on_behalf: true } });
+    assert.deepEqual(owned.access, { read: true, write: true, send: true, manage: true });
+    await call(base + "/members/reader", { method: "PUT", data: { read: true, send: true } });
     const shared = (await call("/mailboxes", { token: tokens.reader })).mailboxes[0];
-    assert.deepEqual(shared.access, { read: true, write: false, send_as: false, send_on_behalf: true, manage: false });
+    assert.deepEqual(shared.access, { read: true, write: false, send: true, manage: false });
     const directory = await call(base + "/members?search=reader");
     assert.equal(directory.members[0].email_address, "reader@office.test");
     assert.deepEqual(Object.keys(directory.candidates[0]).sort(), ["display_name", "email_address", "id"]);
     assert.equal(directory.candidates.length, 1);
     await call(base + "/members", { token: tokens.reader, expected: 403 });
     const { key } = await call("/api-keys", { method: "POST", data: { name: "read only", expires_at: Math.floor(Date.now() / 1000) + 3600, scopes: [{ mailbox_id: mailbox.id, action: "read" }] }, expected: 201 });
-    assert.deepEqual((await call("/mailboxes", { token: key.token })).mailboxes[0].access, { read: true, write: false, send_as: false, send_on_behalf: false, manage: false });
+    assert.deepEqual((await call("/mailboxes", { token: key.token })).mailboxes[0].access, { read: true, write: false, send: false, manage: false });
     const keys = await call("/api-keys"); assert.equal(keys.scopes[0].mailbox_id, mailbox.id); assert.equal(keys.keys.some((entry) => "token" in entry), false);
     const adminAddresses = await admin(base + "/addresses"); assert.equal(adminAddresses.addresses[0].id, address.id);
     await call(base + "/addresses", { token: tokens.outsider, expected: 403 });
@@ -790,6 +790,73 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
     expected: 409,
   });
 });
+test("From selection uses one send permission and removes modes from APIs and saved sends", async (t) => {
+  const { mf, call, admin, base, mailbox, address, domain, draft, tokens } = await fixture(t, "6000000000", true);
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const alias = (await admin("/addresses", { method: "POST", data: { domain_id: domain.id, mailbox_id: mailbox.id, local_part: "alias" }, expected: 201 })).address;
+  const disabled = (await admin("/addresses", { method: "POST", data: { domain_id: domain.id, mailbox_id: mailbox.id, local_part: "disabled", send_enabled: false }, expected: 201 })).address;
+  const addresses = (await call(base + "/addresses")).addresses;
+  assert.equal(addresses.find((entry) => entry.id === address.id).can_send, true);
+  assert.equal(addresses.find((entry) => entry.id === alias.id).can_send, true);
+  assert.equal(addresses.find((entry) => entry.id === disabled.id).can_send, false);
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
+  assert.ok((await call(base + "/addresses", { token: tokens.reader })).addresses.every((entry) => !entry.can_send));
+  const memberDraft = (await call(base + "/drafts", { method: "POST", token: tokens.reader, data: { subject: "Shared From", to: ["recipient@example.test"] }, expected: 201 })).message;
+  await call(base + "/drafts/" + memberDraft.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: alias.id }, expected: 403 });
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true, send: true } });
+  assert.equal((await call("/mailboxes", { token: tokens.reader })).mailboxes.find((entry) => entry.id === mailbox.id).access.send, true);
+  assert.equal((await call(base + "/addresses", { token: tokens.reader })).addresses.find((entry) => entry.id === alias.id).can_send, true);
+  for (const mode of ["send_as", "send_on_behalf", "send"])
+    await call(base + "/drafts/" + memberDraft.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: alias.id, send_mode: mode }, expected: 400 });
+  for (const action of ["send_as", "send_on_behalf"]) {
+    await call(base + "/members/reader", { method: "PUT", data: { [action]: true }, expected: 400 });
+    await call("/api-keys", { method: "POST", data: { name: "Removed send scope", expires_at: Math.floor(Date.now() / 1000) + 3600, scopes: [{ mailbox_id: mailbox.id, action }] }, expected: 400 });
+  }
+  await call(base + "/drafts", { method: "POST", data: { compose_state: { to: "", cc: "", bcc: "", send_mode: "send_on_behalf" } }, expected: 400 });
+  const { submission } = await call(base + "/drafts/" + memberDraft.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: alias.id }, expected: 202 });
+  assert.equal("send_mode" in submission, false);
+  const accepted = await eventually(() => call(base + "/submissions/" + submission.id, { token: tokens.reader }), (result) => result.submission.status === "accepted", "Shared From send failed");
+  assert.equal("send_mode" in accepted.submission, false);
+  const deliveries = await Promise.all((await bucket.list({ prefix: "test-sent/" })).objects.map(async (object) => (await bucket.get(object.key)).json()));
+  assert.equal(deliveries[0].from, "alias@mail.test");
+  assert.equal(deliveries[0].headers["X-Officeflare-Sent-On-Behalf-Of"], undefined);
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
+  assert.ok((await call(base + "/addresses", { token: tokens.reader })).addresses.every((entry) => !entry.can_send));
+
+  const identities = async (token = tokens.owner) => (await call("/jmap", { method: "POST", token, data: { using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:submission"], methodCalls: [["Identity/get", { accountId: mailbox.id }, "identities"]] } })).methodResponses[0][1].list;
+  assert.deepEqual(new Set((await identities()).map((entry) => entry.email)), new Set(["owner@mail.test", "alias@mail.test"]));
+  assert.deepEqual(await identities(tokens.reader), []);
+  await admin("/domains/" + domain.id, { method: "PATCH", data: { outbound_enabled: false } });
+  assert.ok((await call(base + "/addresses")).addresses.every((entry) => !entry.can_send));
+  assert.deepEqual(await identities(), []);
+  await admin("/domains/" + domain.id, { method: "PATCH", data: { outbound_enabled: true } });
+
+  const { key } = await call("/api-keys", { method: "POST", data: { name: "From sender", expires_at: Math.floor(Date.now() / 1000) + 3600, scopes: [{ mailbox_id: mailbox.id, action: "read" }, { mailbox_id: mailbox.id, action: "send" }] }, expected: 201 });
+  assert.equal((await call(base + "/addresses", { token: key.token })).addresses.find((entry) => entry.id === alias.id).can_send, true);
+  const keyedDraft = await draft({ subject: "Scoped From" });
+  const scoped = (await call(base + "/drafts/" + keyedDraft.id + "/submissions", { method: "POST", token: key.token, data: { version: 1, address_id: alias.id }, expected: 202 })).submission;
+  await eventually(() => call(base + "/submissions/" + scoped.id), (result) => result.submission.status === "accepted", "Scoped From send failed");
+
+  const legacy = await draft({ subject: "Legacy saved mode", compose_state: { to: "recipient@example.test", cc: "", bcc: "", address_id: alias.id } });
+  const object = (await bucket.list({ prefix: `bodies/${mailbox.id}/${legacy.id}/` })).objects[0];
+  const oldBody = await (await bucket.get(object.key)).json();
+  oldBody.compose_state.send_mode = "send_on_behalf";
+  await bucket.put(object.key, JSON.stringify(oldBody));
+  assert.equal("send_mode" in (await call(base + "/drafts/" + legacy.id)).message.body.compose_state, false);
+  const edited = (await call(base + "/drafts/" + legacy.id, { method: "PATCH", data: { version: 1, text: "Mode removed" } })).message;
+  assert.equal("send_mode" in edited.body.compose_state, false);
+  const scheduled = (await call(base + "/drafts/" + legacy.id + "/submissions", { method: "POST", data: { version: edited.draft.version, address_id: alias.id, scheduled_at: Math.floor(Date.now() / 1000) + 3 }, expected: 202 })).submission;
+  const snapshotObject = (await bucket.list({ prefix: `submissions/${mailbox.id}/${scheduled.id}/` })).objects[0];
+  const snapshot = await (await bucket.get(snapshotObject.key)).json();
+  snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"] = "owner";
+  await bucket.put(snapshotObject.key, JSON.stringify(snapshot));
+  await eventually(() => call(base + "/submissions/" + scheduled.id), (result) => result.submission.status === "accepted", "Legacy queued snapshot did not send");
+  const allSent = await Promise.all((await bucket.list({ prefix: "test-sent/" })).objects.map(async (entry) => (await bucket.get(entry.key)).json()));
+  const legacySent = allSent.find((entry) => entry.subject === "Legacy saved mode");
+  assert.equal(legacySent.from, "alias@mail.test");
+  assert.equal(legacySent.headers["X-Officeflare-Sent-On-Behalf-Of"], undefined);
+});
+
 test("outbox keeps processing and unknown sends visible, private and safe to reconcile", async (t) => {
   const { mf, call, base, mailbox, address, draft, tokens } = await fixture(t, "6000000000", true);
   const bucket = await mf.getR2Bucket("MAIL_BUCKET"), queue = await mf.getQueueProducer("MAIL_QUEUE");
@@ -987,6 +1054,78 @@ test("imports, backups, restore, JMAP and MCP use the same permission boundary",
     data: { jsonrpc: "2.0", id: 1, method: "ping" },
     expected: 403,
   });
+});
+
+test("MBOX export and reimport preserve legacy text, binary attachments and quoted From lines", async (t) => {
+  const { mf, tokens, call, admin, base, mailbox, draft } = await fixture(t, "6000000000", true);
+  const harness = await mf.getWorker("mail-harness"), bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const binary = Buffer.concat([
+    Buffer.from(Array.from({ length: 256 }, (_, byte) => byte)),
+    Buffer.from("\nFrom binary line\r\n>From quoted binary\n>>From twice quoted\n", "ascii"),
+    Buffer.from([0, 0xff, 0x80]),
+  ]);
+  const originals = new Map([
+    ["Legacy byte export", Buffer.concat([
+      Buffer.from(["From: legacy@example.test", "To: owner@mail.test", "Subject: Legacy byte export", "Message-ID: <legacy-export@example.test>", "MIME-Version: 1.0", "Content-Type: text/plain; charset=iso-8859-1", "Content-Transfer-Encoding: 8bit", "", "caf"].join("\r\n"), "ascii"),
+      Buffer.from([0xe9, 0x20, 0xfc, 0x20, 0xdf]),
+      Buffer.from("\r\nFrom plain line\n>From quoted line\r\n>>From twice quoted\nFromage is ordinary text\r\n", "ascii"),
+    ])],
+    ["Binary byte export", Buffer.concat([
+      Buffer.from(["From: binary@example.test", "To: owner@mail.test", "Subject: Binary byte export", "Message-ID: <binary-export@example.test>", "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="byte-export"', "", "--byte-export", "Content-Type: text/plain; charset=utf-8", "", "Binary attachment", "--byte-export", "Content-Type: application/octet-stream", "Content-Disposition: attachment; filename=bytes.bin", "Content-Transfer-Encoding: binary", "", ""].join("\r\n"), "ascii"),
+      binary,
+      Buffer.from("\r\n--byte-export--\r\n", "ascii"),
+    ])],
+  ]);
+  for (const raw of originals.values()) {
+    const received = await harness.fetch("https://test/email", { method: "POST", headers: { "x-recipient": "owner@mail.test" }, body: raw });
+    assert.equal((await received.json()).rejected, null);
+  }
+  const ingested = await eventually(() => call(base + "/messages"), (page) => page.messages.length === 2, "Original messages were not ingested");
+  const originalAttachment = (await call(base + "/messages/" + ingested.messages.find((entry) => entry.subject === "Binary byte export").id)).message;
+  const originalBytes = await mf.dispatchFetch("https://office.test/api/mail" + base + "/messages/" + originalAttachment.id + "/attachments/" + originalAttachment.attachments[0].id, { headers: { Authorization: "Bearer " + tokens.owner } });
+  const extractedBinary = Buffer.from(await originalBytes.arrayBuffer());
+  assert.deepEqual(extractedBinary.subarray(0, 256), binary.subarray(0, 256));
+  await draft({ subject: "Composed UTF8 export", text: "안녕하세요 — preserved UTF-8", html: "<p>안녕하세요 — preserved UTF-8</p>", include_signature: false });
+  const exported = (await call(base + "/exports", { method: "POST", expected: 202 })).job;
+  await eventually(() => call(base + "/jobs/" + exported.id), (result) => result.job.status === "completed", "Byte-preserving export failed");
+  const download = await mf.dispatchFetch("https://office.test/api/mail" + base + "/jobs/" + exported.id + "/download", { headers: { Authorization: "Bearer " + tokens.owner } });
+  assert.equal(download.status, 200);
+  const archive = Buffer.from(await download.arrayBuffer());
+  assert.ok(archive.includes(Buffer.from([0xe9, 0x20, 0xfc, 0x20, 0xdf])));
+  assert.ok(archive.includes(Buffer.from([0, 0xff, 0x80])));
+  assert.ok(archive.includes(Buffer.from(">>From quoted line\r\n>>>From twice quoted", "ascii")));
+  const pieces = await bucket.list({ prefix: `data-jobs/${mailbox.id}/${exported.id}/` });
+  assert.equal(pieces.objects.filter((object) => object.key.endsWith(".mbox")).length, 3);
+  const target = (await admin("/mailboxes", { method: "POST", data: { name: "Byte import", owner_user_id: "owner" }, expected: 201 })).mailbox;
+  const targetPath = "/mailboxes/" + target.id;
+  const imported = await mf.dispatchFetch("https://office.test/api/mail" + targetPath + "/imports?format=mbox", {
+    method: "POST", headers: { Authorization: "Bearer " + tokens.owner }, body: archive,
+  });
+  assert.equal(imported.status, 202);
+  const importedJob = (await imported.json()).job;
+  await eventually(() => call(targetPath + "/jobs/" + importedJob.id), (result) => result.job.status === "completed", "MBOX reimport failed");
+  const restored = (await call(targetPath + "/messages")).messages;
+  assert.equal(restored.length, 3);
+  for (const [subject, raw] of originals) {
+    const message = restored.find((entry) => entry.subject === subject);
+    assert.ok(message, subject);
+    const response = await mf.dispatchFetch("https://office.test/api/mail" + targetPath + "/messages/" + message.id + "/original", { headers: { Authorization: "Bearer " + tokens.owner } });
+    assert.equal(response.status, 200);
+    // The two final LF bytes frame the MBOX record; the original MIME is untouched.
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.concat([raw, Buffer.from("\n\n")]));
+  }
+  const legacy = (await call(targetPath + "/messages/" + restored.find((entry) => entry.subject === "Legacy byte export").id)).message;
+  assert.match(legacy.body.text, /café ü ß/);
+  assert.match(legacy.body.text, /From plain line\n>From quoted line\n>>From twice quoted/);
+  const attachment = (await call(targetPath + "/messages/" + restored.find((entry) => entry.subject === "Binary byte export").id)).message;
+  assert.equal(attachment.attachments.length, 1);
+  const bytes = await mf.dispatchFetch("https://office.test/api/mail" + targetPath + "/messages/" + attachment.id + "/attachments/" + attachment.attachments[0].id, { headers: { Authorization: "Bearer " + tokens.owner } });
+  // Compare extracted attachments before and after export; the MIME parser has
+  // its own newline normalization, independently of the preserved wire message.
+  assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), extractedBinary);
+  const composed = (await call(targetPath + "/messages/" + restored.find((entry) => entry.subject === "Composed UTF8 export").id)).message;
+  assert.match(composed.body.text, /안녕하세요 — preserved UTF-8/);
+  assert.match(composed.body.html, /안녕하세요 — preserved UTF-8/);
 });
 
 test("domain routing, signatures, audit and attachment-safe configuration restore", async (t) => {
@@ -1381,7 +1520,7 @@ test("shared mailbox address and membership save atomically with safe retries an
   const config = await admin(path);
   assert.equal(config.addresses[0].email_address, "support@mail.test"); assert.equal(config.members.length, 2);
   const reader = config.members.find((entry) => entry.user_id === "reader"), manager = config.members.find((entry) => entry.user_id === "outsider");
-  assert.equal(reader.can_read, 1); assert.equal(reader.can_send_as, 0); assert.equal(manager.can_manage, 1);
+  assert.equal(reader.can_read, 1); assert.equal(reader.can_send, 0); assert.equal(manager.can_manage, 1);
   assert.equal((await call("/mailboxes", { token: tokens.reader })).mailboxes.find((entry) => entry.id === id).access.write, false);
   await call(path, { token: tokens.reader, expected: 403 });
   await call(`/mailboxes/${id}/messages`, { token: tokens.reader });
@@ -1392,12 +1531,12 @@ test("shared mailbox address and membership save atomically with safe retries an
   const all = (await admin("/mailboxes?all=true")).mailboxes.find((entry) => entry.id === id);
   assert.equal(all.email_address, "support@mail.test"); assert.equal(all.member_count, 2);
 
-  const custom = { can_read: true, can_write: false, can_send_as: false, can_send_on_behalf: true, can_manage: false };
+  const custom = { can_read: true, can_write: false, can_send: true, can_manage: false };
   await admin(path, { method: "PATCH", data: { name: "Support team", address: { domain_id: domain.id, local_part: "help" }, members: [{ user_id: "reader", role: "custom", permissions: custom }] } });
   const changed = await admin(path);
   assert.equal(changed.addresses.find((entry) => entry.is_primary).email_address, "help@mail.test");
   assert.equal(changed.addresses.find((entry) => !entry.is_primary).email_address, "support@mail.test");
-  assert.equal(changed.members.length, 1); assert.equal(changed.members[0].can_send_on_behalf, 1);
+  assert.equal(changed.members.length, 1); assert.equal(changed.members[0].can_send, 1);
   await call(`/mailboxes/${id}/messages`, { token: tokens.outsider, expected: 403 });
   const alias = changed.addresses.find((entry) => !entry.is_primary);
   await admin(`/addresses/${alias.id}`, { method: "PATCH", data: { receive_enabled: false, send_enabled: true } });
@@ -1450,8 +1589,8 @@ test("draft Reply-To addresses survive editing and reach outgoing mail", async (
   assert.equal(updated.reply_to_address, "replies@example.test");
   const reopened = (await call(base + "/drafts/" + message.id)).message;
   assert.equal(reopened.reply_to_address, "replies@example.test");
-  const send = async (value, mode = "send_as", token = tokens.owner) => {
-    const submission = (await call(base + "/drafts/" + value.id + "/submissions", { method: "POST", token, data: { version: value.draft.version, address_id: address.id, send_mode: mode }, expected: 202 })).submission;
+  const send = async (value, token = tokens.owner) => {
+    const submission = (await call(base + "/drafts/" + value.id + "/submissions", { method: "POST", token, data: { version: value.draft.version, address_id: address.id }, expected: 202 })).submission;
     await eventually(() => call(base + "/submissions/" + submission.id, { token }), (result) => result.submission.status === "accepted", "Reply-To mail was not accepted");
     const deliveries = await Promise.all((await bucket.list({ prefix: "test-sent/" })).objects.map(async (object) => (await bucket.get(object.key)).json()));
     return deliveries.find((delivery) => delivery.subject === value.subject);
@@ -1485,12 +1624,14 @@ test("draft Reply-To addresses survive editing and reach outgoing mail", async (
   await draft({ reply_to: "first@example.test" }, headers);
   await call(base + "/drafts", { method: "POST", headers, data: { subject: "A mail test", text: "Hello searchable mail", to: ["recipient@example.test"], reply_to: "second@example.test" }, expected: 409 });
 
-  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true, send_on_behalf: true } });
-  const delegated = (await call(base + "/drafts", { method: "POST", token: tokens.reader, data: { subject: "Default reply address", to: ["recipient@example.test"] }, expected: 201 })).message;
-  await call(base + "/drafts/" + delegated.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: address.id, send_mode: "send_as" }, expected: 403 });
-  const delegatedSent = await send(delegated, "send_on_behalf", tokens.reader);
-  assert.equal(delegatedSent.replyTo, undefined);
-  assert.equal(delegatedSent.headers["X-Officeflare-Sent-On-Behalf-Of"], "reader");
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
+  const sharedDraft = (await call(base + "/drafts", { method: "POST", token: tokens.reader, data: { subject: "Default reply address", to: ["recipient@example.test"] }, expected: 201 })).message;
+  await call(base + "/drafts/" + sharedDraft.id + "/submissions", { method: "POST", token: tokens.reader, data: { version: 1, address_id: address.id }, expected: 403 });
+  await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true, send: true } });
+  const sharedSent = await send(sharedDraft, tokens.reader);
+  assert.equal(sharedSent.replyTo, undefined);
+  assert.equal(sharedSent.from, "owner@mail.test");
+  assert.equal(sharedSent.headers["X-Officeflare-Sent-On-Behalf-Of"], undefined);
 
   const exported = (await call(base + "/exports", { method: "POST", expected: 202 })).job;
   await eventually(() => call(base + "/jobs/" + exported.id), (result) => result.job.status === "completed", "Reply-To export did not finish");
@@ -1515,7 +1656,7 @@ test("mail experience preferences, draft recovery and conversation paging", asyn
     await call("/preferences", { method: "PATCH", data: { shortcuts: "true" }, expected: 400 });
   });
   await t.test("unfinished recipient input survives draft saves without relaxing send validation", async () => {
-    const state = { to: "unfinished@", cc: "", bcc: "", address_id: address.id, send_mode: "send_as", schedule: "" };
+    const state = { to: "unfinished@", cc: "", bcc: "", address_id: address.id, schedule: "" };
     const message = await draft({ to: [], compose_state: state });
     assert.deepEqual(message.body.compose_state, state);
     const updated = (await call(base + "/drafts/" + message.id, { method: "PATCH", data: { version: 1, text: "Updated body" } })).message;

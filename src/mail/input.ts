@@ -219,9 +219,9 @@ export function strictId(value: unknown, key = "id") {
 export function composeState(value: unknown): import("./types").ComposeState {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail(400, "Invalid compose_state");
   const data = value as Record<string, unknown>;
-  if (Object.keys(data).some((key) => !["to", "cc", "bcc", "reply_to", "address_id", "send_mode", "schedule"].includes(key))) fail(400, "Invalid compose_state");
+  if (Object.keys(data).some((key) => !["to", "cc", "bcc", "reply_to", "address_id", "schedule"].includes(key))) fail(400, "Invalid compose_state");
   const result: import("./types").ComposeState = { to: text(data.to ?? "", "to", 16384, true), cc: text(data.cc ?? "", "cc", 16384, true), bcc: text(data.bcc ?? "", "bcc", 16384, true) };
-  for (const key of ["address_id", "send_mode", "schedule"] as const) if (data[key] !== undefined) result[key] = text(data[key], key, 100, true);
+  for (const key of ["address_id", "schedule"] as const) if (data[key] !== undefined) result[key] = text(data[key], key, 100, true);
   if (data.reply_to !== undefined) result.reply_to = text(data.reply_to, "reply_to", 254, true);
   return result;
 }

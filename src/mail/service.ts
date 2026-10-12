@@ -42,7 +42,13 @@ export const bodyKey = (
 export async function readBody(env: Env, key: string): Promise<MailBody> {
   const object = await env.MAIL_BUCKET.get(key);
   if (!object) fail(503, "Mail body is unavailable");
-  return object.json<MailBody>();
+  const body = await object.json<MailBody>();
+  if (body.compose_state) {
+    // Old saved drafts may contain a mode; it no longer participates in sending.
+    const { send_mode: _mode, ...state } = body.compose_state as MailBody["compose_state"] & { send_mode?: string };
+    body.compose_state = state;
+  }
+  return body;
 }
 async function stableUuid(value: string) {
   const digest = await hash(value);
@@ -297,11 +303,8 @@ export async function submitDraft(
 ) {
   await authorize(env, actor, mailboxId, "read");
   await belongs(env, mailboxId, locator(resourceId));
-  const mode = data.send_mode ?? "send_as";
-  if (mode !== "send_as" && mode !== "send_on_behalf")
-    fail(400, "Invalid send_mode");
   const addressId = text(data.address_id, "address_id", 36),
-    address = await sender(env, actor, mailboxId, addressId, mode);
+    address = await sender(env, actor, mailboxId, addressId);
   if (
     (data.provider !== undefined && data.provider !== address.provider) ||
     (data.connection_id !== undefined &&
@@ -323,7 +326,6 @@ export async function submitDraft(
     JSON.stringify({
       resourceId,
       addressId,
-      mode,
       version,
       scheduled_at: data.scheduled_at ?? null,
       ...(data.undo_window !== undefined ? { undo_window: integer(data.undo_window, "undo_window", 0, 30) } : {}),
@@ -394,9 +396,6 @@ export async function submitDraft(
     headers,
     attachments,
   };
-  if (mode === "send_on_behalf") {
-    snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"] = actor.user_id;
-  }
   if (data.auto_reply) {
     snapshot.headers["Auto-Submitted"] = "auto-replied";
     snapshot.headers["X-Officeflare-Autoreply"] = "1";
@@ -420,7 +419,6 @@ export async function submitDraft(
       actor_auth_version: actor.auth_version,
       api_key_id: actor.api_key_id,
       address_id: addressId,
-      send_mode: mode,
       provider: address.provider,
       connection_id: address.connection_id,
       request_hash: requestHash,

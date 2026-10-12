@@ -59,7 +59,6 @@ export async function sendSubmission(
       },
       mailboxId,
       job.address_id,
-      job.send_mode,
     );
     if (
       selected.provider !== job.provider ||
@@ -69,6 +68,8 @@ export async function sendSubmission(
     const object = await env.MAIL_BUCKET.get(job.snapshot_r2_key);
     if (!object) fail(409, "Submission snapshot is unavailable");
     snapshot = await object.json<SubmissionSnapshot>();
+    // Clean up already queued snapshots created before mode-based sending was removed.
+    delete snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"];
     if (snapshot.from !== selected.email_address)
       fail(409, "Sending address changed");
   } catch {

@@ -2,6 +2,7 @@ import { putStream } from "./objects";
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
 import { inlineContentIds, imageAssetKey } from "./editor";
+import { mboxMessage, unquoteMboxMessage } from "./mbox";
 import { hash, text } from "./input";
 import { ingest, readBody, flushOutbox } from "./service";
 import {
@@ -215,22 +216,15 @@ export async function processDataJob(
           }),
         );
       } else {
-        let raw: string;
+        let raw: Uint8Array;
         if (details.raw_r2_key) {
           const object = await env.MAIL_BUCKET.get(details.raw_r2_key);
           if (!object) fail(503, "Export original unavailable");
-          raw = await object.text();
-        } else raw = await renderMime(env, details, body);
-        const date = new Date(details.received_at * 1000).toUTCString();
+          raw = new Uint8Array(await object.arrayBuffer());
+        } else raw = new TextEncoder().encode(await renderMime(env, details, body));
         await env.MAIL_BUCKET.put(
           prefix + ".mbox",
-          "From " +
-            (details.from_address || "officeflare") +
-            " " +
-            date +
-            "\n" +
-            raw.replace(/^From /gm, ">From ") +
-            "\n\n",
+          mboxMessage(raw, details.from_address, details.received_at),
         );
       }
     }
@@ -685,7 +679,7 @@ async function backupManifest(
     { httpMetadata: { contentType: "application/json" } },
   );
 }
-// Split mboxo without transcoding MIME bytes or binary attachments through UTF-8.
+// Split mboxrd (including singly quoted mboxo lines) without transcoding MIME bytes.
 function splitMbox(raw: Uint8Array): Uint8Array[] {
   const ranges: { start: number; end: number }[] = [],
     from = [70, 114, 111, 109, 32];
@@ -703,25 +697,5 @@ function splitMbox(raw: Uint8Array): Uint8Array[] {
   if (start < raw.length) ranges.push({ start, end: raw.length });
   if (ranges.length > 10000)
     fail(413, "Import has too many messages; split the file");
-  return ranges.map(({ start, end }) => {
-    const slice = raw.subarray(start, end),
-      escaped: number[] = [];
-    for (let pos = 0; pos < slice.length; pos++)
-      if (
-        (pos === 0 || slice[pos - 1] === 10) &&
-        slice[pos] === 62 &&
-        from.every((value, index) => slice[pos + 1 + index] === value)
-      )
-        escaped.push(pos);
-    if (!escaped.length) return slice;
-    const result = new Uint8Array(slice.length - escaped.length);
-    let source = 0,
-      target = 0;
-    for (const pos of [...escaped, slice.length]) {
-      result.set(slice.subarray(source, pos), target);
-      target += pos - source;
-      source = pos + 1;
-    }
-    return result;
-  });
+  return ranges.map(({ start, end }) => unquoteMboxMessage(raw.subarray(start, end)));
 }

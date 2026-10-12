@@ -500,7 +500,7 @@ function MailList({
           action.busy ||
           !rows.length ||
           rows.some((row) => !cancelableSubmission(row.submission_status ?? "")) ||
-          !(mail.box!.access?.send_as || mail.box!.access?.send_on_behalf)
+          !mail.box!.access?.send
         }
         onClick={() => {
           void action.run(async () => {

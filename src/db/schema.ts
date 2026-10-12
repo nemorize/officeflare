@@ -239,8 +239,7 @@ export const mailMailboxMembers = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     can_read: integer().notNull().default(0),
     can_write: integer().notNull().default(0),
-    can_send_as: integer().notNull().default(0),
-    can_send_on_behalf: integer().notNull().default(0),
+    can_send: integer().notNull().default(0),
     can_manage: integer().notNull().default(0),
     updated_at: timestamp("updated_at"),
   },
@@ -298,7 +297,7 @@ export const mailApiKeyScopes = sqliteTable(
       .notNull()
       .references(() => mailMailboxes.id, { onDelete: "cascade" }),
     action: text({
-      enum: ["read", "write", "send_as", "send_on_behalf"],
+      enum: ["read", "write", "send"],
     }).notNull(),
   },
   (table) => [

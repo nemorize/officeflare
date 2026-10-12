@@ -25,8 +25,8 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const surface = useRef<HTMLElement>(null);
   const createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null);
   const pendingEdit = useRef<{ version: number; payload: object; matches: (message: MessageDetail) => boolean } | null>(null);
-  const rights = mail.boxes.find((box) => box.id === mailboxId)?.access, canSend = rights?.send_as || rights?.send_on_behalf;
-  const mode = rights?.send_as ? "send_as" : "send_on_behalf";
+  const rights = mail.boxes.find((box) => box.id === mailboxId)?.access,
+    canSend = !!rights?.send && !!addresses.data?.addresses.some((address) => address.id === sender && address.can_send);
   useEffect(() => {
     if (ready || (draftId ? !initial.data : !settings.data)) return;
     const message = initial.data?.message;
@@ -37,7 +37,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     draftRef.current = message ?? null;
     setReady(true);
   }, [draftId, initial.data, settings.data, ready]);
-  useEffect(() => { const primary = addresses.data?.addresses.find((address) => address.send_enabled && address.is_primary) ?? addresses.data?.addresses.find((address) => address.send_enabled); if (!sender && primary) setSender(primary.id); }, [addresses.data, sender]);
+  useEffect(() => { if (!addresses.data) return; const available = addresses.data.addresses.filter((address) => address.can_send), primary = available.find((address) => address.is_primary) ?? available[0]; if (!available.some((address) => address.id === sender)) setSender(primary?.id ?? ""); }, [addresses.data, sender]);
   useEffect(() => { if (!dirty && !unknown) return; const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent); }, [dirty, unknown]);
   useEffect(() => { const host = document.getElementById("mail-reply-host"); setInlineHost(host); if (inline && !host) setDocked(true); },[inline,docked,location.pathname,location.search]);
   useEffect(() => { const focus = () => { setMinimized(false); }; window.addEventListener("officeflare:focus-composer",focus); return () => window.removeEventListener("officeflare:focus-composer",focus); },[]);
@@ -100,7 +100,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
       const recipients = values(true); if (!recipients.to.length && !recipients.cc.length && !recipients.bcc.length) throw new Error("Add at least one recipient.");
       if (!sender || !canSend) throw new Error("Choose an available sending address. Your mailbox needs send permission.");
       const scheduledAt = scheduledTime(schedule), message = await save();
-      pendingSend.current = { id: message.id, payload: { version: message.draft!.version, address_id: sender, send_mode: mode, ...(scheduledAt ? { scheduled_at: scheduledAt } : { undo_window: mail.preferences.undo_seconds }) } };
+      pendingSend.current = { id: message.id, payload: { version: message.draft!.version, address_id: sender, ...(scheduledAt ? { scheduled_at: scheduledAt } : { undo_window: mail.preferences.undo_seconds }) } };
     }
     const pending = pendingSend.current;
     try {
@@ -151,7 +151,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     <MailState loading={!ready} error={initial.error || settings.error} retry={() => { initial.reload(); settings.reload(); }} />
     {ready && <MailForm className="mail-composer" onSubmit={(event) => { event.preventDefault(); void action.run(send); }}>
       <MailFieldset disabled={locked}>
-        {mail.boxes.length > 1 && <div className="mail-compose-sender"><MailField label="From"><MailSelect variant="integrated" value={sender} onValueChange={(nextValue) => { setSender(nextValue); mark(); }} options={[{ value: "", label: "Select sending address" }, ...(addresses.data?.addresses.filter((address) => address.send_enabled).map((address) => ({ value: address.id, label: address.email_address })) || [])]} /></MailField></div>}<MailNotice error={addresses.error} />{addresses.data && !addresses.data.addresses.some((address) => address.send_enabled) && <p className="mail-hint">No sending address is configured. You can save this message as a draft.</p>}
+        <div className="mail-compose-sender"><MailField label="From"><MailSelect variant="integrated" value={sender} onValueChange={(nextValue) => { setSender(nextValue); mark(); }} options={[{ value: "", label: "Select sending address" }, ...(addresses.data?.addresses.filter((address) => address.can_send).map((address) => ({ value: address.id, label: address.email_address })) || [])]} /></MailField></div><MailNotice error={addresses.error} />{addresses.data && !addresses.data.addresses.some((address) => address.can_send) && <p className="mail-hint">No sending address is available. You can save this message as a draft.</p>}
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
         {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/><MailInput variant="integrated" label="Reply-To" type="email" inputMode="email" autoComplete="off" maxLength={254} placeholder="Same as From" value={replyTo} onChange={(event) => { setReplyTo(event.target.value); mark(); }} /></> : null}
         <MailInput variant="integrated" label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />

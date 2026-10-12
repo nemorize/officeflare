@@ -561,11 +561,14 @@ async function jmapMethod(
     return { accountId: account, state: currentState, list, notFound };
   }
   if (name === "Identity/get") {
-    const addresses = await all<{ id: string; email: string }>(
+    let canSend = false;
+    try { await authorize(env, actor, account, "send"); canSend = true; }
+    catch (error) { if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error; }
+    const addresses = canSend ? await all<{ id: string; email: string }>(
       env,
-      "SELECT a.id,a.local_part||'@'||d.name email FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.mailbox_id=? AND a.send_enabled=1",
+      "SELECT a.id,a.local_part||'@'||d.name email FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1 AND p.provider='cloudflare'",
       account,
-    );
+    ) : [];
     return {
       accountId: account,
       state: currentState,

@@ -586,9 +586,9 @@ mail.get("/mailboxes", async (c) => {
     });
   }
   const owner = actor(c);
-  const entries = await all<Mailbox & { can_read: number; can_write: number; can_send_as: number; can_send_on_behalf: number; can_manage: number }>(
+  const entries = await all<Mailbox & { can_read: number; can_write: number; can_send: number; can_manage: number }>(
     c.env,
-    "SELECT DISTINCT b.*,m.can_read,m.can_write,m.can_send_as,m.can_send_on_behalf,m.can_manage FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send_as=1 OR m.can_send_on_behalf=1) ORDER BY b.created_at,b.id LIMIT 1000",
+    "SELECT DISTINCT b.*,m.can_read,m.can_write,m.can_send,m.can_manage FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE " + activeAccountSql + " AND " + mailAccessSql + " AND b.status='active' AND (b.owner_user_id=? OR m.can_read=1 OR m.can_write=1 OR m.can_manage=1 OR m.can_send=1) ORDER BY b.created_at,b.id LIMIT 1000",
     owner.user_id,
     owner.user_id,
   );
@@ -598,9 +598,9 @@ mail.get("/mailboxes", async (c) => {
     owner.api_key_id,
   ) : null;
   return c.json({
-    mailboxes: entries.filter((b) => !scoped || scoped.some((s) => s.mailbox_id === b.id)).map(({ can_read, can_write, can_send_as, can_send_on_behalf, can_manage, ...b }) => ({
+    mailboxes: entries.filter((b) => !scoped || scoped.some((s) => s.mailbox_id === b.id)).map(({ can_read, can_write, can_send, can_manage, ...b }) => ({
       ...b,
-      access: Object.fromEntries(Object.entries({ read: can_read, write: can_write, send_as: can_send_as, send_on_behalf: can_send_on_behalf, manage: can_manage }).map(([action, granted]) => [action,
+      access: Object.fromEntries(Object.entries({ read: can_read, write: can_write, send: can_send, manage: can_manage }).map(([action, granted]) => [action,
         (b.owner_user_id === owner.user_id || granted === 1) && (!scoped || scoped.some((s) => s.mailbox_id === b.id && s.action === action)),
       ])),
     })),
@@ -625,7 +625,7 @@ async function setupMembers(c: Parameters<typeof authenticateMail>[0], value: un
     const user_id = text(value.user_id, "user_id", 100), role = value.role ?? "member";
     if (!["viewer", "member", "manager", "custom"].includes(role)) fail(400, "Invalid member role");
     if (role !== "custom" && value.permissions !== undefined) fail(400, "Custom permissions require a custom role");
-    const keys = ["can_read", "can_write", "can_send_as", "can_send_on_behalf", "can_manage"];
+    const keys = ["can_read", "can_write", "can_send", "can_manage"];
     if (role === "custom" && (!value.permissions || typeof value.permissions !== "object" || Array.isArray(value.permissions) || Object.keys(value.permissions).some((key) => !keys.includes(key)) || keys.some((key) => typeof value.permissions[key] !== "boolean"))) fail(400, "Invalid custom member permissions");
     return { user_id, role, ...(role === "custom" ? { permissions: Object.fromEntries(keys.map((key) => [key, value.permissions[key]])) } : {}) } as SetupMember;
   });
@@ -650,8 +650,8 @@ function setupStatements(db: ReturnType<typeof setupControl>, boxId: string, own
   }
   if (replaceMembers) statements.push(db.prepare("DELETE FROM mail_mailbox_members WHERE mailbox_id=? AND user_id<>?").bind(boxId, owner));
   const assignments = members.filter((entry) => entry.user_id !== owner).map((member) => ({ user_id: member.user_id,
-    ...(member.permissions ?? { can_read: true, can_write: member.role !== "viewer", can_send_as: member.role !== "viewer", can_send_on_behalf: false, can_manage: member.role === "manager" }) }));
-  if (assignments.length) statements.push(db.prepare("INSERT INTO mail_mailbox_members(mailbox_id,user_id,can_read,can_write,can_send_as,can_send_on_behalf,can_manage) SELECT ?,json_extract(selected.value,'$.user_id'),json_extract(selected.value,'$.can_read'),json_extract(selected.value,'$.can_write'),json_extract(selected.value,'$.can_send_as'),json_extract(selected.value,'$.can_send_on_behalf'),json_extract(selected.value,'$.can_manage') FROM json_each(?) selected WHERE EXISTS(SELECT 1 FROM mail_mailboxes WHERE id=?)").bind(boxId, JSON.stringify(assignments), boxId));
+    ...(member.permissions ?? { can_read: true, can_write: member.role !== "viewer", can_send: member.role !== "viewer", can_manage: member.role === "manager" }) }));
+  if (assignments.length) statements.push(db.prepare("INSERT INTO mail_mailbox_members(mailbox_id,user_id,can_read,can_write,can_send,can_manage) SELECT ?,json_extract(selected.value,'$.user_id'),json_extract(selected.value,'$.can_read'),json_extract(selected.value,'$.can_write'),json_extract(selected.value,'$.can_send'),json_extract(selected.value,'$.can_manage') FROM json_each(?) selected WHERE EXISTS(SELECT 1 FROM mail_mailboxes WHERE id=?)").bind(boxId, JSON.stringify(assignments), boxId));
   return statements;
 }
 mail.get("/mailbox-users", async (c) => {
@@ -757,8 +757,7 @@ mail.put("/mailboxes/:m/members/:user", async (c) => {
   const data = await input(c, [
     "read",
     "write",
-    "send_as",
-    "send_on_behalf",
+    "send",
     "manage",
   ]);
   if (
@@ -771,12 +770,12 @@ mail.put("/mailboxes/:m/members/:user", async (c) => {
     fail(400, "User is unavailable");
   await resourceControl(c, resource(c), "manage")
     .prepare(
-      "INSERT INTO mail_mailbox_members VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(mailbox_id,user_id) DO UPDATE SET can_read=excluded.can_read,can_write=excluded.can_write,can_send_as=excluded.can_send_as,can_send_on_behalf=excluded.can_send_on_behalf,can_manage=excluded.can_manage,updated_at=excluded.updated_at",
+      "INSERT INTO mail_mailbox_members(mailbox_id,user_id,can_read,can_write,can_send,can_manage,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(mailbox_id,user_id) DO UPDATE SET can_read=excluded.can_read,can_write=excluded.can_write,can_send=excluded.can_send,can_manage=excluded.can_manage,updated_at=excluded.updated_at",
     )
     .bind(
       resource(c),
       c.req.param("user"),
-      ...["read", "write", "send_as", "send_on_behalf", "manage"].map((f) =>
+      ...["read", "write", "send", "manage"].map((f) =>
         data[f] === undefined ? 0 : flag(data[f], f),
       ),
       epoch(),
@@ -804,12 +803,16 @@ mail.delete("/mailboxes/:m/members/:user", async (c) => {
 mail.get("/mailboxes/:m/addresses", async (c) => {
   try { await authorize(c.env, actor(c), resource(c), "read"); }
   catch { await administrator(c, "admin.mail.domains.read"); }
+  let canSend = false;
+  try { await authorize(c.env, actor(c), resource(c), "send"); canSend = true; }
+  catch (error) { if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error; }
+  const addresses = await all<Address & { email_address: string; send_available: number }>(
+    c.env,
+    "SELECT a.*,a.local_part||'@'||d.name email_address,(a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1 AND p.provider='cloudflare') send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id LEFT JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=?",
+    resource(c),
+  );
   return c.json({
-    addresses: await all(
-      c.env,
-      "SELECT a.*,a.local_part||'@'||d.name email_address FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.mailbox_id=?",
-      resource(c),
-    ),
+    addresses: addresses.map(({ send_available, ...address }) => ({ ...address, can_send: canSend && send_available === 1 })),
   });
 });
 mail.post("/addresses", async (c) => {
@@ -1339,7 +1342,6 @@ mail.post("/mailboxes/:m/drafts/:id/submissions", async (c) => {
   const data = await input(c, [
     "address_id",
     "version",
-    "send_mode",
     "provider",
     "connection_id",
     "scheduled_at",
@@ -1380,7 +1382,7 @@ for (const action of ["cancel", "retry"] as const)
         c.req.param("id")!,
         actor(c).user_id,
       );
-    await authorize(c.env, actor(c), resource(c), existing.send_mode);
+    await authorize(c.env, actor(c), resource(c), "send");
     const job =
       action === "cancel"
         ? await store.cancel(existing.id, actor(c).user_id)
@@ -1563,13 +1565,13 @@ mail.post("/api-keys", async (c) => {
     fail(400, "Invalid scopes");
   const scopes: {
     mailbox_id: string;
-    action: "read" | "write" | "send_as" | "send_on_behalf";
+    action: "read" | "write" | "send";
   }[] = [];
   for (const value of data.scopes) {
     if (
       !value ||
       typeof value !== "object" ||
-      !["read", "write", "send_as", "send_on_behalf"].includes(value.action)
+      !["read", "write", "send"].includes(value.action)
     )
       fail(400, "Invalid scope");
     await authorize(c.env, actor(c), strictId(value.mailbox_id), value.action);
