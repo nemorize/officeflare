@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
 import type { AppEnv } from "../auth/types";
-import { access, rows } from "../drive/access";
+import { access, activeUser, driveEnabled, rows } from "../drive/access";
+import { text } from "../drive/input";
 import { collaboration } from "../drive/collaboration";
 import { privateContent } from "../drive/content";
 import { cursor, readCursor } from "../drive/cursor";
@@ -18,6 +19,16 @@ drive.use("*", requireAccess, requirePermission("drive.access"));
 drive.get("/capabilities", c => c.json({ max_file_bytes: MAX_FILE_BYTES, part_bytes: PART_BYTES,
   upload_lifetime_seconds: 86400, trash_retention_days: 30, max_tree_operation_items: 200,
   sharing_roles: ["viewer", "commenter", "editor"], public_links: "read_only" }));
+drive.get("/people", async c => {
+  const q = text(c.req.query("q") ?? "", "q", 255).trim();
+  if (q.length < 2) return c.json({ people: [] });
+  const query = `%${q.replace(/[\\%_]/g, value => "\\" + value)}%`;
+  const people = await rows(c.env, `SELECT u.id,u.display_name,u.email_address FROM users u
+    WHERE ${activeUser("u")} AND ${driveEnabled("u")} AND u.id<>?
+    AND (u.display_name LIKE ? ESCAPE '\\' OR u.email_address LIKE ? ESCAPE '\\') ORDER BY u.display_name,u.id LIMIT 20`,
+    c.get("identity").user.id, query, query);
+  return c.json({ people });
+});
 drive.get("/quota", async c => {
   const quota = (await account(c))!;
   return c.json({ ...quota, available_bytes: Math.max(0, quota.quota_bytes - quota.used_bytes - quota.reserved_bytes) });

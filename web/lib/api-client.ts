@@ -9,7 +9,7 @@ export interface ApiOptions {
   token?: string;
   retryAuth?: boolean;
   signal?: AbortSignal;
-  response?: "json" | "blob";
+  response?: "json" | "blob" | "response";
   headers?: Record<string, string>;
 }
 
@@ -39,6 +39,6 @@ export function createApiClient(deps: {
       } catch { /* The HTTP status still identifies the failure. */ }
       throw new ApiError(response.status, message);
     }
-    return response.status === 204 ? undefined as T : options.response === "blob" ? await response.blob() as T : response.json();
+    return options.response === "response" ? response as T : response.status === 204 ? undefined as T : options.response === "blob" ? await response.blob() as T : response.json();
   };
 }

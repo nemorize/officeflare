@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Button, Checkbox, Icon, useNotifications } from "@/components/ui";
+import { Button, CheckboxControl, CheckboxLabel, Field, SelectControl, Icon, useNotifications } from "@/components/ui";
 import { NotificationCard, ReadAllButton } from "../components/notification-center";
 import { useNotificationCenter, useNotificationList } from "../components/notification-center-context";
 import { api, errorMessage } from "../lib/api";
@@ -21,8 +21,8 @@ export function NotificationsPage() {
   return <section className="account-page notification-page">
     <header className="account-page-header notification-page-header"><div><h1>Notifications</h1><p>Updates across your Officeflare workspace.</p></div><Link to="/profile/notifications" aria-label="Notification settings" title="Notification settings"><Icon name="settings" width="20" height="20" /></Link></header>
     <div className="notification-toolbar">
-      <label>Show<select value={state} onChange={(event) => setState(event.target.value as NotificationState)}>{(["inbox", "unread", "archived", "snoozed", "all"] as const).map((value) => <option key={value} value={value}>{value[0]!.toUpperCase() + value.slice(1)}</option>)}</select></label>
-      <label>Service<select value={service} onChange={(event) => setService(event.target.value)}><option value="">All services</option>{services.map((value) => <option key={value} value={value}>{value[0]!.toUpperCase() + value.slice(1)}</option>)}</select></label>
+      <Field.Root className="notification-filter"><Field.Label htmlFor="notification-state">Show</Field.Label><SelectControl id="notification-state" value={state} onValueChange={(value) => setState(value as NotificationState)} options={(["inbox", "unread", "archived", "snoozed", "all"] as const).map((value) => ({value, label: value[0]!.toUpperCase() + value.slice(1)}))} /></Field.Root>
+      <Field.Root className="notification-filter"><Field.Label htmlFor="notification-service">Service</Field.Label><SelectControl id="notification-service" value={service} onValueChange={setService} options={[{value: "", label: "All services"}, ...services.map((value) => ({value, label: value[0]!.toUpperCase() + value.slice(1)}))]} /></Field.Root>
       <ReadAllButton />
     </div>
     {(list.error || center.error) && <p className="notification-error" role="alert">{list.error || center.error}<Button size="sm" onClick={() => { void center.refresh(true); }}>Retry</Button></p>}
@@ -61,15 +61,11 @@ export function NotificationSettingsPage() {
     {!settings ? !error && <p role="status">Loading settings…</p> : <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <section className="account-panel">
         <div className="account-panel-header"><h2>In-app notifications</h2><p>Security notifications are always delivered to help protect your account.</p></div>
-        <label className="notification-setting"><span className="notification-setting-content"><strong>Receive workspace updates by default</strong><small>Individual choices below override this default.</small></span>
-          <Checkbox.Root checked={settings.enabled} disabled={busy} onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked })}>
-            <Checkbox.Indicator aria-hidden="true"><Icon name="check" width="12" height="12" /></Checkbox.Indicator>
-          </Checkbox.Root></label>
-        {types.map((item) => <label key={item.type} className="notification-setting"><span className="notification-setting-content"><strong>{item.label}</strong><small>{item.required ? "Always on" : `${item.service === "account" ? "Account" : "System"} · ${item.category}`}</small></span>
-          <Checkbox.Root checked={item.required || (settings.rules[`type:${item.type}`] ?? settings.rules[`category:${item.service}:${item.category}`] ?? settings.rules[`service:${item.service}`] ?? settings.enabled)} disabled={busy || item.required}
-            onCheckedChange={(checked) => setSettings({ ...settings, rules: { ...settings.rules, [`type:${item.type}`]: checked } })}>
-            <Checkbox.Indicator aria-hidden="true"><Icon name="check" width="12" height="12" /></Checkbox.Indicator>
-          </Checkbox.Root></label>)}
+        <CheckboxLabel className="notification-setting"><span className="notification-setting-content"><strong>Receive workspace updates by default</strong><small>Individual choices below override this default.</small></span>
+          <CheckboxControl checked={settings.enabled} disabled={busy} onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked })} /></CheckboxLabel>
+        {types.map((item) => <CheckboxLabel key={item.type} className="notification-setting"><span className="notification-setting-content"><strong>{item.label}</strong><small>{item.required ? "Always on" : `${item.service === "account" ? "Account" : "System"} · ${item.category}`}</small></span>
+          <CheckboxControl checked={item.required || (settings.rules[`type:${item.type}`] ?? settings.rules[`category:${item.service}:${item.category}`] ?? settings.rules[`service:${item.service}`] ?? settings.enabled)} disabled={busy || item.required}
+            onCheckedChange={(checked) => setSettings({ ...settings, rules: { ...settings.rules, [`type:${item.type}`]: checked } })} /></CheckboxLabel>)}
         <div className="account-actions"><Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button></div>
       </section>
     </form>}

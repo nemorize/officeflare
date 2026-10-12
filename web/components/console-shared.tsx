@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertDialog, AlertDialogPopup, Button, Checkbox, Icon, useNotifications } from "./ui";
+import { AlertDialog, AlertDialogPopup, Button, CheckboxControl, CheckboxLabel, Icon, useNotifications } from "./ui";
 import { ApiError, api, errorMessage } from "../lib/api";
 import { useAccess } from "./console-access";
 import "./console-shared.css";
@@ -9,7 +9,7 @@ export function Notice({ error }: { error?: string }) {
   return error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>;
 }
 export function Check({ children, checked, onChange, disabled }: { children: ReactNode; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
-  return <label className="console-check"><Checkbox.Root checked={checked} onCheckedChange={onChange} disabled={disabled}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root><span>{children}</span></label>;
+  return <CheckboxLabel className="console-check"><CheckboxControl checked={checked} onCheckedChange={onChange} disabled={disabled} /><span>{children}</span></CheckboxLabel>;
 }
 export function useResource<T>(path: string | null) {
   const access = useAccess();

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Button, Checkbox, Dialog, DialogPopup, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
+import { CheckboxLabel, Button, Checkbox, Dialog, DialogPopup, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { useSession, sessions } from "../lib/session";
 import { ApiError, api, errorMessage } from "../lib/api";
 import { SessionStorageError } from "../lib/session-manager";
@@ -129,7 +129,7 @@ export function AuthenticatorSettings() {
         {expired ? <p className="account-notice" data-error role="alert">This QR code has expired. Remove the pending authenticator and start again.</p> : <>
           <p>Scan this QR code in your authenticator app, or enter the setup key manually. Setup expires at {new Date(setup.setup_expires_at * 1000).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}.</p>
           <div className="account-otp-qr"><QRCodeSVG value={setup.provisioning_uri} size={204} marginSize={4} level="M" title="Authenticator setup QR code" /></div>
-          <TextField label="Setup key" value={authenticatorKey(setup.provisioning_uri)} readOnly autoComplete="off" className="account-otp-key" />
+          <TextField label="Setup key" value={authenticatorKey(setup.provisioning_uri)} readOnly autoComplete="off" font="mono" />
           <Form onSubmit={verify} className="account-otp-form">
             <Fieldset.Root disabled={action !== null || loading}>
               <TextField label="Code from your new authenticator" name="new_authenticator_code" inputMode="numeric" autoComplete="one-time-code"
@@ -160,7 +160,7 @@ export function AuthenticatorSettings() {
         <Dialog.Title>Save your recovery codes</Dialog.Title><Dialog.Description>These codes are shown only once. Each code can be used once to sign in without your authenticator.</Dialog.Description>
         <ul className="account-recovery-codes">{recoveryCodes.map((value) => <li key={value}><code>{value}</code></li>)}</ul>
         <Button type="button" onClick={downloadCodes}>Download codes</Button>
-        <label className="account-recovery-confirm"><Checkbox.Root checked={savedCodes} onCheckedChange={(checked) => setSavedCodes(checked)}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root>I saved my recovery codes</label>
+        <CheckboxLabel className="account-recovery-confirm"><Checkbox.Root checked={savedCodes} onCheckedChange={(checked) => setSavedCodes(checked)}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root>I saved my recovery codes</CheckboxLabel>
         <div className="account-actions"><Button type="button" variant="primary" disabled={!savedCodes} onClick={() => { setRecoveryCodes([]); setSavedCodes(false); }}>Done</Button></div>
       </DialogPopup>
     </Dialog.Root>

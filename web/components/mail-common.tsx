@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Button, Checkbox, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, Select, SelectPopup } from "./ui";
+import { Button, CheckboxControl, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, SelectControl, Textarea, type InputProps, type CheckboxControlProps, type TextareaProps } from "./ui";
 import { api, ApiError } from "../lib/api";
 import { mailFailure } from "../lib/mail";
 import { useAccess } from "./console-access";
@@ -54,19 +54,15 @@ export function useMailMobile() {
 interface MailSelectOption { value: string; label: ReactNode; disabled?: boolean; }
 export function MailSelect({ options, value = "", onValueChange, className = "", ...props }: {
   options: MailSelectOption[]; value?: string; onValueChange: (value: string) => void;
-  className?: string; disabled?: boolean; required?: boolean; "aria-label"?: string;
+  className?: string; disabled?: boolean; required?: boolean; "aria-label"?: string; variant?: "outline" | "integrated";
 }) {
-  const { disabled, required, "aria-label": ariaLabel } = props;
-  return <Select.Root items={options} value={value} onValueChange={(next) => onValueChange(next ?? "")} disabled={disabled} required={required}>
-    <Select.Trigger className={`mail-select ${className}`} aria-label={ariaLabel}><Select.Value /></Select.Trigger>
-    <SelectPopup><Select.List>{options.map((option) => <Select.Item key={option.value} value={option.value} disabled={option.disabled}><Select.ItemText>{option.label}</Select.ItemText><Select.ItemIndicator><Icon name="check" width="12" height="12" /></Select.ItemIndicator></Select.Item>)}</Select.List></SelectPopup>
-  </Select.Root>;
+  return <SelectControl className={`mail-select ${className}`} options={options} value={value} onValueChange={onValueChange} {...props} />;
 }
-export function MailCheckbox(props: React.ComponentProps<typeof Checkbox.Root>) {
-  return <Checkbox.Root {...props}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root>;
+export function MailCheckbox(props: CheckboxControlProps) {
+  return <CheckboxControl {...props} />;
 }
-export function MailTextarea({ value, disabled, ...props }: React.ComponentProps<"textarea">) {
-  return <Field.Control data-ui="input" value={value} disabled={disabled} render={<textarea {...props} />} />;
+export function MailTextarea(props: TextareaProps) {
+  return <Textarea {...props} />;
 }
 export function MailFileInput({ onChange, multiple, disabled, ...props }: Omit<React.ComponentProps<"input">, "type" | "value" | "defaultValue">) {
   const input = useRef<HTMLInputElement>(null);
@@ -75,7 +71,7 @@ export function MailFileInput({ onChange, multiple, disabled, ...props }: Omit<R
 export function MailMeter({ value, max, label }: { value: number; max: number; label: string }) {
   return <Meter.Root value={value} min={0} max={max} aria-label={label}><Meter.Track><Meter.Indicator /></Meter.Track></Meter.Root>;
 }
-export function MailInput({ label, hint, fieldClassName, ...props }: React.ComponentProps<"input"> & { label: string; hint?: string; fieldClassName?: string }) {
+export function MailInput({ label, hint, fieldClassName, ...props }: Omit<InputProps, "onChange"> & { onChange?: React.ChangeEventHandler<HTMLInputElement>; label: string; hint?: string; fieldClassName?: string }) {
   const id = useId();
   const dateInput = props.type === "date" || props.type === "datetime-local";
   return <MailField label={label} hint={hint} className={fieldClassName}><Input id={id} {...props} onInput={dateInput ? (event) => { props.onInput?.(event); props.onChange?.(event as unknown as React.ChangeEvent<HTMLInputElement>); } : props.onInput} /></MailField>;

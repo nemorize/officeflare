@@ -6,6 +6,8 @@ import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
 import { MailTopbar } from "../components/mail-chrome";
+import { DriveProvider } from "../components/drive-context";
+import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { NotificationBell } from "../components/notification-center";
 import { NotificationCenterProvider } from "../components/notification-center-context";
 import { consoleMenu } from "../lib/console";
@@ -31,7 +33,7 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
   const navigate = useNavigate();
   const email = user?.email_address ?? auth.session?.email ?? "";
   return <Menu.Root>
-    <Menu.Trigger render={<Button variant="ghost" className="workspace-rail-account" />}
+    <Menu.Trigger render={<Button variant="ghost" size="icon" shape="circle" className="workspace-rail-account" />}
       aria-label="Open profile menu" disabled={busy}>
       <AccountAvatar />
     </Menu.Trigger>
@@ -40,7 +42,7 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
       <Menu.Separator />
       {account.map((item) => <Menu.Item key={item.path} onClick={() => navigate(item.path)}><Icon name={item.icon} />{item.name}</Menu.Item>)}
       <Menu.Separator />
-      <Menu.Item onClick={signOut} disabled={busy} className="workspace-sign-out"><Icon name="logout" />{busy ? "Signing out…" : "Sign out"}</Menu.Item>
+      <Menu.Item onClick={signOut} disabled={busy} data-variant="danger"><Icon name="logout" />{busy ? "Signing out…" : "Sign out"}</Menu.Item>
     </MenuPopup>
   </Menu.Root>;
 }
@@ -55,6 +57,7 @@ function WorkspaceChrome() {
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
   const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
+  const isDrive = pathname === "/drive" || pathname.startsWith("/drive/");
   const isNotifications = pathname === "/notifications";
   const access = useAccess(), systemMenu = consoleMenu(access.permissions);
   const visibleApps = workspaceApps.filter((app) => access.permissions.includes(app.permission));
@@ -62,7 +65,7 @@ function WorkspaceChrome() {
   const sidebarName = isNotifications ? "Notifications" : isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
   const sidebarMenu = isNotifications ? notificationMenu : isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
-  const title = current?.name ?? (isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
+  const title = current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
   useEffect(() => { content.current?.scrollTo(0, 0); }, [pathname]);
 
@@ -74,7 +77,7 @@ function WorkspaceChrome() {
     finally { setBusy(false); }
   }
 
-  return <div className={`workspace-shell${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
+  return <div data-ui-theme={isDrive ? "neutral" : undefined} className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
       <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
@@ -87,14 +90,14 @@ function WorkspaceChrome() {
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span><span className="workspace-sidebar-caption">Officeflare workspace</span></div>
-        {isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
+        {isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "User management" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>}
         <div className="workspace-sidebar-footer"><Icon name={isNotifications ? "bell" : isConsole ? "console" : isAccount ? "shield" : activeApp?.icon ?? "mail"} /><span>{isConsole ? "System administration" : isAccount ? "Account settings" : `${sidebarName} workspace`}</span></div>
       </aside>
       <div ref={content} className="workspace-content">
-        {isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
+        {isDrive ? <DriveTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>}
         {isConsole && <nav aria-label="System settings mobile navigation" className="console-mobile-nav">{sidebarMenu.map((item) => <NavLink key={item.path} to={item.path}>{item.name}</NavLink>)}</nav>}
@@ -114,7 +117,7 @@ export function WorkspaceLayout() {
   if (!auth.session) return <main className="empty-page" aria-busy={auth.status === "loading"}>
     <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
   </main>;
-  return <AccountProvider><AccessProvider><NotificationCenterProvider key={auth.session.tokens.session_id}><MailProvider><WorkspaceChrome /></MailProvider></NotificationCenterProvider></AccessProvider></AccountProvider>;
+  return <AccountProvider><AccessProvider><NotificationCenterProvider key={auth.session.tokens.session_id}><MailProvider><DriveProvider key={auth.session.tokens.session_id}><WorkspaceChrome /></DriveProvider></MailProvider></NotificationCenterProvider></AccessProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {

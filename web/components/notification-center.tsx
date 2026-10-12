@@ -44,7 +44,7 @@ export function ReadAllButton() {
 
 function NotificationPreview({ open, close }: { open: boolean; close: () => void }) {
   const center = useNotificationCenter(), list = useNotificationList("inbox", "", open, 10);
-  return <PopoverPopup className="notification-popup" positionerProps={{ side: "right", align: "start", sideOffset: 10 }}>
+  return <PopoverPopup padding="none" className="notification-popup" positionerProps={{ side: "right", align: "start", sideOffset: 10 }}>
     <header className="notification-popup-header"><Popover.Title>Notifications</Popover.Title><Button variant="ghost" size="icon" aria-label="Close notifications" onClick={close}><Icon name="close" /></Button></header>
     <div className="notification-popup-tools"><span>{center.summary ? `${center.summary.unread} unread` : ""}</span><ReadAllButton /></div>
     <div className="notification-popup-list">

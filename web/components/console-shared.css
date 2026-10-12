@@ -1,4 +1,4 @@
-.console-check { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; }
-.console-check [data-ui="checkbox-root"] { flex-shrink: 0; margin-block-start: 1px; }
+.console-check { align-items: flex-start; }
+.console-check [data-ui="checkbox-root"] { margin-block-start: 1px; }
 .console-check strong { display: block; font-weight: 500; }
 .console-check small { display: block; color: var(--ui-muted); font-size: 11px; margin-block-start: 4px; }

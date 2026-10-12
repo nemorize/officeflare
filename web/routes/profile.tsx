@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Checkbox, CheckboxGroup, Field, Fieldset, Form, Icon, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
+import { CheckboxLabel, Button, Checkbox, CheckboxGroup, Field, Fieldset, Form, Icon, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
 import { useAccount } from "../components/account-context";
 import { api, errorMessage } from "../lib/api";
 import { label, profileChanges, type ProfileField, type ProfileValue } from "../lib/profile";
@@ -18,7 +18,7 @@ function FieldControl({ field, value, onChange }: { field: ProfileField; value: 
   if (field.value_type === "multiselect") return <Fieldset.Root>
     <Fieldset.Legend>{title}</Fieldset.Legend>
     <CheckboxGroup className="account-field-options" value={Array.isArray(value) ? value : []} onValueChange={onChange} aria-label={label(field.label, field.key)}>
-      {(field.options ?? []).map((option) => <label key={option.value}><Checkbox.Root value={option.value}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root>{label(option.label, option.value)}</label>)}
+      {(field.options ?? []).map((option) => <CheckboxLabel key={option.value}><Checkbox.Root value={option.value}><Checkbox.Indicator><Icon name="check" width="12" height="12" /></Checkbox.Indicator></Checkbox.Root>{label(option.label, option.value)}</CheckboxLabel>)}
     </CheckboxGroup>
   </Fieldset.Root>;
   if (field.value_type === "select" || field.value_type === "boolean") {

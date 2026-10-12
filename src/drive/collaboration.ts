@@ -17,8 +17,8 @@ collaboration.get("/:itemId/comments", async c => {
   const after = c.req.query("after") ? identifier(c.req.query("after"), "after") : null;
   const previous = after ? await first<Comment>(c.env, "SELECT * FROM drive_comments WHERE id=? AND item_id=?", after, item.id) : null;
   if (after && !previous) fail(400, "Invalid comment cursor");
-  const comments = await rows<Comment>(c.env, `SELECT * FROM drive_comments WHERE item_id=? AND deleted_at IS NULL
-    ${previous ? "AND (created_at>? OR (created_at=? AND id>?))" : ""} ORDER BY created_at,id LIMIT ?`, item.id,
+  const comments = await rows<Comment>(c.env, `SELECT c.*,u.display_name author_name FROM drive_comments c JOIN users u ON u.id=c.author_user_id WHERE c.item_id=? AND c.deleted_at IS NULL
+    ${previous ? "AND (c.created_at>? OR (c.created_at=? AND c.id>?))" : ""} ORDER BY c.created_at,c.id LIMIT ?`, item.id,
     ...(previous ? [previous.created_at, previous.created_at, previous.id] : []), pageSize + 1);
   const page = comments.slice(0, pageSize);
   return c.json({ comments: page.map(comment => ({ ...comment, resolved: !!comment.resolved })), next_cursor: comments.length > pageSize ? page.at(-1)!.id : null });
@@ -72,7 +72,7 @@ collaboration.post("/:itemId/access-requests", async c => {
 });
 collaboration.get("/:itemId/access-requests", async c => {
   const item = await requireItem(c, pathId(c), "owner");
-  const requests = await rows<AccessRequest>(c.env, "SELECT * FROM drive_access_requests WHERE item_id=? AND status='pending' ORDER BY created_at DESC,id DESC LIMIT ?", item.id, limit(c));
+  const requests = await rows<AccessRequest>(c.env, "SELECT r.*,u.display_name,u.email_address FROM drive_access_requests r JOIN users u ON u.id=r.user_id WHERE r.item_id=? AND r.status='pending' ORDER BY r.created_at DESC,r.id DESC LIMIT ?", item.id, limit(c));
   return c.json({ requests });
 });
 collaboration.patch("/:itemId/access-requests/:requestId", async c => {

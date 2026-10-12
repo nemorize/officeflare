@@ -12,8 +12,8 @@ const itemId = (c: Parameters<typeof requireItem>[0]) => identifier(c.req.param(
 const expected = (data: Record<string, unknown>) => integer(data.version, "version", 1);
 sharing.get("/:itemId/permissions", async c => {
   const item = await requireItem(c, itemId(c), "owner");
-  const grants = await rows(c.env, `SELECT p.item_id,p.user_id,p.role,p.expires_at,p.created_at,p.created_by,CASE WHEN p.item_id=? THEN 0 ELSE 1 END inherited
-    FROM drive_permissions p WHERE p.item_id IN (${ancestors("?")} SELECT id FROM ancestors) AND (p.expires_at IS NULL OR p.expires_at>unixepoch()) ORDER BY p.item_id,p.user_id`, item.id, item.id);
+  const grants = await rows(c.env, `SELECT p.item_id,p.user_id,p.role,p.expires_at,p.created_at,p.created_by,u.display_name,u.email_address,d.name source_name,CASE WHEN p.item_id=? THEN 0 ELSE 1 END inherited
+    FROM drive_permissions p JOIN users u ON u.id=p.user_id JOIN drive_items d ON d.id=p.item_id WHERE p.item_id IN (${ancestors("?")} SELECT id FROM ancestors) AND (p.expires_at IS NULL OR p.expires_at>unixepoch()) ORDER BY p.item_id,p.user_id`, item.id, item.id);
   return c.json({ owner_user_id: item.owner_user_id, permissions: grants });
 });
 sharing.put("/:itemId/permissions/:userId", async c => {

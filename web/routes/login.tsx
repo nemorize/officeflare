@@ -192,7 +192,7 @@ export function LoginPage() {
               {error && <p role="alert" className="ui-inline-alert"><Icon name="info" /><span>{error}</span></p>}
 
               <p>
-                <Button type="submit" variant="primary" className="login-submit">
+                <Button type="submit" variant="primary" size="lg" className="login-submit">
                   {busy ? "Processing…" : step.kind === "login" ? "Sign in" : step.kind === "mfa" ? "Verify" : "Change password and sign in"}
                 </Button>
               </p>

@@ -4,10 +4,11 @@ import { useMail, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
 import { useAccess } from "./console-access";
 import { workspaceApps } from "../lib/workspace-navigation";
-import {
+import { CheckboxLabel,
   Button,
   Drawer,
   DrawerPopup,
+  SearchField,
   Icon,
   OfficeflareMark,
   Input,
@@ -160,20 +161,20 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           />
         </div>
         <div className="mail-filter-checks">
-          <label>
+          <CheckboxLabel>
             <MailCheckbox
               checked={unread}
               onCheckedChange={(v) => setUnread(!!v)}
             />
             Unread only
-          </label>
-          <label>
+          </CheckboxLabel>
+          <CheckboxLabel>
             <MailCheckbox
               checked={attached}
               onCheckedChange={(v) => setAttached(!!v)}
             />
             Has attachments
-          </label>
+          </CheckboxLabel>
         </div>
       </div>
       <div className="mail-filter-footer">
@@ -207,7 +208,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           onClick={() => mail.compose()}
         />
       )}
-      <MailForm
+      <SearchField
         className="mail-global-search"
         role="search"
         onSubmit={(event) => {
@@ -216,7 +217,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         }}
       >
         <Icon name="search" />
-        <Input
+        <Input variant="integrated"
           ref={searchInput}
           aria-label="Search mail"
           placeholder="Search mail"
@@ -265,7 +266,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             </PopoverPopup>
           </Popover.Root>
         )}
-      </MailForm>
+      </SearchField>
       <div className="mail-topbar-identity">
         {mail.box?.kind === "shared" && (
           <span className="mail-badge">Shared</span>
@@ -283,7 +284,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           onOpenChange={openFilters}
           swipeDirection="right"
         >
-          <DrawerPopup
+          <DrawerPopup side="right" padding="none"
             className="mail-search-drawer"
             viewportProps={{
               className: "mail-drawer-viewport mail-drawer-right",
@@ -308,7 +309,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           onOpenChange={mail.setMobileMenu}
           swipeDirection="left"
         >
-          <DrawerPopup
+          <DrawerPopup side="left" padding="none"
             className="mail-navigation-drawer"
             viewportProps={{
               className: "mail-drawer-viewport mail-drawer-left",
@@ -371,7 +372,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           onOpenChange={setSettings}
           swipeDirection="right"
         >
-          <DrawerPopup
+          <DrawerPopup side="right"
             className="mail-settings-drawer"
             viewportProps={{
               className: "mail-drawer-viewport mail-drawer-right",
@@ -434,7 +435,7 @@ export function MailPreferenceFields({
           ]}
         />
       </MailField>
-      <label className="mail-preference-check">
+      <CheckboxLabel className="mail-preference-check">
         <MailCheckbox
           checked={mail.preferences.conversation_view}
           onCheckedChange={(conversation_view) => {
@@ -447,8 +448,8 @@ export function MailPreferenceFields({
           <strong>Conversation view</strong>
           <small>Group replies into one conversation.</small>
         </span>
-      </label>
-      <label className="mail-preference-check">
+      </CheckboxLabel>
+      <CheckboxLabel className="mail-preference-check">
         <MailCheckbox
           checked={mail.preferences.shortcuts}
           onCheckedChange={(shortcuts) => {
@@ -459,7 +460,7 @@ export function MailPreferenceFields({
           <strong>Keyboard shortcuts</strong>
           <small>c Compose · / Search · j/k Move · e Archive · r Reply</small>
         </span>
-      </label>
+      </CheckboxLabel>
       <MailField label="Undo send">
         <MailSelect
           value={String(mail.preferences.undo_seconds)}

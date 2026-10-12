@@ -33,7 +33,9 @@ export function MailMenu({
   label = "More actions",
   icon = "more",
   children,
+  variant = "ghost",
 }: {
+  variant?: ComponentProps<typeof Button>["variant"];
   label?: string;
   icon?: IconProps["name"];
   children: ReactNode;
@@ -41,7 +43,7 @@ export function MailMenu({
   return (
     <Menu.Root>
       <Menu.Trigger
-        render={<Button size="icon" variant="ghost" aria-label={label} />}
+        render={<Button size="icon" variant={variant} aria-label={label} />}
       >
         <Icon name={icon} />
       </Menu.Trigger>

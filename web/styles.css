@@ -51,7 +51,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 :where(button, a, input, select, textarea, [tabindex]):focus { outline: none; }
 :where(button, a, input, select, textarea, [tabindex]):focus-visible { box-shadow: var(--ui-focus-ring); }
 :where(button, [data-ui])[data-disabled], button:disabled { cursor: default; }
-::selection { background: #377dff26; }
+::selection { background: color-mix(in srgb, var(--ui-accent) 15%, transparent); }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -59,7 +59,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 
 .password-control { position: relative; width: 100%; }
 .password-control > [data-ui="input"] { padding-inline-end: 40px; }
-.password-control > [data-ui-button] { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; color: var(--ui-muted); }
+.password-control > [data-ui-button] { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; }
 
 .login-page { min-height: 100dvh; display: flex; flex-direction: column; background: var(--ui-sidebar); }
 .login-brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; width: fit-content; }
@@ -72,7 +72,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .login-card [data-ui="form"] { margin-block-start: 26px; }
 .login-card [data-ui="fieldset-root"] { gap: 18px; }
 .login-card [data-ui="input"] { max-width: none; }
-.login-card .login-submit { width: 100%; min-height: 36px; }
+.login-card .login-submit { width: 100%; }
 .login-card .login-secondary { width: 100%; }
 .login-card .login-help { margin-block-start: 24px; font-size: 12px; line-height: 1.6; }
 .login-footer { color: var(--ui-subtle); font-size: 12px; text-align: center; padding: 20px; }

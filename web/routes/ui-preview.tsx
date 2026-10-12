@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
-import { Button, Icon, OfficeflareMark, Select, SelectPopup, TextField } from "@/components/ui";
+import { Button, Icon, OfficeflareMark, Select, SelectPopup, SearchField, Input } from "@/components/ui";
 import * as Forms from "./ui-preview/forms";
 import * as Popups from "./ui-preview/popups";
 import * as Navigation from "./ui-preview/navigation";
@@ -67,12 +67,11 @@ const groupIcons = ["controls", "layers", "navigation", "circle"] as const;
 const categoryItems = [{ value: "all", label: "All components" }, ...groups.map(({ name }) => ({ value: name, label: name }))];
 
 function ComponentSearch({ query, onChange, mobile = false }: { query: string; onChange: (query: string) => void; mobile?: boolean }) {
-  return <div className={`gallery-search ${mobile ? "gallery-search-mobile" : ""}`}>
-    <Icon name="search" className="gallery-search-icon" />
-    <TextField label="Search components" name={mobile ? "component-search-mobile" : "component-search"}
-      value={query} onValueChange={onChange} placeholder="Search components" />
+  return <SearchField className={`gallery-search ${mobile ? "gallery-search-mobile" : ""}`} onSubmit={(event) => event.preventDefault()}>
+    <Icon name="search" />
+    <Input variant="integrated" aria-label="Search components" name={mobile ? "component-search-mobile" : "component-search"} value={query} onValueChange={onChange} placeholder="Search components" />
     {query && <Button size="icon" variant="ghost" onClick={() => onChange("")} aria-label="Clear search"><Icon name="close" width="13" height="13" /></Button>}
-  </div>;
+  </SearchField>;
 }
 
 // Loaded only by the development router; examples never call account APIs.

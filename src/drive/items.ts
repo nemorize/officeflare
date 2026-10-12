@@ -13,10 +13,11 @@ export const items = new Hono<AppEnv>();
 export async function describe(c: DriveContext, item: DriveItem) {
   const version = item.current_version_id ? await first<DriveVersion>(c.env, "SELECT * FROM drive_versions WHERE id=? AND item_id=?", item.current_version_id, item.id) : null;
   const user = c.get("identity").user.id;
+  const owner = await first(c.env, "SELECT id,display_name,email_address FROM users WHERE id=?", item.owner_user_id);
   const grant = item.owner_user_id === user ? "owner" : (await first<{ role: string }>(c.env,
     `SELECT role FROM drive_permissions WHERE user_id=? AND item_id IN (${ancestors("?")} SELECT id FROM ancestors)
       AND (expires_at IS NULL OR expires_at>unixepoch()) ORDER BY CASE role WHEN 'editor' THEN 3 WHEN 'commenter' THEN 2 ELSE 1 END DESC LIMIT 1`, user, item.id))?.role;
-  return { ...item, purged_at: undefined, effective_role: grant ?? null,
+  return { ...item, purged_at: undefined, effective_role: grant ?? null, owner,
     current_version: version ? { id: version.id, size: version.size, content_type: version.content_type, etag: version.etag, sha256: version.sha256,
       created_at: version.created_at, created_by: version.created_by } : null };
 }
@@ -42,17 +43,34 @@ items.get("/", async c => {
   if (kind) { filters.push("d.kind=?"); bindings.push(kind); }
   if (contentType) { filters.push("v.content_type=?"); bindings.push(contentType); }
   if (q) { filters.push("(d.name LIKE ? ESCAPE '\\' OR d.description LIKE ? ESCAPE '\\')"); const search = `%${q.replace(/[\\%_]/g, value => "\\" + value)}%`; bindings.push(search, search); }
-  const scope = JSON.stringify(["items", view, kind ?? "", contentType ?? "", parent, q]), pageSize = limit(c), ordering = view === "recent" ? "r.viewed_at" : "d.updated_at";
+  const sort = c.req.query("sort"), order = c.req.query("order") ?? "asc";
+  if (sort && !["name", "updated_at", "size"].includes(sort) || !["asc", "desc"].includes(order)) fail(400, "Invalid sort order");
+  const scope = JSON.stringify(["items", view, kind ?? "", contentType ?? "", parent, q, sort ?? "", sort ? order : ""]), pageSize = limit(c);
+  const ordering = sort === "name" ? "d.name COLLATE NOCASE" : sort === "size" ? "COALESCE(v.size,0)" : view === "recent" && !sort ? "r.viewed_at" : "d.updated_at";
+  const direction = sort ? order.toUpperCase() : "DESC", operator = direction === "ASC" ? ">" : "<", group = "CASE WHEN d.kind='folder' THEN 0 ELSE 1 END";
   const after = c.req.query("cursor") ? await readCursor(c.env, user, scope, c.req.query("cursor")!) : null;
-  if (after) { filters.push(`(${ordering}<? OR (${ordering}=? AND d.id<?))`); bindings.push(after[0], after[0], after[1]); }
-  const result = await rows<DriveItem & { size: number | null; content_type: string | null; sha256: string | null; starred: number; sort_time: number }>(c.env,
-    `SELECT d.*,v.size,v.content_type,v.sha256,CASE WHEN s.item_id IS NULL THEN 0 ELSE 1 END starred,${ordering} sort_time
+  if (after && sort) {
+    let tuple: unknown; try { tuple = JSON.parse(after[1]); } catch { fail(400, "Invalid Drive cursor"); }
+    if (!Array.isArray(tuple) || tuple.length !== 3 || ![0, 1].includes(tuple[0]) || typeof tuple[1] !== "string" || typeof tuple[2] !== "string") fail(400, "Invalid Drive cursor");
+    const [folderGroup, nameValue, id] = tuple as [number, string, string], value = sort === "name" ? nameValue : after[0];
+    filters.push(`(${group}>? OR (${group}=? AND (${ordering}${operator}? OR (${ordering}=? AND d.id${operator}?))))`);
+    bindings.push(folderGroup, folderGroup, value, value, id);
+  } else if (after) { filters.push(`(${ordering}<? OR (${ordering}=? AND d.id<?))`); bindings.push(after[0], after[0], after[1]); }
+  const result = await rows<DriveItem & { size: number | null; content_type: string | null; sha256: string | null; starred: number; sort_time: number | string; owner_name: string; owner_email: string; effective_role: string | null }>(c.env,
+    `SELECT d.*,v.size,v.content_type,v.sha256,CASE WHEN s.item_id IS NULL THEN 0 ELSE 1 END starred,${ordering} sort_time,u.display_name owner_name,u.email_address owner_email,
+      CASE WHEN d.owner_user_id=? THEN 'owner' ELSE (SELECT p.role FROM drive_permissions p WHERE p.user_id=?
+        AND p.item_id IN (${ancestors("d.id")} SELECT id FROM ancestors) AND (p.expires_at IS NULL OR p.expires_at>unixepoch())
+        ORDER BY CASE p.role WHEN 'editor' THEN 3 WHEN 'commenter' THEN 2 ELSE 1 END DESC LIMIT 1) END effective_role
       FROM drive_items d LEFT JOIN drive_versions v ON v.id=d.current_version_id
+      JOIN users u ON u.id=d.owner_user_id
       LEFT JOIN drive_stars s ON s.item_id=d.id AND s.user_id=? LEFT JOIN drive_recents r ON r.item_id=d.id AND r.user_id=?
-      WHERE ${filters.map(filter => `(${filter})`).join(" AND ")} ORDER BY ${ordering} DESC,d.id DESC LIMIT ?`, user, user, ...bindings, pageSize + 1);
+      WHERE ${filters.map(filter => `(${filter})`).join(" AND ")} ORDER BY ${sort ? `${group} ASC,` : ""}${ordering} ${direction},d.id ${direction} LIMIT ?`, user, user, user, user, ...bindings, pageSize + 1);
   const page = result.slice(0, pageSize);
-  return c.json({ items: page.map(({ sort_time: _, purged_at: _purged, starred, ...item }) => ({ ...item, starred: !!starred })),
-    next_cursor: result.length > pageSize ? await cursor(c.env, user, scope, [page.at(-1)!.sort_time, page.at(-1)!.id]) : null });
+  const last = page.at(-1);
+  return c.json({ items: page.map(({ sort_time: _, purged_at: _purged, starred, owner_name, owner_email, ...item }) => ({ ...item, starred: !!starred, owner: { id: item.owner_user_id, display_name: owner_name, email_address: owner_email } })),
+    next_cursor: result.length > pageSize && last ? await cursor(c.env, user, scope, sort
+      ? [sort === "name" ? 0 : Number(last.sort_time), JSON.stringify([last.kind === "folder" ? 0 : 1, sort === "name" ? last.name : "", last.id])]
+      : [Number(last.sort_time), last.id]) : null });
 });
 items.get("/:itemId", async c => {
   const id = pathId(c), trash = c.req.query("include_trashed") === "true", item = await requireItem(c, id, trash ? "owner" : "read", trash);
@@ -182,7 +200,7 @@ items.get("/:itemId/activity", async c => {
   const after: [number, string] = c.req.query("cursor") ? await readCursor(c.env, user, scope, c.req.query("cursor")!) : [Number.MAX_SAFE_INTEGER, ""];
   const check = access(user, "read", "d.id");
   const result = await rows<{ seq: number; item_id: string; actor_user_id: string | null; link_id: string | null; action: string; details_json: string; created_at: number }>(c.env,
-    `SELECT a.seq,a.item_id,a.actor_user_id,a.link_id,a.action,CASE WHEN d.owner_user_id=? THEN a.details_json ELSE '{}' END details_json,a.created_at FROM drive_activity a JOIN drive_items d ON d.id=a.item_id
+    `SELECT a.seq,a.item_id,a.actor_user_id,u.display_name actor_name,a.link_id,a.action,CASE WHEN d.owner_user_id=? THEN a.details_json ELSE '{}' END details_json,a.created_at FROM drive_activity a JOIN drive_items d ON d.id=a.item_id LEFT JOIN users u ON u.id=a.actor_user_id
       WHERE a.seq<? AND a.item_id ${c.req.query("recursive") === "true" ? `IN (${descendants("?")})` : "=?"} AND (d.owner_user_id=? OR (${check.sql})) ORDER BY a.seq DESC LIMIT ?`, user, after[0], id, user, ...check.args, pageSize + 1);
   const page = result.slice(0, pageSize);
   return c.json({ activity: page.map(({ details_json, ...event }) => ({ ...event, details: JSON.parse(details_json) })),

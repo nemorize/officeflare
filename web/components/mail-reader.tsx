@@ -271,7 +271,7 @@ function MessageCard({
           {(entry.from_address || "D").slice(0, 1).toUpperCase()}
         </span>
         <Button
-          variant="ghost"
+          variant="plain"
           className="mail-card-summary"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
@@ -461,7 +461,7 @@ function MessageCard({
                   {message.attachments
                     .filter((file) => file.disposition !== "inline")
                     .map((file) => (
-                      <Button
+                      <Button variant="card"
                         key={file.id}
                         className="mail-attachment"
                         onClick={() => {

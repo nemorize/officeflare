@@ -391,3 +391,35 @@ test("Drive backend: file lifecycle, inherited sharing, public links and recover
     await db.prepare("UPDATE drive_uploads SET expires_at=unixepoch()-1,lease_until=0 WHERE id=?").bind(session.id).run(); await recover();
   });
 });
+
+test('Drive UI API supports safe account search, roles and complete ordered pagination', async t => {
+  const f = await fixture(t);
+  await f.db.prepare("UPDATE users SET display_name=CASE id WHEN 'owner' THEN 'Owner' WHEN 'editor' THEN 'Team Editor' WHEN 'viewer' THEN 'Team Viewer' ELSE id END").run();
+  const found = (await f.call('/people?q=Team', {actor:'viewer'})).people;
+  assert.deepEqual(found.map(person=>person.id), ['editor']);
+  assert.deepEqual(Object.keys(found[0]).sort(), ['display_name','email_address','id']);
+  assert.deepEqual((await f.call('/people?q=no-drive')).people, []);
+  assert.deepEqual((await f.call('/people?q=%')).people, []);
+  await f.call('/people?q=owner',{actor:'no-drive',expected:403});
+  const root = await f.folder('Shared documents'); await f.share(root.id,'viewer','viewer');
+  const a = await f.upload('zeta.txt','12345',root.id), b = await f.upload('alpha.txt','1',root.id), c = await f.upload('ALPHA.txt','12',root.id);
+  await f.folder('가'.repeat(255),root.id); await f.folder('Beta folder',root.id);
+  const described = await f.item(a.id,'viewer'); assert.equal(described.owner.display_name,'Owner'); assert.equal(described.effective_role,'viewer');
+  for (const sort of ['name','updated_at','size']) for (const order of ['asc','desc']) {
+    const collected = []; let cursor = null, firstCursor;
+    do {
+      const page = await f.call(`/items?view=all&parent_id=${root.id}&sort=${sort}&order=${order}&limit=1${cursor?`&cursor=${encodeURIComponent(cursor)}`:''}`, {actor:'viewer'});
+      assert.ok(page.items.length, `${sort} ${order}: empty page after ${collected.length} items`);
+      assert.equal(page.items[0].effective_role,'viewer'); assert.equal(page.items[0].owner.email_address,'owner@office.test');
+      collected.push(page.items[0]); cursor=page.next_cursor; firstCursor ??= cursor;
+    } while (cursor);
+    assert.equal(collected.length,5); assert.equal(new Set(collected.map(item=>item.id)).size,5);
+    assert.deepEqual(collected.slice(0,2).map(item=>item.kind), ['folder','folder']);
+    if (sort === 'size') assert.deepEqual(collected.slice(2).map(item=>item.size),order === 'asc'?[1,2,5]:[5,2,1]);
+    await f.call(`/items?view=all&parent_id=${root.id}&sort=${sort}&order=${order==='asc'?'desc':'asc'}&cursor=${encodeURIComponent(firstCursor)}`,{actor:'viewer',expected:400});
+  }
+  await f.call('/items?sort=DROP_TABLE', {expected:400});
+  const permissions = (await f.call(`/items/${b.id}/permissions`)).permissions;
+  assert.equal(permissions[0].display_name,'Team Viewer'); assert.equal(permissions[0].source_name,'Shared documents'); assert.equal(permissions[0].inherited,1);
+  await f.call(`/items/${c.id}/comments`,{actor:'viewer',method:'POST',data:{body:'No'},expected:404});
+});

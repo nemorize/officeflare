@@ -1,7 +1,7 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
 import { parseRecipients } from "../lib/mail";
-import { Button, Icon, Input, Field } from "./ui";
+import { Chip, Button, Icon, Input, Field } from "./ui";
 export function RecipientField({
   label,
   value,
@@ -32,9 +32,9 @@ export function RecipientField({
       <Field.Label htmlFor={id}>{label}</Field.Label>
       <div className="mail-recipient-controls">
         {chips.map((chip, index) => (
-          <span
+          <Chip
             key={`${chip}:${index}`}
-            className={`mail-recipient-chip${valid(chip) ? "" : " is-invalid"}`}
+            invalid={!valid(chip)}
           >
             <Button
               variant="ghost"
@@ -60,9 +60,9 @@ export function RecipientField({
             >
               <Icon name="close" width="12" height="12" />
             </Button>
-          </span>
+          </Chip>
         ))}
-        <Input
+        <Input variant="integrated"
           id={id}
           value={pending.trimStart()}
           inputMode="email"

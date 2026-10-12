@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
-import { Button, Dialog, DialogPopup, Form, Icon, useNotifications } from "@/components/ui";
+import { Button, Dialog, DialogPopup, Form, Icon, Slider, useNotifications } from "@/components/ui";
 import { errorMessage } from "../lib/api";
 import { photoCrop, profilePhotoSize, zoomPhotoCrop, type PhotoView } from "../lib/profile-image";
 
@@ -173,7 +173,7 @@ export function ProfileImageEditor({ file, onClose, onSave }: {
   }
 
   return <Dialog.Root open={file !== null} onOpenChange={(open) => { if (!open && !inFlight.current) onClose(); }}>
-    <DialogPopup className="account-photo-dialog">
+    <DialogPopup padding="none" className="account-photo-dialog">
       <div className="account-photo-dialog-header"><div><Dialog.Title>Crop photo</Dialog.Title>
         <Dialog.Description>Drag to reposition. Pinch or use the slider to zoom.</Dialog.Description></div>
         <Button type="button" variant="ghost" size="icon" aria-label="Close photo editor" disabled={busy} onClick={onClose}><Icon name="close" /></Button>
@@ -191,17 +191,15 @@ export function ProfileImageEditor({ file, onClose, onSave }: {
               }} onPointerMove={move} onPointerUp={endGesture} onPointerCancel={endGesture} onLostPointerCapture={endGesture} />
             <div className="account-photo-mask" style={{ width: `${cropSize / previewSize * 100}%`, height: `${cropSize / previewSize * 100}%` }} aria-hidden="true" />
           </div>
-          <div className="account-photo-zoom">
-            <div className="account-photo-zoom-label"><label htmlFor="profile-photo-zoom">Zoom</label>
+          <Slider.Root className="account-photo-zoom" min={1} max={3} step={.01} value={view.zoom} disabled={busy} onValueChange={(value) => zoom(Number(value))}>
+            <div className="account-photo-zoom-label"><Slider.Label>Zoom</Slider.Label>
               <Button type="button" variant="ghost" disabled={busy} onClick={() => { clearGesture(); updateView(initialView); }}>Reset</Button></div>
             <div className="account-photo-zoom-controls">
-              <Button type="button" variant="ghost" size="icon" aria-label="Zoom out" disabled={busy || view.zoom <= 1} onClick={() => zoom(viewRef.current.zoom - .1)}><span aria-hidden="true">−</span></Button>
-              <input id="profile-photo-zoom" type="range" min="1" max="3" step="0.01" value={view.zoom} aria-valuetext={`${Math.round(view.zoom * 100)}%`}
-                disabled={busy} style={{ background: `linear-gradient(to right, var(--ui-text) ${(view.zoom - 1) * 50}%, var(--ui-control-border) ${(view.zoom - 1) * 50}%)` }}
-                onChange={(event) => zoom(Number(event.target.value))} />
+              <Button type="button" variant="ghost" size="icon" aria-label="Zoom out" disabled={busy || view.zoom <= 1} onClick={() => zoom(viewRef.current.zoom - .1)}><Icon name="minimize" /></Button>
+              <Slider.Control><Slider.Track><Slider.Indicator /><Slider.Thumb aria-label="Zoom" aria-valuetext={`${Math.round(view.zoom * 100)}%`} /></Slider.Track></Slider.Control>
               <Button type="button" variant="ghost" size="icon" aria-label="Zoom in" disabled={busy || view.zoom >= 3} onClick={() => zoom(viewRef.current.zoom + .1)}><Icon name="plus" /></Button>
             </div>
-          </div>
+          </Slider.Root>
         </>}
         <div className="account-photo-footer"><Button type="button" disabled={busy} onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={!image || busy}>{busy ? "Saving…" : "Save photo"}</Button></div>

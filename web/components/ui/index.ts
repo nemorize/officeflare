@@ -1,5 +1,6 @@
 export * from "./button";
 export * from "./input";
+export * from "./controls";
 export * from "./primitives";
 export * from "./text-field";
 export * from "./dialog";

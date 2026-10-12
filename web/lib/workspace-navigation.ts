@@ -45,6 +45,7 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
     menu: [
       { path: "/drive", name: "My drive", icon: "folder" },
       { path: "/drive/shared", name: "Shared with me", icon: "users" },
+      { path: "/drive/recent", name: "Recent", icon: "clock" },
       { path: "/drive/starred", name: "Starred", icon: "star" },
       { path: "/drive/trash", name: "Trash", icon: "trash" },
     ],

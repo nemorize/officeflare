@@ -1,6 +1,13 @@
 import type { SVGProps } from "react";
 
 const paths = {
+  upload: "M12 16V3 m-5 5 5-5 5 5 M3 15v6h18v-6",
+  download: "M12 3v13 m-5-5 5 5 5-5 M3 15v6h18v-6",
+  list: "M8 5h13 M8 12h13 M8 19h13 M3 5h.01 M3 12h.01 M3 19h.01",
+  sort: "M4 6h12 M4 12h8 M4 18h4 M20 4v16 m-3-3 3 3 3-3",
+  edit: "m15 4 5 5 M3 21l5-1L21 7l-5-5L3 15v6Z",
+  copy: "M8 8h13v13H8z M16 8V3H3v13h5",
+  move: "M3 7V4h6l3 3h9v13H3V7Z M7 14h10 m-3-3 3 3-3 3",
   undo: "M3 10h10a7 7 0 0 1 0 14 M3 10l5-5 M3 10l5 5",
   redo: "M21 10H11a7 7 0 0 0 0 14 M21 10l-5-5 M21 10l-5 5",
   align: "M4 5h16 M4 10h10 M4 15h16 M4 20h10",

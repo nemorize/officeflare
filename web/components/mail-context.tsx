@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router
 import { api } from "../lib/api";
 import { mailboxPath, type Mailbox, type Capabilities, type Folder, type MailPreferences, type MailSummary } from "../lib/mail";
 import { useAccess } from "./console-access";
-import { Button, Icon } from "./ui";
+import { Snackbar, Button, Icon } from "./ui";
 import { MailField, MailInput, MailModal, MailNotice, useMailAction, useMailResource, MailSelect, MailForm } from "./mail-common";
 import { MailComposer } from "./mail-composer";
 import { useAccount } from "./account-context";
@@ -79,7 +79,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
     href: (path) => `${path}${box ? `?mailbox=${encodeURIComponent(box.id)}` : ""}`, refresh, refreshBoxes: boxes.reload,
     compose: (id,inline) => { if (!box) return; if (composerRef.current && (composerRef.current.id !== id || composerRef.current.box !== box.id)) { feedback("Close your current draft before opening another."); return; } if (composerRef.current) window.dispatchEvent(new Event("officeflare:focus-composer")); else { composerRef.current = { box: box.id, id, inline }; setComposer(composerRef.current); } },
   };
-  return <MailContext value={value}>{children}{composer && <MailComposer key={`${composer.box}:${composer.id ?? "new"}`} mailboxId={composer.box} draftId={composer.id} inline={composer.inline} onClose={() => { composerRef.current = null; setComposer(null); refresh(); }} />}{notice && <div className="mail-snackbar" role="status"><span>{notice.text}</span>{notice.action && <Button variant="ghost" size="sm" disabled={noticeBusy} onClick={async () => { setNoticeBusy(true); try { await notice.action!(); setNotice(null); } catch (error) { feedback(error instanceof Error ? error.message : "Unable to undo this action."); } finally { setNoticeBusy(false); } }}>{noticeBusy ? "Working…" : notice.label}</Button>}<Button variant="ghost" size="icon" aria-label="Dismiss message" onClick={() => setNotice(null)}><Icon name="close" /></Button></div>}</MailContext>;
+  return <MailContext value={value}>{children}{composer && <MailComposer key={`${composer.box}:${composer.id ?? "new"}`} mailboxId={composer.box} draftId={composer.id} inline={composer.inline} onClose={() => { composerRef.current = null; setComposer(null); refresh(); }} />}{notice && <Snackbar className="mail-snackbar"><span>{notice.text}</span>{notice.action && <Button variant="inverse" size="sm" disabled={noticeBusy} onClick={async () => { setNoticeBusy(true); try { await notice.action!(); setNotice(null); } catch (error) { feedback(error instanceof Error ? error.message : "Unable to undo this action."); } finally { setNoticeBusy(false); } }}>{noticeBusy ? "Working…" : notice.label}</Button>}<Button variant="inverse" size="icon" aria-label="Dismiss message" onClick={() => setNotice(null)}><Icon name="close" /></Button></Snackbar>}</MailContext>;
 }
 const links = [
   ["/mail", "Inbox", "inbox"], ["/mail/starred", "Starred", "star"], ["/mail/snoozed", "Snoozed", "clock"], ["/mail/sent", "Sent", "arrow"], ["/mail/drafts", "Drafts", "file"], ["/mail/archive", "Archive", "archive"], ["/mail/spam", "Spam", "shield"], ["/mail/trash", "Trash", "trash"],
@@ -98,7 +98,7 @@ export function MailSidebar() {
       {mail.boxes.length > 1 && <MailField className="mail-box-picker" label="Mailbox">
         <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/>
       </MailField>}
-      <Button className="mail-compose-button" variant="primary" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); mail.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
+      <Button className="mail-compose-button" variant="primary" size="touch" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); mail.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
     </div>
     <nav className="workspace-nav" aria-label="Mail navigation">
       <div className="mail-nav-group">
@@ -112,7 +112,7 @@ export function MailSidebar() {
         {!mail.loading && !custom.length && <p className="mail-folder-empty">{mail.box?.access?.write ? "Create folders to organize mail." : "No custom folders."}</p>}
       </div>
     </nav>
-    <div className="mail-sidebar-bottom"><NavLink to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : "Checking for updates"}</span></div>
+    <div className="mail-sidebar-bottom"><NavLink className="workspace-nav-item" to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : "Checking for updates"}</span></div>
   </div>;
 }
 export function FolderManager() {

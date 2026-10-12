@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Button, Field, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
+import { Textarea, Button, Field, Fieldset, Form, Icon, TextField, useNotifications } from "@/components/ui";
 import { AccessDenied, useAccess } from "../components/console-access";
 import { Check, Confirm, Notice, ResourceState, useResource } from "../components/console-shared";
 import { PermissionPicker } from "../components/permission-picker";
@@ -69,7 +69,7 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
       <Form onSubmit={submit} aria-busy={busy}><section className="account-panel"><div className="account-panel-header"><h2>Role information</h2>{!owned && <p>You cannot change this role because it contains permissions you do not hold.</p>}</div><Fieldset.Root disabled={busy}>
         <TextField label="Role name" name="label" required maxLength={100} value={label} onValueChange={setLabel} readOnly={!editable} />
         <TextField label="Role key" name="key" required maxLength={64} value={key} onValueChange={setKey} readOnly={!creating} description={creating ? "A unique lowercase name, such as team-manager. It cannot be changed later." : undefined} />
-        <Field.Root name="description"><Field.Label htmlFor="console-role-description">Description</Field.Label><textarea id="console-role-description" name="description" className="console-textarea" maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} readOnly={!editable} rows={3} /></Field.Root>
+        <Field.Root name="description"><Field.Label htmlFor="console-role-description">Description</Field.Label><Textarea id="console-role-description" name="description" maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} readOnly={!editable} rows={3} /></Field.Root>
       </Fieldset.Root></section>
       <section className="account-panel"><div className="account-panel-header"><h2>Permissions</h2><p>{editable ? "Required parent permissions are selected together. Removing a parent also removes dependent actions." : "Service entry and administrative actions are independent permissions."}</p></div>
         {creating && editable && <div className="console-role-templates"><span>Start with a template</span>{roleTemplates.map((template) => <Button type="button" key={template.key} size="sm" disabled={busy || !canGrant(access.permissions, template.permissions) || !!role?.is_default && !defaultEligible(template.permissions)} onClick={() => { setSelected(template.permissions); if (creating && !key) setKey(template.key === "mail-user" ? "mail-user-custom" : template.key); if (creating && !label) setLabel(template.label); }}>{template.label}</Button>)}</div>}

@@ -26,6 +26,7 @@ import {
 } from "../components/mail-common";
 import {
   Button,
+  Toggle,
   Icon,
   Menu,
   MenuPopup,
@@ -741,7 +742,7 @@ function MailList({
     >
       <section className="mail-list-pane" aria-label={`${title} messages`}>
         <div className="mail-list-toolbar">
-          <MailCheckbox
+          <MailCheckbox hitArea
             aria-label="Select all messages on this page"
             checked={messages.length > 0 && selected.length === messages.length}
             indeterminate={
@@ -855,7 +856,7 @@ function MailList({
               }}
               className={`mail-message-row${!message.is_read ? " mail-unread" : ""}${selected.includes(message.id) ? " mail-checked" : ""}${selectedId === message.id ? " mail-selected" : ""}`}
             >
-              <MailCheckbox
+              <MailCheckbox hitArea
                 aria-label={`Select ${message.subject || "Untitled message"}`}
                 checked={selected.includes(message.id)}
                 disabled={!canWrite}
@@ -867,18 +868,9 @@ function MailList({
                   )
                 }
               />
-              <MailIconButton
-                icon="star"
-                label={message.is_starred ? "Remove star" : "Add star"}
-                className="mail-star"
-                aria-pressed={!!message.is_starred}
-                disabled={!canWrite || action.busy}
-                onClick={() =>
-                  run([message], { is_starred: !message.is_starred })
-                }
-              />
+              <Toggle data-size="icon" data-variant="star" className="mail-star" aria-label={message.is_starred ? "Remove star" : "Add star"} pressed={!!message.is_starred} disabled={!canWrite || action.busy} onPressedChange={() => run([message], { is_starred: !message.is_starred })}><Icon name="star" /></Toggle>
               <Button
-                variant="ghost"
+                variant="plain"
                 className="mail-message-summary"
                 onClick={() =>
                   message.draft_state === "editable"

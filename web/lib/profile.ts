@@ -40,7 +40,7 @@ export const returnToWorkspace = (path: unknown) =>
     "/", "/mail", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/trash", "/mail/spam", "/mail/starred", "/mail/snoozed", "/mail/all", "/mail/scheduled",
     "/mail/rules", "/mail/settings", "/mail/integrations", "/mail/data", "/mail/activity",
     "/console/mail/domains", "/console/mail/mailboxes", "/console/mail/providers",
-    "/calendar", "/calendar/shared", "/drive", "/drive/shared", "/drive/starred", "/drive/trash",
+    "/calendar", "/calendar/shared", "/drive", "/drive/shared", "/drive/recent", "/drive/starred", "/drive/trash",
     "/profile", "/profile/security", "/profile/sessions", "/profile/notifications", "/notifications",
   ].includes(path) || /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) || /^\/console\/mail\/(?:domains|mailboxes)\/[A-Za-z0-9_-]{1,100}$/.test(path) || /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path))
-    ? path : "/";
+    ? path : typeof path === "string" && /^\/drive\/(?:folders|items)\/[A-Za-z0-9_-]{1,100}$/.test(path) ? path : "/";

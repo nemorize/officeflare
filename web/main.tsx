@@ -19,6 +19,9 @@ const UsersPage = lazy(() => import("./routes/console-users").then((module) => (
 const UserEditorPage = lazy(() => import("./routes/console-users").then((module) => ({ default: module.UserEditorPage })));
 const RolesPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RolesPage })));
 const RoleEditorPage = lazy(() => import("./routes/console-roles").then((module) => ({ default: module.RoleEditorPage })));
+const DrivePage = lazy(() => import("./routes/drive").then((module) => ({ default: module.DrivePage })));
+const DriveLinkedItemPage = lazy(() => import("./routes/drive").then((module) => ({ default: module.DriveLinkedItemPage })));
+const PublicDrivePage = lazy(() => import("./routes/drive-public").then((module) => ({ default: module.PublicDrivePage })));
 const MailPage = lazy(() => import("./routes/mail").then((module) => ({ default: module.MailPage })));
 const MailManagePage = lazy(() => import("./routes/mail-manage").then((module) => ({ default: module.MailManagePage })));
 const MailIntegrationsPage = lazy(() => import("./routes/mail-integrations").then((module) => ({ default: module.MailIntegrationsPage })));
@@ -35,11 +38,14 @@ root.render(
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/share/drive/:token" element={<Suspense fallback={<p className="empty-page">Opening shared files…</p>}><PublicDrivePage /></Suspense>} />
           <Route element={<WorkspaceLayout />}>
             <Route path="/" element={<WorkspaceHome />} />
-            {workspaceApps.filter((app) => app.path !== "/mail").flatMap((app) => app.menu.map((item) =>
+            {workspaceApps.filter((app) => app.path !== "/mail" && app.path !== "/drive").flatMap((app) => app.menu.map((item) =>
               <Route key={item.path} path={item.path} element={<ServiceGate permission={app.permission}><EmptyWorkspacePage title={item.name} /></ServiceGate>} />
             ))}
+            <Route path="/drive/items/:itemId" element={<ServiceGate permission="drive.access"><DriveLinkedItemPage /></ServiceGate>} />
+            {["/drive", "/drive/shared", "/drive/recent", "/drive/starred", "/drive/trash", "/drive/folders/:folderId"].map((path) => <Route key={path} path={path} element={<ServiceGate permission="drive.access"><DrivePage /></ServiceGate>} />)}
             {["/mail", "/mail/starred", "/mail/snoozed", "/mail/all", "/mail/scheduled", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/spam", "/mail/trash", "/mail/folders/:folder"].map((path) => <Route key={path} path={path} element={<ServiceGate permission="mail.access"><MailPage /></ServiceGate>} />)}
             {["rules", "settings"].map((page) => <Route key={page} path={`/mail/${page}`} element={<ServiceGate permission="mail.access"><MailManagePage key={page} page={page} /></ServiceGate>} />)}
             <Route path="/mail/integrations" element={<ServiceGate permission="mail.access"><MailIntegrationsPage /></ServiceGate>} />
