@@ -899,6 +899,7 @@ test("From selection uses one send permission and removes modes from APIs and sa
   const alias = (await admin("/addresses", { method: "POST", data: { domain_id: domain.id, mailbox_id: mailbox.id, local_part: "alias" }, expected: 201 })).address;
   const disabled = (await admin("/addresses", { method: "POST", data: { domain_id: domain.id, mailbox_id: mailbox.id, local_part: "disabled", send_enabled: false }, expected: 201 })).address;
   const addresses = (await call(base + "/addresses")).addresses;
+  assert.equal((await call("/mailboxes")).mailboxes.length, 1);
   assert.equal(addresses.find((entry) => entry.id === address.id).can_send, true);
   assert.equal(addresses.find((entry) => entry.id === alias.id).can_send, true);
   assert.equal(addresses.find((entry) => entry.id === disabled.id).can_send, false);
@@ -923,6 +924,16 @@ test("From selection uses one send permission and removes modes from APIs and sa
   const deliveries = await Promise.all((await bucket.list({ prefix: "test-sent/" })).objects.map(async (object) => (await bucket.get(object.key)).json()));
   assert.equal(deliveries[0].from, "alias@mail.test");
   assert.equal(deliveries[0].headers["X-Officeflare-Sent-On-Behalf-Of"], undefined);
+  const aliasDraft = await draft({ subject: "Saved alias in one mailbox", compose_state: { to: "recipient@example.test", cc: "", bcc: "", address_id: alias.id } });
+  const reopened = (await call(base + "/drafts/" + aliasDraft.id)).message;
+  assert.equal(reopened.body.compose_state.address_id, alias.id);
+  const aliasEdited = (await call(base + "/drafts/" + aliasDraft.id, { method: "PATCH", data: { version: reopened.draft.version, text: "Continue writing after reopening" } })).message;
+  assert.equal(aliasEdited.body.compose_state.address_id, alias.id);
+  const restored = (await call(base + "/drafts/" + aliasDraft.id)).message;
+  const aliasSend = (await call(base + "/drafts/" + restored.id + "/submissions", { method: "POST", data: { version: restored.draft.version, address_id: restored.body.compose_state.address_id }, expected: 202 })).submission;
+  const aliasAccepted = await eventually(() => call(base + "/submissions/" + aliasSend.id), (result) => result.submission.status === "accepted", "The reopened alias draft did not send");
+  const aliasDelivery = await (await bucket.get("test-sent/" + aliasAccepted.submission.provider_message_id + ".json")).json();
+  assert.equal(aliasDelivery.from, "alias@mail.test");
   await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
   assert.ok((await call(base + "/addresses", { token: tokens.reader })).addresses.every((entry) => !entry.can_send));
 

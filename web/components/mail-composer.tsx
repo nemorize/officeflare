@@ -49,7 +49,12 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     draftRef.current = message ?? null;
     setReady(true);
   }, [draftId, initial.data, settings.data, ready]);
-  useEffect(() => { if (!addresses.data) return; const available = addresses.data.addresses.filter((address) => address.can_send), primary = available.find((address) => address.is_primary) ?? available[0]; if (!available.some((address) => address.id === sender)) setSender(primary?.id ?? ""); }, [addresses.data, sender]);
+  useEffect(() => {
+    // Restore the draft's selected alias before choosing a default address.
+    if (!ready || !addresses.data) return;
+    const available = addresses.data.addresses.filter((address) => address.can_send), primary = available.find((address) => address.is_primary) ?? available[0];
+    if (!available.some((address) => address.id === sender)) setSender(primary?.id ?? "");
+  }, [ready, addresses.data, sender]);
   useEffect(() => { if (!dirty && !unknown) return; const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent); }, [dirty, unknown]);
   useEffect(() => { const host = document.getElementById("mail-reply-host"); setInlineHost(host); if (inline && !host) setDocked(true); },[inline,docked,location.pathname,location.search]);
   useEffect(() => { const focus = () => { setMinimized(false); }; window.addEventListener("officeflare:focus-composer",focus); return () => window.removeEventListener("officeflare:focus-composer",focus); },[]);
