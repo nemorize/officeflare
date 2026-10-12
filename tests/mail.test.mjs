@@ -1689,6 +1689,86 @@ test("shared mailbox address and membership save atomically with safe retries an
 
 });
 
+test("reply-all preserves To and Cc roles while excluding mailbox addresses, duplicates and Bcc", async (t) => {
+  const { call, admin, base, mailbox, domain, draft, mf, tokens } = await fixture(t, "6000000000", true);
+  const alias = (await admin("/addresses", { method: "POST", data: { domain_id: domain.id, mailbox_id: mailbox.id, local_part: "alias" }, expected: 201 })).address;
+  const harness = await mf.getWorker("mail-harness"), bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const recipientsOf = (message, kind) => message.recipients.filter((entry) => entry.kind === kind).map((entry) => entry.email_address);
+  const received = async (name, headers) => {
+    const result = await harness.fetch("https://test/email", { method: "POST", body: [...headers, "Subject: " + name, `Message-ID: <${name}@example.test>`, "Content-Type: text/plain; charset=utf-8", "", "Quoted reply-all body"].join("\r\n") });
+    assert.equal((await result.json()).rejected, null);
+    const page = await eventually(() => call(base + "/messages?q=subject:" + name), (page) => page.messages.length === 1, "The source mail did not arrive");
+    return page.messages[0];
+  };
+  const replyAll = async (message, options = {}) => (await call(base + "/messages/" + message.id + "/reply-all", { method: "POST", data: {}, expected: 201, ...options })).message;
+  let incoming, reply;
+  await t.test("Reply-To stays in To, original Cc stays in Cc, and case-insensitive duplicates are removed", async () => {
+    incoming = await received("RecipientRoles", [
+      "From: original@example.test",
+      "Reply-To: Replies@Example.test",
+      "To: OWNER@mail.test, ALIAS@mail.test, Main@Example.test, MAIN@example.test, Both@example.test",
+      "Cc: OWNER@mail.test, alias@mail.test, Observer@example.test, OBSERVER@example.test, both@EXAMPLE.test, replies@example.test",
+    ]);
+    const options = { headers: { "Idempotency-Key": "reply-all-roles" } };
+    reply = await replyAll(incoming, options);
+    const replay = await replyAll(incoming, options);
+    assert.equal(replay.id, reply.id);
+    assert.deepEqual(recipientsOf(reply, "to"), ["replies@example.test", "main@example.test", "both@example.test"]);
+    assert.deepEqual(recipientsOf(reply, "cc"), ["observer@example.test"]);
+    assert.deepEqual(recipientsOf(reply, "bcc"), []);
+    assert.equal(reply.thread_id, incoming.thread_id);
+    assert.match(reply.body.text, /Quoted reply-all body/);
+    const reopened = (await call(base + "/drafts/" + reply.id)).message;
+    assert.deepEqual(reopened.recipients, reply.recipients);
+  });
+  await t.test("sending the reply retains separate To and Cc provider fields", async () => {
+    const job = (await call(base + "/drafts/" + reply.id + "/submissions", { method: "POST", data: { version: reply.draft.version, address_id: alias.id }, expected: 202 })).submission;
+    const accepted = await eventually(() => call(base + "/submissions/" + job.id), (result) => result.submission.status === "accepted", "Reply-all send did not complete");
+    const sent = await (await bucket.get("test-sent/" + accepted.submission.provider_message_id + ".json")).json();
+    assert.equal(sent.from, "alias@mail.test");
+    assert.deepEqual(sent.to, ["replies@example.test", "main@example.test", "both@example.test"]);
+    assert.deepEqual(sent.cc, ["observer@example.test"]);
+    assert.deepEqual(sent.bcc, []);
+  });
+  await t.test("a reply to our own sent alias preserves visible recipient roles and never reveals Bcc", async () => {
+    const sentDraft = await draft({ subject: "Own alias recipients", reply_to: "our-support@example.test", to: ["main@example.test", "owner@mail.test"], cc: ["observer@example.test", "MAIN@example.test", "alias@mail.test"], bcc: ["hidden@example.test"] });
+    const job = (await call(base + "/drafts/" + sentDraft.id + "/submissions", { method: "POST", data: { version: sentDraft.draft.version, address_id: alias.id }, expected: 202 })).submission;
+    await eventually(() => call(base + "/submissions/" + job.id), (result) => result.submission.status === "accepted", "Own sent mail did not complete");
+    const response = await replyAll(sentDraft);
+    assert.deepEqual(recipientsOf(response, "to"), ["main@example.test"]);
+    assert.deepEqual(recipientsOf(response, "cc"), ["observer@example.test"]);
+    assert.deepEqual(recipientsOf(response, "bcc"), []);
+    assert.ok(response.recipients.every((entry) => !["hidden@example.test", "our-support@example.test"].includes(entry.email_address)));
+  });
+  await t.test("the original sender appears in To once even when also listed in Cc", async () => {
+    const message = await received("SenderInCc", ["From: Sender@Example.test", "To: owner@mail.test", "Cc: sender@example.test, other@example.test"]);
+    const response = await replyAll(message);
+    assert.deepEqual(recipientsOf(response, "to"), ["sender@example.test"]);
+    assert.deepEqual(recipientsOf(response, "cc"), ["other@example.test"]);
+  });
+  await t.test("a Cc-only continuation keeps Cc and self-only messages produce no recipients", async () => {
+    const ccOnly = await received("CcOnlyContinuation", ["From: ALIAS@mail.test", "To: owner@mail.test", "Cc: observer@example.test, alias@mail.test"]);
+    const continuation = await replyAll(ccOnly);
+    assert.deepEqual(recipientsOf(continuation, "to"), []);
+    assert.deepEqual(recipientsOf(continuation, "cc"), ["observer@example.test"]);
+    const selfOnly = await received("SelfOnlyRecipients", ["From: alias@mail.test", "To: owner@mail.test", "Cc: ALIAS@mail.test"]);
+    assert.deepEqual((await replyAll(selfOnly)).recipients, []);
+  });
+  await t.test("ordinary replies and forwards keep their recipient behavior and write access is required", async () => {
+    const ordinary = (await call(base + "/messages/" + incoming.id + "/reply", { method: "POST", data: {}, expected: 201 })).message;
+    assert.deepEqual(recipientsOf(ordinary, "to"), ["replies@example.test"]);
+    assert.deepEqual(recipientsOf(ordinary, "cc"), []);
+    const forward = (await call(base + "/messages/" + incoming.id + "/forward", { method: "POST", data: { to: ["forward@example.test"] }, expected: 201 })).message;
+    assert.deepEqual(recipientsOf(forward, "to"), ["forward@example.test"]);
+    assert.deepEqual(recipientsOf(forward, "cc"), []);
+    await call(base + "/members/reader", { method: "PUT", data: { read: true } });
+    await call(base + "/messages/" + incoming.id + "/reply-all", { method: "POST", token: tokens.reader, data: {}, expected: 403 });
+    await call(base + "/members/reader", { method: "PUT", data: { read: true, write: true } });
+    const sharedReply = await replyAll(incoming, { token: tokens.reader });
+    assert.deepEqual(recipientsOf(sharedReply, "to"), ["replies@example.test", "main@example.test", "both@example.test"]);
+    assert.deepEqual(recipientsOf(sharedReply, "cc"), ["observer@example.test"]);
+  });
+});
 test("draft Reply-To addresses survive editing and reach outgoing mail", async (t) => {
   const { call, base, draft, mf, address, tokens } = await fixture(t, "6000000000", true);
   const bucket = await mf.getR2Bucket("MAIL_BUCKET");

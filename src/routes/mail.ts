@@ -1767,23 +1767,23 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
         )
       ).map((a) => a.email_address.toLowerCase()),
     );
-    const to =
-      operation === "forward"
-        ? recipients(data.to, "to")
-        : operation === "reply"
-          ? own.has(source.from_address.toLowerCase())
-            ? source.recipients
-                .filter((r) => r.kind === "to")
-                .map((r) => r.email_address)
-            : [source.reply_to_address ?? source.from_address]
-          : [
-              ...new Set([
-                source.reply_to_address ?? source.from_address,
-                ...source.recipients
-                  .filter((r) => r.kind === "to" || r.kind === "cc")
-                  .map((r) => r.email_address),
-              ]),
-            ].filter((address) => !own.has(address.toLowerCase()));
+    let to: string[], cc: string[] = [];
+    const originalRecipients = (kind: "to" | "cc") => source.recipients.filter((recipient) => recipient.kind === kind).map((recipient) => recipient.email_address);
+    if (operation === "forward") to = recipients(data.to, "to");
+    else if (operation === "reply") to = own.has(source.from_address.toLowerCase()) ? originalRecipients("to") : [source.reply_to_address ?? source.from_address];
+    else {
+      const seen = new Set(own);
+      const unique = (addresses: string[]) => addresses.map((address) => email(address)).filter((address) => {
+        if (seen.has(address)) return false;
+        seen.add(address);
+        return true;
+      });
+      // A reply to our own sent mail continues with its recipients, not our Reply-To.
+      const replyTarget = own.has(source.from_address.toLowerCase()) ? [] : [source.reply_to_address ?? source.from_address];
+      to = unique([...replyTarget, ...originalRecipients("to")]);
+      // To takes precedence when an address occurs in both recipient fields.
+      cc = unique(originalRecipients("cc"));
+    }
     const requestKey = key(c), uploads: string[] = [];
     for (const file of source.attachments.filter((file) => operation === "forward" || file.disposition === "inline")) {
         const object = await c.env.MAIL_BUCKET.get(file.r2_key);
@@ -1818,6 +1818,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
       {
         subject,
         to,
+        cc,
         text: text(data.text ?? "", "text", 10000, true),
         attachment_ids: uploads,
         ...(operation !== "forward" ? { reply_to_message_id: sourceId } : {}),
