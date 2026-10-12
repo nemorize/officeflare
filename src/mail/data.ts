@@ -619,6 +619,7 @@ async function restorePage(
       attachments: files,
       draft_owner_id: source.draft ? actor.user_id : null,
       is_spam: !!source.is_spam,
+      snoozed_until: source.snoozed_until,
     };
     await coordinator.storeMessage(partitionId, input);
     await partition(env, partitionId).applyInboundFlags(

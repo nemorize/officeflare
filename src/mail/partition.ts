@@ -203,10 +203,11 @@ export class MailPartitionDO extends DurableObject<Env> {
         epoch(),
       );
       this.sql.exec(
-        "UPDATE messages SET source=?,trashed_at=?,reply_to_address=? WHERE id=?",
+        "UPDATE messages SET source=?,trashed_at=?,reply_to_address=?,snoozed_until=? WHERE id=?",
         input.source ?? "email",
         ["trash", "spam"].includes(input.folder_id) ? epoch() : null,
         input.reply_to_address ?? null,
+        Number.isSafeInteger(input.snoozed_until) && input.snoozed_until! > epoch() ? input.snoozed_until! : null,
         input.id,
       );
       for (const kind of ["to", "cc", "bcc"] as const)

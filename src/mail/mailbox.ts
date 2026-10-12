@@ -210,7 +210,13 @@ export class MailboxDO extends DurableObject<Env> {
     return this.ctx.blockConcurrencyWhile(async () => {
       if (!this.hasFolder(input.folder_id))
         fail(409, "Folder no longer exists");
-      return partition(this.env, partitionId).insert(input);
+      const store = partition(this.env, partitionId), messageId = await store.insert(input);
+      if (input.snoozed_until !== undefined) {
+        // On a restore retry, use the stored value so later user edits survive.
+        const message = await store.internalMessage(messageId);
+        if (message?.snoozed_until) await this.schedule({ id: "snooze:" + messageId, partition_id: partitionId, kind: "snooze", reference_id: messageId, due_at: message.snoozed_until });
+      }
+      return messageId;
     });
   }
   async changeMessage(

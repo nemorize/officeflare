@@ -93,6 +93,7 @@ export interface MessageInput {
   attachments: Attachment[];
   draft_owner_id: string | null;
   is_spam?: boolean;
+  snoozed_until?: number | null;
 }
 export interface MessageRow {
   scheduled_at?: number | null;

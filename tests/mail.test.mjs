@@ -1909,6 +1909,84 @@ test("mail experience preferences, draft recovery and conversation paging", asyn
   });
 });
 
+test("backup restore preserves future snoozes and resumes reminders safely across retries", async (t) => {
+  const { mf, call, admin, base, mailbox } = await fixture(t, "250000", true);
+  const harness = await mf.getWorker("mail-harness"), bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  for (const subject of ["FutureSnooze", "ExpiredSnooze", "LegacySnooze", "NoSnooze"]) {
+    const response = await harness.fetch("https://test/email", { method: "POST", body: ["From: sender@example.test", "To: owner@mail.test", "Subject: " + subject, `Message-ID: <${subject}@example.test>`, "", "A backed-up reminder"].join("\r\n") });
+    assert.equal((await response.json()).rejected, null);
+  }
+  const originals = (await eventually(() => call(base + "/messages"), (page) => page.messages.length === 4, "Source mail was not received")).messages;
+  const future = Math.floor(Date.now() / 1000) + 3600;
+  for (const subject of ["FutureSnooze", "ExpiredSnooze"]) {
+    const message = originals.find((entry) => entry.subject === subject);
+    await call(base + "/messages/" + message.id, { method: "PATCH", data: { version: message.version, snoozed_until: future, ...(subject === "FutureSnooze" ? { is_read: true, is_starred: true } : {}) } });
+  }
+  const backup = (await call(base + "/backups", { method: "POST", expected: 202 })).job;
+  await eventually(() => call(base + "/jobs/" + backup.id), (result) => result.job.status === "completed", "The snooze backup did not finish");
+  const pieces = [];
+  for (const entry of (await bucket.list({ prefix: `data-jobs/${mailbox.id}/${backup.id}/` })).objects.filter((entry) => entry.key.endsWith(".message.json")))
+    pieces.push({ key: entry.key, message: await (await bucket.get(entry.key)).json() });
+  assert.equal(pieces.length, 4);
+  const futurePiece = pieces.find((piece) => piece.message.subject === "FutureSnooze"), expiredPiece = pieces.find((piece) => piece.message.subject === "ExpiredSnooze"), legacyPiece = pieces.find((piece) => piece.message.subject === "LegacySnooze");
+  assert.equal(futurePiece.message.snoozed_until, future);
+  assert.equal(expiredPiece.message.snoozed_until, future);
+  expiredPiece.message.snoozed_until = Math.floor(Date.now() / 1000) - 60;
+  await bucket.put(expiredPiece.key, JSON.stringify(expiredPiece.message));
+  delete legacyPiece.message.snoozed_until;
+  await bucket.put(legacyPiece.key, JSON.stringify(legacyPiece.message));
+  const target = async (name) => {
+    const box = (await admin("/mailboxes", { method: "POST", data: { name, owner_user_id: "owner" }, expected: 201 })).mailbox;
+    return { id: box.id, path: "/mailboxes/" + box.id };
+  };
+  const start = async (destination) => (await call(base + "/backups/" + backup.id + "/restore", { method: "POST", data: { target_mailbox_id: destination.id }, expected: 202 })).job;
+  const finish = async (destination, job) => eventually(() => call(destination.path + "/jobs/" + job.id), (result) => result.job.status === "completed", "The snooze restore did not finish");
+  const all = async (destination) => (await call(destination.path + "/messages?include_snoozed=true")).messages;
+  await t.test("future times and flags survive while expired, absent and null snoozes remain visible", async () => {
+    const destination = await target("Restored snoozes"), job = await start(destination);
+    await finish(destination, job);
+    const restored = await all(destination), snoozed = restored.find((entry) => entry.subject === "FutureSnooze");
+    assert.equal(restored.length, 4);
+    assert.equal(snoozed.snoozed_until, future); assert.equal(snoozed.is_read, 1); assert.equal(snoozed.is_starred, 1);
+    assert.equal(snoozed.folder_id, "inbox");
+    for (const subject of ["ExpiredSnooze", "LegacySnooze", "NoSnooze"]) assert.equal(restored.find((entry) => entry.subject === subject).snoozed_until, null);
+    assert.deepEqual((await call(destination.path + "/messages?snoozed_only=true")).messages.map((entry) => entry.id), [snoozed.id]);
+    assert.equal((await call(destination.path + "/messages")).messages.length, 3);
+    assert.equal((await call(destination.path + "/summary")).summary.snoozed, 1);
+    assert.equal((await call(base + "/messages/" + originals.find((entry) => entry.subject === "FutureSnooze").id)).message.snoozed_until, future);
+  });
+  await t.test("a restored reminder clears its stored timestamp automatically when due", async () => {
+    const destination = await target("Wake restored reminder"), deadline = Math.floor(Date.now() / 1000) + 6;
+    await bucket.put(futurePiece.key, JSON.stringify({ ...futurePiece.message, snoozed_until: deadline }));
+    const job = await start(destination); await finish(destination, job);
+    const snoozed = (await all(destination)).find((entry) => entry.subject === "FutureSnooze");
+    assert.equal(snoozed.snoozed_until, deadline);
+    const awake = await eventually(() => call(destination.path + "/messages/" + snoozed.id), (result) => result.message.snoozed_until === null, "The restored reminder did not run");
+    assert.ok(awake.message.version > snoozed.version);
+    assert.equal((await call(destination.path + "/messages?snoozed_only=true")).messages.length, 0);
+    assert.equal((await call(destination.path + "/messages")).messages.length, 4);
+    await bucket.put(futurePiece.key, JSON.stringify(futurePiece.message));
+  });
+  await t.test("partial restore retries preserve a changed snooze and rearm its current time", async () => {
+    const firstPiece = pieces[0], missingPiece = pieces[1];
+    await bucket.put(firstPiece.key, JSON.stringify({ ...firstPiece.message, snoozed_until: future }));
+    const missingBody = await (await bucket.get(missingPiece.message.body_r2_key)).arrayBuffer();
+    await bucket.delete(missingPiece.message.body_r2_key);
+    const destination = await target("Retried snooze"), job = await start(destination);
+    await eventually(() => call(destination.path + "/jobs/" + job.id), (result) => result.job.status === "failed", "The incomplete backup did not pause restoration");
+    const partial = (await all(destination)).find((entry) => entry.subject === firstPiece.message.subject);
+    assert.ok(partial); assert.equal(partial.snoozed_until, future);
+    const deadline = Math.floor(Date.now() / 1000) + 6;
+    const changed = (await call(destination.path + "/messages/" + partial.id, { method: "PATCH", data: { version: partial.version, snoozed_until: deadline } })).message;
+    await bucket.put(missingPiece.message.body_r2_key, missingBody);
+    await call(destination.path + "/jobs/" + job.id + "/retry", { method: "POST", expected: 202 });
+    await finish(destination, job);
+    const recovered = (await call(destination.path + "/messages/" + partial.id)).message;
+    assert.equal(recovered.snoozed_until, deadline); assert.equal(recovered.version, changed.version);
+    assert.equal((await all(destination)).length, 4);
+    await eventually(() => call(destination.path + "/messages/" + partial.id), (result) => result.message.snoozed_until === null, "The retried restore overwrote the current reminder schedule");
+  });
+});
 test("rich mail preserves signatures, inline images and quoted HTML through editing and restore", async (t) => {
   const { mf, call, admin, base, tokens, mailbox, draft, address } = await fixture(t, "6000000000", true);
   const bucket = await mf.getR2Bucket("MAIL_BUCKET");
