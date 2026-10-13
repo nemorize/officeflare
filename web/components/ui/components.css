@@ -240,7 +240,15 @@ textarea[data-ui="input"] { height: auto; min-height: 86px; resize: vertical; li
 [data-ui="input"][data-font="mono"] { font-family: ui-monospace, monospace; }
 [data-ui="toggle"][data-variant="ghost"] { border-color: transparent; background: transparent; }
 [data-ui="toggle"][data-variant="ghost"][data-pressed] { background: var(--ui-hover); }
+[data-ui="toggle"][data-variant="star"],
+[data-ui="toggle"][data-variant="star"]:hover { border-color: transparent; border-radius: 50%; background: transparent; color: var(--ui-muted); }
+[data-ui="toggle"][data-variant="star"][data-pressed] { background: transparent; color: var(--ui-text); }
 [data-ui="toggle"][data-variant="star"][data-pressed] svg { fill: currentColor; }
+[data-ui="toggle"][data-variant="star"]:focus-visible { background: var(--ui-hover); }
+[data-ui="toggle"][data-variant="star"]:active:not(:disabled):not([data-disabled]) { background: var(--ui-hover); }
+@media (hover: hover) and (pointer: fine) {
+  [data-ui="toggle"][data-variant="star"]:hover:not(:disabled):not([data-disabled]) { background: var(--ui-hover); }
+}
 [data-ui="button-group"] { display: inline-flex; align-items: stretch; gap: 0; width: fit-content; }
 [data-ui="button-group"] > [data-ui-button] { border-radius: 0; }
 [data-ui="button-group"] > [data-ui-button]:first-child { border-start-start-radius: 999px; border-end-start-radius: 999px; }
