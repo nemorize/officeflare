@@ -185,11 +185,25 @@ function MailList({
     [pages, setPages] = useState<(string | null)[]>(saved?.pages ?? [null]),
     [page, setPage] = useState(saved?.page ?? 0),
     [focus, setFocus] = useState(0),
+    [selectionMode, setSelectionMode] = useState(false),
     [discard, setDiscard] = useState(false);
   const failedSelections = useRef<Set<string> | null>(null);
   const scroller = useRef<HTMLDivElement>(null),
+    selectionButton = useRef<HTMLButtonElement>(null),
     selectedId = params.get("message"),
-    split = mail.preferences.reading_pane === "right";
+    split = mail.preferences.reading_pane === "right",
+    selecting = mobile && canWrite && (selectionMode || selected.length > 0);
+  const toggleSelected = (id: string) => {
+    if (mobile) setSelectionMode(true);
+    setSelected((old) =>
+      old.includes(id) ? old.filter((item) => item !== id) : [...old, id],
+    );
+  };
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelected([]);
+    selectionButton.current?.focus();
+  };
   const options = new URLSearchParams({ limit: "50" });
   if (
     !query &&
@@ -247,6 +261,10 @@ function MailList({
     if (!selectedId && scroller.current)
       scroller.current.scrollTop = snapshots.get(cacheKey)?.scroll ?? 0;
   }, [selectedId]);
+  useEffect(() => {
+    if (!mobile || !canWrite) setSelectionMode(false);
+    if (!canWrite) setSelected([]);
+  }, [mobile, canWrite]);
   const open = (id: string | null) => {
     const existing = snapshots.get(cacheKey);
     if (existing && scroller.current)
@@ -435,6 +453,7 @@ function MailList({
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (
+        event.defaultPrevented ||
         !mail.preferences.shortcuts ||
         event.ctrlKey ||
         event.metaKey ||
@@ -461,10 +480,17 @@ function MailList({
       const current =
         messages.find((message) => message.id === selectedId) ??
         messages[focus];
-      if (event.key === "Enter" && !selectedId && current)
-        current.draft_state === "editable"
-          ? mail.compose(current.id)
-          : open(current.id);
+      if (
+        event.key === "Enter" &&
+        !selectedId &&
+        current &&
+        !(event.target instanceof HTMLElement &&
+          event.target.closest("button,a,[role='checkbox']"))
+      ) {
+        if (selecting) toggleSelected(current.id);
+        else if (current.draft_state === "editable") mail.compose(current.id);
+        else open(current.id);
+      }
       if (
         event.key === "e" &&
         canWrite &&
@@ -476,11 +502,7 @@ function MailList({
           folder_id: "archive",
         });
       if (event.key === "x" && canWrite && current)
-        setSelected((old) =>
-          old.includes(current.id)
-            ? old.filter((id) => id !== current.id)
-            : [...old, current.id],
-        );
+        toggleSelected(current.id);
       if (event.key === "Escape" && selectedId) open(null);
       if (event.key === "r" && selectedId)
         window.dispatchEvent(
@@ -495,6 +517,9 @@ function MailList({
     focus,
     selectedId,
     selected,
+    selecting,
+    mobile,
+    canWrite,
     action.busy,
   ]);
   const actions = (rows: Message[]) =>
@@ -747,22 +772,44 @@ function MailList({
     query.match(/-?(?:[a-z]+:)?”[^”]*”|-?(?:[a-z]+:)?"[^"]*"|\S+/g) ?? [];
   return (
     <div
-      className={`mail-inbox mail-density-${mail.preferences.density}${split ? " mail-split-view" : ""}${selectedId ? " mail-has-message" : ""}`}
+      className={`mail-inbox mail-density-${mail.preferences.density}${split ? " mail-split-view" : ""}${selectedId ? " mail-has-message" : ""}${selecting ? " mail-selection-mode" : ""}`}
     >
-      <section className="mail-list-pane" aria-label={`${title} messages`}>
+      <section
+        className="mail-list-pane"
+        aria-label={`${title} messages`}
+        onKeyDown={(event) => {
+          if (
+            event.key === "Escape" &&
+            selecting &&
+            !event.defaultPrevented &&
+            !(event.target instanceof HTMLElement &&
+              event.target.closest("[role='menu'],[role='dialog']"))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            exitSelection();
+          }
+        }}
+      >
         <div className="mail-list-toolbar">
-          <MailCheckbox hitArea
-            aria-label="Select all messages on this page"
-            checked={messages.length > 0 && selected.length === messages.length}
-            indeterminate={
-              selected.length > 0 && selected.length < messages.length
-            }
-            disabled={!canWrite || !messages.length}
-            onCheckedChange={(checked) =>
-              setSelected(checked ? messages.map((m) => m.id) : [])
-            }
-          />
-          {selected.length ? (
+          {(!mobile || selecting) && (
+            <MailCheckbox hitArea
+              aria-label="Select all messages on this page"
+              checked={messages.length > 0 && selected.length === messages.length}
+              indeterminate={
+                selected.length > 0 && selected.length < messages.length
+              }
+              disabled={!canWrite || !messages.length}
+              onCheckedChange={(checked) =>
+                setSelected(checked ? messages.map((m) => m.id) : [])
+              }
+            />
+          )}
+          {selecting ? (
+            <span className="mail-selection-count" role="status">
+              {selected.length ? `${selected.length} selected` : "Select messages"}
+            </span>
+          ) : selected.length ? (
             <>
               <span className="mail-selection-count">
                 {selected.length} selected
@@ -783,35 +830,55 @@ function MailList({
             </>
           )}
           <div className="mail-toolbar-spacer" />
-          <span className="mail-page-range">
-            {messages.length
-              ? `${page * 50 + 1}–${page * 50 + messages.length}`
-              : ""}
-          </span>
-          <MailIconButton
-            icon="back"
-            label="Previous page"
-            disabled={page === 0 || resource.loading}
-            onClick={() => {
-              setPage(page - 1);
-              setSelected([]);
-              scroller.current?.scrollTo(0, 0);
-            }}
-          />
-          <MailIconButton
-            icon="arrow"
-            label="Next page"
-            disabled={!resource.data?.next_cursor || resource.loading}
-            onClick={() => {
-              setPages([
-                ...pages.slice(0, page + 1),
-                resource.data!.next_cursor,
-              ]);
-              setPage(page + 1);
-              setSelected([]);
-              scroller.current?.scrollTo(0, 0);
-            }}
-          />
+          {mobile && canWrite && (
+            <Button
+              ref={selectionButton}
+              variant="ghost"
+              size="touch"
+              aria-label={selecting ? "Exit selection mode" : "Select messages"}
+              aria-pressed={selecting}
+              disabled={!messages.length && !selecting}
+              onClick={() => {
+                if (selecting) exitSelection();
+                else setSelectionMode(true);
+              }}
+            >
+              {selecting ? "Done" : "Select"}
+            </Button>
+          )}
+          {!selecting && (
+            <>
+              <span className="mail-page-range">
+                {messages.length
+                  ? `${page * 50 + 1}–${page * 50 + messages.length}`
+                  : ""}
+              </span>
+              <MailIconButton
+                icon="back"
+                label="Previous page"
+                disabled={page === 0 || resource.loading}
+                onClick={() => {
+                  setPage(page - 1);
+                  setSelected([]);
+                  scroller.current?.scrollTo(0, 0);
+                }}
+              />
+              <MailIconButton
+                icon="arrow"
+                label="Next page"
+                disabled={!resource.data?.next_cursor || resource.loading}
+                onClick={() => {
+                  setPages([
+                    ...pages.slice(0, page + 1),
+                    resource.data!.next_cursor,
+                  ]);
+                  setPage(page + 1);
+                  setSelected([]);
+                  scroller.current?.scrollTo(0, 0);
+                }}
+              />
+            </>
+          )}
         </div>
         {section === "scheduled" && !query && (
           <p className="mail-outbox-hint">
@@ -866,34 +933,53 @@ function MailList({
               tabIndex={0}
               onFocus={() => setFocus(index)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && e.target === e.currentTarget)
-                  message.draft_state === "editable"
-                    ? mail.compose(message.id)
-                    : open(message.id);
+                if (e.key === "Enter" && e.target === e.currentTarget) {
+                  e.stopPropagation();
+                  if (selecting) toggleSelected(message.id);
+                  else if (message.draft_state === "editable") mail.compose(message.id);
+                  else open(message.id);
+                }
               }}
               className={`mail-message-row${!message.is_read ? " mail-unread" : ""}${selected.includes(message.id) ? " mail-checked" : ""}${selectedId === message.id ? " mail-selected" : ""}`}
             >
-              <MailCheckbox hitArea
-                aria-label={`Select ${message.subject || "Untitled message"}`}
-                checked={selected.includes(message.id)}
-                disabled={!canWrite}
-                onCheckedChange={(checked) =>
-                  setSelected(
-                    checked
-                      ? [...selected, message.id]
-                      : selected.filter((id) => id !== message.id),
-                  )
-                }
-              />
-              <Toggle data-size="icon" data-variant="star" className="mail-star" aria-label={message.is_starred ? "Remove star" : "Add star"} pressed={!!message.is_starred} disabled={!canWrite || action.busy} onPressedChange={() => run([message], { is_starred: !message.is_starred })}><Icon name="star" /></Toggle>
+              {(!mobile || selecting) && (
+                <MailCheckbox hitArea
+                  aria-label={`Select ${message.subject || "Untitled message"}`}
+                  checked={selected.includes(message.id)}
+                  disabled={!canWrite}
+                  onCheckedChange={(checked) =>
+                    setSelected(
+                      checked
+                        ? [...selected, message.id]
+                        : selected.filter((id) => id !== message.id),
+                    )
+                  }
+                />
+              )}
+              {!selecting && (
+                <Toggle
+                  data-size="icon"
+                  data-variant="star"
+                  className="mail-star"
+                  aria-label={message.is_starred ? "Remove star" : "Add star"}
+                  pressed={!!message.is_starred}
+                  disabled={!canWrite || action.busy}
+                  onPressedChange={() =>
+                    run([message], { is_starred: !message.is_starred })
+                  }
+                >
+                  <Icon name="star" />
+                </Toggle>
+              )}
               <Button
                 variant="plain"
                 className="mail-message-summary"
-                onClick={() =>
-                  message.draft_state === "editable"
-                    ? mail.compose(message.id)
-                    : open(message.id)
-                }
+                aria-pressed={selecting ? selected.includes(message.id) : undefined}
+                onClick={() => {
+                  if (selecting) toggleSelected(message.id);
+                  else if (message.draft_state === "editable") mail.compose(message.id);
+                  else open(message.id);
+                }}
               >
                 <span className="mail-row-sender">
                   {message.draft_state === "editable" ? (
@@ -997,6 +1083,11 @@ function MailList({
             </div>
           )}
         </div>
+        {selecting && selectedRows.length > 0 && (
+          <div className="mail-mobile-selection-actions" role="toolbar" aria-label="Selected message actions">
+            {actions(selectedRows)}
+          </div>
+        )}
       </section>
       {selectedId && (
         <div className="mail-reader-pane">
