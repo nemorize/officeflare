@@ -13,9 +13,9 @@ const itemId = (c: Parameters<typeof requireItem>[0]) => identifier(c.req.param(
 const expected = (data: Record<string, unknown>) => integer(data.version, "version", 1);
 sharing.get("/:itemId/permissions", async c => {
   const item = await requireItem(c, itemId(c), "owner");
-  const grants = await rows(c.env, `SELECT p.item_id,p.user_id,p.role,p.expires_at,p.created_at,p.created_by,u.display_name,u.email_address,d.name source_name,CASE WHEN p.item_id=? THEN 0 ELSE 1 END inherited
+  const grants = await rows<{ item_id: string; user_id: string; role: string; expires_at: number | null; created_at: number; created_by: string; display_name: string | null; email_address: string; source_name: string; inherited: number; has_profile_image: number; profile_image_version: string | null }>(c.env, `SELECT p.item_id,p.user_id,p.role,p.expires_at,p.created_at,p.created_by,u.display_name,u.email_address,u.profile_image_key IS NOT NULL has_profile_image,u.profile_image_key profile_image_version,d.name source_name,CASE WHEN p.item_id=? THEN 0 ELSE 1 END inherited
     FROM drive_permissions p JOIN users u ON u.id=p.user_id JOIN drive_items d ON d.id=p.item_id WHERE p.item_id IN (${ancestors("?")} SELECT id FROM ancestors) AND (p.expires_at IS NULL OR p.expires_at>unixepoch()) ORDER BY p.item_id,p.user_id`, item.id, item.id);
-  return c.json({ owner_user_id: item.owner_user_id, permissions: grants });
+  return c.json({ owner_user_id: item.owner_user_id, permissions: grants.map(grant => ({ ...grant, has_profile_image: !!grant.has_profile_image, profile_image_version: grant.profile_image_version?.split("/").at(-1) ?? null })) });
 });
 sharing.put("/:itemId/permissions/:userId", async c => {
   const data = await body(c, ["version", "role", "expires_at"]), id = itemId(c), item = await requireItem(c, id, "owner"), recipient = identifier(c.req.param("userId"), "user_id");

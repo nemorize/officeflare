@@ -7,8 +7,7 @@
 .workspace-rail-link { display: grid; place-items: center; width: 32px; height: 32px; color: var(--ui-muted); border-radius: 9px; }
 .workspace-rail-link:hover { background: var(--ui-hover); }
 .workspace-rail-link[aria-current] { background: #e9eaea; color: var(--ui-text); }
-.workspace-rail > .notification-bell { margin-block-start: auto; }
-.workspace-rail .workspace-rail-account { margin-block-start: 0; }
+.workspace-rail-footer { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-block-start: auto; }
 .workspace-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--ui-primary); color: white; font-size: 11px; font-weight: 500; }
 .workspace-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .workspace-sidebar { display: flex; flex-direction: column; background: var(--ui-sidebar); border-inline-end: 1px solid var(--ui-border); min-height: 0; }

@@ -1,9 +1,9 @@
-import { MailSettingsNav } from "../components/mail-settings-nav";
+import { MailSettingsLayout } from "../components/mail-settings-nav";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { bytes, mailboxPath, mailDate, scheduledTime, type MailRight } from "../lib/mail";
 import { useMail } from "../components/mail-context";
-import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailFieldset } from "../components/mail-common";
+import { MailField, MailInput, MailModal, MailNotice, MailSection, MailState, useMailAction, useMailResource, MailForm, MailFieldset } from "../components/mail-common";
 import { Check, Confirm } from "../components/console-shared";
 import { Button } from "../components/ui";
 const scopeLabels = { read: "Read", write: "Edit", send: "Send" };
@@ -11,7 +11,7 @@ interface ApiKey { id: string; name: string; expires_at: number; revoked_at: num
 interface Scope { key_id?: string; mailbox_id: string; action: Exclude<MailRight, "manage">; }
 export function MailIntegrationsPage() {
   const mail = useMail();
-  return <div className="mail-manage-page" key={mail.box?.id}><MailSettingsNav/><MailPageHeader title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions." /><ApiKeys />{mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>}<Protocols /><Capabilities /></div>;
+  return <div className="mail-manage-page" key={mail.box?.id}><MailSettingsLayout title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions."><ApiKeys />{mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>}<Protocols /><Capabilities /></MailSettingsLayout></div>;
 }
 function Secret({ title, value, onClose }: { title: string; value: string; onClose: () => void }) {
   const action = useMailAction(), [copied, setCopied] = useState(false);

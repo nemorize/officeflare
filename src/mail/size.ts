@@ -15,13 +15,37 @@ export interface MessageSizeInput {
   cc?: string[];
   bcc?: string[];
   headers?: Record<string, string>;
-  attachments: { size_bytes: number; filename: string; content_type: string; content_id?: string | null }[];
+  attachments: { size_bytes: number; filename: string; content_type: string; content_id?: string | null; disposition?: string }[];
 }
-export function estimatedMessageBytes(message: MessageSizeInput) {
+export interface MessageSizeBreakdown {
+  subject: number;
+  body: number;
+  images: number;
+  attachments: number;
+  headers: number;
+  total: number;
+}
+export function messageSizeBreakdown(message: MessageSizeInput): MessageSizeBreakdown {
   const utf8 = (value: string) => new TextEncoder().encode(value).length;
   const headers = [message.subject, message.from, message.reply_to, ...(message.to ?? []), ...(message.cc ?? []), ...(message.bcc ?? []), ...Object.entries(message.headers ?? {}).flat()].join("\r\n");
-  return envelopeBytes + utf8(headers) * 3 + encodedMailBytes(utf8(message.text)) + encodedMailBytes(utf8(message.html)) +
-    message.attachments.reduce((total, file) => total + encodedMailBytes(file.size_bytes) + 1024 + utf8(file.filename + file.content_type + (file.content_id ?? "")) * 3, 0);
+  const subject = utf8(message.subject ?? "") * 3;
+  const size: MessageSizeBreakdown = {
+    subject,
+    body: encodedMailBytes(utf8(message.text)) + encodedMailBytes(utf8(message.html)),
+    images: 0,
+    attachments: 0,
+    headers: envelopeBytes + utf8(headers) * 3 - subject,
+    total: 0,
+  };
+  for (const file of message.attachments) {
+    const key = file.disposition === "inline" || file.content_id ? "images" : "attachments";
+    size[key] += encodedMailBytes(file.size_bytes) + 1024 + utf8(file.filename + file.content_type + (file.content_id ?? "")) * 3;
+  }
+  size.total = size.subject + size.body + size.images + size.attachments + size.headers;
+  return size;
+}
+export function estimatedMessageBytes(message: MessageSizeInput) {
+  return messageSizeBreakdown(message).total;
 }
 export function maxAttachmentBytes(maxSendBytes: number) {
   let low = 0, high = maxSendBytes;

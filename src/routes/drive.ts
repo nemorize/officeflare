@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
 import type { AppEnv } from "../auth/types";
-import { access, activeUser, driveEnabled, first, rows, writableOwner } from "../drive/access";
-import { text } from "../drive/input";
+import { access, activeUser, driveEnabled, first, identity, rows, writableOwner } from "../drive/access";
+import { fail, identifier, text } from "../drive/input";
 import { collaboration } from "../drive/collaboration";
 import { privateContent } from "../drive/content";
 import { cursor, readCursor } from "../drive/cursor";
@@ -15,6 +15,7 @@ import { PART_BYTES } from "../drive/types";
 import { adminDrive } from "../drive/admin";
 import { requireDriveAction, settings } from "../drive/policy";
 import { permissionsFor } from "../authorization/access";
+import { profileImageResponse } from "../profile/image-response";
 
 const drive = new Hono<AppEnv>();
 drive.route("/admin", adminDrive);
@@ -31,6 +32,20 @@ drive.get("/capabilities", async c => {
     write_locked: !await first(c.env, `SELECT 1 WHERE ${writableOwner(c.get("identity").user.id).sql}`, ...writableOwner(c.get("identity").user.id).args),
     permissions: (await permissionsFor(c.get("db"), c.get("identity").user.id)).filter(key => key.startsWith("drive.")),
     account_status: (quota as typeof quota & { status?: string }).status ?? "active" });
+});
+drive.get("/people/:userId/profile-image", async c => {
+  const ownerId = identifier(c.req.param("userId"), "userId"), auth = identity(c), read = access(c.get("identity").user.id), owned = access(c.get("identity").user.id, "owner");
+  const query = `SELECT u.id,u.profile_image_key FROM users u WHERE u.id=? AND ${activeUser("u")} AND ${driveEnabled("u")} AND ${auth.sql}
+    AND (EXISTS(SELECT 1 FROM drive_items d WHERE d.owner_user_id=u.id AND ${read.sql})
+      OR EXISTS(SELECT 1 FROM drive_permissions p JOIN drive_items d ON d.id=p.item_id
+        WHERE p.user_id=u.id AND (p.expires_at IS NULL OR p.expires_at>unixepoch()) AND ${owned.sql}))`;
+  const args = [ownerId, ...auth.args, ...read.args, ...owned.args];
+  const owner = await first<{ id: string; profile_image_key: string | null }>(c.env, query, ...args);
+  if (!owner) fail(404, "No profile image");
+  const response = await profileImageResponse(c, owner);
+  if (!await first(c.env, `${query} AND u.profile_image_key=?`, ...args, owner.profile_image_key)) fail(404, "No profile image");
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 });
 drive.get("/people", async c => {
   const q = text(c.req.query("q") ?? "", "q", 255).trim();

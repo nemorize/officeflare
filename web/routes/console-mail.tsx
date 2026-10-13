@@ -3,25 +3,25 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api } from "../lib/api";
 import { type DomainProvider, type Domain, type Mailbox } from "../lib/mail";
 import { useAccess } from "../components/console-access";
-import { MailField, MailInput, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailSelect, MailFieldset } from "../components/mail-common";
+import { MailField, MailInput, MailNotice, MailSection, MailState, useMailAction, useMailResource, MailForm, MailSelect, MailFieldset } from "../components/mail-common";
 import { MailRules } from "../components/mail-rules";
 import { Button, useNotifications } from "../components/ui";
-import { Check } from "../components/console-shared";
+import { Check, ConsolePageHeader } from "../components/console-shared";
 import { SharedMailboxes } from "./console-shared-mailboxes";
 import "./console.css";
 import "./mail.css";
-export function MailConsolePage({ page }: { page: string }) { return <div className="mail-manage-page mail-console-page">{page === "mailboxes" ? <SharedMailboxes /> : <Domains />}</div>; }
+export function MailConsolePage({ page }: { page: string }) { return <section className="account-page console-page mail-console-page">{page === "mailboxes" ? <SharedMailboxes /> : <Domains />}</section>; }
 function useMailboxDirectory() {
   const permissions = useAccess().permissions;
   return useMailResource<{ mailboxes: Mailbox[] }>(permissions.includes("admin.mail.mailboxes.read") ? "/api/mail/mailboxes?all=true" : permissions.includes("mail.access") ? "/api/mail/mailboxes" : null);
 }
 function Domains() {
   const permissions = useAccess().permissions, resource = useMailResource<{ domains: Domain[]; providers: DomainProvider[] }>("/api/mail/domains"), manage = permissions.includes("admin.mail.domains.manage");
-  return <><MailPageHeader title="Mail domains" description="Configure common domains, delivery providers and inbound routing.">
+  return <><ConsolePageHeader title="Mail domains" description="Configure common domains, delivery providers and inbound routing.">
     {manage && <Button nativeButton={false} render={<Link to="/console/mail/domains/new" />} variant="primary">Register domain</Button>}
-  </MailPageHeader><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
+  </ConsolePageHeader><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
     <div className="mail-domain-grid">{resource.data?.domains.map((domain) => <article key={domain.id} className="mail-domain-card">
-      <h2>{domain.name}{!!domain.is_default && <span className="mail-badge">Default</span>}</h2><p><span className="mail-badge">Receive {domain.inbound_enabled ? "enabled" : "disabled"}</span><span className="mail-badge">Send {domain.outbound_enabled ? "enabled" : "disabled"}</span></p>
+      <h2><span>{domain.name}</span>{!!domain.is_default && <span className="mail-badge mail-domain-default">Default</span>}</h2><p><span className="mail-badge">Receive {domain.inbound_enabled ? "enabled" : "disabled"}</span><span className="mail-badge">Send {domain.outbound_enabled ? "enabled" : "disabled"}</span></p>
       <p className="mail-hint">Receiving: {domain.inbound_provider ?? "No provider"} · Sending: {domain.outbound_provider ?? "No provider"}</p>
       <Button nativeButton={false} render={<Link to={`/console/mail/domains/${encodeURIComponent(domain.id)}`} />} size="sm">{manage ? "Configure domain" : "View domain"}</Button>
     </article>)}</div>
@@ -31,14 +31,14 @@ function Domains() {
 export function MailDomainEditorPage({ creating = false }: { creating?: boolean }) {
   const { id } = useParams(), navigate = useNavigate(), notify = useNotifications(), permissions = useAccess().permissions;
   const resource = useMailResource<{ domains: Domain[]; providers: DomainProvider[] }>("/api/mail/domains"), boxes = useMailboxDirectory(), domain = resource.data?.domains.find((entry) => entry.id === id), manage = permissions.includes("admin.mail.domains.manage");
-  return <div className="mail-manage-page mail-console-page"><Link to="/console/mail/domains" className="console-back">← Mail domains</Link>
-    <MailPageHeader title={creating ? "Register mail domain" : domain?.name ?? "Mail domain"} description="Configure the shared domain, delivery providers and inbound routing." />
+  return <section className="account-page console-page console-detail-page mail-console-page"><Link to="/console/mail/domains" className="console-back">← Mail domains</Link>
+    <ConsolePageHeader title={creating ? "Register mail domain" : domain?.name ?? "Mail domain"} description="Configure the shared domain, delivery providers and inbound routing." />
     <MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
     {resource.data && !creating && !domain && <MailNotice error="This mail domain could not be found." />}
     {resource.data && (creating || domain) && <><DomainEditor key={creating ? "new" : domain!.id} existing={domain} providers={resource.data.providers} boxes={boxes.data?.mailboxes ?? []} canManage={manage} defaultDomain={creating ? !resource.data.domains.some((entry) => entry.is_default) : !!domain?.is_default} onSaved={(domainId) => { notify.success(creating ? "Domain registered." : "Domain settings saved."); if (creating) navigate(`/console/mail/domains/${encodeURIComponent(domainId)}`); else resource.reload(); }} />
       {domain && <><MailSection title="Addresses" description="Manage personal addresses with users and team addresses with shared mailboxes."><div className="mail-actions">{permissions.includes("admin.users.read") && <Button nativeButton={false} render={<Link to="/console/users" />}>Manage users</Button>}{permissions.includes("admin.mail.mailboxes.read") && <Button nativeButton={false} render={<Link to="/console/mail/mailboxes" />}>Shared mailboxes</Button>}</div></MailSection><details className="console-role-summary"><summary>Advanced inbound routing</summary><MailRules path={`/api/mail/domains/${domain.id}/rules`} routing canManage={manage} /></details></>}
     </>}
-  </div>;
+  </section>;
 }
 function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, onSaved }: { existing?: Domain; providers: DomainProvider[]; boxes: Mailbox[]; canManage: boolean; defaultDomain: boolean; onSaved: (id: string) => void }) {
   const action = useMailAction(), setup = useMailResource<{ receive: { action: string }; send: { action: string }; verification: string }>(existing ? `/api/mail/domains/${existing.id}/setup` : null);

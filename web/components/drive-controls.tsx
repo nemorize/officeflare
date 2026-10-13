@@ -25,6 +25,7 @@ import {
 import { api, ApiError, errorMessage } from "../lib/api";
 import type { DriveItem } from "../lib/drive";
 import { fileKind } from "../lib/drive";
+import { LoadingSkeleton } from "./loading-skeleton";
 import "../routes/drive.css";
 
 export const driveFailure = (failure: unknown) =>
@@ -217,10 +218,12 @@ export function DriveState({
   loading,
   error,
   retry,
+  layout,
 }: {
   loading: boolean;
   error: string;
   retry?: () => void;
+  layout?: "list" | "grid";
 }) {
   return error ? (
     <div className="drive-state">
@@ -230,10 +233,9 @@ export function DriveState({
       {retry && <Button onClick={retry}>Try again</Button>}
     </div>
   ) : loading ? (
-    <div className="drive-state" role="status">
-      <span className="drive-spinner" />
-      <p>Loading your files…</p>
-    </div>
+    layout ? <div className={`drive-files-scroll drive-files-skeleton drive-layout-${layout}`}>
+      <LoadingSkeleton kind="list" label="Loading your files…" rows={8} />
+    </div> : <LoadingSkeleton label="Loading files…" />
   ) : null;
 }
 export function useDriveCollection<T>(

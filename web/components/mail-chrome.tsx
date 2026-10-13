@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useMail, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
-import { useAccess } from "./console-access";
 import { WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { CheckboxLabel,
   Button,
@@ -22,9 +21,25 @@ import {
   MailCheckbox,
   useMailMobile,
 } from "./mail-common";
+export function MailSettingsButton() {
+  const mail = useMail();
+  return (
+    <MailIconButton
+      icon="settings"
+      label="Mail settings"
+      nativeButton={false}
+      render={
+        <NavLink
+          to={mail.href("/mail/settings")}
+          onClick={() => mail.setMobileMenu(false)}
+        />
+      }
+    />
+  );
+}
+
 export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
-  const mobile = useMailMobile(),
-    access = useAccess();
+  const mobile = useMailMobile();
   const mail = useMail(),
     navigate = useNavigate(),
     location = useLocation(),
@@ -32,7 +47,6 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
     searchInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState(params.get("q") ?? ""),
     [filters, setFilters] = useState(false),
-    [settings, setSettings] = useState(false),
     [filterText, setFilterText] = useState("");
   const [from, setFrom] = useState(""),
     [to, setTo] = useState(""),
@@ -266,18 +280,6 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           </Popover.Root>
         )}
       </SearchField>
-      <div className="mail-topbar-identity">
-        {mail.box?.kind === "shared" && (
-          <span className="mail-badge">Shared</span>
-        )}
-        <span>{mail.box?.name ?? "Mail"}</span>
-      </div>
-      <MailIconButton
-        className="mail-topbar-settings"
-        icon="settings"
-        label="Quick settings"
-        onClick={() => setSettings(true)}
-      />
       <Drawer.Provider>
         <Drawer.Root
           open={filters && mobile}
@@ -304,44 +306,13 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             {filterForm}
           </DrawerPopup>
         </Drawer.Root>
-        <WorkspaceNavigationDrawer open={mail.mobileMenu} onOpenChange={mail.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailIconButton icon="settings" label="Quick settings" onClick={() => { mail.setMobileMenu(false); setSettings(true); }} />}><MailSidebar /></WorkspaceNavigationDrawer>
-        <Drawer.Root
-          open={settings}
-          onOpenChange={setSettings}
-          swipeDirection="right"
-        >
-          <DrawerPopup side="right"
-            className="mail-settings-drawer"
-            viewportProps={{
-              className: "mail-drawer-viewport mail-drawer-right",
-            }}
-          >
-            <div className="mail-drawer-heading">
-              <Drawer.Title>Quick settings</Drawer.Title>
-              <MailIconButton
-                icon="close"
-                label="Close settings"
-                onClick={() => setSettings(false)}
-              />
-            </div>
-            <Drawer.Description>
-              Make your mailbox work the way you do.
-            </Drawer.Description>
-            <MailPreferenceFields onNavigate={() => setSettings(false)} />
-          </DrawerPopup>
-        </Drawer.Root>
+        <WorkspaceNavigationDrawer open={mail.mobileMenu} onOpenChange={mail.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailSettingsButton />}><MailSidebar /></WorkspaceNavigationDrawer>
       </Drawer.Provider>
     </header>
   );
 }
 
-export function MailPreferenceFields({
-  showLink = true,
-  onNavigate,
-}: {
-  showLink?: boolean;
-  onNavigate?: () => void;
-}) {
+export function MailPreferenceFields() {
   const mail = useMail();
   return (
     <div className="mail-preference-fields">
@@ -415,17 +386,6 @@ export function MailPreferenceFields({
         Your preferences apply only to your account. Folder and mailbox settings
         are shared.
       </p>
-      {showLink && (
-        <Button
-          nativeButton={false}
-          render={
-            <Link to={mail.href("/mail/settings")} onClick={onNavigate} />
-          }
-        >
-          See all mail settings
-          <Icon name="arrow" />
-        </Button>
-      )}
     </div>
   );
 }

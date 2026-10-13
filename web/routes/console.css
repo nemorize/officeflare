@@ -4,7 +4,7 @@
 .console-page-header > button, .console-page-header > a { flex-shrink: 0; }
 .console-back { display: inline-block; color: var(--ui-muted); font-size: 12px; margin-block-end: 18px; }
 .console-list-panel { padding: 0; overflow: hidden; }
-.console-list-panel > .account-loading, .console-list-panel > .account-notice { margin: 24px; }
+.console-list-panel > .account-notice { margin: 24px; }
 .console-list-panel > button { margin: 0 24px 24px; }
 .console-table-scroll { overflow-x: auto; }
 .console-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
@@ -79,6 +79,7 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
 
 .console-mail-address { margin: 0; }
 .console-mail-delivery { margin-block-start: 18px; }
+.console-mail-access > .mail-hint { margin-block: 12px 16px; }
 .console-mail-address .mail-field { margin: 0; }
 .console-mail-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-block: 12px; }
 .console-mail-summary > div { min-width: 0; }
@@ -86,10 +87,15 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
 .console-mail-summary h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .console-mail-summary > [data-ui="button"] { flex-shrink: 0; }
 .console-mail-aliases { margin-block-start: 24px; padding-block-start: 12px; border-block-start: 1px solid var(--ui-border); }
+.console-mail-alias { border-block-end: 1px solid var(--ui-border); }
+.console-mail-alias:last-child { border-block-end: 0; }
+.console-mail-alias > .mail-record { border-block-end: 0; }
+.console-mail-alias > .mail-form { padding-block-end: 18px; }
 .console-mail-members { display: grid; gap: 16px; max-height: 440px; overflow-y: auto; margin-block: 18px; padding-inline-end: 4px; }
 .console-mail-member { display: grid; grid-template-columns: minmax(0, 1fr) 200px; align-items: center; gap: 12px; }
 .console-mail-custom-rights { grid-column: 1 / -1; display: flex; gap: 16px; flex-wrap: wrap; padding-inline-start: 30px; }
-.console-role-summary > summary { cursor: pointer; font-size: 12px; color: var(--ui-text); }
+.console-role-summary > summary, .console-mail-primary-delivery > summary { cursor: pointer; font-size: 12px; color: var(--ui-text); }
 .console-role-summary > .console-role-options { margin-block-start: 18px; }
+.console-account-security > h3 { font-size: 12px; font-weight: 500; }
 .account-panel + .mail-section, .mail-section + form { margin-block-start: 24px; }
 @media (max-width: 640px) { .console-mail-summary { align-items: flex-start; flex-wrap: wrap; } .console-mail-member { grid-template-columns: minmax(0, 1fr); } .console-mail-member > .mail-select { margin-inline-start: 30px; width: calc(100% - 30px); } }

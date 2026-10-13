@@ -19,6 +19,7 @@ import {
   useNotifications,
 } from "../components/ui";
 import { useDrive, DriveNewMenu } from "../components/drive-context";
+import { DriveOwner, DriveOwnerPhotosProvider } from "../components/drive-owner";
 import {
   DriveField,
   DriveCheckbox,
@@ -630,6 +631,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         </div>
         <DriveNotice error={action.error} />
         <DriveState
+          layout={layout}
           loading={
             collection.loading ||
             (!!folder && folderResource.loading && !folderResource.data)
@@ -708,7 +710,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           </div>
         )}
         {!collection.loading && !!collection.items.length && (
-          <div className={`drive-files-scroll drive-layout-${layout}`}>
+          <DriveOwnerPhotosProvider><div className={`drive-files-scroll drive-layout-${layout}`}>
             <div
               className="drive-file-grid"
               role="grid"
@@ -870,20 +872,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                         </div>
                       )}
                       <div className="drive-row-owner" role="gridcell">
-                        <span className="drive-owner-avatar">
-                          {(
-                            item.owner?.display_name ||
-                            item.owner?.email_address ||
-                            "U"
-                          )
-                            .slice(0, 1)
-                            .toUpperCase()}
-                        </span>
-                        {item.effective_role === "owner"
-                          ? "me"
-                          : item.owner?.display_name ||
-                            item.owner?.email_address ||
-                            "Shared account"}
+                        <DriveOwner item={item} />
                       </div>
                       <div className="drive-row-date" role="gridcell">
                         {driveDate(
@@ -936,7 +925,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             <DriveNotice
               error={collection.items.length ? collection.error : ""}
             />
-          </div>
+          </div></DriveOwnerPhotosProvider>
         )}
       </div>
       {detailsOpen && selectedId && (

@@ -72,9 +72,6 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
         ) : (
           <p>Checking storage…</p>
         )}
-        <span className="drive-storage-hint">
-          File versions count toward storage.
-        </span>
       </div>
     </div>
   );

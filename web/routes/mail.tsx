@@ -522,52 +522,55 @@ function MailList({
     canWrite,
     action.busy,
   ]);
-  const actions = (rows: Message[]) =>
+  const actions = (rows: Message[], messageActions?: ReactNode) =>
     section === "scheduled" ? (
-      <Button
-        size="sm"
-        disabled={
-          action.busy ||
-          !rows.length ||
-          rows.some((row) => !cancelableSubmission(row.submission_status ?? "")) ||
-          !mail.box!.access?.send
-        }
-        onClick={() => {
-          void action.run(async () => {
-            let failed = 0;
-            for (const row of rows) {
-              try {
-                const { message } = await api<{ message: MessageDetail }>(
-                  `${path}/messages/${row.id}`,
-                );
-                const pending = message.submissions.find((submission) =>
-                  ["scheduled", "queued", "retry_wait"].includes(
-                    submission.status,
-                  ),
-                );
-                if (!pending) throw new Error("Send is no longer pending");
-                await api(`${path}/submissions/${pending.id}/cancel`, {
-                  method: "POST",
-                });
-              } catch {
-                failed++;
+      <>
+        <Button
+          size="sm"
+          disabled={
+            action.busy ||
+            !rows.length ||
+            rows.some((row) => !cancelableSubmission(row.submission_status ?? "")) ||
+            !mail.box!.access?.send
+          }
+          onClick={() => {
+            void action.run(async () => {
+              let failed = 0;
+              for (const row of rows) {
+                try {
+                  const { message } = await api<{ message: MessageDetail }>(
+                    `${path}/messages/${row.id}`,
+                  );
+                  const pending = message.submissions.find((submission) =>
+                    ["scheduled", "queued", "retry_wait"].includes(
+                      submission.status,
+                    ),
+                  );
+                  if (!pending) throw new Error("Send is no longer pending");
+                  await api(`${path}/submissions/${pending.id}/cancel`, {
+                    method: "POST",
+                  });
+                } catch {
+                  failed++;
+                }
               }
-            }
-            mail.refresh();
-            setSelected([]);
-            if (failed)
-              throw new Error(
-                `${failed} sends could not be canceled. They may already be processing.`,
+              mail.refresh();
+              setSelected([]);
+              if (failed)
+                throw new Error(
+                  `${failed} sends could not be canceled. They may already be processing.`,
+                );
+              mail.feedback(
+                "Pending sends canceled. Messages moved to Drafts.",
               );
-            mail.feedback(
-              "Pending sends canceled. Messages moved to Drafts.",
-            );
-          });
-        }}
-      >
-        <Icon name="close" />
-        Cancel send
-      </Button>
+            });
+          }}
+        >
+          <Icon name="close" />
+          Cancel send
+        </Button>
+        {messageActions && <MailMenu>{messageActions}</MailMenu>}
+      </>
     ) : (
       <>
         <MailIconButton
@@ -662,15 +665,17 @@ function MailList({
         <MailMenu>
           {mobile && (
             <>
-              <Menu.Item
-                disabled={!canWrite || action.busy}
-                onClick={() =>
-                  run(rows, { is_read: !rows.every((m) => m.is_read) })
-                }
-              >
-                <Icon name="mail" />
-                {rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
-              </Menu.Item>
+              {!messageActions && (
+                <Menu.Item
+                  disabled={!canWrite || action.busy}
+                  onClick={() =>
+                    run(rows, { is_read: !rows.every((m) => m.is_read) })
+                  }
+                >
+                  <Icon name="mail" />
+                  {rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
+                </Menu.Item>
+              )}
               <Menu.SubmenuRoot>
                 <Menu.SubmenuTrigger>
                   <Icon name="folder" />
@@ -763,6 +768,12 @@ function MailList({
           >
             Report spam
           </Menu.Item>
+          {messageActions && (
+            <>
+              <Menu.Separator />
+              {messageActions}
+            </>
+          )}
         </MailMenu>
       </>
     );
@@ -1095,7 +1106,9 @@ function MailList({
             key={`${mail.box!.id}:${selectedId}`}
             id={selectedId}
             actions={
-              active && !active.draft_owner_id ? actions([active]) : undefined
+              active && !active.draft_owner_id
+                ? (messageActions) => actions([active], messageActions)
+                : undefined
             }
             actionError={action.error}
             onClose={() => open(null)}

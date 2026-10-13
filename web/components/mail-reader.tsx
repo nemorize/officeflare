@@ -32,7 +32,7 @@ export function ConversationReader({
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
-  actions?: ReactNode;
+  actions?: (messageActions: ReactNode) => ReactNode;
   actionError?: string;
 }) {
   const mail = useMail(),
@@ -41,10 +41,20 @@ export function ConversationReader({
       `${path}/messages/${id}`,
       mail.revision,
     ),
-    message = initial.data?.message;
+    message = initial.data?.message,
+    action = useMailAction(),
+    canWrite = !!mail.box?.access?.write;
   const [cursor, setCursor] = useState<string | null>(null),
     [entries, setEntries] = useState<Message[]>([]),
-    [expandAll, setExpandAll] = useState(false);
+    [expandAll, setExpandAll] = useState(false),
+    [plain, setPlain] = useState(false),
+    [actionId, setActionId] = useState(id),
+    [deleting, setDeleting] = useState<MessageDetail | null>(null);
+  const focused = useMailResource<{ message: MessageDetail }>(
+      actionId !== id ? `${path}/messages/${actionId}` : null,
+      mail.revision,
+    ),
+    target = actionId === id ? message : focused.data?.message;
   const thread = useMailResource<{
     messages: Message[];
     next_cursor: string | null;
@@ -79,6 +89,94 @@ export function ConversationReader({
         : message
           ? [message]
           : [];
+  const change = async (changes: object) => {
+    const latest = (
+      await api<{ message: MessageDetail }>(`${path}/messages/${actionId}`)
+    ).message;
+    await api(`${path}/messages/${actionId}`, {
+      method: "PATCH",
+      body: { version: latest.version, ...changes },
+    });
+    if (actionId === id) initial.reload();
+    else focused.reload();
+    mail.refresh();
+  };
+  const messageActions = target && (
+    <>
+      <Menu.Item
+        disabled={!canWrite || action.busy}
+        onClick={() => {
+          void action.run(() => change({ is_read: false }));
+        }}
+      >
+        Mark unread
+      </Menu.Item>
+      <Menu.Item
+        disabled={!canWrite || !!target.draft || action.busy}
+        onClick={() => {
+          void action.run(() =>
+            change({
+              folder_id: target.folder_id === "trash" ? "inbox" : "trash",
+            }),
+          );
+        }}
+      >
+        {target.folder_id === "trash" ? "Restore to inbox" : "Move to trash"}
+      </Menu.Item>
+      <Menu.Item onClick={() => setPlain(!plain)}>
+        {plain ? "Show formatted message" : "Show plain text"}
+      </Menu.Item>
+      <Menu.Item
+        disabled={action.busy}
+        onClick={() => {
+          void action.run(() =>
+            downloadMail(`${path}/messages/${actionId}/original`, "message.eml"),
+          );
+        }}
+      >
+        Download original
+      </Menu.Item>
+      <Menu.Item
+        disabled={!canWrite || action.busy}
+        onClick={() => {
+          void action.run(async () => {
+            await api(path + "/blocked-senders", {
+              method: "PUT",
+              body: { email_address: target.from_address, blocked: true },
+            });
+            mail.feedback("Sender blocked");
+          });
+        }}
+      >
+        Block sender
+      </Menu.Item>
+      {(target.draft ||
+        target.folder_id === "trash" ||
+        target.folder_id === "spam") && (
+        <Menu.Item
+          disabled={
+            !canWrite || action.busy || target.draft?.state === "submitted"
+          }
+          onClick={() => setDeleting(target)}
+        >
+          {target.draft ? "Discard draft" : "Delete permanently"}
+        </Menu.Item>
+      )}
+      <Menu.Separator />
+      <Menu.Item
+        onClick={() =>
+          mail.feedback(
+            `Provider: ${target.provider ?? "—"} · Message ID: ${target.rfc_message_id ?? "—"}`,
+            undefined,
+            undefined,
+            15000,
+          )
+        }
+      >
+        Technical details
+      </Menu.Item>
+    </>
+  );
   return (
     <section className="mail-conversation" aria-label="Message detail">
       <div className="mail-conversation-toolbar">
@@ -87,7 +185,15 @@ export function ConversationReader({
           label="Back to messages"
           onClick={onClose}
         />
-        {actions && <div className="mail-toolbar-actions">{actions}</div>}
+        {(actions || messageActions) && (
+          <div className="mail-toolbar-actions">
+            {actions ? (
+              actions(messageActions)
+            ) : (
+              <MailMenu>{messageActions}</MailMenu>
+            )}
+          </div>
+        )}
         <div className="mail-toolbar-spacer" />
         <div className="mail-conversation-navigation">
           <MailIconButton
@@ -126,6 +232,8 @@ export function ConversationReader({
       </div>
       <div className="mail-conversation-content">
         <MailNotice error={actionError ?? ""} />
+        <MailNotice error={action.error} />
+        <MailNotice error={focused.error} />
         <MailState
           kind="reader"
           loading={initial.loading && !message}
@@ -163,8 +271,10 @@ export function ConversationReader({
                     entry={entry}
                     initial={entry.id === id ? message : undefined}
                     expanded={expandAll || entry.id === id}
-                    onDeleted={onClose}
-                    replyShortcut={entry.id === id}
+                    plain={plain}
+                    active={messages.length > 1 && entry.id === actionId}
+                    onActivate={() => setActionId(entry.id)}
+                    replyShortcut={entry.id === actionId}
                   />
                 ))}
             </div>
@@ -172,6 +282,25 @@ export function ConversationReader({
           </>
         )}
       </div>
+      <Confirm
+        open={!!deleting}
+        title={deleting?.draft ? "Discard draft?" : "Delete permanently?"}
+        description="This message and its attachments will be permanently removed."
+        label="Delete permanently"
+        destructive
+        onClose={() => setDeleting(null)}
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api(
+            `${path}/${deleting.draft ? "drafts" : "messages"}/${deleting.id}${deleting.draft ? "" : "/permanent-delete"}`,
+            { method: deleting.draft ? "DELETE" : "POST" },
+          );
+          setDeleting(null);
+          mail.refresh();
+          mail.feedback("Message deleted");
+          onClose();
+        }}
+      />
     </section>
   );
 }
@@ -179,21 +308,23 @@ function MessageCard({
   entry,
   initial,
   expanded,
-  onDeleted,
+  plain,
+  active,
+  onActivate,
   replyShortcut,
 }: {
   entry: Message;
   initial?: MessageDetail;
   expanded: boolean;
-  onDeleted: () => void;
+  plain: boolean;
+  active: boolean;
+  onActivate: () => void;
   replyShortcut: boolean;
 }) {
   const mail = useMail(),
     path = mailboxPath(mail.box!.id),
     action = useMailAction(),
-    [open, setOpen] = useState(expanded),
-    [plain, setPlain] = useState(false),
-    [deleting, setDeleting] = useState(false);
+    [open, setOpen] = useState(expanded);
   const resource = useMailResource<{ message: MessageDetail }>(
       open && !initial ? `${path}/messages/${entry.id}` : null,
     ),
@@ -206,13 +337,13 @@ function MessageCard({
     if (
       !open ||
       !message ||
-      message.is_read ||
       message.draft ||
       !canWrite ||
       readAttempted.current
     )
       return;
     readAttempted.current = true;
+    if (message.is_read) return;
     void api<{ message: Message }>(`${path}/messages/${message.id}`, {
       method: "PATCH",
       body: { version: message.version, is_read: true },
@@ -220,17 +351,6 @@ function MessageCard({
       .then(result => { mail.recordRead(message, result.message.version); })
       .catch(() => {});
   }, [open, message]);
-  const change = async (changes: object) => {
-    const latest = (
-      await api<{ message: MessageDetail }>(`${path}/messages/${entry.id}`)
-    ).message;
-    await api(`${path}/messages/${entry.id}`, {
-      method: "PATCH",
-      body: { version: latest.version, ...changes },
-    });
-    resource.reload();
-    mail.refresh();
-  };
   const reply = async (kind: "reply" | "reply-all" | "forward") => {
     if (mail.composing) {
       mail.feedback("Close your current draft before opening another.");
@@ -264,7 +384,11 @@ function MessageCard({
     return () => window.removeEventListener("officeflare:reply", listener);
   }, [replyShortcut, action.busy, entry.id, mail.composing]);
   return (
-    <article className={`mail-message-card${open ? " is-expanded" : ""}`}>
+    <article
+      className={`mail-message-card${open ? " is-expanded" : ""}${active ? " is-active" : ""}`}
+      onFocusCapture={onActivate}
+      onPointerDown={onActivate}
+    >
       <div className="mail-card-header">
         <span className="mail-sender-avatar">
           {(entry.from_address || "D").slice(0, 1).toUpperCase()}
@@ -348,86 +472,6 @@ function MessageCard({
                 </dl>
               </PopoverPopup>
             </Popover.Root>
-            <MailMenu>
-              <Menu.Item
-                disabled={!canWrite || action.busy}
-                onClick={() => {
-                  void action.run(() => change({ is_read: false }));
-                }}
-              >
-                Mark unread
-              </Menu.Item>
-              <Menu.Item
-                disabled={!canWrite || !!message.draft || action.busy}
-                onClick={() => {
-                  void action.run(() =>
-                    change({
-                      folder_id:
-                        message.folder_id === "trash" ? "inbox" : "trash",
-                    }),
-                  );
-                }}
-              >
-                {message.folder_id === "trash"
-                  ? "Restore to inbox"
-                  : "Move to trash"}
-              </Menu.Item>
-              <Menu.Item onClick={() => setPlain(!plain)}>
-                {plain ? "Show formatted message" : "Show plain text"}
-              </Menu.Item>
-              <Menu.Item
-                onClick={() => {
-                  void action.run(() =>
-                    downloadMail(
-                      `${path}/messages/${entry.id}/original`,
-                      "message.eml",
-                    ),
-                  );
-                }}
-              >
-                Download original
-              </Menu.Item>
-              <Menu.Item
-                disabled={!canWrite || action.busy}
-                onClick={() => {
-                  void action.run(async () => {
-                    await api(path + "/blocked-senders", {
-                      method: "PUT",
-                      body: {
-                        email_address: message.from_address,
-                        blocked: true,
-                      },
-                    });
-                    mail.feedback("Sender blocked");
-                  });
-                }}
-              >
-                Block sender
-              </Menu.Item>
-              {(message.draft ||
-                message.folder_id === "trash" ||
-                message.folder_id === "spam") && (
-                <Menu.Item
-                  disabled={!canWrite || message.draft?.state === "submitted"}
-                  onClick={() => setDeleting(true)}
-                >
-                  {message.draft ? "Discard draft" : "Delete permanently"}
-                </Menu.Item>
-              )}
-              <Menu.Separator />
-              <Menu.Item
-                onClick={() =>
-                  mail.feedback(
-                    `Provider: ${message.provider ?? "—"} · Message ID: ${message.rfc_message_id ?? "—"}`,
-                    undefined,
-                    undefined,
-                    15000,
-                  )
-                }
-              >
-                Technical details
-              </Menu.Item>
-            </MailMenu>
           </>
         )}
       </div>
@@ -526,24 +570,6 @@ function MessageCard({
           )}
         </div>
       )}
-      <Confirm
-        open={deleting}
-        title={message?.draft ? "Discard draft?" : "Delete permanently?"}
-        description="This message and its attachments will be permanently removed."
-        label="Delete permanently"
-        destructive
-        onClose={() => setDeleting(false)}
-        onConfirm={async () => {
-          await api(
-            `${path}/${message?.draft ? "drafts" : "messages"}/${entry.id}${message?.draft ? "" : "/permanent-delete"}`,
-            { method: message?.draft ? "DELETE" : "POST" },
-          );
-          setDeleting(false);
-          mail.refresh();
-          mail.feedback("Message deleted");
-          onDeleted();
-        }}
-      />
     </article>
   );
 }

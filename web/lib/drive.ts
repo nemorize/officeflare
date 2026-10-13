@@ -3,8 +3,10 @@ import type { ApiOptions } from "./api-client";
 export type DriveRole = "owner" | "editor" | "commenter" | "viewer";
 export interface DrivePerson {
   id: string;
-  display_name: string;
+  display_name: string | null;
   email_address: string;
+  has_profile_image?: boolean;
+  profile_image_version?: string | null;
 }
 export interface DriveItem {
   id: string;
@@ -51,8 +53,10 @@ export interface DriveCapabilities {
 export interface DriveGrant {
   item_id: string;
   user_id: string;
-  display_name: string;
+  display_name: string | null;
   email_address: string;
+  has_profile_image?: boolean;
+  profile_image_version?: string | null;
   role: Exclude<DriveRole, "owner">;
   expires_at: number | null;
   inherited: number;

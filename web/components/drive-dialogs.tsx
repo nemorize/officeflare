@@ -34,6 +34,7 @@ import {
   type DriveRole,
 } from "../lib/drive";
 import { useAccount } from "./account-context";
+import { DriveOwnerPhotosProvider, DrivePersonAvatar } from "./drive-owner";
 
 export const roles = [
   { value: "viewer", label: "Viewer" },
@@ -483,9 +484,9 @@ export function DriveShareDialog({
     await navigator.clipboard.writeText(url);
     notify.success("Link copied.");
   };
-  const owner = item.owner;
+  const owner = item.owner?.id === account.user?.id ? account.user ?? item.owner : item.owner;
   return (
-    <DriveModal
+    <DriveOwnerPhotosProvider><DriveModal
       wide
       title={`Share “${item.name}”`}
       description={
@@ -554,12 +555,10 @@ export function DriveShareDialog({
           )}
           <h3 className="drive-section-label">People with access</h3>
           <div className="drive-access-person">
-            <span className="drive-person-avatar">
-              {(owner?.display_name || "O").slice(0, 1).toUpperCase()}
-            </span>
+            <DrivePersonAvatar person={owner} />
             <div>
               <strong>
-                {owner?.display_name || "Owner"}
+                {owner?.display_name || owner?.email_address || "Owner"}
                 {owner?.id === account.user?.id && " (you)"}
               </strong>
               <span>{owner?.email_address}</span>
@@ -576,11 +575,7 @@ export function DriveShareDialog({
               className="drive-access-person"
               key={`${grant.item_id}:${grant.user_id}`}
             >
-              <span className="drive-person-avatar">
-                {(grant.display_name || grant.email_address)
-                  .slice(0, 1)
-                  .toUpperCase()}
-              </span>
+              <DrivePersonAvatar person={{ id: grant.user_id, display_name: grant.display_name, email_address: grant.email_address, has_profile_image: grant.has_profile_image, profile_image_version: grant.profile_image_version }} />
               <div>
                 <strong>{grant.display_name || grant.email_address}</strong>
                 <span>{grant.email_address}</span>
@@ -596,7 +591,7 @@ export function DriveShareDialog({
               ) : (
                 <>
                   <DriveSelect
-                    label={`Role for ${grant.display_name}`}
+                    label={`Role for ${grant.display_name || grant.email_address}`}
                     value={grant.role}
                     options={roles}
                     disabled={action.busy || item.actions?.internal_share === false}
@@ -759,40 +754,42 @@ export function DriveShareDialog({
             />
             Allow file preview and download
           </CheckboxLabel>
-          <Button
-            variant="primary"
-            disabled={action.busy || item.actions?.public_share === false || (!!password && password.length < 8) || (!!drive.capabilities?.public_link_password_required && password.length < 8) || (!!drive.capabilities?.public_link_max_days && !linkExpiry)}
-            onClick={() =>
-              mutate(async (current) => {
-                const result = await api<{
-                  link: DriveLink & { token: string };
-                }>(`/api/drive/items/${item.id}/links`, {
-                  method: "POST",
-                  body: {
-                    version: current.version,
-                    password: password || null,
-                    expires_at: expiration(linkExpiry),
-                    allow_download: allowDownload,
-                  },
-                });
-                const url = publicShareUrl(
-                  result.link.token,
-                  window.location.origin,
-                );
-                try {
-                  sessionStorage.setItem(storageKey(result.link.id), url);
-                } catch {
-                  /* Copyable URL remains in the dialog. */
-                }
-                setCreatedUrl(url);
-                setCreatedLinkId(result.link.id);
-                setPassword("");
-              }, "Public link created.")
-            }
-          >
-            <Icon name="plus" />
-            Create public link
-          </Button>
+          <div className="drive-modal-actions drive-link-create-actions">
+            <Button
+              variant="primary"
+              disabled={action.busy || item.actions?.public_share === false || (!!password && password.length < 8) || (!!drive.capabilities?.public_link_password_required && password.length < 8) || (!!drive.capabilities?.public_link_max_days && !linkExpiry)}
+              onClick={() =>
+                mutate(async (current) => {
+                  const result = await api<{
+                    link: DriveLink & { token: string };
+                  }>(`/api/drive/items/${item.id}/links`, {
+                    method: "POST",
+                    body: {
+                      version: current.version,
+                      password: password || null,
+                      expires_at: expiration(linkExpiry),
+                      allow_download: allowDownload,
+                    },
+                  });
+                  const url = publicShareUrl(
+                    result.link.token,
+                    window.location.origin,
+                  );
+                  try {
+                    sessionStorage.setItem(storageKey(result.link.id), url);
+                  } catch {
+                    /* Copyable URL remains in the dialog. */
+                  }
+                  setCreatedUrl(url);
+                  setCreatedLinkId(result.link.id);
+                  setPassword("");
+                }, "Public link created.")
+              }
+            >
+              <Icon name="plus" />
+              Create public link
+            </Button>
+          </div>
           {createdUrl && (
             <div className="drive-created-link">
               <DriveField
@@ -933,7 +930,7 @@ export function DriveShareDialog({
           }}
         />
       )}
-    </DriveModal>
+    </DriveModal></DriveOwnerPhotosProvider>
   );
 }
 import { Menu, MenuPopup } from "./ui";
@@ -954,7 +951,7 @@ function MenuForPerson({
     <Menu.Root>
       <Menu.Trigger
         render={<Button size="icon" variant="ghost" />}
-        aria-label={`Access options for ${grant.display_name}`}
+        aria-label={`Access options for ${grant.display_name || grant.email_address}`}
         disabled={disabled}
       >
         <Icon name="more" />

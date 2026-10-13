@@ -2,9 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertDialog, AlertDialogPopup, Button, CheckboxControl, CheckboxLabel, Icon, useNotifications } from "./ui";
 import { ApiError, api, errorMessage } from "../lib/api";
 import { useAccess } from "./console-access";
+import { LoadingSkeleton } from "./loading-skeleton";
 import "./console-shared.css";
 
 export const adminDate = (timestamp: number | null) => timestamp === null ? "Never" : new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+export function ConsolePageHeader({ title, description, children }: { title: string; description: ReactNode; children?: ReactNode }) {
+  return <header className="account-page-header console-page-header"><div><h1>{title}</h1><p>{description}</p></div>{children}</header>;
+}
 export function Notice({ error }: { error?: string }) {
   return error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>;
 }
@@ -30,8 +34,8 @@ export function useResource<T>(path: string | null) {
   const current = state.path === path ? state : { data: null, loading: !!path, error: "" };
   return { ...current, update: (data: T) => setState({ path, data, loading: false, error: "" }) };
 }
-export function ResourceState({ loading, error }: { loading: boolean; error: string }) {
-  return loading ? <p className="account-loading" role="status">Loading…</p> : <Notice error={error} />;
+export function ResourceState({ loading, error, kind = "section", label = "Loading…", rows = 3 }: { loading: boolean; error: string; kind?: "section" | "list" | "form"; label?: string; rows?: number }) {
+  return loading ? <LoadingSkeleton kind={kind} label={label} rows={rows} /> : <Notice error={error} />;
 }
 export function Confirm({ open, title, description, label, onClose, onConfirm, destructive = false, theme }: { open: boolean; title: string; description: ReactNode; label: string; onClose: () => void; onConfirm: () => Promise<void>; destructive?: boolean; theme?: "neutral" }) {
   const access = useAccess(), notify = useNotifications(), running = useRef(false);

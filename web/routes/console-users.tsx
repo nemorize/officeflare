@@ -13,6 +13,7 @@ import { validatePassword } from "../lib/profile";
 import { sessions } from "../lib/session";
 import { DomainSetupLink, MailAddressField, preferredDomain, UserMailPanel, type UserMailDomain } from "../components/user-mail";
 import { useMailResource } from "../components/mail-common";
+import { LoadingSkeleton } from "../components/loading-skeleton";
 import "./console.css";
 
 export function UsersPage() {
@@ -23,7 +24,7 @@ export function UsersPage() {
     <header className="account-page-header console-page-header"><div><h1>Users</h1><p>Manage people, personal mail addresses and workspace access.</p></div>
       {access.permissions.includes("admin.users.create") && <Button nativeButton={false} render={<Link to="/console/users/new" />} variant="primary"><Icon name="plus" />New user</Button>}</header>
     <section className="account-panel console-list-panel">
-      {!canRead ? <p className="console-empty">You do not have permission to view user accounts.</p> : !resource.data ? <ResourceState {...resource} /> : <>
+      {!canRead ? <p className="console-empty">You do not have permission to view user accounts.</p> : !resource.data ? <ResourceState {...resource} kind="list" label="Loading users…" rows={5} /> : <>
         <div className="console-table-scroll"><table className="console-table"><caption className="console-sr-only">User accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Personal mail</th><th scope="col">Status</th><th scope="col" className="console-date-column">Last sign-in</th><th scope="col"><span className="console-sr-only">Actions</span></th></tr></thead>
           <tbody>{resource.data.users.map((user) => <tr key={user.id}><td><Link to={`/console/users/${encodeURIComponent(user.id)}`} className="console-identity"><UserAvatar user={user} /><span><strong>{user.display_name || user.email_address}</strong><small>{user.email_address}</small></span></Link></td>
             <td><span>{user.mail?.email_address ?? (user.mail?.mail_enabled ? "Address not set" : "Not enabled")}</span><small className="console-subtext">{!user.mail?.mail_enabled ? "Mail not enabled" : user.mail?.mailbox ? user.mail.mailbox.status === "active" ? "Mailbox ready" : user.mail.mailbox.status === "provisioning" ? "Preparing mailbox" : "Mailbox disabled" : user.mail?.mail_enabled ? "Set up from user details" : "No Mail role"}</small></td><td><span className="console-badge" data-muted={user.disabled_at !== null}>{user.disabled_at === null ? "Active" : "Disabled"}</span>{user.password_reset_required && <small className="console-subtext">Password change required</small>}</td>
@@ -100,7 +101,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
   return <section className="account-page console-page console-detail-page">
     <Link to="/console/users" className="console-back">← Users</Link>
     <header className="account-page-header"><h1>{creating ? "New user" : user?.display_name || user?.email_address || "User account"}</h1><p>{creating ? "Create a person with their workspace address and personal mail together." : "Manage personal mail, account information and workspace access."}</p></header>
-    {!creating && !user ? <ResourceState {...resource} /> : <>
+    {!creating && !user ? <ResourceState {...resource} kind="form" label="Loading user…" /> : <>
       {!creating && user && <UserMailPanel user={user} />}
       <Form onSubmit={submit} aria-busy={busy}><section className="account-panel"><div className="account-panel-header"><h2>{creating ? "User details" : "Account information"}</h2><p>{creating ? "The user should change their temporary password when they first sign in." : "Account security changes end the user's active sessions."}</p></div>
         <Fieldset.Root disabled={busy}>
@@ -109,7 +110,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
           {creating && mailOptions.error && <Notice error={mailOptions.error} />}
           {creating && creationMail && mailOptions.data && !mailOptions.data.domains.length && <DomainSetupLink />}
           {creating && <><PasswordField id="user-temporary-password" label="Temporary password" value={password} onChange={setPassword} autoComplete="new-password" /><p className="console-subtext">Use 15–128 characters.</p></>}
-          <details className="console-role-summary"><summary>Account security</summary><div className="console-role-options"><Check checked={disabled} onChange={setDisabled} disabled={!canDisable}>Disable this account{isSelf && <small>You cannot disable your own account.</small>}</Check><Check checked={passwordReset} onChange={setPasswordReset} disabled={!canReset}>Require a password change at next sign-in</Check></div></details>
+          <section className="console-role-summary console-account-security"><h3>Account security</h3><div className="console-role-options"><Check checked={disabled} onChange={setDisabled} disabled={!canDisable}>Disable this account{isSelf && <small>You cannot disable your own account.</small>}</Check><Check checked={passwordReset} onChange={setPasswordReset} disabled={!canReset}>Require a password change at next sign-in</Check></div></section>
         </Fieldset.Root>
         {creating && <InitialRoles onChange={setCreationRoles} onMailChange={setCreationMail} disabled={busy} />}
         <Notice error={error} />
@@ -160,8 +161,8 @@ function InitialRoles({ onChange, onMailChange, disabled }: { onChange: (ids: st
     }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(errorMessage(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [canReadRoles, onChange, onMailChange]);
-  return <details className="console-role-summary"><summary>Workspace access and roles{loading ? " · Loading…" : error ? " · Unable to load" : ""}</summary><p className="console-subtext">Default roles are selected automatically. A role with Mail access includes a personal mailbox.</p>
-    {loading ? <p role="status" className="account-loading">Loading default roles…</p> : error ? <Notice error={error} /> : <div className="console-role-options">{roles.map((role) => {
+  return <details className="console-role-summary"><summary>Workspace access and roles{error ? " · Unable to load" : ""}</summary><p className="console-subtext">Default roles are selected automatically. A role with Mail access includes a personal mailbox.</p>
+    {loading ? <LoadingSkeleton label="Loading default roles…" /> : error ? <Notice error={error} /> : <div className="console-role-options">{roles.map((role) => {
       const isDefault = defaults.includes(role.id), allowed = access.permissions.includes(isDefault ? "admin.users.roles.remove" : "admin.users.roles.assign") && canGrant(access.permissions, role.permissions);
       return <Check key={role.id} checked={selected.includes(role.id)} disabled={disabled || !allowed || !selected.includes(role.id) && selected.length >= 50} onChange={(checked) => {
         const ids = checked ? [...selected, role.id] : selected.filter((id) => id !== role.id); setSelected(ids); onChange(ids); onMailChange(roles.some((entry) => ids.includes(entry.id) && entry.permissions.includes("mail.access")));
@@ -188,7 +189,7 @@ function UserRoles({ user }: { user: AdminUser }) {
   const resulting = [...new Set(roles.filter((role) => selected.includes(role.id)).flatMap((role) => role.permissions))];
   const changed = added.length > 0 || removed.length > 0;
   return <section id="user-roles" className="account-panel"><div className="account-panel-header"><h2>Workspace access</h2><p>Role permissions are combined. Changes apply immediately. You can assign up to 50 roles.</p></div><Notice error={error} />
-    {loading ? <p className="account-loading" role="status">Loading roles…</p> : error ? null : <>
+    {loading ? <LoadingSkeleton label="Loading roles…" /> : error ? null : <>
       {editable ? <div className="console-role-options">{roles.map((role) => {
         const held = canGrant(access.permissions, role.permissions), allowed = oldIds.includes(role.id) ? canRemove && held : canAssign && held;
         return <Check key={role.id} checked={selected.includes(role.id)} disabled={!allowed || !selected.includes(role.id) && selected.length >= 50} onChange={(checked) => setSelected((current) => checked ? [...current, role.id] : current.filter((id) => id !== role.id))}>

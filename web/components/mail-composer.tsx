@@ -13,7 +13,8 @@ import { Confirm } from "./console-shared";
 import { MailEditor } from "./mail-editor";
 import { MailHtml } from "./mail-body";
 import { normalizedEditorHtml, plainMailHtml, storedEditorHtml } from "../lib/mail-editor";
-import { estimatedMessageBytes } from "../../src/mail/size";
+import { estimatedMessageBytes, messageSizeBreakdown } from "../../src/mail/size";
+import { MailMessageSize } from "./mail-message-size";
 export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { mailboxId: string; draftId?: string; inline?: boolean; onClose: () => void }) {
   const mail = useMail(), location = useLocation(), path = mailboxPath(mailboxId), action = useMailAction();
   const initial = useMailResource<{ message: MessageDetail }>(draftId ? `${path}/drafts/${draftId}` : null);
@@ -27,8 +28,9 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const surface = useRef<HTMLElement>(null);
   const createOperation = useRef(new MailOperation()), sendOperation = useRef(new MailOperation()), pendingCreate = useRef<object | null>(null), pendingSend = useRef<{ id: string; payload: object } | null>(null);
   const pendingEdit = useRef<{ version: number; payload: object; matches: (message: MessageDetail) => boolean } | null>(null);
+  const sendingAddresses = addresses.data?.addresses.filter((address) => address.can_send) ?? [];
   const rights = mail.boxes.find((box) => box.id === mailboxId)?.access,
-    canSend = !!rights?.send && !!addresses.data?.addresses.some((address) => address.id === sender && address.can_send);
+    canSend = !!rights?.send && sendingAddresses.some((address) => address.id === sender);
   const fromAddress = addresses.data?.addresses.find((address) => address.id === sender);
   const maximum = fromAddress?.max_send_bytes ?? 0;
   const uploadMaximum = fromAddress?.max_upload_bytes ?? addresses.data?.limits.max_upload_bytes ?? mail.capabilities?.limits.max_upload_bytes ?? 0;
@@ -37,7 +39,8 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const referencedImages = new Set([...new DOMParser().parseFromString(storedHtml, "text/html").querySelectorAll('img[src^="cid:"]')].map((image) => image.getAttribute("src")!.slice(4)));
   const sizeFiles = [...files.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id)), ...uploadedImages.filter((image) => referencedImages.has(image.content_id) && !files.some((file) => file.content_id === image.content_id))];
   const referenceHeaders: Record<string, string> = draft?.references.length ? { "In-Reply-To": `<${draft.references.at(-1)}>`, References: draft.references.slice(-20).map((reference) => `<${reference}>`).join(" ") } : {};
-  const estimatedSize = estimatedMessageBytes({ text: text + (quoted ? "\n\n" + quoted.text : ""), html: storedHtml, subject, from: fromAddress?.email_address, reply_to: replyTo, to: to.split(/[,;\n]+/), cc: cc.split(/[,;\n]+/), bcc: bcc.split(/[,;\n]+/), headers: referenceHeaders, attachments: sizeFiles });
+  const messageSize = messageSizeBreakdown({ text: text + (quoted ? "\n\n" + quoted.text : ""), html: storedHtml, subject, from: fromAddress?.email_address, reply_to: replyTo, to: to.split(/[,;\n]+/), cc: cc.split(/[,;\n]+/), bcc: bcc.split(/[,;\n]+/), headers: referenceHeaders, attachments: sizeFiles });
+  const estimatedSize = messageSize.total;
   const tooLarge = maximum > 0 && estimatedSize > maximum;
   useEffect(() => {
     if (ready || (draftId ? !initial.data : !settings.data)) return;
@@ -163,7 +166,6 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         </Tooltip.Trigger>
         <TooltipPopup>{collapseLabel}</TooltipPopup>
       </Tooltip.Root>
-      <span>{mail.boxes.find((box) => box.id === mailboxId)?.name}</span>
       <MailIconButton icon={fullSize ? "shrink" : "expand"} label={fullSize ? "Restore default size" : !docked ? "Open in compose window" : "Expand composer"} disabled={imageUploading} onClick={() => { if (!docked) setDocked(true); else setExpanded(!fullSize); setMinimized(false); }}/>
       <MailIconButton icon="close" label="Save and close draft" disabled={action.busy || closing || imageUploading} onClick={() => { void close(); }}/>
     </div>
@@ -171,20 +173,38 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     <MailState loading={!ready} error={initial.error || settings.error} retry={() => { initial.reload(); settings.reload(); }} />
     {ready && <MailForm className="mail-composer" onSubmit={(event) => { event.preventDefault(); void action.run(send); }}>
       <MailFieldset disabled={locked}>
-        <div className="mail-compose-sender"><MailField label="From"><MailSelect variant="integrated" value={sender} onValueChange={(nextValue) => { setSender(nextValue); mark(); }} options={[{ value: "", label: "Select sending address" }, ...(addresses.data?.addresses.filter((address) => address.can_send).map((address) => ({ value: address.id, label: address.email_address })) || [])]} /></MailField></div><MailNotice error={addresses.error} />{addresses.data && !addresses.data.addresses.some((address) => address.can_send) && <p className="mail-hint">No sending address is available. You can save this message as a draft.</p>}
+        <div className="mail-compose-sender">
+          <MailField label="From">
+            <MailSelect
+              variant="integrated"
+              disabled={!sendingAddresses.length}
+              value={sendingAddresses.length ? sender : ""}
+              onValueChange={(nextValue) => { setSender(nextValue); mark(); }}
+              options={[
+                {
+                  value: "",
+                  label: addresses.data && !sendingAddresses.length
+                    ? "No sending address is available."
+                    : "Select sending address",
+                },
+                ...sendingAddresses.map((address) => ({ value: address.id, label: address.email_address })),
+              ]}
+            />
+          </MailField>
+        </div>
+        <MailNotice error={addresses.error} />
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
         {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/><MailInput variant="integrated" label="Reply-To" type="email" inputMode="email" autoComplete="off" maxLength={254} placeholder="Same as From" value={replyTo} onChange={(event) => { setReplyTo(event.target.value); mark(); }} /></> : null}
         <MailInput variant="integrated" label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />
         <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} maxImageBytes={uploadMaximum} onImageUploaded={(image) => setUploadedImages((previous) => [...previous, image])} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
         {draft?.body.quoted_body && <div className="mail-quote-section"><Button size="sm" variant="ghost" disabled={locked} aria-pressed={includeQuote} onClick={() => { setIncludeQuote(!includeQuote); mark(); }}>{includeQuote ? "Remove quoted message" : "Include quoted message"}</Button>{includeQuote && <details className="mail-quoted-body"><summary>Quoted message</summary>{draft.body.quoted_body.html ? <MailHtml message={draft} path={path} content={draft.body.quoted_body.html} /> : <pre>{draft.body.quoted_body.text}</pre>}</details>}</div>}
         <div className="mail-attachments">{files.filter((file) => file.disposition !== "inline").map((file) => <div key={file.id}><span>{file.filename} <small>{bytes(file.size_bytes)}</small></span><Button variant="ghost" size="sm" aria-label={`Remove ${file.filename}`} onClick={() => { setFiles(files.filter((item) => item.id !== file.id)); mark(); }}>×</Button></div>)}</div>
-        <MailField label="Attach files" hint={`Up to ${bytes(uploadMaximum)} per file. The body, images and all encoded attachments share the message limit.`}><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>
-        {maximum > 0 && <p className="mail-hint" role="status">Estimated message size: {bytes(estimatedSize)} / {bytes(maximum)}.</p>}
+        <MailField label="Attach files"><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>
         {tooLarge && <MailNotice error="This message exceeds the selected sending address’s size limit. Remove attachments or shorten the message." />}
         {scheduleOpen && <div className="mail-schedule-panel"><div className="mail-schedule-presets">{[["Tomorrow",24],["Next week",168]].map(([label,hours]) => <Button key={label} size="sm" onClick={() => { const date=new Date(Date.now()+Number(hours)*3600000); setSchedule(new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16)); mark(); }}>{label}</Button>)}</div><MailInput label="Send at" hint="Uses your local timezone." type="datetime-local" value={schedule} onChange={(event) => { setSchedule(event.target.value); mark(); }}/>{schedule && <Button variant="ghost" size="sm" onClick={() => { setSchedule(""); mark(); }}>Remove schedule</Button>}</div>}
       </MailFieldset>
       <MailNotice error={action.error} />{unknown && <p className="mail-hint" role="status">The server response was lost. Retry the same request to check its outcome.</p>}
-      <div className="mail-compose-footer"><ButtonGroup className="mail-send-group"><Button variant="primary" type="submit" disabled={action.busy || imageUploading || unknown && !pendingSend.current || !canSend || !sender || !!draft && draft.draft?.state !== "editable" && !pendingSend.current}>{pendingSend.current ? "Check send outcome" : schedule ? "Schedule send" : "Send"}<Icon name="arrow"/></Button><MailMenu variant="primary" icon="down" label="More send options"><Menu.Item disabled={locked || action.busy} onClick={() => setScheduleOpen(!scheduleOpen)}>Schedule send</Menu.Item></MailMenu></ButtonGroup><span className="mail-save-status" role="status">{autosaving ? "Saving…" : dirty ? "Unsaved changes" : draft ? "Draft saved" : ""}</span>{unknown && !pendingSend.current && <Button className="mail-retry-save" size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await save(); }); }}>Check save outcome</Button>}<MailIconButton icon="trash" label="Discard draft" disabled={action.busy || imageUploading || draft?.draft?.state === "submitted"} onClick={() => setDeleteDraft(true)}/></div>
+      <div className="mail-compose-footer"><ButtonGroup className="mail-send-group"><Button variant="primary" type="submit" disabled={action.busy || imageUploading || unknown && !pendingSend.current || !canSend || !sender || !!draft && draft.draft?.state !== "editable" && !pendingSend.current}>{pendingSend.current ? "Check send outcome" : schedule ? "Schedule send" : "Send"}<Icon name="arrow"/></Button><MailMenu variant="primary" icon="down" label="More send options"><Menu.Item disabled={locked || action.busy} onClick={() => setScheduleOpen(!scheduleOpen)}>Schedule send</Menu.Item></MailMenu></ButtonGroup><span className="mail-save-status" role="status">{autosaving ? "Saving…" : dirty ? "Unsaved changes" : draft ? "Draft saved" : ""}</span>{unknown && !pendingSend.current && <Button className="mail-retry-save" size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await save(); }); }}>Check save outcome</Button>}<div className="mail-compose-tools"><MailMessageSize size={messageSize} maximum={maximum} uploadMaximum={uploadMaximum} /><MailIconButton icon="trash" label="Discard draft" disabled={action.busy || imageUploading || draft?.draft?.state === "submitted"} onClick={() => setDeleteDraft(true)}/></div></div>
     </MailForm>}
     </div>}
     <Confirm open={deleteDraft} title="Discard this draft?" description="The draft and its attachments will be permanently removed." label="Discard draft" destructive onClose={() => setDeleteDraft(false)} onConfirm={async () => { if (draftRef.current) await api(`${path}/drafts/${draftRef.current.id}`,{method:"DELETE"}); mail.refresh(); onClose(); }}/>

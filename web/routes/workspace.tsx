@@ -5,7 +5,7 @@ import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
 import { AccessProvider, useAccess } from "../components/console-access";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
-import { MailTopbar } from "../components/mail-chrome";
+import { MailSettingsButton, MailTopbar } from "../components/mail-chrome";
 import { MailResourceProvider } from "../components/mail-resource-context";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { DriveProvider } from "../components/drive-context";
@@ -87,12 +87,14 @@ function WorkspaceChrome() {
       {visibleApps.map((item) => <NavLink key={item.path} to={item.path} title={item.name} aria-label={item.name}
         className="workspace-rail-link"><Icon name={item.icon} width="18" height="18" /></NavLink>)}
       {access.permissions.includes("console.access") && <NavLink to="/console" title="Console" aria-label="Console" className="workspace-rail-link"><Icon name="console" width="18" height="18" /></NavLink>}
-      <NotificationBell />
-      <ProfileMenu busy={busy} signOut={() => { void signOut(); }} />
+      <div className="workspace-rail-footer">
+        <NotificationBell />
+        <ProfileMenu busy={busy} signOut={() => { void signOut(); }} />
+      </div>
     </aside>
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
-        <div className="workspace-sidebar-header"><span>{sidebarName}</span></div>
+        <div className="workspace-sidebar-header"><span>{sidebarName}</span>{isMail && activeApp && <MailSettingsButton />}</div>
         {access.status === "loading" ? <LoadingSkeleton label="Loading navigation…" /> : isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "Administration" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { encodedMailBytes, estimatedMessageBytes, maxAttachmentBytes, messageSizeLimits } from "../src/mail/size.ts";
+import { encodedMailBytes, estimatedMessageBytes, maxAttachmentBytes, messageSizeBreakdown, messageSizeLimits } from "../src/mail/size.ts";
 
 test("mail budgets respect different provider ceilings and lower administrator limits", () => {
   const smallProvider = 5 * 1024 ** 2, largeProvider = 40 * 1024 ** 2;
@@ -28,4 +28,33 @@ test("all parts of a multilingual message consume the same sending budget", () =
   const plain = estimatedMessageBytes({ text: "aaaa", html: "", attachments: [] });
   assert.ok(estimatedMessageBytes({ text: "서울본문", html: "", attachments: [] }) > plain);
   assert.ok(estimatedMessageBytes({ ...message, text: message.text.repeat(100), html: message.html.repeat(100) }) > estimatedMessageBytes(message));
+});
+test("composer size categories account for inline images, image attachments and Unicode without double counting", () => {
+  const message = {
+    subject: "서울 보고서", text: "본문", html: '<p>본문<img src="cid:inline-image"></p>',
+    from: "sender@example.test", to: ["team@example.test"], headers: { References: "<previous@example.test>" },
+    attachments: [
+      { size_bytes: 400 * 1024, filename: "서울.pdf", content_type: "application/pdf", disposition: "attachment" },
+      { size_bytes: 200 * 1024, filename: "photo.png", content_type: "image/png", disposition: "attachment" },
+      { size_bytes: 100 * 1024, filename: "inline.png", content_type: "image/png", content_id: "inline-image" },
+    ],
+  };
+  const size = messageSizeBreakdown(message);
+  assert.equal(size.subject, Buffer.byteLength(message.subject) * 3);
+  assert.equal(size.body, encodedMailBytes(Buffer.byteLength(message.text)) + encodedMailBytes(Buffer.byteLength(message.html)));
+  assert.equal(size.total, size.subject + size.body + size.images + size.attachments + size.headers);
+  assert.equal(size.total, estimatedMessageBytes(message));
+  const withoutInlineImage = messageSizeBreakdown({ ...message, attachments: message.attachments.slice(0, 2) });
+  assert.equal(withoutInlineImage.images, 0);
+  assert.equal(withoutInlineImage.attachments, size.attachments);
+  assert.equal(size.total - withoutInlineImage.total, size.images);
+  const onlyInlineImage = messageSizeBreakdown({ ...message, attachments: message.attachments.slice(2) });
+  assert.equal(onlyInlineImage.attachments, 0);
+  assert.equal(onlyInlineImage.images, size.images);
+  const withoutSubject = messageSizeBreakdown({ ...message, subject: "" });
+  assert.equal(size.total - withoutSubject.total, size.subject);
+  assert.equal(withoutSubject.headers, size.headers);
+  const empty = messageSizeBreakdown({ text: "", html: "", attachments: [] });
+  assert.equal(empty.subject + empty.body + empty.images + empty.attachments, 0);
+  assert.ok(empty.headers > 0);
 });

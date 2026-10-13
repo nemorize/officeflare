@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useBlocker } from "react-router";
 import { api } from "../lib/api";
 import { mailboxPath, type Address, type MailRight, type MailSettings } from "../lib/mail";
-import { MailSettingsNav } from "../components/mail-settings-nav";
+import { MailSettingsLayout } from "../components/mail-settings-nav";
 import { MailPreferenceFields } from "../components/mail-chrome";
 import { FolderManager } from "../components/mail-context";
 import { useMail } from "../components/mail-context";
 import { MailReady } from "./mail";
-import { MailField, MailInput, MailModal, MailNotice, MailPageHeader, MailSection, MailState, useMailAction, useMailResource, MailForm, MailTextarea, MailFieldset, MailSelect } from "../components/mail-common";
+import { MailField, MailInput, MailModal, MailNotice, MailSection, MailState, useMailAction, useMailResource, MailForm, MailTextarea, MailFieldset, MailSelect } from "../components/mail-common";
 import { useMailCache } from "../components/mail-resource-context";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { MailEditor } from "../components/mail-editor";
@@ -18,21 +18,20 @@ import { Check, Confirm } from "../components/console-shared";
 import { useAccess } from "../components/console-access";
 export function MailManagePage({ page }: { page: string }) {
   const mail = useMail();
-  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}><MailSettingsNav/>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
+  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
 }
 function Rules() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), resource = useMailResource<{ "blocked-senders": { email_address: string }[] }>(path + "/blocked-senders"), action = useMailAction(), [email, setEmail] = useState(""), [test, setTest] = useState({ from: "", to: "", subject: "", body: "" }), [result, setResult] = useState<{ folder_id: string; is_read: boolean; is_starred: boolean; is_spam: boolean; matched_rules: string[] } | null>(null);
-  return <><MailPageHeader title="Rules & blocked senders" description="Organize incoming mail automatically for this mailbox." /><MailRules path={path + "/rules"} folders={mail.folders} canManage={!!mail.box!.access?.manage} /><MailSection title="Blocked senders" description="Messages from blocked senders go to Spam."><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />{mail.box!.access?.write && <MailForm className="mail-inline-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { await api(path + "/blocked-senders", { method: "PUT", body: { email_address: email, blocked: true } }); setEmail(""); resource.reload(); }); }}><MailInput label="Email address" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /><Button type="submit" disabled={action.busy}>Block sender</Button></MailForm>}<div className="mail-record-list">{resource.data?.["blocked-senders"].map((sender) => <div key={sender.email_address} className="mail-record"><strong>{sender.email_address}</strong>{mail.box!.access?.write && <Button size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await api(path + "/blocked-senders", { method: "PUT", body: { ...sender, blocked: false } }); resource.reload(); }); }}>Unblock</Button>}</div>)}</div><MailNotice error={action.error} /></MailSection>
+  return <MailSettingsLayout title="Rules & blocked senders" description="Organize incoming mail automatically for this mailbox."><MailRules path={path + "/rules"} folders={mail.folders} canManage={!!mail.box!.access?.manage} /><MailSection title="Blocked senders" description="Messages from blocked senders go to Spam."><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />{mail.box!.access?.write && <MailForm className="mail-inline-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { await api(path + "/blocked-senders", { method: "PUT", body: { email_address: email, blocked: true } }); setEmail(""); resource.reload(); }); }}><MailInput label="Email address" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /><Button type="submit" disabled={action.busy}>Block sender</Button></MailForm>}<div className="mail-record-list">{resource.data?.["blocked-senders"].map((sender) => <div key={sender.email_address} className="mail-record"><strong>{sender.email_address}</strong>{mail.box!.access?.write && <Button size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { await api(path + "/blocked-senders", { method: "PUT", body: { ...sender, blocked: false } }); resource.reload(); }); }}>Unblock</Button>}</div>)}</div><MailNotice error={action.error} /></MailSection>
     {mail.box!.access?.manage && <MailSection title="Test rules" description="Preview the result for a sample message without changing any mail."><MailForm className="mail-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { const data = await api<{ result: typeof result }>(path + "/rules/evaluate", { method: "POST", body: test }); setResult(data.result); }); }}><div className="mail-form-grid">{(["from", "to", "subject"] as const).map((field) => <MailInput key={field} label={field === "from" ? "Sender" : field === "to" ? "Recipient" : "Subject"} value={test[field]} onChange={(event) => setTest({ ...test, [field]: event.target.value })} />)}</div><MailField label="Body"><MailTextarea value={test.body} onChange={(event) => setTest({ ...test, body: event.target.value })} /></MailField><Button type="submit" disabled={action.busy}>Evaluate rules</Button>{result && <p role="status">Folder: {mail.folders.find((folder) => folder.id === result.folder_id)?.name ?? result.folder_id} · {result.is_read ? "Read" : "Unread"}{result.is_starred ? " · Starred" : ""}{result.is_spam ? " · Spam" : ""} · {result.matched_rules.length} rule(s) matched</p>}</MailForm></MailSection>}
-  </>;
+  </MailSettingsLayout>;
 }
 function Settings() {
   const mail = useMail(), permissions = useAccess().permissions, path = mailboxPath(mail.box!.id);
   const resource = useMailResource<{ settings: MailSettings }>(mail.box!.access?.read ? path + "/settings" : null);
   const addresses = useMailResource<{ addresses: Address[]; limits?: { max_upload_bytes: number } }>(mail.box!.access?.read ? path + "/addresses" : null);
-  return <>
-    <MailPageHeader title="Mail settings" description="Choose your personal preferences and manage this mailbox." />
-    <MailSection title="Your experience" description="Personal preferences · saved automatically."><MailPreferenceFields showLink={false}/></MailSection>
+  return <MailSettingsLayout title="Mail settings" description="Choose your personal preferences and manage this mailbox.">
+    <MailSection title="Your experience" description="Personal preferences · saved automatically."><MailPreferenceFields /></MailSection>
     {mail.box!.access?.write && <MailSection title="Folders" description="Shared by everyone using this mailbox." action={<FolderManager/>}><div className="mail-settings-folder-list">{mail.folders.map(folder => <span className="mail-badge" key={folder.id}>{folder.name}</span>)}</div></MailSection>}
     {mail.box!.access?.read && <>
       <MailNotice error={resource.error} />
@@ -44,7 +43,7 @@ function Settings() {
       </MailSection>
     </>}
     {mail.box!.access?.manage ? <Members path={path} /> : <MailSection title="Sharing"><p className="mail-hint">Mailbox members are managed by the owner.</p></MailSection>}
-  </>;
+  </MailSettingsLayout>;
 }
 function SettingsSkeleton() {
   return <div className="mail-settings-placeholder" role="status" aria-label="Loading mailbox settings…"><div aria-hidden="true">

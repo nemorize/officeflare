@@ -13,7 +13,7 @@ import { Confirm } from "./console-shared";
 import "../routes/mail.css";
 interface MailContextValue {
   boxes: Mailbox[]; box: Mailbox | null; folders: Folder[]; capabilities: Capabilities | null;
-  composing: boolean; activeDraftId: string | null; loading: boolean; error: string; revision: number; realtime: string; summary: MailSummary | null; preferences: MailPreferences;
+  composing: boolean; activeDraftId: string | null; loading: boolean; error: string; revision: number; summary: MailSummary | null; preferences: MailPreferences;
   setPreferences: (changes: Partial<MailPreferences>) => Promise<void>; mobileMenu: boolean; setMobileMenu: (value: boolean) => void;
   feedback: (text: string, action?: () => Promise<void>, label?: string, timeout?: number) => void;
   selectBox: (id: string) => void; href: (path: string) => string; refresh: (target?: "messages" | "folders" | "summary") => void;
@@ -45,7 +45,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
     catch (failure) { prefs.reload(); feedback(failure instanceof Error ? failure.message : "Settings could not be saved."); }
   };
 
-  const [revision, setRevision] = useState(0), [realtime, setRealtime] = useState("Connecting");
+  const [revision, setRevision] = useState(0);
   const [folderRevision, setFolderRevision] = useState(0), [summaryRevision,setSummaryRevision] = useState(0);
   const refresh = useCallback((target: "messages" | "folders" | "summary" = "messages") => {
     const path = activeMailboxPath.current;
@@ -62,27 +62,25 @@ export function MailProvider({ children }: { children: ReactNode }) {
   }, [enabled]);
   useEffect(() => { const refreshAccess = () => boxes.reload(); window.addEventListener("officeflare:mail-access-changed", refreshAccess); return () => window.removeEventListener("officeflare:mail-access-changed", refreshAccess); }, [boxes.reload]);
   useEffect(() => {
-    if (!box?.access?.read || !caps.data) { setRealtime(boxes.loading || caps.loading ? "Connecting" : "Unavailable"); return; }
-    if (!caps.data.features.realtime) { setRealtime("Manual"); return; }
+    if (!box?.access?.read || !caps.data?.features.realtime) return;
     let stopped = false, socket: WebSocket | null = null, timer: ReturnType<typeof setTimeout>, heartbeat: ReturnType<typeof setInterval>, attempt = 0;
     const controller = new AbortController();
     const connect = async () => {
       if (stopped || document.hidden) return;
-      setRealtime("Connecting");
       try {
         const result = await api<{ ticket: string }>(mailboxPath(box.id) + "/events/ticket", { method: "POST", signal: controller.signal });
         if (stopped || document.hidden) return;
         const url = new URL(mailboxPath(box.id) + "/events/ws", window.location.origin); url.protocol = url.protocol === "https:" ? "wss:" : "ws:"; url.searchParams.set("ticket", result.ticket);
-        socket = new WebSocket(url); socket.onopen = () => { attempt = 0; setRealtime("Live"); refresh(); heartbeat = setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send("ping"); }, 30_000); };
+        socket = new WebSocket(url); socket.onopen = () => { attempt = 0; refresh(); heartbeat = setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send("ping"); }, 30_000); };
         socket.onmessage = (event) => { try { if (JSON.parse(String(event.data)).message_id) refresh(); } catch { /* Ignore non-event heartbeat messages. */ } };
-        socket.onclose = (event) => { clearInterval(heartbeat); socket = null; setRealtime("Offline"); if (!stopped && !document.hidden && event.code !== 1008) timer = setTimeout(() => { void connect(); }, Math.min(30_000, 1000 * 2 ** attempt++)); if (event.code === 1008) boxes.reload(); };
+        socket.onclose = (event) => { clearInterval(heartbeat); socket = null; if (!stopped && !document.hidden && event.code !== 1008) timer = setTimeout(() => { void connect(); }, Math.min(30_000, 1000 * 2 ** attempt++)); if (event.code === 1008) boxes.reload(); };
         socket.onerror = () => socket?.close();
-      } catch { setRealtime("Offline"); if (!stopped && !document.hidden) timer = setTimeout(() => { void connect(); }, Math.min(30_000, 1000 * 2 ** attempt++)); }
+      } catch { if (!stopped && !document.hidden) timer = setTimeout(() => { void connect(); }, Math.min(30_000, 1000 * 2 ** attempt++)); }
     };
     const visibility = () => { clearTimeout(timer); if (document.hidden) { socket?.close(); clearInterval(heartbeat); } else { refresh(); if (!socket) void connect(); } };
     document.addEventListener("visibilitychange", visibility); void connect();
     return () => { stopped = true; controller.abort(); clearTimeout(timer); clearInterval(heartbeat); socket?.close(); document.removeEventListener("visibilitychange", visibility); };
-  }, [box?.id, box?.access?.read, caps.data?.features.realtime, caps.loading, boxes.loading, refresh, boxes.reload]);
+  }, [box?.id, box?.access?.read, caps.data?.features.realtime, refresh, boxes.reload]);
   const value: MailContextValue = {
     boxes: boxes.data?.mailboxes ?? [], box, folders: (folders.data?.folders ?? []).map((folder) => ({ ...folder, name: folder.system_key ? {inbox:"Inbox",sent:"Sent",drafts:"Drafts",archive:"Archive",spam:"Spam",trash:"Trash"}[folder.system_key] ?? folder.name : folder.name })), capabilities: caps.data,
     recordRead: (message, version) => {
@@ -90,7 +88,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
       cache.update(key => key === path + "/messages/" + message.id || key.startsWith(path + "/threads/" + message.thread_id + "?"), data => applyReadReceipt(data, message.id, version));
       cache.invalidate(key => key === path + "/summary" || key.startsWith(path + "/messages?") || key.startsWith(path + "/threads?"));
     },
-    composing: !!composer, activeDraftId: composer?.id ?? null, loading: boxes.loading || caps.loading || folders.loading, error: boxes.error || caps.error || folders.error || (requested && boxes.data && !box ? "This mailbox is unavailable. Choose another mailbox." : ""), revision, realtime, summary: summary.data?.summary ?? null, preferences, setPreferences, mobileMenu, setMobileMenu, feedback,
+    composing: !!composer, activeDraftId: composer?.id ?? null, loading: boxes.loading || caps.loading || folders.loading, error: boxes.error || caps.error || folders.error || (requested && boxes.data && !box ? "This mailbox is unavailable. Choose another mailbox." : ""), revision, summary: summary.data?.summary ?? null, preferences, setPreferences, mobileMenu, setMobileMenu, feedback,
     selectBox: (id) => { const next = new URLSearchParams(params); next.set("mailbox", id); next.delete("message"); next.delete("q"); if (location.pathname.startsWith("/mail/folders/")) navigate(`/mail?${next}`); else setParams(next); },
     href: (path) => `${path}${box ? `?mailbox=${encodeURIComponent(box.id)}` : ""}`, refresh, refreshBoxes: boxes.reload,
     compose: (id,inline) => { if (!box) return; if (composerRef.current && (composerRef.current.id !== id || composerRef.current.box !== box.id)) { feedback("Close your current draft before opening another."); return; } if (composerRef.current) window.dispatchEvent(new Event("officeflare:focus-composer")); else { composerRef.current = { box: box.id, id, inline }; setComposer(composerRef.current); } },
@@ -128,7 +126,6 @@ export function MailSidebar() {
         {!mail.loading && !custom.length && <p className="mail-folder-empty">{mail.box?.access?.write ? "Create folders to organize mail." : "No custom folders."}</p>}
       </div>
     </nav>
-    <div className="mail-sidebar-bottom"><NavLink className="workspace-nav-item" to={mail.href("/mail/settings")} onClick={() => mail.setMobileMenu(false)}><Icon name="settings"/><span>Mail settings</span></NavLink><span className="mail-connection" role="status"><i data-live={mail.realtime === "Live"}/>{mail.realtime === "Live" ? "Up to date" : mail.realtime === "Connecting" ? "Connecting…" : mail.realtime === "Manual" ? "Updates on refresh" : "Live updates unavailable"}</span></div>
   </div>;
 }
 export function FolderManager() {

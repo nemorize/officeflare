@@ -20,7 +20,7 @@ async function fixture(t, options = {}) {
   const bindings = { AUTH_SIGNING_KEYS: JSON.stringify({ active_kid: "test", keys: [{ ...await exportJWK(privateKey), kid: "test" }] }),
     MFA_ENCRYPTION_KEYS: JSON.stringify({ active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } }),
     AUTH_ISSUER: "officeflare", AUTH_AUDIENCE: "officeflare-api" };
-  const common = { compatibilityDate: "2026-09-29", d1Databases: { DB: "drive-tests" }, r2Buckets: { DRIVE_BUCKET: "drive-tests" }, bindings };
+  const common = { compatibilityDate: "2026-09-29", d1Databases: { DB: "drive-tests" }, r2Buckets: { DRIVE_BUCKET: "drive-tests", PROFILE_BUCKET: "drive-profile-tests" }, bindings };
   const mf = new Miniflare(convertV4MiniflareOptions({ log: new Log(LogLevel.ERROR), workers: [
     { ...common, name: "officeflare", modules: workerModules },
     { ...common, name: "drive-harness", modules: [{ type: "ESModule", path: "tests/drive-harness.mjs", contents: harness.outputFiles[0].text }, ...workerModules] },
@@ -425,6 +425,56 @@ test('Drive UI API supports safe account search, roles and complete ordered pagi
   const permissions = (await f.call(`/items/${b.id}/permissions`)).permissions;
   assert.equal(permissions[0].display_name,'Team Viewer'); assert.equal(permissions[0].source_name,'Shared documents'); assert.equal(permissions[0].inherited,1);
   await f.call(`/items/${c.id}/comments`,{actor:'viewer',method:'POST',data:{body:'No'},expected:404});
+});
+
+test("Drive owner photos require readable files and refresh when the image changes", async t => {
+  const f = await fixture(t), root = await f.folder("Owner photo access"), photoPath = "/people/owner/profile-image";
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ9kAAAAASUVORK5CYII=", "base64");
+  const bucket = await f.mf.getR2Bucket("PROFILE_BUCKET"), key = "profiles/owner/photo.png";
+  await bucket.put(key, png, { httpMetadata: { contentType: "image/png" } });
+  await f.db.prepare("UPDATE users SET display_name='Drive owner',profile_image_key=? WHERE id='owner'").bind(key).run();
+  await f.call(photoPath, { actor: null, expected: 401 });
+  await f.call(photoPath, { actor: "no-drive", expected: 403 });
+  for (const actor of ["viewer", "outsider", "admin"]) await f.call(photoPath, { actor, expected: 404 });
+  await f.share(root.id, "viewer", "viewer");
+  const child = await f.folder("Inherited access", root.id), described = await f.item(child.id, "viewer");
+  await bucket.put("profiles/viewer/recipient.png", png, { httpMetadata: { contentType: "image/png" } });
+  await f.db.prepare("UPDATE users SET profile_image_key='profiles/viewer/recipient.png' WHERE id='viewer'").run();
+  const grant = (await f.call(`/items/${child.id}/permissions`)).permissions[0];
+  assert.equal(grant.inherited, 1);
+  assert.equal(grant.has_profile_image, true);
+  assert.equal(grant.profile_image_version, "recipient.png");
+  assert.equal(Object.hasOwn(grant, "profile_image_key"), false);
+  const recipientPhoto = await f.raw("/people/viewer/profile-image");
+  assert.equal(recipientPhoto.status, 200);
+  assert.deepEqual(Buffer.from(await recipientPhoto.arrayBuffer()), png);
+  await f.call("/people/viewer/profile-image", { actor: "outsider", expected: 404 });
+  assert.equal(described.owner.display_name, "Drive owner");
+  assert.equal(described.owner.has_profile_image, true);
+  assert.equal(described.owner.profile_image_version, "photo.png");
+  assert.equal(Object.hasOwn(described.owner, "profile_image_key"), false);
+  const listed = (await f.call("/items?view=shared", { actor: "viewer" })).items;
+  assert.ok(listed.every(entry => entry.owner.has_profile_image && entry.owner.profile_image_version === "photo.png"));
+  assert.equal(JSON.stringify(listed).includes("profiles/owner/"), false);
+  const response = await f.raw(photoPath, { actor: "viewer" });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+  await f.call("/api/users/owner/profile-image", { actor: "viewer", expected: 403 });
+  await f.db.prepare("UPDATE drive_settings SET internal_sharing_enabled=0 WHERE id=1").run();
+  await f.call(photoPath, { actor: "viewer", expected: 404 });
+  await f.db.prepare("UPDATE drive_settings SET internal_sharing_enabled=1 WHERE id=1").run();
+  await bucket.put("profiles/owner/replaced.png", png, { httpMetadata: { contentType: "image/png" } });
+  await f.db.prepare("UPDATE users SET profile_image_key='profiles/owner/replaced.png' WHERE id='owner'").run();
+  assert.equal((await f.item(child.id, "viewer")).owner.profile_image_version, "replaced.png");
+  await f.db.prepare("UPDATE users SET profile_image_key=NULL WHERE id='owner'").run();
+  assert.equal((await f.item(child.id, "viewer")).owner.has_profile_image, false);
+  await f.call(photoPath, { actor: "viewer", expected: 404 });
+  await f.db.prepare("UPDATE users SET profile_image_key=? WHERE id='owner'").bind(key).run();
+  await f.call(`/items/${root.id}/permissions/viewer?version=${(await f.item(root.id)).version}`, { method: "DELETE" });
+  await f.call(photoPath, { actor: "viewer", expected: 404 });
+  await f.call("/people/viewer/profile-image", { expected: 404 });
 });
 
 const adminCall = (f, path, options = {}) => f.call(`/admin${path}`, { actor: "admin", ...options });

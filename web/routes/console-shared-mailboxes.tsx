@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useAccess } from "../components/console-access";
 import { useAccount } from "../components/account-context";
-import { Check } from "../components/console-shared";
-import { Button, useNotifications } from "../components/ui";
+import { Check, ConsolePageHeader } from "../components/console-shared";
+import { Button, Input, useNotifications } from "../components/ui";
 import { MailAddressField, MailboxAliases, DomainSetupLink, preferredDomain } from "../components/user-mail";
-import { MailField, MailFieldset, MailForm, MailInput, MailNotice, MailPageHeader, MailSection, MailSelect, MailState, useMailAction, useMailResource } from "../components/mail-common";
+import { MailField, MailFieldset, MailForm, MailInput, MailNotice, MailSection, MailSelect, MailState, useMailAction, useMailResource } from "../components/mail-common";
 import { api, ApiError } from "../lib/api";
 import { MailOperation, type Address, type Domain, type Mailbox } from "../lib/mail";
 import "./console.css";
@@ -27,9 +27,8 @@ function assignment(member: Member): Assignment {
 export function SharedMailboxes() {
   const permissions = useAccess().permissions, resource = useMailResource<{ mailboxes: Mailbox[] }>("/api/mail/mailboxes?all=true&kind=shared"), [search, setSearch] = useState("");
   const boxes = resource.data?.mailboxes.filter((box) => box.kind === "shared" && `${box.name} ${box.email_address ?? ""}`.toLowerCase().includes(search.toLowerCase())) ?? [];
-  return <><MailPageHeader title="Shared mailboxes" description="Manage team addresses and the people who use them together.">{permissions.includes("admin.mail.mailboxes.manage") && <Button nativeButton={false} render={<Link to="/console/mail/mailboxes/new" />} variant="primary">New shared mailbox</Button>}</MailPageHeader>
-    {permissions.includes("admin.users.read") && <p className="mail-hint">Personal addresses and mailboxes are managed in <Link to="/console/users">Users →</Link></p>}
-    <MailInput label="Find shared mailboxes" placeholder="Name or email address" value={search} onChange={(event) => setSearch(event.target.value)} />
+  return <><ConsolePageHeader title="Shared mailboxes" description="Manage team addresses and the people who use them together.">{permissions.includes("admin.mail.mailboxes.manage") && <Button nativeButton={false} render={<Link to="/console/mail/mailboxes/new" />} variant="primary">New shared mailbox</Button>}</ConsolePageHeader>
+    <div className="mail-field"><Input aria-label="Find shared mailboxes" placeholder="Name or email address" value={search} onValueChange={setSearch} /></div>
     <MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
     {resource.data && <div className="mail-table-wrap"><table className="mail-table"><caption className="console-sr-only">Shared mailboxes</caption><thead><tr><th>Mailbox</th><th>Members</th><th>Status</th><th><span className="console-sr-only">Actions</span></th></tr></thead><tbody>{boxes.map((box) => <tr key={box.id}><td><Link to={`/console/mail/mailboxes/${box.id}`}><strong>{box.name}</strong><small>{box.email_address ?? "Address not set"}</small></Link></td><td>{box.member_count ?? 0}</td><td><span className="mail-badge">{box.status}</span></td><td><Button nativeButton={false} render={<Link to={`/console/mail/mailboxes/${box.id}`} />} size="sm">{permissions.includes("admin.mail.mailboxes.manage") ? "Manage" : "View"}</Button></td></tr>)}</tbody></table>{!boxes.length && <p className="mail-empty">{search ? "No shared mailboxes match your search." : "No shared mailboxes yet. Create a team address and choose its members in one step."}</p>}</div>}
   </>;
@@ -37,11 +36,11 @@ export function SharedMailboxes() {
 export function SharedMailboxEditorPage({ creating = false }: { creating?: boolean }) {
   const { id = "" } = useParams(), permissions = useAccess().permissions, config = useMailResource<Configuration>(creating ? null : `/api/mail/mailboxes/${encodeURIComponent(id)}/configuration`);
   const domains = useMailResource<{ domains: Domain[] }>(permissions.includes("admin.mail.domains.read") ? "/api/mail/domains" : null), directory = useMailResource<{ users: Person[] }>("/api/mail/mailbox-users");
-  return <div className="mail-manage-page mail-console-page"><Link to="/console/mail/mailboxes" className="console-back">← Shared mailboxes</Link>
-    <MailPageHeader title={creating ? "New shared mailbox" : config.data?.mailbox.name ?? "Shared mailbox"} description="Set a team address and shared access in one place." />
+  return <section className="account-page console-page console-detail-page mail-console-page"><Link to="/console/mail/mailboxes" className="console-back">← Shared mailboxes</Link>
+    <ConsolePageHeader title={creating ? "New shared mailbox" : config.data?.mailbox.name ?? "Shared mailbox"} description="Set a team address and shared access in one place." />
     <MailState loading={!creating && config.loading && !config.data || directory.loading && !directory.data || domains.loading && !domains.data} error={config.error || directory.error || domains.error} retry={() => { config.reload(); directory.reload(); domains.reload(); }} />
     {(creating || config.data) && directory.data && (!permissions.includes("admin.mail.domains.read") || domains.data) && <SharedMailboxForm key={creating ? "new" : id} existing={config.data ?? undefined} domains={domains.data?.domains ?? []} users={directory.data.users} onSaved={config.reload} />}
-  </div>;
+  </section>;
 }
 function SharedMailboxForm({ existing, domains, users, onSaved }: { existing?: Configuration; domains: Domain[]; users: Person[]; onSaved: () => void }) {
   const { user } = useAccount(), permissions = useAccess().permissions, notify = useNotifications(), navigate = useNavigate(), action = useMailAction();

@@ -51,13 +51,6 @@
 .drive-storage p {
   margin: 10px 0 0;
 }
-.drive-storage-hint {
-  display: block;
-  color: var(--ui-subtle);
-  font-size: 10px;
-  line-height: 1.6;
-  margin-top: 8px;
-}
 .workspace-drive .workspace-sidebar-footer {
   margin-top: 0;
 }
@@ -221,6 +214,10 @@
   width: 100%;
   min-width: 0;
 }
+.drive-files-skeleton .loading-skeleton-list .skeleton-row { height: 54px; }
+.drive-files-skeleton.drive-layout-grid .loading-skeleton > [aria-hidden] { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.drive-files-skeleton.drive-layout-grid .skeleton-row { display: grid; align-content: start; gap: 12px; height: 195px; padding: 12px; border: 1px solid var(--ui-border); border-radius: 12px; }
+.drive-files-skeleton.drive-layout-grid .skeleton-avatar { width: 100%; height: 112px; border-radius: 8px; background: var(--ui-surface); }
 .drive-table-header,
 .drive-file-row {
   display: grid;
@@ -326,7 +323,10 @@
   font-size: 9px;
   color: var(--ui-muted);
   flex-shrink: 0;
+  overflow: hidden;
 }
+.drive-owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.drive-owner-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .drive-row-date,
 .drive-row-size {
   font-size: 10px;
@@ -688,7 +688,9 @@
   background: var(--ui-surface);
   color: var(--ui-muted);
   flex-shrink: 0;
+  overflow: hidden;
 }
+.drive-person-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .drive-person-chip {
   display: flex;
   align-items: center;
@@ -828,6 +830,9 @@
 }
 .drive-check-label {
   margin: 13px 0 19px;
+}
+.drive-link-create-actions {
+  margin-top: 0;
 }
 .drive-created-link {
   display: flex;
@@ -1530,6 +1535,7 @@
     grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
     gap: 10px;
   }
+  .drive-files-skeleton.drive-layout-grid .loading-skeleton > [aria-hidden] { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; }
   .drive-page-header,
   .drive-view-toolbar {
     padding-left: 16px;
