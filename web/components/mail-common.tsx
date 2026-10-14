@@ -74,9 +74,9 @@ export function MailInput({ label, hint, fieldClassName, ...props }: Omit<InputP
   return <MailField label={label} hint={hint} className={fieldClassName}><Input id={id} {...props} onInput={dateInput ? (event) => { props.onInput?.(event); props.onChange?.(event as unknown as React.ChangeEvent<HTMLInputElement>); } : props.onInput} /></MailField>;
 }
 export function MailModal({ open, title, description, children, onClose, busy, wide }: { open: boolean; title: string; description?: ReactNode; children: ReactNode; onClose: () => void; busy?: boolean; wide?: boolean }) {
-  return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}><DialogPopup className={`mail-modal${wide ? " mail-modal-wide" : ""}`}>
+  return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}><DialogPopup padding="none" viewportProps={{ className: "mail-modal-viewport" }} className={`mail-modal${wide ? " mail-modal-wide" : ""}`}>
     <div className="mail-modal-heading"><Dialog.Title>{title}</Dialog.Title><Button size="icon" variant="ghost" aria-label="Close dialog" disabled={busy} onClick={onClose}><Icon name="close" /></Button></div>
-    <Dialog.Description>{description ?? ""}</Dialog.Description>{children}
+    <div className="mail-modal-body"><Dialog.Description>{description ?? ""}</Dialog.Description>{children}</div>
   </DialogPopup></Dialog.Root>;
 }
 export function MailSection({ title, description, action, children }: { title: string; description?: ReactNode; action?: ReactNode; children: ReactNode }) { return <section className="mail-section"><header><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{action}</header>{children}</section>; }
