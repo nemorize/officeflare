@@ -92,8 +92,6 @@
 .mail-protocol-grid [data-ui="button"] { justify-self: start; }
 .mail-protocol-tools { display: grid; gap: 12px; margin: 0; padding-left: 18px; font-size: 12px; }
 .mail-protocol-tools p { color: var(--ui-muted); margin-top: 5px; }
-.mail-capabilities > div { display: flex; gap: 8px; flex-wrap: wrap; margin-block: 16px; }
-.mail-capabilities h3 { width: 100%; font-size: 13px; font-weight: 500; }
 .mail-data-options p { font-size: 12px; color: var(--ui-muted); line-height: 1.8; margin: 10px 0 18px; }
 .mail-backup-files { max-height: 45dvh; overflow: auto; margin-top: 18px; }
 .mail-backup-files strong { font-size: 12px; }
