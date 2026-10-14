@@ -1447,7 +1447,9 @@ for (const action of ["cancel", "retry"] as const)
     return c.json({ submission: publicSubmission(job) });
   });
 mail.get("/mailboxes/:m/audit-logs", async (c) => {
+  await administrator(c, "admin.mail.audit.read");
   await authorize(c.env, actor(c), resource(c), "manage");
+  c.header("Cache-Control", "private, no-store");
   return c.json({
     events: await mailbox(c.env, resource(c)).auditLog(
       integer(

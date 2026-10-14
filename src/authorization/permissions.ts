@@ -56,6 +56,7 @@ export const permissionCatalog = {
   "admin.mail.domains.manage": { label: "Manage mail domains", description: "Configure domains, addresses and inbound routing.", group: "mail", requires: ["admin.mail.domains.read"] },
   "admin.mail.mailboxes.read": { label: "View mailbox configuration", description: "List workspace mailbox configuration without access to message contents.", group: "mail", requires: ["console.access"] },
   "admin.mail.mailboxes.manage": { label: "Manage mailbox configuration", description: "Provision mailboxes and change their status. Does not grant mailbox content access.", group: "mail", requires: ["admin.mail.mailboxes.read"] },
+  "admin.mail.audit.read": { label: "View mail audit history", description: "Inspect resource activity for mailboxes you manage. Does not grant access to other mailboxes.", group: "mail", requires: ["console.access", "mail.access"] },
 } as const satisfies Record<string, PermissionDefinition>;
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";

@@ -1243,7 +1243,7 @@ test("MBOX export and reimport preserve legacy text, binary attachments and quot
 });
 
 test("domain routing, signatures, audit and attachment-safe configuration restore", async (t) => {
-  const { mf, tokens, call, admin, base, domain, mailbox, draft } =
+  const { mf, db, tokens, call, admin, base, domain, mailbox, draft } =
     await fixture(t, "6000000000", true);
   const harness = await mf.getWorker("mail-harness"),
     bucket = await mf.getR2Bucket("MAIL_BUCKET");
@@ -1343,6 +1343,10 @@ test("domain routing, signatures, audit and attachment-safe configuration restor
       actions: [{ type: "move", folder_id: folder.id }],
     },
   });
+  await call(base + "/audit-logs", { expected: 403 });
+  await db.prepare("INSERT INTO roles(id,key,label) VALUES('mail-auditor','mail-auditor','Mail auditor')").run();
+  await db.batch(permissionClosure(["admin.mail.audit.read"]).map(permission => db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('mail-auditor',?)").bind(permission)));
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('owner','mail-auditor')").run();
   const events = await call(base + "/audit-logs");
   assert.ok(
     events.events.some(
@@ -2115,4 +2119,34 @@ test("formatted mail and cached images remain authorized, private, and tied to e
   await call(base + '/drafts/' + message.id, { method: 'PATCH', data: { version: 1, text: 'Updated content', html: '<p>Changed</p>' } });
   assert.doesNotMatch((await call(renderPath)).html, /newsletter/);
   await call(renderPath + '/assets/0', { expected: 404 });
+});
+
+test("mail audit history requires a dedicated permission and mailbox management, with immediate revocation", async (t) => {
+  const { db, tokens, raw, call, base, mailbox } = await fixture(t);
+  const auditPath = base + "/audit-logs";
+  assert.ok((await (await raw('/api/me/permissions', { token: tokens.administrator })).json()).permissions.includes('admin.mail.audit.read'));
+  assert.ok(!(await (await raw('/api/me/permissions', { token: tokens.owner })).json()).permissions.includes('admin.mail.audit.read'));
+  await call(auditPath, { expected: 403 }); // Personal ownership and Mail access are insufficient.
+  await call(auditPath, { token: tokens.administrator, expected: 403 }); // Global permission never supplies mailbox access.
+  await call(base + '/members/reader', { method: 'PUT', data: { read: true, manage: true } });
+  await call(auditPath, { token: tokens.reader, expected: 403 });
+  await db.prepare("INSERT INTO roles(id,key,label) VALUES('delegated-auditor','delegated-auditor','Delegated auditor')").run();
+  await db.batch(permissionClosure(['admin.mail.audit.read']).map(permission => db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('delegated-auditor',?)").bind(permission)));
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('reader','delegated-auditor')").run();
+  const response = await raw('/api/mail' + auditPath, { token: tokens.reader });
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.ok((await response.json()).events.some(event => event.actor_id === 'owner'));
+  const { key } = await call('/api-keys', { method: 'POST', token: tokens.reader, data: { name: 'Auditor read key', expires_at: Math.floor(Date.now() / 1000) + 3600, scopes: [{ mailbox_id: mailbox.id, action: 'read' }] }, expected: 201 });
+  await call(auditPath, { token: key.token, expected: 403 });
+  await call(base + '/members/reader', { method: 'PUT', data: { read: true, manage: false } });
+  await call(auditPath, { token: tokens.reader, expected: 403 });
+  await call(base + '/members/reader', { method: 'PUT', data: { read: true, manage: true } });
+  await call(auditPath, { token: tokens.reader });
+  await db.prepare("DELETE FROM role_permissions WHERE role_id='delegated-auditor' AND permission_key='console.access'").run();
+  await call(auditPath, { token: tokens.reader, expected: 403 });
+  await db.prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('delegated-auditor','console.access')").run();
+  await call(auditPath, { token: tokens.reader });
+  await db.prepare("DELETE FROM user_roles WHERE user_id='reader' AND role_id='delegated-auditor'").run();
+  await call(auditPath, { token: tokens.reader, expected: 403 });
 });
