@@ -58,8 +58,8 @@ svg { flex-shrink: 0; vertical-align: middle; }
 }
 
 .password-control { position: relative; width: 100%; }
-.password-control > [data-ui="input"] { padding-inline-end: 40px; }
-.password-control > [data-ui-button] { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; }
+.password-control > [data-ui="input"] { padding-inline-end: calc(var(--ui-control-height) + 4px); }
+.password-control > [data-ui-button][data-size="icon"] { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; width: calc(var(--ui-control-height) - 6px); height: calc(var(--ui-control-height) - 6px); min-height: calc(var(--ui-control-height) - 6px); }
 
 .login-page { min-height: 100dvh; display: flex; flex-direction: column; background: var(--ui-sidebar); }
 .login-brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; width: fit-content; }
