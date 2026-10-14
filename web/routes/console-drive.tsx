@@ -67,8 +67,8 @@ function Overview() {
   const resource = useResource<{ summary: Record<string, number> }>(`${endpoint}/overview`);
   const summary = resource.data?.summary;
   return <><PageHeader title="Drive overview" description="Storage totals include every stored file version and items in trash. Reservations include uploads and ownership transfers." /><ResourceState loading={resource.loading} error={resource.error} label="Loading Drive overview…" />{summary && <div className="console-drive-summary-grid">{[
-    ["Storage used", formatBytes(summary.used_bytes ?? 0)], ["Reserved storage", formatBytes(summary.reserved_bytes ?? 0)], ["Allocated limits", formatBytes(summary.quota_bytes ?? 0)], ["Drive accounts", summary.accounts], ["Files / folders", `${summary.files ?? 0} / ${summary.folders ?? 0}`], ["Over quota", summary.over_quota ?? 0], ["Items in trash", summary.trashed ?? 0], ["Active uploads", summary.uploads], ["Pending cleanup", summary.pending_cleanup],
-  ].map(([label, value]) => <section className="account-panel" key={label}><div className="account-panel-header"><h2>{label}</h2></div><p>{value}</p></section>)}</div>}<Transfers /></>;
+    ["Storage used", formatBytes(summary.used_bytes ?? 0)], ["Reserved storage", formatBytes(summary.reserved_bytes ?? 0)], ["Allocated limits", formatBytes(summary.quota_bytes ?? 0)], ["Drive accounts", summary.accounts], ["Files / folders", `${summary.files ?? 0} / ${summary.folders ?? 0}`], ["Over quota", summary.over_quota ?? 0], ["Items in trash", summary.trashed ?? 0], ["Active uploads", summary.uploads], ["Pending cleanup", summary.pending_cleanup], ["Ownership transfers", summary.transfers ?? 0],
+  ].map(([label, value]) => <section className="account-panel" key={label}><div className="account-panel-header"><h2>{label}</h2></div><p>{value}</p></section>)}</div>}</>;
 }
 function Accounts() {
   const [query, setQuery] = useState(""), [state, setState] = useState("all"), resource = usePaged<DriveAccount>("accounts", { q: query, state });

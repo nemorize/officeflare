@@ -51,8 +51,9 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
 .console-mobile-nav { display: none; }
 .console-drive-tabs { overflow-x: auto; margin-block-end: 24px; }
 .console-drive-tabs > [data-ui="tabs-list"] { width: max-content; min-width: 100%; }
-.console-drive-summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 16px; }
-.console-drive-summary-grid > .account-panel { margin: 0; }
+.console-drive-summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); grid-auto-rows: 1fr; gap: 16px; }
+.console-drive-summary-grid > .account-panel { display: flex; flex-direction: column; margin: 0; }
+.console-drive-summary-grid > .account-panel > p { margin-block-start: auto; }
 .console-drive-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin-block: 20px; }
 .console-drive-filters > [data-ui="field-root"] { flex: 1; min-width: 160px; }
 .console-drive-form-grid, .console-drive-confirm-fields { display: grid; gap: 16px; }
