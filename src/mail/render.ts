@@ -4,7 +4,7 @@ import generate from "css-tree/generator";
 import walk from "css-tree/walker";
 import type { CssNode, List, ListItem } from "css-tree";
 import sanitizeHtml from "sanitize-html";
-import { fetchRemoteAsset, remoteUrl, validatedImage, type RemoteFetcher } from "./remote";
+import { fetchRemoteAsset, remoteUrl, validatedImage, runtimeRemoteFetcher, type RemoteFetcher } from "./remote";
 import { hash } from "./input";
 
 export interface MailRenderAsset { id: string; url: string }
@@ -58,7 +58,7 @@ async function cachedRemote(url: string, kind: "image" | "stylesheet", ownHost: 
   await cache?.put(request, new Response(result.body, { headers: { ...cacheHeaders(result.contentType), "X-Mail-Resource-Url": result.url } })).catch(() => {});
   return result;
 }
-export async function renderMailHtml(source: string, cid: Record<string, string>, resourcePath: string, ownHost: string, cache: RenderCache | undefined = frameCache(), fetcher: RemoteFetcher = fetch): Promise<MailRendering> {
+export async function renderMailHtml(source: string, cid: Record<string, string>, resourcePath: string, ownHost: string, cache: RenderCache | undefined = frameCache(), fetcher: RemoteFetcher = runtimeRemoteFetcher): Promise<MailRendering> {
   if (source.length > 2 * 1024 ** 2) throw new Error("Mail body is too large to render");
   const fingerprint = await hash(resourcePath + "\n" + source);
   const key = cacheRequest("html", fingerprint), existing = await cache?.match(key);
@@ -183,7 +183,7 @@ export async function renderMailHtml(source: string, cid: Record<string, string>
   if (!failures) await cache?.put(key, Response.json(result, { headers: cacheHeaders("application/json") })).catch(() => {});
   return result;
 }
-export async function loadMailRenderImage(asset: MailRenderAsset, ownHost: string, cache: RenderCache | undefined = frameCache(), fetcher: RemoteFetcher = fetch): Promise<Response> {
+export async function loadMailRenderImage(asset: MailRenderAsset, ownHost: string, cache: RenderCache | undefined = frameCache(), fetcher: RemoteFetcher = runtimeRemoteFetcher): Promise<Response> {
   const result = await cachedRemote(asset.url, "image", ownHost, cache, fetcher);
   return new Response(result.body, { headers: { "Content-Type": result.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox" } });
 }

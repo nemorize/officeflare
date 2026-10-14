@@ -5,6 +5,8 @@ import sanitizeHtml from "sanitize-html";
 export type RemoteKind = "image" | "stylesheet";
 export interface RemoteAsset { body: Uint8Array; contentType: string; url: string }
 export type RemoteFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+// Worker runtime methods require their global receiver, unlike Node's fetch.
+export const runtimeRemoteFetcher: RemoteFetcher = (input, init) => globalThis.fetch(input, init);
 const maximumBytes = { image: 5 * 1024 ** 2, stylesheet: 256 * 1024 };
 const privacyHeaders = {
   "User-Agent": "Officeflare-Mail-Proxy/1.0",
@@ -81,7 +83,7 @@ export function validatedImage(body: Uint8Array, contentType: string): { body: U
     throw new Error("Unsupported remote image");
   return { body, contentType: expected };
 }
-export async function fetchRemoteAsset(value: string, kind: RemoteKind, ownHost: string, fetcher: RemoteFetcher = fetch): Promise<RemoteAsset> {
+export async function fetchRemoteAsset(value: string, kind: RemoteKind, ownHost: string, fetcher: RemoteFetcher = runtimeRemoteFetcher): Promise<RemoteAsset> {
   let url = remoteUrl(value);
   const signal = AbortSignal.timeout(8000);
   for (let hop = 0; hop <= 3; hop++) {

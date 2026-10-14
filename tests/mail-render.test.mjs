@@ -147,3 +147,14 @@ test('inline link and image styles rewrite each background URL once', async () =
   assert.equal(result.html.match(/background-image:url\(\/api\/mail\/mailboxes\/box\/messages\/message\/render\/assets\/0\)/g).length, 2);
   assert.doesNotMatch(result.html, /background(?:=""|>)/);
 });
+
+test('default remote fetching preserves the Worker global receiver for DNS, CSS and images', async t => {
+  const fixture = remoteFixture(url => url.pathname.endsWith('.css') ? new Response('.body{color:#123456}', { headers: { 'Content-Type': 'text/css' } }) : imageResponse());
+  t.mock.method(globalThis, 'fetch', function(input, init) { assert.equal(this, globalThis, 'Worker fetch must retain its global receiver'); return fixture.fetcher(input, init); });
+  const image = await fetchRemoteAsset('https://cdn.example.com/image.png', 'image', origin);
+  assert.equal(image.contentType, 'image/png');
+  const rendered = await renderMailHtml('<link rel="stylesheet" href="https://cdn.example.com/style.css"><p class="body">Body</p><img src="https://cdn.example.com/image.png">', {}, path, origin, memoryCache());
+  assert.equal(rendered.failures, 0); assert.match(rendered.html, /#123456/);
+  const response = await loadMailRenderImage(rendered.assets[0], origin, memoryCache());
+  assert.equal(response.headers.get('Content-Type'), 'image/png');
+});
