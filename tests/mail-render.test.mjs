@@ -38,7 +38,7 @@ test('proxy uses fresh privacy headers, manually revalidates redirects and caps 
     for (const name of ['cf-connecting-ip','x-real-ip','x-forwarded-for','true-client-ip']) assert.equal(headers.get(name), '0.0.0.0');
     assert.equal(headers.get('user-agent'), 'Officeflare-Mail-Proxy/1.0');
     assert.ok(call.options.signal);
-    assert.equal(call.options.redirect, call.url.hostname === 'cloudflare-dns.com' ? 'error' : 'manual');
+    assert.equal(call.options.redirect, 'manual');
   }
   assert.equal(fixture.calls.filter(call => call.url.hostname === 'cloudflare-dns.com').length, 4);
   const loop = remoteFixture(() => new Response(null, { status: 302, headers: { Location: '/a' } }));
@@ -150,11 +150,20 @@ test('inline link and image styles rewrite each background URL once', async () =
 
 test('default remote fetching preserves the Worker global receiver for DNS, CSS and images', async t => {
   const fixture = remoteFixture(url => url.pathname.endsWith('.css') ? new Response('.body{color:#123456}', { headers: { 'Content-Type': 'text/css' } }) : imageResponse());
-  t.mock.method(globalThis, 'fetch', function(input, init) { assert.equal(this, globalThis, 'Worker fetch must retain its global receiver'); return fixture.fetcher(input, init); });
+  t.mock.method(globalThis, 'fetch', function(input, init) { assert.equal(this, globalThis, 'Worker fetch must retain its global receiver'); assert.notEqual(init.redirect, 'error', 'Workers do not implement redirect:error'); return fixture.fetcher(input, init); });
   const image = await fetchRemoteAsset('https://cdn.example.com/image.png', 'image', origin);
   assert.equal(image.contentType, 'image/png');
   const rendered = await renderMailHtml('<link rel="stylesheet" href="https://cdn.example.com/style.css"><p class="body">Body</p><img src="https://cdn.example.com/image.png">', {}, path, origin, memoryCache());
   assert.equal(rendered.failures, 0); assert.match(rendered.html, /#123456/);
   const response = await loadMailRenderImage(rendered.assets[0], origin, memoryCache());
   assert.equal(response.headers.get('Content-Type'), 'image/png');
+});
+
+test('DNS verification refuses redirects instead of following a potentially private target', async () => {
+  const calls = [];
+  await assert.rejects(fetchRemoteAsset('https://cdn.example.com/image.png', 'image', origin, async (input, options) => {
+    calls.push(String(input)); assert.equal(options.redirect, 'manual');
+    return new Response(null, { status: 302, headers: { Location: 'https://internal.example.com/' } });
+  }), /DNS lookup failed/);
+  assert.ok(calls.every(url => url.startsWith('https://cloudflare-dns.com/')));
 });

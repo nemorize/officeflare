@@ -50,7 +50,8 @@ export async function boundedBody(response: Response, maximum: number): Promise<
 async function publicDns(hostname: string, fetcher: RemoteFetcher, signal: AbortSignal) {
   const records = await Promise.all(["A", "AAAA"].map(async type => {
     const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`;
-    const response = await fetcher(url, { redirect: "error", signal, headers: { ...privacyHeaders, Accept: "application/dns-json" } });
+    // Workers only implement manual/follow. Reject non-2xx below without following DNS redirects.
+    const response = await fetcher(url, { redirect: "manual", signal, headers: { ...privacyHeaders, Accept: "application/dns-json" } });
     if (!response.ok) throw new Error("DNS lookup failed");
     const result = JSON.parse(new TextDecoder().decode(await boundedBody(response, 16 * 1024))) as { Status?: number; Answer?: { type: number; data: string }[] };
     if (result.Status !== 0) throw new Error("DNS lookup failed");
