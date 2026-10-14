@@ -68,7 +68,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
   const [folderRevision, setFolderRevision] = useState(0), [summaryRevision,setSummaryRevision] = useState(0);
   const refresh = useCallback((target: "messages" | "folders" | "summary" = "messages") => {
     const path = activeMailboxPath.current;
-    if (path) cache.invalidateInactive(key => key === path + "/summary" || target === "folders" && key === path + "/folders" || target === "messages" && key.startsWith(path + "/") && /\/(?:messages|threads|drafts|submissions|storage|audit-logs|jobs|ui)(?:\/|\?|$)/.test(key.slice(path.length)));
+    if (path) cache.invalidateInactive(key => key === path + "/summary" || target === "folders" && key === path + "/folders" || target === "messages" && key.startsWith(path + "/") && !/\/(?:render|attachments)(?:\/|\?)/.test(key) && /\/(?:messages|threads|drafts|submissions|storage|audit-logs|jobs|ui)(?:\/|\?|$)/.test(key.slice(path.length)));
     if (target === "messages") setRevision(value => value + 1);
     if (target === "folders") setFolderRevision(value => value + 1);
     setSummaryRevision(value => value + 1);
@@ -118,7 +118,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
         if (primary) cache.update(key => key === primary, data => mergeMailView(data, delta, new URLSearchParams(scope).get("grouped") === "true", !!new URLSearchParams(scope).get("cursor")));
         if (views.length > 1) cache.invalidate(key => views.slice(1).includes(key));
         const affected = new Set(delta.messages.map(message => message.id)), deleted = new Set(delta.removed);
-        cache.invalidateInactive(key => key.startsWith(path + "/") && (/\/(?:ui\/view|messages|threads|drafts)(?:\/|\?)/.test(key.slice(path.length))));
+        cache.invalidateInactive(key => key.startsWith(path + "/") && !/\/(?:render|attachments)(?:\/|\?)/.test(key) && (/\/(?:ui\/view|messages|threads|drafts)(?:\/|\?)/.test(key.slice(path.length))));
         // Bodies and draft content require a fresh read, whereas flag-only receipts do not.
         cache.invalidate(key => key.startsWith(path + "/drafts/") && affected.has(key.slice((path + "/drafts/").length)) || key.startsWith(path + "/messages/") && deleted.has(key.slice((path + "/messages/").length)) || key.startsWith(path + "/ui/conversation/") && deleted.has(key.slice((path + "/ui/conversation/").length).split("?")[0]!));
       }

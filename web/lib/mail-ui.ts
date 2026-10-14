@@ -70,6 +70,8 @@ export function applyMailHeaders(data: unknown, messages: Message[], removed: st
   const updates = new Map(messages.map(message => [message.id, message]));
   const apply = (value: Message) => { const next = updates.get(value.id); return next && next.version >= value.version ? { ...value, ...next } : value; };
   const resource = data as { message?: Message; messages?: Message[] };
+  // Header updates must never coerce cached image Blobs or render manifests into objects.
+  if (!resource.message && !Array.isArray(resource.messages)) return data;
   let entries = resource.messages?.filter(message => !removed.includes(message.id)).map(apply);
   if (entries && resource.message) {
     const existing = new Set(entries.map(message => message.id));

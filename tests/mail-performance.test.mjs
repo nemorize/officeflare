@@ -65,3 +65,19 @@ test("conversation headers accept new mail and deletions without reloading unrel
   assert.deepEqual(next.messages.map(message => message.id), ["c", "a"]); assert.equal(next.message.body, body);
   assert.equal(applyMailHeaders(next, [{ ...first, version: 1 }]).message.version, 2);
 });
+
+test("a read receipt during image loading preserves the binary asset and its render manifest", async () => {
+  const { applyMailHeaders } = await import("../web/lib/mail-ui.ts");
+  const headers = [{ id: "a", thread_id: "t", version: 2, is_read: 1 }];
+  let finish;
+  const cache = new MailResourceCache(() => new Promise(resolve => { finish = resolve; }));
+  const key = "/api/mail/mailboxes/b/messages/a/render/assets/0?revision=body";
+  const image = new Blob([new Uint8Array([0,255])], { type: "image/png" });
+  const loading = cache.load(key); await Promise.resolve();
+  cache.update(path => path.startsWith("/api/mail/mailboxes/b/messages/"), data => applyMailHeaders(data, headers));
+  finish(image); await loading;
+  assert.equal(cache.snapshot(key).data, image);
+  assert.equal(cache.snapshot(key).data.type, "image/png");
+  const manifest = { html: "<p>Body</p>", assets: [{ source: key }] };
+  assert.equal(applyMailHeaders(manifest, headers), manifest);
+});
