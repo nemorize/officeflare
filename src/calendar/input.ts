@@ -1,7 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 import type { CalendarContext } from "./types";
 export function fail(
-  status: 400 | 403 | 404 | 409 | 410 | 412 | 422 | 428,
+  status: 400 | 403 | 404 | 409 | 410 | 412 | 422 | 428 | 429,
   code: string,
   message: string,
 ): never {

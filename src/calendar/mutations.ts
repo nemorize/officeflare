@@ -4,6 +4,7 @@ import type { Permission } from "../authorization/permissions";
 import type { Bind, CalendarContext, Condition } from "./types";
 import { combine, condition, first, identity, statement } from "./access";
 import { fail, text } from "./input";
+import { seal, receipt } from "./secrets";
 
 export function insert(
   c: CalendarContext,
@@ -76,6 +77,12 @@ export interface Mutation<T> {
   request: unknown;
   result: T;
   idempotent?: boolean;
+  secretResult?: boolean;
+  principal?: {
+    actor_key: string;
+    actor_user_id: string | null;
+    auth: Condition;
+  };
   build: (proof: string, operationId: string) => D1PreparedStatement[];
   calendar?: string;
   event?: string;
@@ -106,14 +113,23 @@ export async function replay<T>(
       "IDEMPOTENCY_CONFLICT",
       "Idempotency-Key was used with another request",
     );
-  return { result: JSON.parse(old.result_json) as T };
+  return {
+    result: await receipt<T>(
+      c.env,
+      `receipt:user:${actor}:${operation}:${old.request_hash}`,
+      old.result_json,
+    ),
+  };
 }
 export async function mutate<T>(
   c: CalendarContext,
   input: Mutation<T>,
 ): Promise<T> {
-  const actor = c.get("identity").user.id,
-    auth = identity(c, input.action),
+  const actor =
+      input.principal?.actor_user_id ??
+      (input.principal ? null : c.get("identity").user.id),
+    actorKey = input.principal?.actor_key ?? `user:${actor}`,
+    auth = input.principal?.auth ?? identity(c, input.action),
     hash = await digest(stable(input.request));
   const key = input.idempotent
     ? text(c.req.header("Idempotency-Key"), "Idempotency-Key", 128)
@@ -123,7 +139,7 @@ export async function mutate<T>(
       ? first<{ request_hash: string; result_json: string }>(
           c.env,
           "SELECT request_hash,result_json FROM calendar_operations WHERE actor_key=? AND operation=? AND idempotency_key=?",
-          `user:${actor}`,
+          actorKey,
           input.operation,
           key,
         )
@@ -138,7 +154,11 @@ export async function mutate<T>(
         "IDEMPOTENCY_CONFLICT",
         "Idempotency-Key was used with another request",
       );
-    return JSON.parse(previous.result_json) as T;
+    return receipt<T>(
+      c.env,
+      `receipt:${actorKey}:${input.operation}:${hash}`,
+      previous.result_json,
+    );
   }
   const operation = uuid(),
     proof = `EXISTS(SELECT 1 FROM calendar_operations WHERE id='${operation}')`,
@@ -149,7 +169,7 @@ export async function mutate<T>(
         ? [
             condition(
               "NOT EXISTS(SELECT 1 FROM calendar_operations WHERE actor_key=? AND operation=? AND idempotency_key=?)",
-              `user:${actor}`,
+              actorKey,
               input.operation,
               key,
             ),
@@ -158,12 +178,20 @@ export async function mutate<T>(
     );
   const values = {
     id: operation,
-    actor_key: `user:${actor}`,
+    actor_key: actorKey,
     actor_user_id: actor,
     operation: input.operation,
     idempotency_key: key,
     request_hash: hash,
-    result_json: JSON.stringify(input.result),
+    result_json: JSON.stringify(
+      input.secretResult
+        ? await seal(
+            c.env,
+            `receipt:${actorKey}:${input.operation}:${hash}`,
+            input.result,
+          )
+        : input.result,
+    ),
     expires_at: now() + 86400,
   };
   const statements = [
@@ -207,7 +235,11 @@ export async function mutate<T>(
           "IDEMPOTENCY_CONFLICT",
           "Idempotency-Key was used with another request",
         );
-      return JSON.parse(raced.result_json) as T;
+      return receipt<T>(
+        c.env,
+        `receipt:${actorKey}:${input.operation}:${hash}`,
+        raced.result_json,
+      );
     }
     fail(
       412,

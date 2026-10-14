@@ -13,8 +13,23 @@ import personalRoutes from "../calendar/personal";
 import { calendars, rows } from "../calendar/access";
 import { pageLimit, fail } from "../calendar/input";
 import { cursor, readCursor } from "../calendar/cursor";
+import sharingRoutes, { adminSettings } from "../calendar/sharing";
+import linkRoutes, { linkSessions } from "../calendar/links";
+import { publicRoutes } from "../calendar/public";
+import attendeeRoutes, { ownInvitations } from "../calendar/attendees";
+import {
+  registrationRoutes,
+  publicRegistrations,
+} from "../calendar/registrations";
+import availabilityRoutes from "../calendar/availability";
+import attachmentRoutes from "../calendar/attachments";
+import proposalRoutes, {
+  ownProposalRoutes,
+  publicProposalRoutes,
+} from "../calendar/proposals";
+import { publishingRoutes } from "../calendar/publishing";
 const capabilities = {
-  phase: 1,
+  phase: 2,
   calendars: true,
   subscriptions: true,
   preferences: true,
@@ -31,17 +46,26 @@ const capabilities = {
   max_query_days: 366,
   max_page_size: 500,
   max_occurrences: 5000,
+  max_collaboration_recipients: 100,
+  max_attachments: 20,
+  max_public_candidates: 200,
+  max_public_occurrences: 500,
   supported_years: [1970, 2100],
-  working_hours: false,
-  sharing: false,
-  external_sharing: false,
-  attendees: false,
-  external_attendees: false,
-  notification_delivery: false,
-  email_delivery: false,
-  ics: false,
+  working_hours: true,
+  sharing: true,
+  external_sharing: true,
+  attendees: true,
+  external_attendees: true,
+  notification_delivery: true,
+  email_delivery: true,
+  ics: true,
   reminders: false,
-  free_busy: false,
+  free_busy: true,
+  availability: true,
+  drive_attachments: true,
+  time_proposals: true,
+  guest_event_editing: false,
+  guest_invitation_forwarding: false,
   resources: false,
   appointments: false,
   tasks: false,
@@ -49,6 +73,21 @@ const capabilities = {
   integrations: false,
 };
 const calendar = new Hono<AppEnv>();
+calendar.route("/", publicRoutes);
+calendar.route("/", linkSessions);
+calendar.route("/", publicRegistrations);
+calendar.route("/", publishingRoutes);
+calendar.route("/", publicProposalRoutes);
+calendar.use("/inbox-invitations", requireAccess);
+calendar.use("/inbox-invitations/*", requireAccess);
+calendar.route("/", ownInvitations);
+calendar.route("/", ownProposalRoutes);
+calendar.use(
+  "/admin/*",
+  requireAccess,
+  requirePermission("admin.calendar.settings.read"),
+);
+calendar.route("/", adminSettings);
 calendar.use("*", requireAccess, requirePermission("calendar.access"));
 calendar.use("*", async (c, next) => {
   await ensurePrimary(c);
@@ -125,4 +164,11 @@ calendar.get("/changes", async (c) => {
 calendar.route("/", calendarRoutes);
 calendar.route("/", eventRoutes);
 calendar.route("/", personalRoutes);
+calendar.route("/", sharingRoutes);
+calendar.route("/", linkRoutes);
+calendar.route("/", attendeeRoutes);
+calendar.route("/", registrationRoutes);
+calendar.route("/", availabilityRoutes);
+calendar.route("/", attachmentRoutes);
+calendar.route("/", proposalRoutes);
 export default calendar;

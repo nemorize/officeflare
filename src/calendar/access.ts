@@ -40,7 +40,7 @@ export function permission(user: string, key: Permission) {
 }
 export function identity(
   c: CalendarContext,
-  action: Permission = "calendar.access",
+  action: Permission | null = "calendar.access",
 ) {
   const { user, session } = c.get("identity");
   return combine(
@@ -52,7 +52,7 @@ export function identity(
       user.auth_version,
       now(),
     ),
-    permission(user.id, action),
+    ...(action ? [permission(user.id, action)] : []),
   );
 }
 export const rank: Record<Role, number> = {
@@ -66,7 +66,15 @@ export const rank: Record<Role, number> = {
 const roleRank = (user: string, alias: string): Condition =>
   condition(
     `CASE WHEN ${alias}.data_owner_user_id=? THEN 6 ELSE COALESCE((SELECT MAX(CASE a.role WHEN 'free_busy' THEN 1 WHEN 'reader' THEN 2 WHEN 'writer_without_private' THEN 3 WHEN 'writer' THEN 4 WHEN 'manager' THEN 5 ELSE 0 END)
-  FROM calendar_acl a WHERE a.calendar_id=${alias}.id AND a.scope_type='user' AND a.scope_key=? AND (a.expires_at IS NULL OR a.expires_at>unixepoch())),0) END`,
+  FROM calendar_acl a JOIN calendar_workspace_settings settings ON settings.id='workspace' AND settings.internal_sharing_enabled=1
+  WHERE a.calendar_id=${alias}.id AND (a.expires_at IS NULL OR a.expires_at>unixepoch()) AND (
+  (a.scope_type='user' AND a.scope_key=?) OR
+  (a.scope_type='group' AND EXISTS(SELECT 1 FROM calendar_groups g JOIN calendar_group_members gm ON gm.group_id=g.id WHERE g.id=a.scope_key AND g.deleted_at IS NULL AND gm.user_id=?)) OR
+  (a.scope_type IN('organization','public') AND a.scope_key='workspace') OR
+  (a.scope_type='domain' AND EXISTS(SELECT 1 FROM users domain_user JOIN mail_domains d ON d.name=a.scope_key AND (d.inbound_enabled=1 OR d.outbound_enabled=1) WHERE domain_user.id=? AND lower(substr(domain_user.email_address,instr(domain_user.email_address,'@')+1))=lower(a.scope_key)))
+  )),0) END`,
+    user,
+    user,
     user,
     user,
   );

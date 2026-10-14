@@ -32,6 +32,7 @@ const MailDataPage = lazy(() => import("./routes/mail-data").then((module) => ({
 const MailConsolePage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailConsolePage })));
 const SharedMailboxEditorPage = lazy(() => import("./routes/console-shared-mailboxes").then((module) => ({ default: module.SharedMailboxEditorPage })));
 const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailDomainEditorPage })));
+const CalendarInvitationPage = lazy(() => import('./routes/calendar-invitation').then(module => ({ default: module.CalendarInvitationPage })));
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
 if (import.meta.hot) import.meta.hot.data.root = root;
@@ -54,6 +55,7 @@ const router = createBrowserRouter(createRoutesFromElements(<>
             <Route path="/profile/security" element={<SecurityPage />} />
             <Route path="/profile/sessions" element={<SessionsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/calendar/invitations/:attendeeId" element={<CalendarInvitationPage />} />
             <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
             <Route path="/console" element={<ConsoleGate />}>
               <Route index element={<ConsoleHome />} />

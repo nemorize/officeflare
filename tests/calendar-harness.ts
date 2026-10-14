@@ -1,7 +1,41 @@
 import worker from "../dist/index.js";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { deliverCalendar, recoverCalendar } from "../src/calendar/jobs";
+import type { AuthEnv } from "../src/auth/types";
+export class FakeEmail extends WorkerEntrypoint<Env> {
+  async send(message: unknown) {
+    const id = `<${crypto.randomUUID()}@calendar.test>`;
+    await this.env.MAIL_BUCKET.put(
+      `test-sent/${id}.json`,
+      JSON.stringify(message),
+    );
+    if (
+      (await (await this.env.MAIL_BUCKET.get("test-mode"))?.text()) ===
+      "unknown"
+    )
+      throw new Error("Connection lost after provider acceptance");
+    return { messageId: id };
+  }
+}
 // Test-only races at the claim boundary. Production routes never accept these headers.
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if (new URL(request.url).pathname === "/test-calendar/flush") {
+      const data = (await request.json()) as { ids?: string[] };
+      const jobs =
+        data.ids ??
+        (
+          await env.DB.prepare(
+            "SELECT id FROM calendar_invitation_deliveries WHERE status IN('queued','retry_wait')",
+          ).all<{ id: string }>()
+        ).results.map((value) => value.id);
+      await Promise.all(jobs.map((id) => deliverCalendar(env as AuthEnv, id)));
+      return Response.json({ processed: jobs.length });
+    }
+    if (new URL(request.url).pathname === "/test-calendar/recover") {
+      await recoverCalendar(env as AuthEnv);
+      return Response.json({ recovered: true });
+    }
     let injected = false;
     const queries = new WeakMap<object, string>();
     const wrap = (

@@ -41,6 +41,7 @@ export const createFields = [
   ...eventFields,
   "event_type",
   "copy_preferences",
+  "attendees",
 ] as const;
 export function writeEvent(
   data: Record<string, unknown>,
@@ -159,6 +160,12 @@ export function writeEvent(
     const value = object(data.guest_permissions, "guest_permissions");
     fields(value, ["can_modify", "can_invite_others", "can_see_other_guests"]);
     for (const [key, item] of Object.entries(value)) flag(item, key);
+    if (value.can_modify === true || value.can_invite_others === true)
+      fail(
+        422,
+        "FEATURE_UNAVAILABLE",
+        "Guest event editing and invitation forwarding are not available yet",
+      );
     result.guest_permissions_json = JSON.stringify(value);
   }
   if ("shared_properties" in data) {
@@ -229,12 +236,16 @@ export async function loadOverrides(c: CalendarContext, ids: string[]) {
     JSON.stringify(ids),
   );
 }
-export const getCopy = (c: CalendarContext, event: Event) =>
+export const getCopy = (
+  c: CalendarContext,
+  event: Event,
+  calendarId = event.organizer_calendar_id,
+) =>
   first<Copy>(
     c.env,
     "SELECT * FROM calendar_event_copies WHERE event_id=? AND calendar_id=?",
     event.id,
-    event.organizer_calendar_id,
+    calendarId,
   );
 export function copyDto(value: Copy) {
   const { private_properties_json, ...rest } = value;
@@ -342,6 +353,7 @@ export function insertEvent(
   event: Event,
   copy: Copy,
   proof: string,
+  baseScopeId: string | null = uuid(),
 ) {
   return [
     insert(
@@ -350,12 +362,16 @@ export function insertEvent(
       event as unknown as Record<string, Bind>,
       proof,
     ),
-    insert(
-      c,
-      "calendar_event_scopes",
-      { id: uuid(), event_id: event.id, occurrence_key: "" },
-      proof,
-    ),
+    ...(baseScopeId
+      ? [
+          insert(
+            c,
+            "calendar_event_scopes",
+            { id: baseScopeId, event_id: event.id, occurrence_key: "" },
+            proof,
+          ),
+        ]
+      : []),
     insert(
       c,
       "calendar_event_copies",

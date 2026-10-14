@@ -20,6 +20,12 @@ export const permissionCatalog = {
   "calendar.events.create": { label: "Create calendar events", description: "Create and duplicate events in calendars where you have writing access.", group: "calendar", requires: ["calendar.access"] },
   "calendar.events.update": { label: "Edit calendar events", description: "Edit, move and restore events where calendar writing access permits it.", group: "calendar", requires: ["calendar.access"] },
   "calendar.events.delete": { label: "Delete calendar events", description: "Cancel events and recurring occurrences where calendar writing access permits it.", group: "calendar", requires: ["calendar.access"] },
+  "calendar.sharing.internal": { label: "Share calendars internally", description: "Manage calendar grants where you have management access.", group: "calendar", requires: ["calendar.access"] },
+  "calendar.sharing.external": { label: "Share calendar links", description: "Create and manage external viewing and registration links.", group: "calendar", requires: ["calendar.access"] },
+  "calendar.events.invite": { label: "Invite calendar attendees", description: "Invite people and manage registrations in writable events.", group: "calendar", requires: ["calendar.access"] },
+  "calendar.groups.manage": { label: "Manage calendar groups", description: "Manage groups owned by your account.", group: "calendar", requires: ["calendar.access"] },
+  "admin.calendar.settings.read": { label: "Read Calendar settings", description: "Read workspace sharing and system sender settings.", group: "calendar", requires: ["console.access"] },
+  "admin.calendar.settings.manage": { label: "Manage Calendar settings", description: "Change workspace sharing policy and the system invitation sender.", group: "calendar", requires: ["admin.calendar.settings.read"] },
   "drive.access": { label: "Access Drive", description: "Use owned and explicitly shared files and folders. Does not grant access to other users' files.", group: "services", requires: [] },
   "drive.files.create": { label: "Create Drive files and folders", description: "Upload files, create folders and copy accessible items. Folder sharing and storage limits still apply.", group: "drive", requires: ["drive.access"] },
   "drive.files.update": { label: "Edit Drive files", description: "Replace content, rename, move, restore and manage file versions where you have editing access.", group: "drive", requires: ["drive.access"] },
@@ -65,7 +71,7 @@ export const permissionCatalog = {
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";
 export const MAIL_USER_ROLE_ID = "system-mail-user";
-export const calendarUserPermissions = ["calendar.access", "calendar.calendars.create", "calendar.events.create", "calendar.events.update", "calendar.events.delete"] as const;
+export const calendarUserPermissions = ["calendar.access", "calendar.calendars.create", "calendar.events.create", "calendar.events.update", "calendar.events.delete", "calendar.sharing.internal", "calendar.sharing.external", "calendar.events.invite", "calendar.groups.manage"] as const;
 export const driveUserPermissions = ["drive.access", "drive.files.create", "drive.files.update", "drive.files.delete", "drive.files.download", "drive.comments.create", "drive.sharing.internal", "drive.sharing.public"] as const;
 export function isPermission(value: unknown): value is Permission {
   return typeof value === "string" && Object.hasOwn(permissionCatalog, value);

@@ -24,9 +24,87 @@ import {
   rows,
 } from "./access";
 import { change, insert, mutate, update } from "./mutations";
-import type { Calendar, CalendarContext } from "./types";
+import type { Calendar, CalendarContext, Event } from "./types";
 import { zone } from "./time";
 import { cursor, readCursor } from "./cursor";
+import { allAttendees } from "./attendance-store";
+import { prepareDeliveries } from "./delivery";
+import { wakeCalendar } from "./jobs";
+async function participantLifecycle(
+  c: CalendarContext,
+  cal: Calendar,
+  action: "cancel" | "update",
+) {
+  const source = await rows<Event>(
+    c.env,
+    "SELECT e.* FROM calendar_events e WHERE organizer_calendar_id=? AND trashed_at IS NULL AND status<>'cancelled' AND EXISTS(SELECT 1 FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id=e.id AND a.removed_at IS NULL) ORDER BY e.id LIMIT 101",
+    cal.id,
+  );
+  if (source.length > 100)
+    fail(
+      422,
+      "TOO_MANY_ATTENDEES",
+      "Cancel participating events individually before trashing this calendar",
+    );
+  const snapshot = condition(
+    "NOT EXISTS(SELECT 1 FROM calendar_events e WHERE e.organizer_calendar_id=? AND e.trashed_at IS NULL AND e.status<>'cancelled' AND EXISTS(SELECT 1 FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id=e.id AND a.removed_at IS NULL) AND NOT EXISTS(SELECT 1 FROM json_each(?) v WHERE json_extract(v.value,'$.id')=e.id AND json_extract(v.value,'$.version')=e.version))",
+    cal.id,
+    JSON.stringify(
+      source.map((value) => ({ id: value.id, version: value.version })),
+    ),
+  );
+  const prepared: {
+    value: Event;
+    notice: Awaited<ReturnType<typeof prepareDeliveries>>;
+  }[] = [];
+  let count = 0;
+  for (const event of source) {
+    const attendees = await allAttendees(c, event.id);
+    count += attendees.length;
+    if (count > 100)
+      fail(
+        422,
+        "TOO_MANY_ATTENDEES",
+        "At most 100 recipients can be changed in one calendar operation",
+      );
+    const value = {
+      ...event,
+      version: event.version + 1,
+      sequence: event.sequence + 1,
+      updated_at: now(),
+    };
+    prepared.push({
+      value,
+      notice: await prepareDeliveries(c, cal, value, attendees, action),
+    });
+  }
+  const unchanged = condition(
+    "NOT EXISTS(SELECT 1 FROM json_each(?) v LEFT JOIN calendar_events e ON e.id=json_extract(v.value,'$.id') WHERE e.id IS NULL OR e.version<>json_extract(v.value,'$.version') OR e.trashed_at IS NOT NULL OR e.status='cancelled')",
+    JSON.stringify(
+      source.map((value) => ({ id: value.id, version: value.version })),
+    ),
+  );
+  return {
+    checks: [snapshot, unchanged],
+    build: (proof: string, operation: string) =>
+      prepared.flatMap(({ value, notice }) => [
+        update(
+          c,
+          "calendar_events",
+          {
+            version: value.version,
+            sequence: value.sequence,
+            updated_at: value.updated_at,
+          },
+          "id=?",
+          [value.id],
+          proof,
+        ),
+        change(c, proof, cal.id, "event", value.id, value.version),
+        ...notice(proof, operation),
+      ]),
+  };
+}
 export const calendarDto = (value: Calendar) => ({
   ...value,
   ...(value.effective_role === "free_busy"
@@ -106,6 +184,9 @@ export async function ensurePrimary(c: CalendarContext) {
           { user_id: user.id, calendar_id: id },
           proof,
         ),
+        c.env.DB.prepare(
+          `INSERT INTO calendar_event_copies(id,event_id,calendar_id,copy_kind) SELECT lower(hex(randomblob(16))),s.event_id,?,'attendee' FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE a.user_id=? AND a.removed_at IS NULL AND ${proof} GROUP BY s.event_id ON CONFLICT(event_id,calendar_id) DO NOTHING`,
+        ).bind(id, user.id),
         change(c, proof, id, "calendar", id, 1),
         change(c, proof, null, "subscription", id, 1, "upsert", user.id),
       ],
@@ -402,13 +483,17 @@ routes.delete("/calendars/:calendarId", async (c) => {
     version = expectedVersion(c);
   if (cal.is_primary)
     fail(409, "PRIMARY_CALENDAR", "The primary calendar cannot be deleted");
+  const participants = await participantLifecycle(c, cal, "cancel");
   await mutate(c, {
     operation: "calendar.trash",
     request: { id: cal.id, version },
     result: null,
     calendar: cal.id,
-    checks: [calendarCondition(c, { ...cal, version }, 6)],
-    build: (proof) => [
+    checks: [
+      calendarCondition(c, { ...cal, version }, 6),
+      ...participants.checks,
+    ],
+    build: (proof, operation) => [
       update(
         c,
         "calendars",
@@ -418,8 +503,10 @@ routes.delete("/calendars/:calendarId", async (c) => {
         proof,
       ),
       change(c, proof, cal.id, "calendar", cal.id, version + 1, "delete"),
+      ...participants.build(proof, operation),
     ],
   });
+  wakeCalendar(c);
   return c.body(null, 204);
 });
 routes.post("/calendars/:calendarId/restore", async (c) => {
@@ -431,13 +518,18 @@ routes.post("/calendars/:calendarId/restore", async (c) => {
       6,
       true,
     );
+  if (!cal.trashed_at) fail(409, "NOT_TRASHED", "Calendar is not in trash");
+  const participants = await participantLifecycle(c, cal, "update");
   await mutate(c, {
     operation: "calendar.restore",
     request: data,
     result: null,
     calendar: cal.id,
-    checks: [calendarCondition(c, { ...cal, version }, 6, true)],
-    build: (proof) => [
+    checks: [
+      calendarCondition(c, { ...cal, version }, 6, true),
+      ...participants.checks,
+    ],
+    build: (proof, operation) => [
       update(
         c,
         "calendars",
@@ -447,8 +539,10 @@ routes.post("/calendars/:calendarId/restore", async (c) => {
         proof,
       ),
       change(c, proof, cal.id, "calendar", cal.id, version + 1),
+      ...participants.build(proof, operation),
     ],
   });
+  wakeCalendar(c);
   return c.json({
     calendar: calendarDto({ ...cal, trashed_at: null, version: version + 1 }),
   });

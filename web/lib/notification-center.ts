@@ -11,5 +11,5 @@ export interface NotificationUpdate { read?: boolean; archived?: boolean; snooze
 export type NotificationState = "inbox" | "unread" | "archived" | "snoozed" | "all";
 
 // Paths are also checked on the server. Keep navigation on the current origin.
-export const notificationTarget = (path: string | null) => path === "/profile/sessions" || path === "/notifications" ? path : null;
+export const notificationTarget = (path: string | null) => path === "/profile/sessions" || path === "/notifications" || /^\/calendar\/invitations\/[A-Za-z0-9_-]+$/.test(path ?? "") ? path : null;
 export const notificationDate = (timestamp: number) => new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });

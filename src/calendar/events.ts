@@ -55,6 +55,19 @@ import {
 } from "./recurrence";
 import { endpoint, interval, queryRange } from "./time";
 import { change, insert, mutate, replay, update } from "./mutations";
+import { prepareNewAttendees } from "./attendees";
+import { prepareDeliveries } from "./delivery";
+import {
+  allAttendees,
+  effectiveAttendees,
+  attendeeStates,
+} from "./attendance-store";
+import { wakeCalendar } from "./jobs";
+import {
+  participatingScopes,
+  detachParticipants,
+  splitParticipants,
+} from "./participants-lifecycle";
 
 const paths = "/calendars/:calendarId/events";
 const scopeOf = (data: Record<string, unknown>) => {
@@ -189,7 +202,8 @@ async function list(c: CalendarContext) {
   if (!selected.length) return c.json({ events: [], next_cursor: null });
   const candidates = await rows<Event>(
     c.env,
-    `SELECT * FROM calendar_events WHERE organizer_calendar_id IN (SELECT value FROM json_each(?)) ${showDeleted ? "" : "AND trashed_at IS NULL"} AND (recurrence_json<>'[]' OR (start_at<? AND end_at>?) OR (start_date<? AND end_date>?)) ORDER BY id LIMIT 2001`,
+    `SELECT e.* FROM calendar_events e JOIN calendars organizer ON organizer.id=e.organizer_calendar_id JOIN users owner ON owner.id=organizer.data_owner_user_id WHERE organizer.status='active' AND organizer.trashed_at IS NULL AND owner.disabled_at IS NULL AND owner.deleted_at IS NULL AND owner.password_hash IS NOT NULL AND owner.password_reset_required=0 AND (e.organizer_calendar_id IN (SELECT value FROM json_each(?)) OR EXISTS(SELECT 1 FROM calendar_event_copies cp JOIN calendar_event_attendees a ON a.user_id=(SELECT data_owner_user_id FROM calendars WHERE id=cp.calendar_id) JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE cp.event_id=e.id AND s.event_id=e.id AND a.removed_at IS NULL AND cp.removed_at IS NULL AND cp.calendar_id IN(SELECT value FROM json_each(?)))) ${showDeleted ? "" : "AND e.trashed_at IS NULL"} AND (e.recurrence_json<>'[]' OR (e.start_at<? AND e.end_at>?) OR (e.start_date<? AND e.end_date>?)) ORDER BY e.id LIMIT 2001`,
+    JSON.stringify(selected.map((cal) => cal.id)),
     JSON.stringify(selected.map((cal) => cal.id)),
     range.max,
     range.min,
@@ -210,10 +224,56 @@ async function list(c: CalendarContext) {
       JSON.stringify(candidates.map((event) => event.id)),
     ),
     result: { key: string; value: ReturnType<typeof eventDto> }[] = [];
+  const invitationStates = new Map<
+    string,
+    Awaited<ReturnType<typeof attendeeStates>>
+  >();
+  for (const owner of new Set(selected.map((cal) => cal.data_owner_user_id)))
+    invitationStates.set(
+      owner,
+      await attendeeStates(
+        c,
+        candidates.map((value) => value.id),
+        owner,
+      ),
+    );
+  const sourceCalendars = await rows<Calendar>(
+    c.env,
+    "SELECT * FROM calendars WHERE id IN(SELECT value FROM json_each(?))",
+    JSON.stringify([
+      ...new Set(candidates.map((value) => value.organizer_calendar_id)),
+    ]),
+  );
+  const prefs = await rows<{
+    user_id: string;
+    invitation_policy: string;
+    display_options_json: string;
+  }>(
+    c.env,
+    "SELECT user_id,invitation_policy,display_options_json FROM calendar_preferences WHERE user_id IN(SELECT value FROM json_each(?))",
+    JSON.stringify([
+      ...new Set(selected.map((value) => value.data_owner_user_id)),
+    ]),
+  );
   for (const event of candidates) {
-    const cal = selected.find(
-        (value) => value.id === event.organizer_calendar_id,
-      )!,
+    const cal =
+      selected.find((value) => value.id === event.organizer_calendar_id) ??
+      selected.find((value) =>
+        copies.some(
+          (copy) => copy.event_id === event.id && copy.calendar_id === value.id,
+        ),
+      );
+    if (!cal) continue;
+    const foreign = cal.id !== event.organizer_calendar_id;
+    if (foreign && (event.trashed_at || event.status === "cancelled")) continue;
+    const viewCal = foreign
+        ? {
+            ...cal,
+            default_visibility: sourceCalendars.find(
+              (value) => value.id === event.organizer_calendar_id,
+            )!.default_visibility,
+          }
+        : cal,
       copy =
         cal.data_owner_user_id === c.get("identity").user.id
           ? copies.find(
@@ -230,9 +290,44 @@ async function list(c: CalendarContext) {
       cal.time_zone,
       showDeleted,
     );
-    if (expanded || cal.effective_role === "free_busy")
+    if (expanded || cal.effective_role === "free_busy" || foreign)
       for (const item of instances) {
-        const value = eventDto(item.event, cal, item, copy);
+        const attendee = foreign
+            ? invitationStates.get(cal.data_owner_user_id)!(event.id, item.key)
+            : null,
+          personal = prefs.find(
+            (value) => value.user_id === cal.data_owner_user_id,
+          );
+        if (
+          foreign &&
+          (!attendee ||
+            (attendee.response_status === "declined" &&
+              !JSON.parse(personal?.display_options_json ?? "{}")
+                .show_declined) ||
+            (attendee.response_status === "needs_action" &&
+              personal?.invitation_policy === "on_response"))
+        )
+          continue;
+        const value = {
+          ...eventDto(
+            item.event,
+            foreign && cal.data_owner_user_id === c.get("identity").user.id
+              ? {
+                  ...viewCal,
+                  effective_role:
+                    item.event.status === "cancelled" ? "free_busy" : "writer",
+                }
+              : viewCal,
+            item,
+            copy,
+          ),
+          ...(attendee && cal.data_owner_user_id === c.get("identity").user.id
+            ? {
+                invitation_id: attendee.id,
+                response_status: attendee.response_status,
+              }
+            : {}),
+        };
         if (
           query &&
           (value.is_redacted ||
@@ -300,6 +395,16 @@ routes.post(paths, async (c) => {
     );
   event.organizer_email = owner!.email_address;
   event.creator_user_id = c.get("identity").user.id;
+  const baseScopeId = uuid(),
+    invited = await prepareNewAttendees(
+      c,
+      cal,
+      event,
+      data.attendees,
+      baseScopeId,
+      "",
+      data.send_updates,
+    );
   const result = await mutate(c, {
     operation: `event.create:${cal.id}`,
     action: "calendar.events.create",
@@ -311,13 +416,16 @@ routes.post(paths, async (c) => {
     checks: [
       calendarCondition(c, cal, 3),
       await labelCheck(c, cal, copy.label_id),
+      ...invited.checks,
     ],
-    build: (proof) => [
-      ...insertEvent(c, event, copy, proof),
+    build: (proof, operation) => [
+      ...insertEvent(c, event, copy, proof, baseScopeId),
+      ...invited.build(proof, operation),
       changed(event, proof, c),
     ],
   });
   c.header("ETag", `"v${result.event.version}"`);
+  wakeCalendar(c);
   return c.json(result, 201);
 });
 routes.get(`${paths}/:eventId`, async (c) => {
@@ -402,7 +510,7 @@ routes.get(`${paths}/:eventId/instances/:occurrenceKey`, async (c) => {
     ),
   });
 });
-function setOverride(
+export function setOverride(
   c: CalendarContext,
   cal: Calendar,
   event: Event,
@@ -431,28 +539,23 @@ function setOverride(
     ...(old
       ? []
       : [
-          insert(
-            c,
-            "calendar_event_scopes",
-            { id: scopeId, event_id: event.id, occurrence_key: key },
-            proof,
-          ),
+          c.env.DB.prepare(
+            `INSERT INTO calendar_event_scopes(id,event_id,occurrence_key) SELECT ?,?,? WHERE ${proof} ON CONFLICT(event_id,occurrence_key) DO NOTHING`,
+          ).bind(scopeId, event.id, key),
         ]),
-    old
-      ? update(
-          c,
-          "calendar_event_overrides",
-          values,
-          "scope_id=?",
-          [scopeId],
-          proof,
-        )
-      : insert(
-          c,
-          "calendar_event_overrides",
-          { scope_id: scopeId, ...values },
-          proof,
-        ),
+    c.env.DB.prepare(
+      `INSERT INTO calendar_event_overrides(scope_id,${Object.keys(values).join(",")}) SELECT s.id,${Object.keys(
+        values,
+      )
+        .map(() => "?")
+        .join(
+          ",",
+        )} FROM calendar_event_scopes s WHERE s.event_id=? AND s.occurrence_key=? AND ${proof} ON CONFLICT(scope_id) DO UPDATE SET ${Object.keys(
+        values,
+      )
+        .map((column) => `${column}=excluded.${column}`)
+        .join(",")} WHERE ${proof}`,
+    ).bind(...Object.values(values), event.id, key),
     update(
       c,
       "calendar_events",
@@ -474,7 +577,7 @@ function setOverride(
     ),
   ];
 }
-function detach(
+async function detach(
   c: CalendarContext,
   cal: Calendar,
   event: Event,
@@ -510,15 +613,38 @@ function detach(
     items.push({ scopeId: override.scope_id, event: value });
   }
   const copies = items.map((item) => makeCopy(item.event));
+  const participants = await Promise.all(
+    items.map((item) =>
+      detachParticipants(
+        c,
+        cal,
+        event,
+        item.event,
+        overrides.find((value) => value.scope_id === item.scopeId)!
+          .occurrence_key,
+        item.scopeId,
+        next.sequence,
+      ),
+    ),
+  );
   return {
     ids,
-    build: (proof: string) =>
+    build: (proof: string, operation: string) =>
       items.flatMap((item, index) => [
-        ...insertEvent(c, item.event, copies[index]!, proof),
-        changed(item.event, proof, c),
+        ...insertEvent(c, item.event, copies[index]!, proof, null),
+        update(
+          c,
+          "calendar_event_scopes",
+          { event_id: item.event.id, occurrence_key: "" },
+          "id=?",
+          [item.scopeId],
+          proof,
+        ),
         c.env.DB.prepare(
-          `DELETE FROM calendar_event_scopes WHERE id=? AND ${proof}`,
+          `DELETE FROM calendar_event_overrides WHERE scope_id=? AND ${proof}`,
         ).bind(item.scopeId),
+        ...participants[index]!(proof, operation),
+        changed(item.event, proof, c),
         change(
           c,
           proof,
@@ -544,7 +670,11 @@ routes.patch(`${paths}/:eventId`, async (c) => {
     { cal, event } = await target(c, true),
     version = expectedVersion(c, data),
     scope = scopeOf(data),
-    overrides = await loadOverrides(c, [event.id]);
+    overrides = await participatingScopes(
+      c,
+      event,
+      await loadOverrides(c, [event.id]),
+    );
   if (
     !Object.keys(data).some((key) =>
       (eventFields as readonly string[]).includes(key),
@@ -570,6 +700,15 @@ routes.patch(`${paths}/:eventId`, async (c) => {
     const effective = applyOverride(event, original, old),
       { patch, parsed } = overridePatch(data, effective, cal);
     requireDetails(effective, cal);
+    const notices = await prepareDeliveries(
+      c,
+      cal,
+      { ...parsed, version: version + 1, sequence: event.sequence + 1 },
+      await effectiveAttendees(c, event.id, key),
+      "update",
+      key,
+      { sendUpdates: data.send_updates },
+    );
     const result = await mutate(c, {
       operation: "event.override",
       action: "calendar.events.update",
@@ -584,9 +723,12 @@ routes.patch(`${paths}/:eventId`, async (c) => {
       calendar: cal.id,
       event: event.id,
       checks: [eventCondition(c, cal, event, version)],
-      build: (proof) =>
-        setOverride(c, cal, event, version, key, patch, 0, old, proof),
+      build: (proof, operation) => [
+        ...setOverride(c, cal, event, version, key, patch, 0, old, proof),
+        ...notices(proof, operation),
+      ],
     });
+    wakeCalendar(c);
     return c.json(result);
   }
   if (scope === "following")
@@ -597,7 +739,16 @@ routes.patch(`${paths}/:eventId`, async (c) => {
       updated_at: now(),
       sequence: event.sequence + 1,
     },
-    detached = detach(c, cal, event, overrides, next);
+    detached = await detach(c, cal, event, overrides, next);
+  const notices = await prepareDeliveries(
+    c,
+    cal,
+    next,
+    await allAttendees(c, event.id),
+    "update",
+    "",
+    { sendUpdates: data.send_updates },
+  );
   const result = await mutate(c, {
     operation: "event.update",
     action: "calendar.events.update",
@@ -606,7 +757,7 @@ routes.patch(`${paths}/:eventId`, async (c) => {
     calendar: cal.id,
     event: event.id,
     checks: [eventCondition(c, cal, event, version)],
-    build: (proof) => [
+    build: (proof, operation) => [
       update(
         c,
         "calendar_events",
@@ -615,11 +766,13 @@ routes.patch(`${paths}/:eventId`, async (c) => {
         [event.id],
         proof,
       ),
-      ...detached.build(proof),
+      ...detached.build(proof, operation),
       changed(next, proof, c),
+      ...notices(proof, operation),
     ],
   });
   c.header("ETag", `"v${version + 1}"`);
+  wakeCalendar(c);
   return c.json(result);
 });
 
@@ -679,7 +832,7 @@ async function following(
       : { recurrence_json: JSON.stringify(split.before) }),
   };
   const future = overrides.filter((value) => value.occurrence_key >= key),
-    detached = detach(c, cal, event, future, next),
+    detached = await detach(c, cal, event, future, next),
     sourceCopy = await getCopy(c, event),
     copy = {
       ...(sourceCopy ?? makeCopy(next)),
@@ -701,6 +854,16 @@ async function following(
         throw error;
     }
   }
+  const newBaseScope = uuid(),
+    participants = await splitParticipants(
+      c,
+      cal,
+      event,
+      old,
+      next,
+      key,
+      newBaseScope,
+    );
   const result = await mutate(c, {
     operation: "event.split",
     action: "calendar.events.update",
@@ -734,7 +897,7 @@ async function following(
         [event.id],
         proof,
       ),
-      ...insertEvent(c, next, copy, proof),
+      ...insertEvent(c, next, copy, proof, newBaseScope),
       ...matching.map((value) =>
         update(
           c,
@@ -745,7 +908,8 @@ async function following(
           proof,
         ),
       ),
-      ...detached.build(proof),
+      ...detached.build(proof, operation),
+      ...participants(proof, operation),
       insert(
         c,
         "calendar_series_links",
@@ -762,6 +926,7 @@ async function following(
     ],
   });
   c.header("ETag", '"v1"');
+  wakeCalendar(c);
   return c.json(result);
 }
 routes.delete(`${paths}/:eventId`, async (c) => {
@@ -784,6 +949,19 @@ routes.delete(`${paths}/:eventId`, async (c) => {
       applyOverride(event, originalOccurrence(event, selected), old),
       cal,
     );
+    const notices = await prepareDeliveries(
+      c,
+      cal,
+      {
+        ...applyOverride(event, originalOccurrence(event, selected), old),
+        status: "cancelled",
+        version: version + 1,
+        sequence: event.sequence + 1,
+      },
+      await effectiveAttendees(c, event.id, selected),
+      "cancel",
+      selected,
+    );
     await mutate(c, {
       operation: "event.cancel_occurrence",
       action: "calendar.events.delete",
@@ -792,9 +970,12 @@ routes.delete(`${paths}/:eventId`, async (c) => {
       calendar: cal.id,
       event: event.id,
       checks: [eventCondition(c, cal, event, version)],
-      build: (proof) =>
-        setOverride(c, cal, event, version, selected, {}, 1, old, proof),
+      build: (proof, operation) => [
+        ...setOverride(c, cal, event, version, selected, {}, 1, old, proof),
+        ...notices(proof, operation),
+      ],
     });
+    wakeCalendar(c);
     return c.body(null, 204);
   }
   let values: Record<string, Bind> = {
@@ -823,6 +1004,35 @@ routes.delete(`${paths}/:eventId`, async (c) => {
         ),
       };
   }
+  const members = await allAttendees(c, event.id),
+    truncated = scope === "following" && !values.trashed_at;
+  const prefixNotices = truncated
+    ? await prepareDeliveries(
+        c,
+        cal,
+        { ...event, ...values } as Event,
+        members.filter((value) => value.occurrence_key < (key ?? "")),
+        "update",
+      )
+    : null;
+  const notices = await prepareDeliveries(
+    c,
+    cal,
+    {
+      ...event,
+      sequence: event.sequence + 1,
+      version: version + 1,
+      status: "cancelled",
+    },
+    truncated
+      ? members.filter(
+          (value) =>
+            value.occurrence_key >= (key ?? "") && !!value.occurrence_key,
+        )
+      : members,
+    "cancel",
+    "",
+  );
   await mutate(c, {
     operation: "event.trash",
     action: "calendar.events.delete",
@@ -831,8 +1041,20 @@ routes.delete(`${paths}/:eventId`, async (c) => {
     calendar: cal.id,
     event: event.id,
     checks: [eventCondition(c, cal, event, version)],
-    build: (proof) => [
+    build: (proof, operation) => [
       update(c, "calendar_events", values, "id=?", [event.id], proof),
+      ...(truncated
+        ? [
+            c.env.DB.prepare(
+              `UPDATE calendar_event_attendees SET removed_at=unixepoch(),version=version+1 WHERE scope_id IN(SELECT id FROM calendar_event_scopes WHERE event_id=? AND occurrence_key>=?) AND ${proof}`,
+            ).bind(event.id, key ?? ""),
+            c.env.DB.prepare(
+              `UPDATE calendar_event_registrations SET status='cancelled',cancelled_at=unixepoch(),version=version+1 WHERE event_id=? AND occurrence_key>=? AND ${proof}`,
+            ).bind(event.id, key ?? ""),
+          ]
+        : []),
+      ...notices(proof, operation),
+      ...(prefixNotices ? prefixNotices(proof, operation) : []),
       change(
         c,
         proof,
@@ -844,6 +1066,7 @@ routes.delete(`${paths}/:eventId`, async (c) => {
       ),
     ],
   });
+  wakeCalendar(c);
   return c.body(null, 204);
 });
 routes.post(`${paths}/:eventId/restore`, async (c) => {
@@ -873,6 +1096,19 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
     if (!override?.cancelled)
       fail(409, "NOT_CANCELLED", "Occurrence is not cancelled");
     requireDetails(applyOverride(event, original, override), cal);
+    const notices = await prepareDeliveries(
+      c,
+      cal,
+      {
+        ...applyOverride(event, original, { ...override, cancelled: 0 }),
+        sequence: event.sequence + 1,
+        version: version + 1,
+      },
+      await effectiveAttendees(c, event.id, key),
+      "update",
+      key,
+      { sendUpdates: data.send_updates },
+    );
     await mutate(c, {
       operation: "event.restore_occurrence",
       action: "calendar.events.update",
@@ -881,9 +1117,12 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
       calendar: cal.id,
       event: event.id,
       checks: [eventCondition(c, cal, event, version, 3, true)],
-      build: (proof) =>
-        setOverride(c, cal, event, version, key, {}, 0, override, proof),
+      build: (proof, operation) => [
+        ...setOverride(c, cal, event, version, key, {}, 0, override, proof),
+        ...notices(proof, operation),
+      ],
     });
+    wakeCalendar(c);
     return c.json({
       event: eventDto(
         {
@@ -904,6 +1143,15 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
     sequence: event.sequence + 1,
     updated_at: now(),
   };
+  const notices = await prepareDeliveries(
+    c,
+    cal,
+    restored,
+    await allAttendees(c, event.id),
+    "update",
+    "",
+    { sendUpdates: data.send_updates },
+  );
   await mutate(c, {
     operation: "event.restore",
     action: "calendar.events.update",
@@ -912,7 +1160,7 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
     calendar: cal.id,
     event: event.id,
     checks: [eventCondition(c, cal, event, version, 3, true)],
-    build: (proof) => [
+    build: (proof, operation) => [
       update(
         c,
         "calendar_events",
@@ -922,8 +1170,10 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
         proof,
       ),
       changed(restored, proof, c),
+      ...notices(proof, operation),
     ],
   });
+  wakeCalendar(c);
   return c.json({ event: eventDto(restored, cal) });
 });
 routes.post(`${paths}/:eventId/duplicate`, async (c) => {
@@ -1028,6 +1278,7 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
   if (destination.id === cal.id)
     fail(400, "INVALID_INPUT", "Choose a different calendar");
   const currentCopy = await getCopy(c, event),
+    destinationCopy = await getCopy(c, event, destination.id),
     owner = await first<{ email_address: string }>(
       c.env,
       "SELECT email_address FROM users WHERE id=?",
@@ -1051,6 +1302,13 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
       ? { private_properties_json: "{}", color_override: null, hidden_at: null }
       : {}),
   };
+  const notices = await prepareDeliveries(
+    c,
+    destination,
+    moved,
+    await allAttendees(c, event.id),
+    "update",
+  );
   const result = await mutate(c, {
     operation: `event.move:${event.id}`,
     action: "calendar.events.update",
@@ -1062,6 +1320,15 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
     checks: [
       eventCondition(c, cal, event, version),
       calendarCondition(c, destination, 3),
+      ...(destinationCopy
+        ? [
+            condition(
+              "EXISTS(SELECT 1 FROM calendar_event_copies WHERE id=? AND version=?)",
+              destinationCopy.id,
+              destinationCopy.version,
+            ),
+          ]
+        : []),
       ...(currentCopy
         ? [
             condition(
@@ -1072,7 +1339,7 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
           ]
         : []),
     ],
-    build: (proof) => [
+    build: (proof, operation) => [
       update(
         c,
         "calendar_events",
@@ -1086,17 +1353,45 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
             update(
               c,
               "calendar_event_copies",
-              copyChanges,
+              destinationCopy
+                ? {
+                    removed_at: now(),
+                    version: currentCopy.version + 1,
+                    updated_at: now(),
+                  }
+                : copyChanges,
               "id=?",
               [currentCopy.id],
               proof,
             ),
           ]
         : []),
+      ...(destinationCopy
+        ? [
+            update(
+              c,
+              "calendar_event_copies",
+              {
+                copy_kind: "organizer",
+                removed_at: null,
+                version: destinationCopy.version + 1,
+                updated_at: now(),
+              },
+              "id=?",
+              [destinationCopy.id],
+              proof,
+            ),
+          ]
+        : []),
+      c.env.DB.prepare(
+        `UPDATE calendar_share_links SET revoked_at=unixepoch(),version=version+1,access_version=access_version+1 WHERE event_id=? AND revoked_at IS NULL AND ${proof}`,
+      ).bind(event.id),
+      ...notices(proof, operation),
       change(c, proof, cal.id, "event", event.id, version + 1, "delete"),
       changed(moved, proof, c),
     ],
   });
+  wakeCalendar(c);
   return c.json(result);
 });
 routes.post(`${paths}/:eventId/recurrence-preview`, async (c) => {

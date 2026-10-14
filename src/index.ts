@@ -7,6 +7,7 @@ import { receive } from "./mail/service";
 import { consume, recover } from "./mail/jobs";
 import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
 import { recoverDrive } from "./drive/jobs";
+import { consumeCalendar, recoverCalendar } from "./calendar/jobs";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
 export { NotificationHubDO } from "./notifications/hub";
@@ -55,9 +56,14 @@ export default {
   email: receive,
   queue: async (batch, env) => {
     if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications")) await consumeNotifications(batch, env);
-    else await consume(batch, env);
+    else {
+      const calendarMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind === 'calendar.delivery');
+      const mailMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind !== 'calendar.delivery');
+      if (calendarMessages.length) await consumeCalendar({ ...batch, messages: calendarMessages }, env);
+      if (mailMessages.length) await consume({ ...batch, messages: mailMessages }, env);
+    }
   },
   scheduled: async (_event, env, ctx) => {
-    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env)]));
+    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env), recoverCalendar(env)]));
   },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;

@@ -68,7 +68,9 @@ routes.put("/preferences", async (c) => {
   }
   const rules = data.rules as Record<string, unknown>;
   if (Object.keys(rules).length > allowed.size || Object.entries(rules).some(([key, value]) => !allowed.has(key) || typeof value !== "boolean")) invalid("Invalid notification rules");
-  if (rules["type:security.sign_in"] === false || rules["category:account:security"] === false || rules["service:account"] === false) invalid("Security notifications are required");
+  for (const [type, definition] of Object.entries(notificationTypes)) {
+    if (definition.required && (rules[`type:${type}`] === false || rules[`category:${definition.service}:${definition.category}`] === false || rules[`service:${definition.service}`] === false)) invalid("Required notifications cannot be disabled");
+  }
   const db = c.get("db"), { user, session } = c.get("identity"), operation = uuid();
   const won = accessWon(db, session.id, operation);
   const results = await db.batch([
