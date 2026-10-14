@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type MailCommandResult } from "../lib/mail-ui";
+import { useMailCache } from "./mail-resource-context";
 import { api, ApiError } from "../lib/api";
 import {
   bytes,
@@ -35,17 +37,17 @@ export function ConversationReader({
   actions?: (messageActions: ReactNode) => ReactNode;
   actionError?: string;
 }) {
-  const mail = useMail(),
+  const [cursor, setCursor] = useState<string | null>(null);
+  const mail = useMail(), cache = useMailCache(),
     path = mailboxPath(mail.box!.id),
-    initial = useMailResource<{ message: MessageDetail }>(
-      `${path}/messages/${id}`,
+    initial = useMailResource<{ message: MessageDetail; messages: Message[]; next_cursor: string | null }>(
+      `${path}/ui/conversation/${id}?conversation=${mail.preferences.conversation_view}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
       mail.revision,
     ),
     message = initial.data?.message,
     action = useMailAction(),
     canWrite = !!mail.box?.access?.write;
-  const [cursor, setCursor] = useState<string | null>(null),
-    [entries, setEntries] = useState<Message[]>([]),
+  const [entries, setEntries] = useState<Message[]>([]),
     [expandAll, setExpandAll] = useState(false),
     [plain, setPlain] = useState(false),
     [actionId, setActionId] = useState(id),
@@ -55,15 +57,7 @@ export function ConversationReader({
       mail.revision,
     ),
     target = actionId === id ? message : focused.data?.message;
-  const thread = useMailResource<{
-    messages: Message[];
-    next_cursor: string | null;
-  }>(
-    message && !message.draft && mail.preferences.conversation_view
-      ? `${path}/threads/${message.thread_id}?limit=50&include_snoozed=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
-      : null,
-    mail.revision,
-  );
+  const thread = initial;
   useEffect(() => {
     if (thread.data)
       setEntries((old) =>
@@ -90,17 +84,17 @@ export function ConversationReader({
           ? [message]
           : [];
   const change = async (changes: object) => {
-    const latest = (
-      await api<{ message: MessageDetail }>(`${path}/messages/${actionId}`)
-    ).message;
-    await api(`${path}/messages/${actionId}`, {
-      method: "PATCH",
-      body: { version: latest.version, ...changes },
-    });
-    if (actionId === id) initial.reload();
-    else focused.reload();
-    mail.refresh();
+    if (!target) return;
+    const body = { targets: [{ id: target.id, version: target.version }], changes };
+    const finish = cache.beginMutation();
+    try {
+      const result = await api<MailCommandResult>(path + "/ui/commands", { method: "POST", body, headers: new MailOperation().headers(body) });
+      mail.committed(result);
+      const failure = result.results.find(item => !item.success);
+      if (failure && !failure.success) { initial.reload(); throw new Error(failure.error); }
+    } finally { finish(); }
   };
+
   const messageActions = target && (
     <>
       <Menu.Item
@@ -321,7 +315,7 @@ function MessageCard({
   onActivate: () => void;
   replyShortcut: boolean;
 }) {
-  const mail = useMail(),
+  const mail = useMail(), cache = useMailCache(),
     path = mailboxPath(mail.box!.id),
     action = useMailAction(),
     [open, setOpen] = useState(expanded);
@@ -344,12 +338,14 @@ function MessageCard({
       return;
     readAttempted.current = true;
     if (message.is_read) return;
-    void api<{ message: Message }>(`${path}/messages/${message.id}`, {
-      method: "PATCH",
-      body: { version: message.version, is_read: true },
+    const finish = cache.beginMutation();
+    void api<MailCommandResult>(path + "/ui/commands", {
+      method: "POST",
+      body: { targets: [{ id: message.id, version: message.version }], changes: { is_read: true } },
     })
-      .then(result => { mail.recordRead(message, result.message.version); })
-      .catch(() => {});
+      .then(result => { mail.committed(result); const failure = result.results.find(item => !item.success); if (failure && !failure.success) throw new Error(failure.error); })
+      .catch(() => {})
+      .finally(finish);
   }, [open, message]);
   const reply = async (kind: "reply" | "reply-all" | "forward") => {
     if (mail.composing) {
@@ -367,7 +363,8 @@ function MessageCard({
         },
       );
       operation.current.complete();
-      mail.refresh();
+      cache.replace(path + "/drafts/" + result.message.id, result);
+      cache.replace(path + "/messages/" + result.message.id, result);
       mail.compose(result.message.id, true);
     } catch (error) {
       if (error instanceof ApiError && error.status < 500)

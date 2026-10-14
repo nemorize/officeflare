@@ -1,8 +1,10 @@
 import { useLocation } from "react-router";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { bytes, mailboxPath, MailOperation, parseRecipients, scheduledTime, submissionLabel, type Address, type Attachment, type MailSettings, type MessageDetail, type Submission } from "../lib/mail";
+import { mergeMailView } from "../lib/mail-ui";
+import { useMailCache } from "./mail-resource-context";
 import { useMail } from "./mail-context";
 import { MailField, MailInput, MailNotice, MailState, useMailAction, useMailResource, MailForm, MailFieldset, MailSelect, MailFileInput } from "./mail-common";
 import { ButtonGroup, Button, Icon, Tooltip, TooltipPopup } from "./ui";
@@ -16,9 +18,12 @@ import { normalizedEditorHtml, plainMailHtml, storedEditorHtml } from "../lib/ma
 import { estimatedMessageBytes, messageSizeBreakdown } from "../../src/mail/size";
 import { MailMessageSize } from "./mail-message-size";
 export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { mailboxId: string; draftId?: string; inline?: boolean; onClose: () => void }) {
-  const mail = useMail(), location = useLocation(), path = mailboxPath(mailboxId), action = useMailAction();
-  const initial = useMailResource<{ message: MessageDetail }>(draftId ? `${path}/drafts/${draftId}` : null);
-  const addresses = useMailResource<{ addresses: Address[]; limits: { max_upload_bytes: number } }>(path + "/addresses"), settings = useMailResource<{ settings: MailSettings }>(path + "/settings");
+  const cache = useMailCache(), mail = useMail(), location = useLocation(), path = mailboxPath(mailboxId), action = useMailAction();
+  const editorFlush = useRef<(() => { html: string; text: string }) | null>(null);
+  const seededDraft = useRef(draftId ? cache.snapshot(`${path}/drafts/${draftId}`).data as { message: MessageDetail } | null : null);
+  const context = useMailResource<{ message: MessageDetail | null; addresses: Address[]; limits: { max_upload_bytes: number }; settings: MailSettings }>(path + "/ui/compose-context" + (draftId && !seededDraft.current ? "?draft=" + encodeURIComponent(draftId) : ""));
+  const initial = { ...context, data: context.data?.message ? { message: context.data.message } : seededDraft.current };
+  const addresses = context, settings = context;
   const [draft, setDraft] = useState<MessageDetail | null>(null), [ready, setReady] = useState(false), [to, setTo] = useState(""), [cc, setCc] = useState(""), [bcc, setBcc] = useState(""), [subject, setSubject] = useState(""), [text, setText] = useState(""), [html, setHtml] = useState("");
   const [files, setFiles] = useState<(Attachment & { upload?: boolean })[]>([]), [sender, setSender] = useState(""), [replyTo, setReplyTo] = useState(""), [schedule, setSchedule] = useState(""), [dirty, setDirty] = useState(false), [discard, setDiscard] = useState(false), [includeCc, setIncludeCc] = useState(false), [unknown, setUnknown] = useState(false);
   const [minimized,setMinimized] = useState(false), [expanded,setExpanded] = useState(false), [docked,setDocked] = useState(!inline), [autosaving,setAutosaving] = useState(false), [closing,setClosing] = useState(false), [deleteDraft,setDeleteDraft] = useState(false), [scheduleOpen,setScheduleOpen] = useState(false), [inlineHost,setInlineHost] = useState<HTMLElement | null>(null);
@@ -35,11 +40,11 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const maximum = fromAddress?.max_send_bytes ?? 0;
   const uploadMaximum = fromAddress?.max_upload_bytes ?? addresses.data?.limits.max_upload_bytes ?? mail.capabilities?.limits.max_upload_bytes ?? 0;
   const quoted = includeQuote ? draft?.body.quoted_body : undefined;
-  const storedHtml = storedEditorHtml(html, mailboxId, files) + (quoted ? `<blockquote style="border-left:2px solid #dddddd;padding-left:16px;margin:16px 0">${storedEditorHtml(quoted.html || plainMailHtml(quoted.text), mailboxId, files)}</blockquote>` : "");
-  const referencedImages = new Set([...new DOMParser().parseFromString(storedHtml, "text/html").querySelectorAll('img[src^="cid:"]')].map((image) => image.getAttribute("src")!.slice(4)));
-  const sizeFiles = [...files.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id)), ...uploadedImages.filter((image) => referencedImages.has(image.content_id) && !files.some((file) => file.content_id === image.content_id))];
-  const referenceHeaders: Record<string, string> = draft?.references.length ? { "In-Reply-To": `<${draft.references.at(-1)}>`, References: draft.references.slice(-20).map((reference) => `<${reference}>`).join(" ") } : {};
-  const messageSize = messageSizeBreakdown({ text: text + (quoted ? "\n\n" + quoted.text : ""), html: storedHtml, subject, from: fromAddress?.email_address, reply_to: replyTo, to: to.split(/[,;\n]+/), cc: cc.split(/[,;\n]+/), bcc: bcc.split(/[,;\n]+/), headers: referenceHeaders, attachments: sizeFiles });
+  const storedHtml = useMemo(() => storedEditorHtml(html, mailboxId, files) + (quoted ? `<blockquote style="border-left:2px solid #dddddd;padding-left:16px;margin:16px 0">${storedEditorHtml(quoted.html || plainMailHtml(quoted.text), mailboxId, files)}</blockquote>` : ""), [html, mailboxId, files, quoted]);
+  const referencedImages = useMemo(() => new Set([...new DOMParser().parseFromString(storedHtml, "text/html").querySelectorAll('img[src^="cid:"]')].map((image) => image.getAttribute("src")!.slice(4))), [storedHtml]);
+  const sizeFiles = useMemo(() => [...files.filter((file) => file.disposition !== "inline" || !!file.content_id && referencedImages.has(file.content_id)), ...uploadedImages.filter((image) => referencedImages.has(image.content_id) && !files.some((file) => file.content_id === image.content_id))], [files, uploadedImages, referencedImages]);
+  const referenceHeaders = useMemo((): Record<string, string> => draft?.references.length ? { "In-Reply-To": `<${draft.references.at(-1)}>`, References: draft.references.slice(-20).map((reference) => `<${reference}>`).join(" ") } : {}, [draft?.references]);
+  const messageSize = useMemo(() => messageSizeBreakdown({ text: text + (quoted ? "\n\n" + quoted.text : ""), html: storedHtml, subject, from: fromAddress?.email_address, reply_to: replyTo, to: to.split(/[,;\n]+/), cc: cc.split(/[,;\n]+/), bcc: bcc.split(/[,;\n]+/), headers: referenceHeaders, attachments: sizeFiles }), [text, quoted, storedHtml, subject, fromAddress?.email_address, replyTo, to, cc, bcc, referenceHeaders, sizeFiles]);
   const estimatedSize = messageSize.total;
   const tooLarge = maximum > 0 && estimatedSize > maximum;
   useEffect(() => {
@@ -65,6 +70,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
   const close = async () => { if (imageUploading) return; if (unknown) { setDiscard(true); return; } if (!dirty) { onClose(); return; } if (action.busy) return; setClosing(true); const success = await action.run(async () => { await save(); onClose(); }); if (!success) setClosing(false); };
 
   const values = (strict = false) => {
+    const currentBody = editorFlush.current?.() ?? { text, html };
     const valid = (value: string) => strict ? parseRecipients(value) : value.split(/[,;\n]+/).flatMap((token) => { try { return parseRecipients(token); } catch { return []; } });
     const recipients = { to: valid(to), cc: valid(cc), bcc: valid(bcc) };
     if (Object.values(recipients).flat().length > 50) throw new Error("A message can have at most 50 recipients.");
@@ -76,9 +82,13 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         replyToAddress = addresses[0]!;
       } catch { if (strict) throw new Error("Enter a single valid Reply-To email address."); }
     }
-    return { subject, reply_to: replyToAddress, editor_body: { text, html: storedEditorHtml(html, mailboxId, files) }, include_quoted_body: includeQuote, compose_state: { to,cc,bcc,reply_to:replyTo,address_id:sender,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
+    return { subject, reply_to: replyToAddress, editor_body: { text: currentBody.text, html: currentBody.html }, include_quoted_body: includeQuote, compose_state: { to,cc,bcc,reply_to:replyTo,address_id:sender,schedule }, ...recipients, attachment_ids: files.filter((file) => file.upload).map((file) => file.id) };
   };
   async function save(): Promise<MessageDetail> {
+    const finish = cache.beginMutation();
+    try { return await saveDraft(); } finally { finish(); }
+  }
+  async function saveDraft(): Promise<MessageDetail> {
     if (!ready) throw new Error("Wait for the draft to finish loading.");
     if (draft && !dirty) return draft;
     const savedGeneration = generation.current, savedFiles = files;
@@ -108,7 +118,14 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
     setUnknown(false); setDraft(result.message); draftRef.current = result.message;
     if (generation.current === savedGeneration) { setFiles(result.message.attachments); setDirty(false); }
     else { const used = new Set<string>(); setFiles((current) => current.map((file) => { if (!file.upload || !savedFiles.some((old) => old.id === file.id)) return file; const replacement = result.message.attachments.find((next) => !used.has(next.id) && next.filename === file.filename && next.size_bytes === file.size_bytes && !savedFiles.some((old) => !old.upload && old.id === next.id)); if (replacement) { used.add(replacement.id); return replacement; } return file; })); }
-    mail.refresh("summary"); return result.message;
+    if (draft) cache.rememberMessages(path, [result.message]);
+    const { body: _body, recipients: _recipients, attachments: _attachments, draft: savedDraft, ...header } = result.message;
+    const row = { ...header, draft_state: savedDraft?.state, recipient_summary: result.message.recipients.filter(recipient => recipient.kind === "to").map(recipient => recipient.email_address).join(", ") };
+    cache.update(key => key.startsWith(path + "/ui/view?") && new URLSearchParams(key.split("?")[1]).get("folder_id") === "drafts" && !new URLSearchParams(key.split("?")[1]).has("q"), data => mergeMailView(data, { cursor: 0, reset: false, messages: [row], view: [row], thread_ids: [row.thread_id], summary: null }, false, false));
+    cache.invalidateInactive(key => key.startsWith(path + "/ui/view?"));
+    cache.replace(`${path}/drafts/${result.message.id}`, result);
+    cache.replace(`${path}/messages/${result.message.id}`, result);
+    return result.message;
   }
   async function patchDraft(id: string): Promise<{ message: MessageDetail }> {
     try { return await api(`${path}/drafts/${id}`, { method: "PATCH", body: pendingEdit.current!.payload }); }
@@ -196,7 +213,7 @@ export function MailComposer({ mailboxId, draftId, inline = false, onClose }: { 
         <RecipientField label="To" value={to} onChange={(value) => { setTo(value); mark(); }} action={!includeCc ? <Button size="sm" className="mail-add-recipients" variant="ghost" onClick={() => setIncludeCc(true)}>Cc / Bcc</Button> : undefined} />
         {includeCc ? <><RecipientField label="Cc" value={cc} onChange={(value) => { setCc(value); mark(); }}/><RecipientField label="Bcc" value={bcc} onChange={(value) => { setBcc(value); mark(); }}/><MailInput variant="integrated" label="Reply-To" type="email" inputMode="email" autoComplete="off" maxLength={254} placeholder="Same as From" value={replyTo} onChange={(event) => { setReplyTo(event.target.value); mark(); }} /></> : null}
         <MailInput variant="integrated" label="Subject" value={subject} maxLength={998} onChange={(event) => { setSubject(event.target.value); mark(); }} />
-        <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} maxImageBytes={uploadMaximum} onImageUploaded={(image) => setUploadedImages((previous) => [...previous, image])} onUploadingChange={setImageUploading} disabled={locked} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); mark(); }} />
+        <MailEditor className="mail-compose-body" value={html} mailboxId={mailboxId} attachments={files} maxImageBytes={uploadMaximum} onImageUploaded={(image) => setUploadedImages((previous) => [...previous, image])} onUploadingChange={setImageUploading} disabled={locked} flushRef={editorFlush} onDirty={mark} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); }} />
         {draft?.body.quoted_body && <div className="mail-quote-section"><Button size="sm" variant="ghost" disabled={locked} aria-pressed={includeQuote} onClick={() => { setIncludeQuote(!includeQuote); mark(); }}>{includeQuote ? "Remove quoted message" : "Include quoted message"}</Button>{includeQuote && <details className="mail-quoted-body"><summary>Quoted message</summary>{draft.body.quoted_body.html ? <MailHtml message={draft} path={path} content={draft.body.quoted_body.html} /> : <pre>{draft.body.quoted_body.text}</pre>}</details>}</div>}
         <div className="mail-attachments">{files.filter((file) => file.disposition !== "inline").map((file) => <div key={file.id}><span>{file.filename} <small>{bytes(file.size_bytes)}</small></span><Button variant="ghost" size="sm" aria-label={`Remove ${file.filename}`} onClick={() => { setFiles(files.filter((item) => item.id !== file.id)); mark(); }}>×</Button></div>)}</div>
         <MailField label="Attach files"><MailFileInput multiple onChange={(event) => { const selected = event.target.files; void action.run(() => upload(selected)); event.target.value = ""; }} /></MailField>

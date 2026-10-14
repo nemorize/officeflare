@@ -249,6 +249,36 @@ export class MailboxDO extends DurableObject<Env> {
       "SELECT * FROM partitions WHERE status<>'preparing' ORDER BY ordinal",
     );
   }
+  commandPlan(operation: string, requestHash: string, plan?: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
+    const previous = row<{ request_hash: string; resource_id: string }>(this.sql, "SELECT * FROM request_keys WHERE operation_id=? AND expires_at>?", operation, epoch());
+    if (previous && previous.request_hash !== requestHash) fail(409, "Idempotency key reused with different request");
+    if (!previous && !plan) return null;
+    return JSON.parse(previous?.resource_id ?? this.registerRequest(operation, requestHash, JSON.stringify(plan))) as NonNullable<typeof plan>;
+  }
+  async changeMessages(actorId: string, operation: string, requestHash: string, items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const allowed = new Set(this.partitions().map(entry => entry.id));
+      const groups = new Map<string, typeof items>();
+      for (const item of items) {
+        const partitionId = item.id.split(".")[0]!;
+        if (!allowed.has(partitionId)) fail(404, "Mail resource not found");
+        if (item.changes.folder_id && !this.hasFolder(item.changes.folder_id)) fail(404, "Folder not found");
+        groups.set(partitionId, [...(groups.get(partitionId) ?? []), item]);
+      }
+      const results = [];
+      const entries = [...groups];
+      for (let start = 0; start < entries.length; start += 4) results.push(...(await Promise.all(entries.slice(start, start + 4).map(([partitionId, group]) => partition(this.env, partitionId).patchMany(actorId, operation, requestHash, group)))).flat());
+      return results;
+    });
+  }
+  /** Take this watermark before reading a snapshot; catch-up then cannot miss writes. */
+  changeWindow(actorId: string, since?: number) {
+    const cursor = row<{ n: number }>(this.sql, "SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='events'),0) n")!.n;
+    const oldest = row<{ n: number | null }>(this.sql, "SELECT min(sequence) n FROM events")!.n;
+    const reset = since !== undefined && (since > cursor || (since < cursor && (oldest === null || since < oldest - 1)));
+    const events = since === undefined || reset ? [] : rows<{ sequence: number; payload_json: string }>(this.sql, "SELECT sequence,payload_json FROM events WHERE sequence>? AND (private_user_id IS NULL OR private_user_id=?) ORDER BY sequence LIMIT 257", since, actorId);
+    return { cursor, reset: reset || events.length > 256, events: events.length > 256 ? [] : events.map(event => JSON.parse(event.payload_json) as { message_id: string; thread_id?: string; operation: string }) };
+  }
   folders() {
     return rows<{
       id: string;
@@ -727,12 +757,16 @@ export class MailboxDO extends DurableObject<Env> {
   }
   async emit(message: {
     message_id: string;
+    thread_id?: string;
+    version?: number;
     operation: string;
     private_user_id?: string | null;
   }) {
     const payload = {
       mailbox_id: this.identity(),
       message_id: message.message_id,
+      thread_id: message.thread_id,
+      version: message.version,
       operation: message.operation,
     };
     const event = row<{ sequence: number }>(

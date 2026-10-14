@@ -1,11 +1,17 @@
 import {
   useEffect,
+  useMemo,
+  memo,
   useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { mailViewOptions, mailGrouped } from "../../src/mail/ui-query";
+import { type MailCommandResult } from "../lib/mail-ui";
+import { useMailCache } from "../components/mail-resource-context";
+import { MailOperation } from "../lib/mail";
 import { api } from "../lib/api";
 import {
   mailboxPath,
@@ -173,15 +179,12 @@ function MailList({
     action = useMailAction(),
     canWrite = !!mail.box!.access?.write,
     mobile = useMailMobile();
-  const grouped =
-    mail.preferences.conversation_view &&
-    !query &&
-    !["drafts", "scheduled"].includes(section);
+  const cache = useMailCache();
+  const grouped = mailGrouped(section, query, mail.preferences.conversation_view);
   const sessionId = useSession().session?.tokens.session_id;
   const cacheKey = `${sessionId}:${user?.id}:${mail.box!.id}:${section}:${folder ?? ""}:${query}:${grouped}`,
     saved = snapshots.get(cacheKey);
-  const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []),
-    [selected, setSelected] = useState<string[]>(saved?.selected ?? []),
+  const [selected, setSelected] = useState<string[]>(saved?.selected ?? []),
     [pages, setPages] = useState<(string | null)[]>(saved?.pages ?? [null]),
     [page, setPage] = useState(saved?.page ?? 0),
     [focus, setFocus] = useState(0),
@@ -204,46 +207,27 @@ function MailList({
     setSelected([]);
     selectionButton.current?.focus();
   };
-  const options = new URLSearchParams({ limit: "50" });
-  if (
-    !query &&
-    (folder || !["starred", "snoozed", "all", "scheduled"].includes(section))
-  )
-    options.set("folder_id", folder ?? section);
-  if (section === "all" || section === "scheduled") {
-    options.set("view", section === "scheduled" ? "outbox" : section);
-    options.set("include_snoozed", "true");
-  }
-  if (section === "starred" && !query) options.set("q", "is:starred");
-  if (query) options.set("q", query);
-  if (section === "snoozed") {
-    options.set("snoozed_only", "true");
-    options.set("include_snoozed", "true");
-  }
+  const options = mailViewOptions(section, folder, query);
+  options.set("grouped", String(grouped));
   if (pages[page]) options.set("cursor", pages[page]!);
   const resource = useMailResource<{
     messages: Message[];
     next_cursor: string | null;
-  }>(`${path}/${grouped ? "threads" : "messages"}?${options}`, mail.revision);
+  }>(`${path}/ui/view?${options}`, mail.revision);
+  const messages = resource.data?.messages ?? (resource.error ? [] : saved?.messages ?? []);
+  const setMessages = (update: Message[] | ((current: Message[]) => Message[])) => {
+    const current = (cache.snapshot(resource.path).data as { messages: Message[]; next_cursor: string | null } | null) ?? { messages, next_cursor: null };
+    cache.replace(resource.path!, { ...current, messages: typeof update === "function" ? update(current.messages) : update });
+  };
   useEffect(() => {
-    if (!resource.data && resource.error) setMessages([]);
     if (resource.data) {
-      setMessages(resource.data.messages);
       const failed = failedSelections.current;
       failedSelections.current = null;
-      setSelected((old) =>
-        failed
-          ? resource
-              .data!.messages.filter((message) =>
-                failed.has(grouped ? message.thread_id : message.id),
-              )
-              .map((message) => message.id)
-          : old.filter((id) =>
-              resource.data!.messages.some((m) => m.id === id),
-            ),
-      );
+      setSelected(old => {
+        const next = failed ? resource.data!.messages.filter(message => failed.has(grouped ? message.thread_id : message.id)).map(message => message.id) : old.filter(id => resource.data!.messages.some(message => message.id === id));
+        return next.length === old.length && next.every((id, index) => id === old[index]) ? old : next;
+      });
     } else if (resource.error) {
-      setMessages([]);
       snapshots.delete(cacheKey);
     }
   }, [resource.data, resource.error]);
@@ -274,182 +258,65 @@ function MailList({
     else next.delete("message");
     setParams(next);
   };
-  async function expand(rows: Message[]): Promise<Message[]> {
-    if (!grouped) return rows;
-    const collected: Message[] = [];
-    for (const row of rows) {
-      const threadOptions = new URLSearchParams(options);
-      threadOptions.delete("cursor");
-      threadOptions.set("limit", "100");
-      if (!threadOptions.has("include_snoozed"))
-        threadOptions.set("include_snoozed", "false");
-      let cursor: string | null = null;
-      do {
-        if (cursor) threadOptions.set("cursor", cursor);
-        const result: { messages: Message[]; next_cursor: string | null } =
-          await api(`${path}/threads/${row.thread_id}?${threadOptions}`);
-        collected.push(...result.messages.filter((m) => !m.draft_owner_id));
-        cursor = result.next_cursor;
-      } while (cursor);
-    }
-    return [...new Map(collected.map((m) => [m.id, m])).values()];
-  }
-  async function mutate(
-    rows: Message[],
-    changes: Record<string, string | boolean | number | null>,
-  ) {
-    const items = await expand(rows),
-      old = messages;
-    const removed =
-      "folder_id" in changes ||
-      ("snoozed_until" in changes && section !== "snoozed");
-    setMessages((current) =>
-      removed
-        ? current.filter((m) => !rows.some((r) => r.id === m.id))
-        : current.map((m) =>
-            rows.some((r) => r.id === m.id)
-              ? {
-                  ...m,
-                  ...Object.fromEntries(
-                    Object.entries(changes).map(([k, v]) => [
-                      k,
-                      typeof v === "boolean" ? Number(v) : v,
-                    ]),
-                  ),
-                }
-              : m,
-          ),
-    );
-    const updated: { before: Message; version: number }[] = [],
-      failures: string[] = [];
+  async function mutate(rows: Message[], changes: Record<string, string | boolean | number | null>) {
+    const finishMutation = cache.beginMutation();
+    const originals = new Map(rows.map(row => [row.id, row]));
+    const removed = "folder_id" in changes || ("snoozed_until" in changes && section !== "snoozed");
+    // React paints the optimistic change before any conversation expansion or HTTP work.
+    setMessages(current => current.flatMap(row => !originals.has(row.id) ? [row] : removed ? [] : [{ ...row, ...Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, typeof value === "boolean" ? Number(value) : value])) }]));
+    const restore = (failed: Set<string>) => setMessages(current => {
+      const existing = new Set(current.map(row => row.id));
+      const restored = current.map(row => failed.has(row.id) && row.version === originals.get(row.id)?.version ? originals.get(row.id)! : row);
+      for (const [id, row] of originals) if (failed.has(id) && !existing.has(id)) restored.push(row);
+      return restored.sort((a, b) => b.received_at - a.received_at || b.id.localeCompare(a.id));
+    });
+    let settled = false;
     try {
-      for (let start = 0; start < items.length; start += 200) {
-        const chunk = items.slice(start, start + 200);
-        if ("snoozed_until" in changes) {
-          for (const item of chunk) {
-            try {
-              const result = await api<{ message: Message }>(
-                `${path}/messages/${item.id}`,
-                {
-                  method: "PATCH",
-                  body: { version: item.version, ...changes },
-                },
-              );
-              updated.push({ before: item, version: result.message.version });
-            } catch {
-              failures.push(item.id);
-            }
-          }
-        } else {
-          try {
-            const result = await api<{
-              results: { id: string; success: boolean; version: number }[];
-            }>(path + "/messages/bulk", {
-              method: "POST",
-              body: {
-                items: chunk.map(({ id, version }) => ({ id, version })),
-                ...changes,
-              },
-            });
-            for (const item of result.results)
-              if (item.success)
-                updated.push({
-                  before: chunk.find((m) => m.id === item.id)!,
-                  version: item.version,
-                });
-              else failures.push(item.id);
-          } catch {
-            failures.push(...chunk.map((item) => item.id));
-          }
+      const body = { targets: rows.map(({ id, version }) => ({ id, version, thread: grouped })), changes, scope: options.toString() };
+      const operation = new MailOperation();
+      const result = await api<MailCommandResult>(path + "/ui/commands", { method: "POST", body, headers: operation.headers(body) });
+      settled = true;
+      mail.committed(result);
+      const failures = result.results.filter(item => !item.success);
+      const successful = result.results.flatMap(item => item.success ? [item] : []);
+      const failedRows = new Set(rows.filter(row => failures.some(item => item.id === row.id || item.thread_id === row.thread_id)).map(row => row.id));
+      if (failures.length) { restore(failedRows); cache.invalidate(resource.path!); }
+      setSelected([...failedRows]);
+      if (successful.length) mail.feedback(changes.folder_id === "trash" ? "Moved to trash" : changes.folder_id === "archive" ? "Conversation archived" : "Mailbox updated", async () => {
+        const targets = successful.map(({ before, message }) => {
+          const restore: Record<string, unknown> = {};
+          for (const key of Object.keys(changes)) restore[key] = typeof changes[key] === "boolean" ? !!before[key as keyof Message] : before[key as keyof Message] ?? null;
+          if ("folder_id" in changes) restore.is_spam = !!before.is_spam;
+          return { id: before.id, version: message.version, changes: restore };
+        });
+        for (let start = 0; start < targets.length; start += 200) {
+          const body = { targets: targets.slice(start, start + 200) }, operation = new MailOperation();
+          const finish = cache.beginMutation();
+          let restored: MailCommandResult;
+          try { restored = await api<MailCommandResult>(path + "/ui/commands", { method: "POST", body, headers: operation.headers(body) }); mail.committed(restored); } finally { finish(); }
+          if (restored.results.some(item => !item.success)) throw new Error("Some messages changed since this action and could not be restored.");
         }
-      }
-      if (failures.length)
-        failedSelections.current = new Set(
-          items
-            .filter((item) => failures.includes(item.id))
-            .map((item) => (grouped ? item.thread_id : item.id)),
-        );
-      setSelected(
-        rows
-          .filter((row) =>
-            items.some(
-              (m) => failures.includes(m.id) && m.thread_id === row.thread_id,
-            ),
-          )
-          .map((r) => r.id),
-      );
-      if (updated.length)
-        mail.feedback(
-          changes.folder_id === "trash"
-            ? "Moved to trash"
-            : changes.folder_id === "archive"
-              ? "Conversation archived"
-              : "Mailbox updated",
-          async () => {
-            let failed = 0;
-            for (const { before, version } of updated) {
-              const restore: Record<string, unknown> = {};
-              for (const key of Object.keys(changes)) {
-                const value = before[key as keyof Message];
-                restore[key] =
-                  typeof changes[key] === "boolean" ? !!value : (value ?? null);
-              }
-              if ("folder_id" in changes) restore.is_spam = !!before.is_spam;
-              try {
-                await api(`${path}/messages/${before.id}`, {
-                  method: "PATCH",
-                  body: { version, ...restore },
-                });
-              } catch {
-                failed++;
-              }
-            }
-            mail.refresh();
-            if (failed)
-              throw new Error(
-                `${failed} messages changed since this action and could not be restored.`,
-              );
-          },
-        );
-      if (
-        removed &&
-        selectedId &&
-        rows.some((row) => row.id === selectedId) &&
-        !failures.length
-      )
-        open(null);
-      mail.refresh();
-      if (failures.length)
-        throw new Error(
-          `${failures.length} messages could not be updated. Review the selected conversations and try again.`,
-        );
+      });
+      if (removed && selectedId && rows.some(row => row.id === selectedId) && !failures.length) open(null);
+      if (failures.length) throw new Error(`${failures.length} messages could not be updated. Review the selected conversations and try again.`);
     } catch (error) {
-      if (removed && failures.length)
-        setMessages(
-          old.filter(
-            (row) =>
-              !rows.some((item) => item.id === row.id) ||
-              items.some(
-                (item) =>
-                  failures.includes(item.id) &&
-                  (grouped
-                    ? item.thread_id === row.thread_id
-                    : item.id === row.id),
-              ),
-          ),
-        );
-      else setMessages(old);
-      mail.refresh();
+      // An uncertain result is reconciled from the server; rollback touches only this action.
+      if (!settled) { restore(new Set(originals.keys())); cache.invalidate(resource.path!); }
       throw error;
-    }
+    } finally { finishMutation(); }
   }
-  const run = (
-    rows: Message[],
-    changes: Record<string, string | boolean | number | null>,
-  ) => {
+
+  const pendingRows = useRef(new Set<string>());
+  const run = (rows: Message[], changes: Record<string, string | boolean | number | null>) => {
+    if (action.busy) return;
+    pendingRows.current = new Set(rows.map(row => row.id));
     void action.run(() => mutate(rows, changes));
   };
-  const selectedRows = messages.filter((m) => selected.includes(m.id));
+  const selectedRows = messages.filter(message => selected.includes(message.id));
+  const events = useRef({ focus: setFocus, select: toggleSelected, compose: mail.compose, open: (id: string) => open(id), run });
+  events.current = { focus: setFocus, select: toggleSelected, compose: mail.compose, open: (id: string) => open(id), run };
+  const rowHandlers = useMemo(() => ({ focus: (index: number) => events.current.focus(index), select: (id: string) => events.current.select(id), compose: (id: string) => events.current.compose(id), open: (id: string) => events.current.open(id), run: (rows: Message[], changes: Record<string, string | boolean | number | null>) => events.current.run(rows, changes) }), []);
+
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (
@@ -938,136 +805,7 @@ function MailList({
             if (snap) snap.scroll = scroller.current?.scrollTop ?? 0;
           }}
         >
-          {messages.map((message, index) => (
-            <div
-              key={message.id}
-              tabIndex={0}
-              onFocus={() => setFocus(index)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.target === e.currentTarget) {
-                  e.stopPropagation();
-                  if (selecting) toggleSelected(message.id);
-                  else if (message.draft_state === "editable") mail.compose(message.id);
-                  else open(message.id);
-                }
-              }}
-              className={`mail-message-row${!message.is_read ? " mail-unread" : ""}${selected.includes(message.id) ? " mail-checked" : ""}${selectedId === message.id ? " mail-selected" : ""}`}
-            >
-              {(!mobile || selecting) && (
-                <MailCheckbox hitArea
-                  aria-label={`Select ${message.subject || "Untitled message"}`}
-                  checked={selected.includes(message.id)}
-                  disabled={!canWrite}
-                  onCheckedChange={(checked) =>
-                    setSelected(
-                      checked
-                        ? [...selected, message.id]
-                        : selected.filter((id) => id !== message.id),
-                    )
-                  }
-                />
-              )}
-              {!selecting && (
-                <Toggle
-                  data-size="icon"
-                  data-variant="star"
-                  className="mail-star"
-                  aria-label={message.is_starred ? "Remove star" : "Add star"}
-                  pressed={!!message.is_starred}
-                  disabled={!canWrite || action.busy}
-                  onPressedChange={() =>
-                    run([message], { is_starred: !message.is_starred })
-                  }
-                >
-                  <Icon name="star" />
-                </Toggle>
-              )}
-              <Button
-                variant="plain"
-                className="mail-message-summary"
-                aria-pressed={selecting ? selected.includes(message.id) : undefined}
-                onClick={() => {
-                  if (selecting) toggleSelected(message.id);
-                  else if (message.draft_state === "editable") mail.compose(message.id);
-                  else open(message.id);
-                }}
-              >
-                <span className="mail-row-sender">
-                  {message.draft_state === "editable" ? (
-                    <>
-                      <em>Draft</em>{" "}
-                      {message.recipient_summary || "No recipients"}
-                    </>
-                  ) : section === "sent" || section === "scheduled" ? (
-                    message.recipient_summary || "No recipients"
-                  ) : (
-                    message.participants || message.from_address || "Me"
-                  )}
-                  {(message.message_count ?? 0) > 1 && (
-                    <small> ({message.message_count})</small>
-                  )}
-                </span>
-                <span className="mail-row-content">
-                  {section === "scheduled" && message.submission_status && (
-                    <span className="mail-badge" data-status={message.submission_status}>
-                      {submissionLabel(message.submission_status)}
-                    </span>
-                  )}
-                  <strong>{message.subject || "(No subject)"}</strong>
-                  <span className="mail-row-snippet">
-                    {" "}
-                    — {message.snippet || "No preview"}
-                  </span>
-                </span>
-                <span className="mail-row-indicators">
-                  {!!message.has_attachments && <Icon name="attachment" />}
-                  {!!message.snoozed_until && <Icon name="clock" />}
-                </span>
-                <time
-                  title={mailDate(message.scheduled_at ?? message.received_at)}
-                >
-                  {new Date(
-                    (message.scheduled_at ?? message.received_at) * 1000,
-                  ).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                  {section === "scheduled" && message.submission_status === "scheduled" && message.scheduled_at && (
-                    <small className="mail-row-schedule-time">
-                      {new Date(message.scheduled_at * 1000).toLocaleTimeString(
-                        undefined,
-                        { hour: "numeric", minute: "2-digit" },
-                      )}
-                    </small>
-                  )}
-                </time>
-              </Button>
-              {!message.draft_owner_id && (
-                <div className="mail-row-quick-actions">
-                  <MailIconButton
-                    icon="archive"
-                    label="Archive conversation"
-                    disabled={!canWrite || action.busy}
-                    onClick={() => run([message], { folder_id: "archive" })}
-                  />
-                  <MailIconButton
-                    icon="trash"
-                    label="Delete conversation"
-                    disabled={!canWrite || action.busy}
-                    onClick={() => run([message], { folder_id: "trash" })}
-                  />
-                  <MailIconButton
-                    icon="mail"
-                    label={message.is_read ? "Mark unread" : "Mark read"}
-                    disabled={!canWrite || action.busy}
-                    onClick={() =>
-                      run([message], { is_read: !message.is_read })
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+          {messages.map((message, index) => <MailMessageRow key={message.id} message={message} index={index} section={section} mobile={mobile} selecting={selecting} canWrite={canWrite} checked={selected.includes(message.id)} active={selectedId === message.id} busy={action.busy && pendingRows.current.has(message.id)} handlers={rowHandlers} />)}
           {!resource.loading && !resource.error && !messages.length && (
             <div className="mail-empty">
               <span className="mail-empty-illustration">
@@ -1152,3 +890,131 @@ function MailList({
     </div>
   );
 }
+
+interface MailRowHandlers { focus: (index: number) => void; select: (id: string) => void; compose: (id: string) => void; open: (id: string) => void; run: (rows: Message[], changes: Record<string, string | boolean | number | null>) => void; }
+const MailMessageRow = memo(function MailMessageRow({ message, index, section, mobile, selecting, canWrite, checked, active, busy, handlers }: { message: Message; index: number; section: string; mobile: boolean; selecting: boolean; canWrite: boolean; checked: boolean; active: boolean; busy: boolean; handlers: MailRowHandlers }) {
+  return (
+            <div
+              key={message.id}
+              tabIndex={0}
+              onFocus={() => handlers.focus(index)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.target === e.currentTarget) {
+                  e.stopPropagation();
+                  if (selecting) handlers.select(message.id);
+                  else if (message.draft_state === "editable") handlers.compose(message.id);
+                  else handlers.open(message.id);
+                }
+              }}
+              className={`mail-message-row${!message.is_read ? " mail-unread" : ""}${checked ? " mail-checked" : ""}${active ? " mail-selected" : ""}`}
+            >
+              {(!mobile || selecting) && (
+                <MailCheckbox hitArea
+                  aria-label={`Select ${message.subject || "Untitled message"}`}
+                  checked={checked}
+                  disabled={!canWrite}
+                  onCheckedChange={() => handlers.select(message.id)}
+                />
+              )}
+              {!selecting && (
+                <Toggle
+                  data-size="icon"
+                  data-variant="star"
+                  className="mail-star"
+                  aria-label={message.is_starred ? "Remove star" : "Add star"}
+                  pressed={!!message.is_starred}
+                  disabled={!canWrite || busy}
+                  onPressedChange={() =>
+                    handlers.run([message], { is_starred: !message.is_starred })
+                  }
+                >
+                  <Icon name="star" />
+                </Toggle>
+              )}
+              <Button
+                variant="plain"
+                className="mail-message-summary"
+                aria-pressed={selecting ? checked : undefined}
+                onClick={() => {
+                  if (selecting) handlers.select(message.id);
+                  else if (message.draft_state === "editable") handlers.compose(message.id);
+                  else handlers.open(message.id);
+                }}
+              >
+                <span className="mail-row-sender">
+                  {message.draft_state === "editable" ? (
+                    <>
+                      <em>Draft</em>{" "}
+                      {message.recipient_summary || "No recipients"}
+                    </>
+                  ) : section === "sent" || section === "scheduled" ? (
+                    message.recipient_summary || "No recipients"
+                  ) : (
+                    message.participants || message.from_address || "Me"
+                  )}
+                  {(message.message_count ?? 0) > 1 && (
+                    <small> ({message.message_count})</small>
+                  )}
+                </span>
+                <span className="mail-row-content">
+                  {section === "scheduled" && message.submission_status && (
+                    <span className="mail-badge" data-status={message.submission_status}>
+                      {submissionLabel(message.submission_status)}
+                    </span>
+                  )}
+                  <strong>{message.subject || "(No subject)"}</strong>
+                  <span className="mail-row-snippet">
+                    {" "}
+                    — {message.snippet || "No preview"}
+                  </span>
+                </span>
+                <span className="mail-row-indicators">
+                  {!!message.has_attachments && <Icon name="attachment" />}
+                  {!!message.snoozed_until && <Icon name="clock" />}
+                </span>
+                <time
+                  title={mailDate(message.scheduled_at ?? message.received_at)}
+                >
+                  {new Date(
+                    (message.scheduled_at ?? message.received_at) * 1000,
+                  ).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {section === "scheduled" && message.submission_status === "scheduled" && message.scheduled_at && (
+                    <small className="mail-row-schedule-time">
+                      {new Date(message.scheduled_at * 1000).toLocaleTimeString(
+                        undefined,
+                        { hour: "numeric", minute: "2-digit" },
+                      )}
+                    </small>
+                  )}
+                </time>
+              </Button>
+              {!message.draft_owner_id && (
+                <div className="mail-row-quick-actions">
+                  <MailIconButton
+                    icon="archive"
+                    label="Archive conversation"
+                    disabled={!canWrite || busy}
+                    onClick={() => handlers.run([message], { folder_id: "archive" })}
+                  />
+                  <MailIconButton
+                    icon="trash"
+                    label="Delete conversation"
+                    disabled={!canWrite || busy}
+                    onClick={() => handlers.run([message], { folder_id: "trash" })}
+                  />
+                  <MailIconButton
+                    icon="mail"
+                    label={message.is_read ? "Mark unread" : "Mark read"}
+                    disabled={!canWrite || busy}
+                    onClick={() =>
+                      handlers.run([message], { is_read: !message.is_read })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+  );
+});

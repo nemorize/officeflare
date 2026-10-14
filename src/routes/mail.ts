@@ -1,3 +1,4 @@
+import { mailViewOptions, mailGrouped } from "../mail/ui-query";
 import { queryThreads, mailboxSummary } from "../mail/views";
 import { configuredSendLimit, mailboxSendingLimits, providerSendMaximum, sendingLimits } from "../mail/limits";
 import { maxAttachmentBytes } from "../mail/size";
@@ -163,8 +164,7 @@ mail.get("/providers", (c) =>
     })),
   }),
 );
-mail.get("/capabilities", (c) =>
-  c.json({
+const mailCapabilities = (env: Env) => ({
     providers: providers.map(({ id, capabilities }) => ({
       provider: id,
       ...capabilities,
@@ -178,7 +178,7 @@ mail.get("/capabilities", (c) =>
       drafts: true,
       scheduled_send: true,
       rules: true,
-      webhooks: !!c.env.MAIL_ENCRYPTION_KEY,
+      webhooks: !!env.MAIL_ENCRYPTION_KEY,
       realtime: true,
       threads: true,
       signatures: true,
@@ -199,8 +199,8 @@ mail.get("/capabilities", (c) =>
       max_page_size: 100,
     },
     domain_setup: "cloudflare_dashboard",
-  }),
-);
+});
+mail.get("/capabilities", (c) => c.json(mailCapabilities(c.env)));
 mail.get("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.read");
   return c.json({
@@ -596,6 +596,9 @@ mail.get("/mailboxes", async (c) => {
       ),
     });
   }
+  return c.json(await mailboxInventory(c));
+});
+async function mailboxInventory(c: Parameters<typeof authenticateMail>[0]) {
   const owner = actor(c);
   const entries = await all<Mailbox & { can_read: number; can_write: number; can_send: number; can_manage: number }>(
     c.env,
@@ -608,15 +611,15 @@ mail.get("/mailboxes", async (c) => {
     "SELECT mailbox_id,action FROM mail_api_key_scopes WHERE key_id=?",
     owner.api_key_id,
   ) : null;
-  return c.json({
+  return {
     mailboxes: entries.filter((b) => !scoped || scoped.some((s) => s.mailbox_id === b.id)).map(({ can_read, can_write, can_send, can_manage, ...b }) => ({
       ...b,
       access: Object.fromEntries(Object.entries({ read: can_read, write: can_write, send: can_send, manage: can_manage }).map(([action, granted]) => [action,
         (b.owner_user_id === owner.user_id || granted === 1) && (!scoped || scoped.some((s) => s.mailbox_id === b.id && s.action === action)),
       ])),
     })),
-  });
-});
+  };
+}
 type SetupAddress = { domain_id: string; local_part: string };
 type SetupMember = { user_id: string; role: "viewer" | "member" | "manager" | "custom"; permissions?: Record<string, boolean> };
 async function setupAddress(c: Parameters<typeof authenticateMail>[0], value: unknown): Promise<SetupAddress | null> {
@@ -811,7 +814,7 @@ mail.delete("/mailboxes/:m/members/:user", async (c) => {
     .run();
   return c.body(null, 204);
 });
-mail.get("/mailboxes/:m/addresses", async (c) => {
+async function mailboxAddresses(c: Parameters<typeof authenticateMail>[0]) {
   try { await authorize(c.env, actor(c), resource(c), "read"); }
   catch { await administrator(c, "admin.mail.domains.read"); }
   let canSend = false;
@@ -822,11 +825,12 @@ mail.get("/mailboxes/:m/addresses", async (c) => {
     "SELECT a.*,a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,(a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1) send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id LEFT JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=?",
     resource(c),
   );
-  return c.json({
+  return {
     addresses: addresses.map(({ send_available, max_send_bytes, ...address }) => ({ ...address, can_send: canSend && send_available === 1 && providers.some((entry) => entry.id === address.provider && entry.capabilities.send), ...(address.provider && providers.some((entry) => entry.id === address.provider) ? sendingLimits(address.provider, max_send_bytes) : { max_send_bytes: 0, max_upload_bytes: 0 }) })),
     limits: await mailboxSendingLimits(c.env, resource(c)),
-  });
-});
+  };
+}
+mail.get("/mailboxes/:m/addresses", async c => c.json(await mailboxAddresses(c)));
 mail.post("/addresses", async (c) => {
   await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
@@ -976,18 +980,22 @@ mail.delete("/mailboxes/:m/folders/:id", async (c) => {
   );
   return c.body(null, 204);
 });
-async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
+function pageQuery(c: Parameters<typeof authenticateMail>[0], options: URLSearchParams) {
   const query = {
-    limit: integer(Number(c.req.query("limit") ?? (c.req.param("thread") ? 100 : 50)), "limit", 1, 100) + 1,
-    search: c.req.query("q"),
-    folder_id: c.req.query("folder_id"),
-    thread_id: c.req.param("thread") ? strictId(c.req.param("thread")) : c.req.query("thread_id"),
-    view: c.req.query("view") as "all" | "scheduled" | "outbox" | undefined,
-    editable_drafts: c.req.query("folder_id") === "drafts",
-    include_snoozed: c.req.query("include_snoozed") === "true" || !!c.req.param("thread") && c.req.query("include_snoozed") !== "false",
-    snoozed_only: c.req.query("snoozed_only") === "true",
+    limit: integer(Number(options.get("limit") ?? (c.req.param("thread") ? 100 : 50)), "limit", 1, 100) + 1,
+    search: options.get("q") ?? undefined,
+    folder_id: options.get("folder_id") ?? undefined,
+    thread_id: c.req.param("thread") ? strictId(c.req.param("thread")) : options.get("thread_id") ?? undefined,
+    view: (options.get("view") ?? undefined) as "all" | "scheduled" | "outbox" | undefined,
+    editable_drafts: options.get("folder_id") === "drafts",
+    include_snoozed: options.get("include_snoozed") === "true" || !!c.req.param("thread") && options.get("include_snoozed") !== "false",
+    snoozed_only: options.get("snoozed_only") === "true",
   };
   if (query.view && !["all", "scheduled", "outbox"].includes(query.view)) fail(400, "Invalid view");
+  return query;
+}
+async function messagePage(c: Parameters<typeof authenticateMail>[0], mailboxId = resource(c), options = new URLSearchParams(c.req.query()), grouped = c.req.path.endsWith("/threads")) {
+  const query = pageQuery(c, options);
   let cursor:
     | {
         before: { received_at: number; id: string };
@@ -996,11 +1004,11 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
       }
     | undefined;
   const fingerprint = await hash(
-    JSON.stringify({ mailbox: resource(c), actor: actor(c), ...query }),
+    JSON.stringify({ mailbox: mailboxId, actor: actor(c), grouped, ...query }),
   );
-  if (c.req.query("cursor")) {
+  if (options.get("cursor")) {
     try {
-      cursor = JSON.parse(atob(c.req.query("cursor")!));
+      cursor = JSON.parse(atob(options.get("cursor")!));
     } catch {
       fail(400, "Invalid cursor");
     }
@@ -1015,17 +1023,17 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
     )
       fail(400, "Invalid cursor");
   }
-  const result = await (c.req.path.endsWith("/threads") ? queryThreads : queryMessages)(
+  const result = await (grouped ? queryThreads : queryMessages)(
       c.env,
       actor(c),
-      resource(c),
+      mailboxId,
       { ...query, before: cursor?.before },
       cursor?.partitions,
     ),
     hasNext = result.messages.length === query.limit;
   const page = result.messages.slice(0, query.limit - 1),
     last = page.at(-1);
-  return c.json({
+  return {
     ...(c.req.param("thread") ? { thread_id: c.req.param("thread") } : {}),
     messages: page.map(publicMessage),
     has_more: hasNext,
@@ -1039,8 +1047,9 @@ async function listMessages(c: Parameters<typeof authenticateMail>[0]) {
             }),
           )
         : null,
-  });
+  };
 }
+const listMessages = async (c: Parameters<typeof authenticateMail>[0]) => c.json(await messagePage(c));
 mail.get("/mailboxes/:m/messages", listMessages);
 mail.get("/mailboxes/:m/search", listMessages);
 mail.get("/mailboxes/:m/threads", listMessages);
@@ -2000,3 +2009,126 @@ mail.route("/jmap", jmap);
 mail.post("/mcp", mcp);
 mail.get("/mcp", (c) => c.body(null, 405));
 export default mail;
+
+function uiSession(c: Parameters<typeof authenticateMail>[0]) {
+  if (actor(c).api_key_id) fail(403, "Mail UI requires a user session");
+}
+function listItem(message: Omit<MessageRow, "body_r2_key" | "raw_r2_key"> & { body_r2_key?: string; body_revision?: string } & { recipient_summary?: string; participants?: string; message_count?: number; unread_count?: number; starred_count?: number }) {
+  const fields = ["id", "thread_id", "version", "direction", "folder_id", "subject", "from_address", "reply_to_address", "received_at", "is_read", "is_starred", "is_spam", "snoozed_until", "snippet", "has_attachments", "draft_owner_id", "draft_state", "recipient_summary", "participants", "message_count", "unread_count", "starred_count", "scheduled_at", "submission_status"] as const;
+  return { ...Object.fromEntries(fields.filter(key => message[key] !== undefined).map(key => [key, message[key]])), ...(message.body_r2_key || message.body_revision ? { body_revision: message.body_revision ?? message.body_r2_key?.split("/").at(-1) } : {}) };
+}
+mail.get("/ui/bootstrap", async c => {
+  uiSession(c);
+  const [inventory, saved] = await Promise.all([mailboxInventory(c), first<{ preferences_json: string }>(c.env, "SELECT preferences_json FROM user_mail_preferences WHERE user_id=?", actor(c).user_id)]);
+  const preferences = saved ? mailPreferences(JSON.parse(saved.preferences_json)) : defaultMailPreferences;
+  const requested = c.req.query("mailbox");
+  const box = inventory.mailboxes.find(entry => entry.id === requested) ?? (!requested ? inventory.mailboxes.find(entry => entry.kind === "personal" && entry.owner_user_id === actor(c).user_id) ?? inventory.mailboxes[0] : null);
+  const common = { ...inventory, preferences, capabilities: mailCapabilities(c.env), mailbox_id: box?.id ?? null };
+  if (!box?.access.read) return c.json({ ...common, folders: [], summary: null, cursor: null, page: null });
+  await authorize(c.env, actor(c), box.id, "read");
+  const cursor = (await mailbox(c.env, box.id).changeWindow(actor(c).user_id)).cursor;
+  const section = c.req.query("section") ?? "inbox", search = c.req.query("q") ?? "";
+  if (!["inbox", "sent", "archive", "spam", "trash", "drafts", "starred", "snoozed", "all", "scheduled", "folder"].includes(section)) fail(400, "Invalid mail section");
+  const options = mailViewOptions(section, c.req.query("folder"), search), grouped = mailGrouped(section, search, preferences.conversation_view);
+  const [folders, summary, page] = await Promise.all([mailbox(c.env, box.id).folders(), mailboxSummary(c.env, actor(c), box.id), messagePage(c, box.id, options, grouped)]);
+  await authorize(c.env, actor(c), box.id, "read");
+  options.set("grouped", String(grouped));
+  return c.json({ ...common, folders, summary, cursor, page: { ...page, messages: page.messages.map(listItem) }, view_path: `/api/mail/mailboxes/${box.id}/ui/view?${options}` });
+});
+mail.get("/mailboxes/:m/ui/view", async c => {
+  uiSession(c);
+  const page = await messagePage(c, resource(c), new URLSearchParams(c.req.query()), c.req.query("grouped") === "true");
+  return c.json({ ...page, messages: page.messages.map(listItem) });
+});
+mail.get("/mailboxes/:m/ui/conversation/:id", async c => {
+  uiSession(c);
+  const message = await getMessage(c.env, actor(c), resource(c), c.req.param("id"));
+  const options = new URLSearchParams({ thread_id: message.thread_id, include_snoozed: "true", limit: "50" });
+  if (c.req.query("cursor")) options.set("cursor", c.req.query("cursor")!);
+  const page = message.draft || c.req.query("conversation") === "false" ? { messages: [message], next_cursor: null } : await messagePage(c, resource(c), options, false);
+  return c.json({ message, ...page, messages: page.messages.map(listItem) });
+});
+mail.get("/mailboxes/:m/ui/compose-context", async c => {
+  uiSession(c);
+  await authorize(c.env, actor(c), resource(c), "read");
+  const [addresses, settings, message] = await Promise.all([mailboxAddresses(c), mailbox(c.env, resource(c)).settings(), c.req.query("draft") ? getMessage(c.env, actor(c), resource(c), c.req.query("draft")!) : Promise.resolve(null)]);
+  if (message && !message.draft) fail(404, "Draft not found");
+  return c.json({ ...addresses, settings, message });
+});
+mail.get("/mailboxes/:m/ui/changes", async c => {
+  uiSession(c);
+  await authorize(c.env, actor(c), resource(c), "read");
+  const window = await mailbox(c.env, resource(c)).changeWindow(actor(c).user_id, c.req.query("since") === undefined ? undefined : integer(Number(c.req.query("since")), "since", 0, Number.MAX_SAFE_INTEGER));
+  if (window.reset || !window.events.length) return c.json({ cursor: window.cursor, reset: window.reset, messages: [], thread_ids: [], summary: null });
+  const ids = [...new Set(window.events.map(event => event.message_id))];
+  const messages: MessageRow[] = [], removed: string[] = [];
+  const partitions = new Set((await mailbox(c.env, resource(c)).partitions()).map(entry => entry.id));
+  for (let start = 0; start < ids.length; start += 8) await Promise.all(ids.slice(start, start + 8).map(async id => {
+    if (!partitions.has(locator(id))) { removed.push(id); return; }
+    try { messages.push(await partition(c.env, locator(id)).get(id, actor(c).user_id)); }
+    catch (error) { if (error instanceof Error && error.message.startsWith("MAIL:404:")) removed.push(id); else throw error; }
+  }));
+  const thread_ids = [...new Set([...messages.map(message => message.thread_id), ...window.events.flatMap(event => event.thread_id ? [event.thread_id] : [])])];
+  // Legacy deletion events lack a thread identity; resynchronize rather than guess.
+  if (thread_ids.length > 100 || window.events.some(event => event.operation === "deleted" && !event.thread_id)) return c.json({ cursor: window.cursor, reset: true, messages: [], thread_ids: [], summary: null });
+  const scope = new URLSearchParams(text(c.req.query("scope") ?? "", "scope", 4000, true));
+  const query = pageQuery(c, scope), grouped = scope.get("grouped") === "true";
+  const [summary, affected] = await Promise.all([mailboxSummary(c.env, actor(c), resource(c)), thread_ids.length ? (grouped ? queryThreads : queryMessages)(c.env, actor(c), resource(c), { ...query, limit: 201, thread_ids }) : Promise.resolve({ messages: [] })]);
+  await authorize(c.env, actor(c), resource(c), "read");
+  return c.json({ cursor: window.cursor, reset: affected.messages.length > 200, messages: messages.map(listItem), removed, thread_ids, summary, view: affected.messages.slice(0, 200).map(listItem) });
+});
+mail.post("/mailboxes/:m/ui/commands", async c => {
+  uiSession(c);
+  await authorize(c.env, actor(c), resource(c), "read");
+  await authorize(c.env, actor(c), resource(c), "write");
+  const data = await input(c, ["targets", "changes", "scope"]);
+  if (data.scope !== undefined && typeof data.scope !== "string") fail(400, "Invalid command scope");
+  if (!Array.isArray(data.targets) || !data.targets.length || data.targets.length > 200) fail(400, "Invalid command targets");
+  const validateChanges = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail(400, "Invalid changes");
+    const changes: Parameters<import("../mail/partition").MailPartitionDO["patch"]>[3] = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "folder_id") changes.folder_id = text(entry, key, 100);
+      else if (key === "snoozed_until") changes.snoozed_until = entry === null ? null : integer(entry, key, epoch() + 1, epoch() + 366 * 86400);
+      else if (["is_read", "is_starred", "is_spam"].includes(key)) changes[key as "is_read"] = flag(entry, key);
+      else fail(400, "Invalid change");
+    }
+    if (!Object.keys(changes).length) fail(400, "No changes supplied");
+    return changes;
+  };
+  const operation = key(c), requestHash = await hash(JSON.stringify({ actor: actor(c).user_id, data }));
+  const planKey = "ui:" + actor(c).user_id + ":" + operation;
+  let items = await mailbox(c.env, resource(c)).commandPlan(planKey, requestHash);
+  if (!items) {
+    const scope = new URLSearchParams(typeof data.scope === "string" ? text(data.scope, "scope", 4000, true) : "");
+    scope.delete("cursor"); scope.set("limit", "100");
+    const plan = new Map<string, { id: string; version: number; changes: ReturnType<typeof validateChanges> }>();
+    const partitions = new Set((await mailbox(c.env, resource(c)).partitions()).map(entry => entry.id));
+    for (const target of data.targets) {
+      if (!target || typeof target !== "object") fail(400, "Invalid target");
+      const targetId = text(target.id, "id", 73), version = integer(target.version, "version", 1, Number.MAX_SAFE_INTEGER), changes = validateChanges(target.changes ?? data.changes);
+      if (!partitions.has(locator(targetId))) fail(404, "Mail resource not found");
+      const anchor = await partition(c.env, locator(targetId)).get(targetId, actor(c).user_id);
+      if (target.thread === true) {
+        if (anchor.draft_owner_id) fail(400, "Drafts cannot be expanded as conversations");
+        if (anchor.version !== version) { plan.set(targetId, { id: targetId, version, changes }); continue; }
+        const query = pageQuery(c, scope);
+        let before: { received_at: number; id: string } | undefined;
+        while (true) {
+          const page = await queryMessages(c.env, actor(c), resource(c), { ...query, limit: 100, before, thread_id: anchor.thread_id, exclude_drafts: true });
+          for (const message of page.messages) plan.set(message.id, { id: message.id, version: message.version, changes });
+          if (plan.size > 2000) fail(400, "Select fewer conversations");
+          if (page.messages.length < 100) break;
+          const last = page.messages.at(-1)!; before = { received_at: last.received_at, id: last.id };
+        }
+      } else plan.set(targetId, { id: targetId, version, changes });
+    }
+    items = await mailbox(c.env, resource(c)).commandPlan(planKey, requestHash, [...plan.values()]);
+  }
+  const results = await mailbox(c.env, resource(c)).changeMessages(actor(c).user_id, operation, requestHash, items!);
+  for (const result of results) if (result.success && result.message.snoozed_until) await mailbox(c.env, resource(c)).schedule({ id: "snooze:" + result.id, partition_id: locator(result.id), kind: "snooze", reference_id: result.id, due_at: result.message.snoozed_until });
+  const partitions = [...new Set(items!.map(item => locator(item.id)))];
+  for (let start = 0; start < partitions.length; start += 4) await Promise.all(partitions.slice(start, start + 4).map(id => flushOutbox(c.env, resource(c), id)));
+  const summary = await mailboxSummary(c.env, actor(c), resource(c));
+  return c.json({ mailbox_id: resource(c), results: results.map(result => result.success ? { ...result, before: listItem(result.before), message: listItem(result.message) } : result), summary });
+});

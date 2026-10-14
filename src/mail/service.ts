@@ -87,6 +87,7 @@ export async function getMessage(
   const { body_r2_key: _body, raw_r2_key: _raw, ...result } = message;
   return {
     ...result,
+    body_revision: message.body_r2_key.split("/").at(-1),
     attachments: message.attachments.map(({ r2_key: _key, ...file }) => file),
     body: { text: content.text, html: cleanHtml(content.html, cid), ...(message.draft ? {
       ...(content.compose_state ? { compose_state: content.compose_state } : {}),

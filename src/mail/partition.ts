@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./partition.sql";
 import unifiedSend from "./partition-v2.sql";
+import uiCommands from "./partition-v3.sql";
 import { migrate } from "./migrations";
 import { compileSearch } from "./search";
 import {
@@ -25,7 +26,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, unifiedSend]);
+      migrate(ctx.storage, [schema, unifiedSend, uiCommands]);
     });
   }
   initialize(mailboxId: string, partitionId: string) {
@@ -85,7 +86,9 @@ export class MailPartitionDO extends DurableObject<Env> {
     messageId: string,
     operation: string,
     privateUser: string | null = null,
+    threadId?: string,
   ) {
+    const current = row<{ thread_id: string; version: number }>(this.sql, "SELECT thread_id,version FROM messages WHERE id=?", messageId);
     this.sql.exec(
       "INSERT INTO change_log(message_id,operation,created_at) VALUES(?,?,?)",
       messageId,
@@ -103,6 +106,8 @@ export class MailPartitionDO extends DurableObject<Env> {
       JSON.stringify({
         ...identity,
         message_id: messageId,
+        thread_id: threadId ?? current?.thread_id,
+        version: current?.version,
         operation,
         private_user_id: privateUser,
       }),
@@ -374,6 +379,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   query(query: MessageQuery) {
     const { filters, bindings } = this.queryPlan(query);
+    if (query.thread_ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(query.thread_ids)); }
     const submission = query.view === "scheduled" || query.view === "outbox"
       ? ",(SELECT status FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','processing','retry_wait','unknown') ORDER BY created_at DESC,id DESC LIMIT 1) submission_status,(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at"
       : "";
@@ -382,6 +388,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   threadPage(query: MessageQuery, ids?: string[]): ThreadRow[] {
     const { filters, bindings } = this.queryPlan({ ...query, before: undefined });
+    if (query.thread_ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(query.thread_ids)); }
     if (ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(ids)); }
     const before = !ids && query.before ? " AND (received_at<? OR (received_at=? AND id<?))" : "";
     return rows<ThreadRow>(this.sql,
@@ -448,6 +455,30 @@ export class MailPartitionDO extends DurableObject<Env> {
       this.change(messageId, "updated", message.draft_owner_id);
     });
     return this.get(messageId, actorId);
+  }
+  /** Each item commits its receipt and outbox record with the CAS update. */
+  patchMany(actorId: string, operation: string, requestHash: string, items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
+    this.sql.exec("DELETE FROM ui_command_receipts WHERE expires_at<?", epoch());
+    return items.map(item => {
+      const operationId = actorId + ":" + operation + ":" + item.id;
+      const previous = row<{ request_hash: string; result_json: string }>(this.sql, "SELECT * FROM ui_command_receipts WHERE operation_id=?", operationId);
+      if (previous) {
+        if (previous.request_hash !== requestHash) fail(409, "Idempotency key reused with different request");
+        return JSON.parse(previous.result_json) as { id: string; success: true; before: MessageRow; message: MessageRow };
+      }
+      let threadId: string | undefined;
+      try {
+        return this.ctx.storage.transactionSync(() => {
+          const before = this.get(item.id, actorId); threadId = before.thread_id;
+          const message = this.patch(item.id, actorId, item.version, { ...item.changes });
+          const result = { id: item.id, success: true as const, before, message };
+          this.sql.exec("INSERT INTO ui_command_receipts VALUES(?,?,?,?)", operationId, requestHash, JSON.stringify(result), epoch() + 86400);
+          return result;
+        });
+      } catch (error) {
+        return { id: item.id, thread_id: threadId, success: false as const, error: error instanceof Error ? error.message.replace(/^MAIL:\d{3}:/, "") : "Operation failed" };
+      }
+    });
   }
   editDraft(
     messageId: string,
@@ -902,7 +933,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         );
     this.sql.exec("DELETE FROM submissions WHERE message_id=?", messageId);
     this.sql.exec("DELETE FROM messages WHERE id=?", messageId);
-    this.change(messageId, "deleted", message.draft_owner_id);
+    this.change(messageId, "deleted", message.draft_owner_id, message.thread_id);
   }
   purge(messageId: string, actorId: string, draft = false) {
     const message = this.get(messageId, actorId);

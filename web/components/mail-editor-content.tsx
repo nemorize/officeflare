@@ -22,10 +22,11 @@ const EmailStyles = Extension.create({ name: "emailStyles", addGlobalAttributes(
 
 function editorFormatting(instance: Editor | null) { return instance ? { bold: instance.isActive("bold"), italic: instance.isActive("italic"), underline: instance.isActive("underline"), strike: instance.isActive("strike"), bullet: instance.isActive("bulletList"), ordered: instance.isActive("orderedList"), quote: instance.isActive("blockquote"), align: instance.getAttributes("paragraph").textAlign ?? "left", font: instance.getAttributes("textStyle").fontFamily ?? "", size: instance.getAttributes("textStyle").fontSize ?? "", link: instance.isActive("link"), href: instance.getAttributes("link").href ?? "", table: instance.isActive("table"), image: instance.isActive("image"), undo: instance.can().undo(), redo: instance.can().redo() } : null; }
 
-export function MailEditor({ value, onChange, onUploadingChange, maxImageBytes, onImageUploaded, mailboxId, attachments = emptyAttachments, disabled = false, label = "Message body", className = "" }: MailEditorProps) {
+export function MailEditor({ value, onChange, onDirty, flushRef, onUploadingChange, maxImageBytes, onImageUploaded, mailboxId, attachments = emptyAttachments, disabled = false, label = "Message body", className = "" }: MailEditorProps) {
   const limits = useMailResource<{ limits: { max_upload_bytes: number } }>(maxImageBytes === undefined ? mailboxPath(mailboxId) + "/addresses" : null);
   const imageMaximum = maxImageBytes ?? limits.data?.limits.max_upload_bytes ?? 0;
-  const current = useRef({ onChange, attachments, disabled, imageMaximum, onImageUploaded }); current.current = { onChange, attachments, disabled, imageMaximum, onImageUploaded };
+  const current = useRef({ onChange, onDirty, attachments, disabled, imageMaximum, onImageUploaded }); current.current = { onChange, onDirty, attachments, disabled, imageMaximum, onImageUploaded };
+  const serialization = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), published = useRef(value);
   const fileInput = useRef<HTMLInputElement>(null), uploadCount = useRef(0);
   const [uploading, setUploading] = useState(false), [error, setError] = useState("");
   useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
@@ -43,14 +44,26 @@ export function MailEditor({ value, onChange, onUploadingChange, maxImageBytes, 
       if (!images.length) return false;
       event.preventDefault(); void uploadImages(images); return true;
     } },
-    onUpdate: ({ editor: next }) => current.current.onChange(next.isEmpty ? "" : storedEditorHtml(next.getHTML(), mailboxId, current.current.attachments), next.getText({ blockSeparator: "\n\n" }).replace(/\n{3,}/g, "\n\n")),
+    onUpdate: () => {
+      current.current.onDirty?.();
+      clearTimeout(serialization.current);
+      serialization.current = setTimeout(() => { const next = flush(); current.current.onChange(next.html, next.text); }, 200);
+    },
   }, [mailboxId]);
   useEffect(() => { editor?.setEditable(!disabled, false); }, [editor, disabled]);
+  function flush() {
+    clearTimeout(serialization.current);
+    const result = { html: !editor || editor.isEmpty ? "" : storedEditorHtml(editor.getHTML(), mailboxId, current.current.attachments), text: editor?.getText({ blockSeparator: "\n\n" }).replace(/\n{3,}/g, "\n\n") ?? "" };
+    published.current = result.html;
+    return result;
+  }
+  useEffect(() => { if (flushRef) flushRef.current = () => { const result = flush(); current.current.onChange(result.html, result.text); return result; }; return () => { clearTimeout(serialization.current); if (flushRef) flushRef.current = null; }; }, [editor, flushRef, mailboxId]);
   useEffect(() => {
-    if (!editor) return;
-    const stored = editor.isEmpty ? "" : storedEditorHtml(editor.getHTML(), mailboxId, attachments);
-    if (stored !== value) editor.commands.setContent(displayEditorHtml(value, mailboxId), { emitUpdate: false });
-  }, [editor, value, mailboxId, attachments]);
+    if (!editor || value === published.current) return;
+    clearTimeout(serialization.current);
+    published.current = value;
+    editor.commands.setContent(displayEditorHtml(value, mailboxId), { emitUpdate: false });
+  }, [editor, value, mailboxId]);
   const state = useEditorState({ editor, selector: ({ editor: instance }) => editorFormatting(instance) }) ?? editorFormatting(editor);
   async function uploadImages(files: File[]) {
     if (current.current.disabled || !editor || editor.isDestroyed) return;

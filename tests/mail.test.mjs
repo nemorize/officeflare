@@ -2150,3 +2150,64 @@ test("mail audit history requires a dedicated permission and mailbox management,
   await db.prepare("DELETE FROM user_roles WHERE user_id='reader' AND role_id='delegated-auditor'").run();
   await call(auditPath, { token: tokens.reader, expected: 403 });
 });
+
+test("mail UI aggregates initial reads, applies bounded replay-safe commands and catches up private changes", async t => {
+  const { call, base, draft, mf, tokens } = await fixture(t, "250000", true);
+  const harness = await mf.getWorker("mail-harness");
+  for (let index = 0; index < 3; index++) {
+    const mime = ["From: sender@example.test", "To: owner@mail.test", "Subject: UI performance", `Message-ID: <ui-${index}@example.test>`, ...(index ? ["In-Reply-To: <ui-0@example.test>", "References: <ui-0@example.test>"] : []), "Content-Type: text/plain", "", "Mail " + index].join("\r\n");
+    assert.equal((await (await harness.fetch("https://test/email", { method: "POST", body: mime })).json()).rejected, null);
+    await eventually(() => call(base + "/messages?folder_id=inbox"), page => page.messages.length === index + 1, "Inbound UI message missing");
+  }
+  const bootstrap = await call("/ui/bootstrap?section=inbox");
+  assert.equal(bootstrap.mailbox_id, base.split("/").at(-1));
+  assert.equal(bootstrap.page.messages.length, 1);
+  assert.equal(bootstrap.page.messages[0].message_count, 3);
+  assert.equal(bootstrap.summary.folders.inbox.unread, 3);
+  const row = bootstrap.page.messages[0];
+  assert.equal(row.raw_r2_key, undefined); assert.equal(row.body_r2_key, undefined);
+  assert.equal(row.search_text, undefined); assert.equal(row.provider_message_id, undefined);
+  const view = await call(bootstrap.view_path.replace("/api/mail", ""));
+  assert.deepEqual(view.messages, bootstrap.page.messages);
+  const conversation = await call(base + "/ui/conversation/" + row.id);
+  assert.equal(conversation.messages.length, 3); assert.ok(conversation.message.body.text);
+  assert.equal((await call(base + "/summary")).summary.folders.inbox.unread, 3); // GET never marks read.
+  await t.test("commands expand a conversation server-side with per-item versions and safe retry", async () => {
+    const body = { targets: [{ id: row.id, version: row.version, thread: true }], changes: { is_read: true }, scope: "folder_id=inbox" }, headers = { "Idempotency-Key": "ui-command" };
+    const result = await call(base + "/ui/commands", { method: "POST", data: body, headers });
+    assert.equal(result.results.length, 3); assert.ok(result.results.every(item => item.success && item.message.version === item.before.version + 1));
+    assert.equal(result.summary.folders.inbox.unread, 0);
+    const replay = await call(base + "/ui/commands", { method: "POST", data: body, headers });
+    assert.deepEqual(replay.results, result.results);
+    await call(base + "/ui/commands", { method: "POST", data: { ...body, changes: { is_read: false } }, headers, expected: 409 });
+    const delta = await call(base + "/ui/changes?since=" + bootstrap.cursor + "&scope=" + encodeURIComponent("folder_id=inbox&grouped=true"));
+    assert.equal(delta.reset, false); assert.equal(delta.messages.length, 3); assert.equal(delta.view.length, 1);
+    assert.equal(delta.view[0].unread_count, 0);
+    const empty = await call(base + "/ui/changes?since=" + delta.cursor);
+    assert.deepEqual(empty.messages, []); assert.equal(empty.summary, null);
+    await call(base + "/ui/changes?since=-1", { expected: 400 });
+  });
+  await t.test("partial conflicts leave independent targets successful and report their conversation", async () => {
+    const rows = (await call(base + "/messages?folder_id=inbox")).messages;
+    const result = await call(base + "/ui/commands", { method: "POST", data: { targets: [{ id: rows[0].id, version: rows[0].version - 1 }, { id: rows[1].id, version: rows[1].version }], changes: { is_starred: true } } });
+    assert.equal(result.results[0].success, false); assert.equal(result.results[0].thread_id, rows[0].thread_id);
+    assert.equal(result.results[1].success, true);
+    await call(base + "/ui/commands", { method: "POST", data: { targets: [{ id: rows[0].id, version: rows[0].version }], changes: { arbitrary: true } }, expected: 400 });
+  });
+  await t.test("private drafts, member revocation and user-only UI retain existing authorization", async () => {
+    await call(base + "/members/reader", { method: "PUT", data: { read: true } });
+    const watermark = (await call(base + "/ui/changes", { token: tokens.reader })).cursor;
+    const message = await draft({ subject: "Private UI draft" });
+    const delta = await call(base + "/ui/changes?since=" + watermark, { token: tokens.reader });
+    assert.deepEqual(delta.messages, []); assert.equal(delta.summary, null);
+    await call(base + "/ui/conversation/" + message.id, { token: tokens.reader, expected: 404 });
+    await call(base + "/ui/compose-context?draft=" + message.id, { token: tokens.reader, expected: 404 });
+    const context = await call(base + "/ui/compose-context?draft=" + message.id);
+    assert.equal(context.message.id, message.id); assert.ok(context.settings); assert.ok(context.addresses);
+    await call(base + "/ui/commands", { token: tokens.reader, method: "POST", data: { targets: [{ id: row.id, version: 1 }], changes: { is_read: true } }, expected: 403 });
+    await call(base + "/members/reader", { method: "DELETE", expected: 204 });
+    await call(base + "/ui/changes?since=" + watermark, { token: tokens.reader, expected: 403 });
+    await call(base + "/ui/view?folder_id=inbox", { token: tokens.reader, expected: 403 });
+    await call(base + "/ui/conversation/" + row.id, { token: tokens.outsider, expected: 403 });
+  });
+});

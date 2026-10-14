@@ -127,6 +127,7 @@ export interface MessageRow {
 }
 export interface MessageQuery {
   actor_id: string;
+  thread_ids?: string[];
   limit: number;
   before?: { received_at: number; id: string };
   folder_id?: string;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
-import { useMail, MailSidebar } from "./mail-context";
+import { useMail, useMailMenu, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
 import { WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { CheckboxLabel,
@@ -22,7 +22,7 @@ import {
   useMailMobile,
 } from "./mail-common";
 export function MailSettingsButton() {
-  const mail = useMail();
+  const menu = useMailMenu(), mail = useMail();
   return (
     <MailIconButton
       icon="settings"
@@ -31,7 +31,7 @@ export function MailSettingsButton() {
       render={
         <NavLink
           to={mail.href("/mail/settings")}
-          onClick={() => mail.setMobileMenu(false)}
+          onClick={() => menu.setMobileMenu(false)}
         />
       }
     />
@@ -40,7 +40,7 @@ export function MailSettingsButton() {
 
 export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
   const mobile = useMailMobile();
-  const mail = useMail(),
+  const menu = useMailMenu(), mail = useMail(),
     navigate = useNavigate(),
     location = useLocation(),
     [params] = useSearchParams(),
@@ -57,7 +57,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
     [attached, setAttached] = useState(false);
   useEffect(() => setSearch(params.get("q") ?? ""), [params]);
   useEffect(() => {
-    mail.setMobileMenu(false);
+    menu.setMobileMenu(false);
   }, [location.pathname]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -204,7 +204,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         label="Toggle mail navigation"
         onClick={() => {
           if (window.matchMedia("(max-width: 760px)").matches)
-            mail.setMobileMenu(true);
+            menu.setMobileMenu(true);
           else
             void mail.setPreferences({
               sidebar_collapsed: !mail.preferences.sidebar_collapsed,
@@ -305,14 +305,14 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             {filterForm}
           </DrawerPopup>
         </Drawer.Root>
-        <WorkspaceNavigationDrawer open={mail.mobileMenu} onOpenChange={mail.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailSettingsButton />}><MailSidebar /></WorkspaceNavigationDrawer>
+        <WorkspaceNavigationDrawer open={menu.mobileMenu} onOpenChange={menu.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailSettingsButton />}><MailSidebar /></WorkspaceNavigationDrawer>
       </Drawer.Provider>
     </header>
   );
 }
 
 export function MailPreferenceFields() {
-  const mail = useMail();
+  const menu = useMailMenu(), mail = useMail();
   return (
     <div className="mail-preference-fields">
       <MailField label="Display density">

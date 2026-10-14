@@ -85,3 +85,41 @@ test("a mailbox change also invalidates a cached detail that is currently unmoun
   await cache.load("/mailbox/message");
   assert.deepEqual(cache.snapshot("/mailbox/message").data, { version: 2 });
 });
+
+test("unchanged mail rows and no-op updates retain references and do not notify", async () => {
+  const row = { id: "m", version: 1, is_read: 0, body: { html: "<p>Body</p>" } };
+  const cache = new MailResourceCache(async () => ({ messages: [{ ...row, body: { ...row.body } }] }));
+  await cache.load("/rows"); const first = cache.snapshot("/rows").data;
+  let notifications = 0; cache.subscribe("/rows", () => notifications++);
+  cache.update(() => true, data => applyReadReceipt(data, "absent", 2));
+  assert.equal(notifications, 0); assert.equal(cache.snapshot("/rows").data, first);
+  await cache.load("/rows", true);
+  assert.equal(cache.snapshot("/rows").data, first);
+  assert.equal(cache.snapshot("/rows").data.messages[0], first.messages[0]);
+  assert.equal(notifications, 2); // Loading status and completion, no data replacement.
+});
+
+test("binary image cache is bounded and never shares an old Blob by object keys", async () => {
+  let byte = 1;
+  const cache = new MailResourceCache(async () => new Blob([new Uint8Array(5 * 1024 ** 2).fill(byte)]));
+  await cache.load("/image/one"); const first = cache.snapshot("/image/one").data;
+  byte = 2; await cache.load("/image/one", true);
+  assert.notEqual(cache.snapshot("/image/one").data, first);
+  for (let index = 0; index < 6; index++) await cache.load("/image/" + index);
+  const total = cache.paths().reduce((size, path) => size + (cache.snapshot(path).data?.size ?? 0), 0);
+  assert.ok(total <= 20 * 1024 ** 2);
+});
+
+test("pending mutations hold catch-up and confirmed versions remain session and mailbox scoped", async () => {
+  const cache = new MailResourceCache(async () => ({}));
+  const finish = cache.beginMutation(), generation = cache.mutationGeneration();
+  let settled = false; const waiting = cache.whenSettled().then(() => { settled = true; });
+  await Promise.resolve(); assert.equal(settled, false);
+  cache.rememberMessages("/api/mail/mailboxes/a", [{ id: "m", version: 3 }]);
+  cache.rememberMessages("/api/mail/mailboxes/a", [{ id: "m", version: 2 }]);
+  assert.equal(cache.knownVersion("/api/mail/mailboxes/a", "m"), 3);
+  assert.equal(cache.knownVersion("/api/mail/mailboxes/b", "m"), 0);
+  finish(); await waiting; assert.equal(settled, true); assert.ok(cache.mutationGeneration() > generation);
+  cache.denyMailbox("/api/mail/mailboxes/a", new Error("Denied")); assert.equal(cache.knownVersion("/api/mail/mailboxes/a", "m"), 0);
+  const next = cache.beginMutation(), closed = cache.whenSettled(); cache.clear(); await closed; next();
+});

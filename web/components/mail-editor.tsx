@@ -1,9 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type RefObject } from "react";
 import type { Attachment } from "../lib/mail";
 import "./mail-editor.css";
 
 export interface MailEditorProps {
   value: string;
+  onDirty?: () => void;
+  flushRef?: RefObject<(() => { html: string; text: string }) | null>;
   onChange: (html: string, text: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
   maxImageBytes?: number;
