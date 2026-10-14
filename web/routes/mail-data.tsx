@@ -10,7 +10,7 @@ import { MailField, MailModal, MailNotice, MailSection, MailState, useMailAction
 import { Check, Confirm } from "../components/console-shared";
 import { Button } from "../components/ui";
 export function MailDataPage({ page }: { page: string }) {
-  const mail = useMail(); return <MailReady><div className="mail-manage-page" key={mail.box?.id}>{page === "activity" ? <Activity /> : <DataJobs />}</div></MailReady>;
+  const mail = useMail(); return <MailReady><div className="account-page mail-manage-page" key={mail.box?.id}>{page === "activity" ? <Activity /> : <DataJobs />}</div></MailReady>;
 }
 function DataJobs() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), navigate = useNavigate(), action = useMailAction(), [poll, setPoll] = useState(false), resource = useMailResource<{ jobs: Job[] }>(path + "/jobs", mail.revision, poll);

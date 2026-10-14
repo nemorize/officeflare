@@ -18,7 +18,7 @@ import { Check, Confirm } from "../components/console-shared";
 import { useAccess } from "../components/console-access";
 export function MailManagePage({ page }: { page: string }) {
   const mail = useMail();
-  return <MailReady read={page !== "settings"}><div className="mail-manage-page" key={mail.box?.id}>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
+  return <MailReady read={page !== "settings"}><div className="account-page mail-manage-page" key={mail.box?.id}>{page === "rules" ? <Rules /> : <Settings />}</div></MailReady>;
 }
 function Rules() {
   const mail = useMail(), path = mailboxPath(mail.box!.id), resource = useMailResource<{ "blocked-senders": { email_address: string }[] }>(path + "/blocked-senders"), action = useMailAction(), [email, setEmail] = useState(""), [test, setTest] = useState({ from: "", to: "", subject: "", body: "" }), [result, setResult] = useState<{ folder_id: string; is_read: boolean; is_starred: boolean; is_spam: boolean; matched_rules: string[] } | null>(null);

@@ -80,4 +80,3 @@ export function MailModal({ open, title, description, children, onClose, busy, w
   </DialogPopup></Dialog.Root>;
 }
 export function MailSection({ title, description, action, children }: { title: string; description?: ReactNode; action?: ReactNode; children: ReactNode }) { return <section className="mail-section"><header><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{action}</header>{children}</section>; }
-export function MailPageHeader({ title, description, children }: { title: string; description: ReactNode; children?: ReactNode }) { return <header className="mail-page-heading"><div><h1>{title}</h1><p>{description}</p></div>{children}</header>; }

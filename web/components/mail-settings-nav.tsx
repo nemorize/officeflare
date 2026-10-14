@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useMail } from "./mail-context";
-import { MailPageHeader } from "./mail-common";
+import { ConsolePageHeader } from "./console-shared";
 import { Tabs } from "./ui";
 
 const pages = [
@@ -30,7 +30,7 @@ export function MailSettingsLayout({ title, description, actions, children }: {
   }, [selected]);
   return (
     <>
-      <MailPageHeader title={title} description={description}>{actions}</MailPageHeader>
+      <ConsolePageHeader title={title} description={description}>{actions}</ConsolePageHeader>
       <Tabs.Root value={selected} onValueChange={(route) => navigate(mail.href(route))}>
         <div ref={nav} className="mail-settings-nav">
           <Tabs.List aria-label="Mail settings sections">

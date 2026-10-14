@@ -11,7 +11,7 @@ interface ApiKey { id: string; name: string; expires_at: number; revoked_at: num
 interface Scope { key_id?: string; mailbox_id: string; action: Exclude<MailRight, "manage">; }
 export function MailIntegrationsPage() {
   const mail = useMail();
-  return <div className="mail-manage-page" key={mail.box?.id}><MailSettingsLayout title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions."><ApiKeys />{mail.capabilities?.features.webhooks && (mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>)}<Protocols /></MailSettingsLayout></div>;
+  return <div className="account-page mail-manage-page" key={mail.box?.id}><MailSettingsLayout title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions."><ApiKeys />{mail.capabilities?.features.webhooks && (mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>)}<Protocols /></MailSettingsLayout></div>;
 }
 function Secret({ title, value, onClose }: { title: string; value: string; onClose: () => void }) {
   const action = useMailAction(), [copied, setCopied] = useState(false);
