@@ -4,6 +4,7 @@ import {
   bytes,
   mailErrorDescription,
   htmlFrame,
+  embeddedMailImage,
   mailFrameHeight,
   mailboxPath,
   mailDate,
@@ -16,6 +17,7 @@ import {
 import { useMail } from "./mail-context";
 import { MailNotice, useMailAction, useMailResource } from "./mail-common";
 import { Button } from "./ui";
+import { LoadingSkeleton } from "./loading-skeleton";
 export function MailHtml({
   message,
   path,
@@ -29,43 +31,59 @@ export function MailHtml({
   const nonce = useMemo(() => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join(""), [message.id, content]);
   const [html, setHtml] = useState(content),
     [error, setError] = useState("");
+  const [loading, setLoading] = useState(true), [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const controller = new AbortController(),
-      urls: string[] = [];
+    const controller = new AbortController();
     setHtml(content);
     setError("");
+    setLoading(true);
     const inline = message.attachments.filter(
       (file) => file.content_id && file.content_type.startsWith("image/"),
     );
-    void Promise.allSettled(
-      inline.map(async (file) => {
-        const source = `${path}/messages/${message.id}/attachments/${file.id}`;
-        const blob = await api<Blob>(source, {
-          response: "blob",
-          signal: controller.signal,
-        });
-        if (controller.signal.aborted) return null;
-        const url = URL.createObjectURL(blob);
-        urls.push(url);
-        return { source, url };
-      }),
-    ).then((results) => {
-      if (controller.signal.aborted) return;
-      let formatted = content;
-      for (const result of results)
-        if (result.status === "fulfilled" && result.value)
-          formatted = formatted.replaceAll(result.value.source, result.value.url);
-      if (results.some((result) => result.status === "rejected"))
-        setError(
-          "Some inline images could not be loaded. You can download the attachments below.",
-        );
-      setHtml(formatted);
-    });
+    void (async () => {
+      let formatted = content, failures = 0;
+      const sources: string[] = [];
+      try {
+        if (content === message.body.html) {
+          const base = `${path}/messages/${message.id}/render`;
+          const rendering = await api<{ html: string; assets: { source: string }[]; failures: number }>(base, { signal: controller.signal });
+          formatted = rendering.html; failures = rendering.failures;
+          for (const asset of rendering.assets) if (asset.source.startsWith(base + "/assets/") && /^\d{1,2}$/.test(asset.source.slice((base + "/assets/").length))) sources.push(asset.source);
+        }
+        for (const file of inline) {
+          const source = `${path}/messages/${message.id}/attachments/${file.id}`;
+          if (formatted.includes(source)) sources.push(source);
+        }
+        // Keep resource loading bounded, including newsletters with many images.
+        const replacements = new Map<string, string>(); let next = 0, loadedBytes = 0;
+        const resourceSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]);
+        await Promise.all(Array.from({ length: Math.min(6, sources.length) }, async () => {
+          while (next < sources.length && !resourceSignal.aborted && loadedBytes < 20 * 1024 ** 2) {
+            const source = sources[next++]!;
+            try {
+              const blob = await api<Blob>(source, { response: "blob", signal: resourceSignal });
+              if (controller.signal.aborted) return;
+              loadedBytes += blob.size;
+              if (loadedBytes > 20 * 1024 ** 2) throw new Error("Mail image budget exceeded");
+              // Opaque sandbox origins cannot read the parent's partitioned blob URLs.
+              replacements.set(source, await embeddedMailImage(blob));
+            } catch { if (!controller.signal.aborted) failures++; }
+          }
+        }));
+        if (next < sources.length && !controller.signal.aborted) failures++;
+        if (resourceSignal.aborted && !controller.signal.aborted) failures++;
+        if (controller.signal.aborted) return;
+        // Replace longer paths first: asset 1 must not replace the prefix of asset 10.
+        for (const source of sources.sort((left, right) => right.length - left.length)) formatted = formatted.replaceAll(source, replacements.get(source) ?? "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=");
+        if (failures) setError("Some images or styles could not be loaded. The rest of the message is available.");
+        setHtml(formatted);
+      } catch { if (!controller.signal.aborted) setError("The formatted message could not be loaded."); }
+      finally { if (!controller.signal.aborted) setLoading(false); }
+    })();
     return () => {
       controller.abort();
-      urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [message.id, content, path]);
+  }, [message.id, content, path, attempt]);
   useLayoutEffect(() => {
     setHeight(128);
     const resize = (event: MessageEvent) => {
@@ -77,9 +95,9 @@ export function MailHtml({
   }, [nonce]);
   return (
     <>
-      <p className="mail-html-note">External images are blocked for privacy.</p>
       <MailNotice error={error} />
-      <iframe
+      {error && <Button variant="ghost" size="sm" onClick={() => setAttempt(value => value + 1)}>Retry loading content</Button>}
+      {loading ? <LoadingSkeleton label="Loading formatted message…" /> : <iframe
         ref={frame}
         style={{ height }}
         className="mail-html-frame"
@@ -87,7 +105,7 @@ export function MailHtml({
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         srcDoc={htmlFrame(html, nonce)}
-      />
+      />}
     </>
   );
 }

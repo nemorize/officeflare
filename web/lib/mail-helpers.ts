@@ -27,12 +27,19 @@ export function mailErrorDescription(code: string) {
   return messages[code] ?? "This operation could not be completed. Try again or contact an administrator.";
 }
 export function mailFailure(failure: unknown) { return failure instanceof Error ? failure.message : "Unable to complete the request."; }
+export async function embeddedMailImage(blob: Blob): Promise<string> {
+  if (!/^image\/[a-z0-9.+-]+$/i.test(blob.type) || blob.size > 5 * 1024 ** 2) throw new Error("Unsupported mail image");
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 8192) binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
+  return `data:${blob.type};base64,${btoa(binary)}`;
+}
 export function htmlFrame(html: string, resizeNonce?: string) {
   if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce)) throw new Error("Invalid frame nonce");
   const policy = resizeNonce ? " script-src 'nonce-" + resizeNonce + "';" : "";
   // Only this nonce-authorized script can run; the frame keeps an opaque origin.
   const resize = resizeNonce ? '<script nonce="' + resizeNonce + '">(()=>{const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce:"' + resizeNonce + '",height},"*")};new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);addEventListener("load",report);report()})()</script>' : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${resize}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${resize}</body></html>`;
 }
 export function mailFrameHeight(data: unknown, nonce: string, source: unknown, expectedSource: unknown): number | null {
   if (!expectedSource || source !== expectedSource || !data || typeof data !== "object") return null;

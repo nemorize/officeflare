@@ -4,6 +4,7 @@ import { maxAttachmentBytes } from "../mail/size";
 import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
+import { loadMailRenderImage, renderMailHtml } from "../mail/render";
 import { attachEditorImages, composedBody, editorBody, imageAssetKey, imageContentId, validateSignatureImages } from "../mail/editor";
 import { Hono } from "hono";
 import {
@@ -1055,6 +1056,40 @@ mail.get("/mailboxes/:m/messages/:id", async (c) =>
     message: await getMessage(c.env, actor(c), resource(c), c.req.param("id")),
   }),
 );
+async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
+  await authorize(c.env, actor(c), resource(c), "read");
+  const messageId = c.req.param("id")!;
+  await belongs(c.env, resource(c), locator(messageId));
+  const message = await partition(c.env, locator(messageId)).get(messageId, actor(c).user_id);
+  const body = await readBody(c.env, message.body_r2_key);
+  const path = `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(messageId)}`;
+  const cid = Object.fromEntries(message.attachments.filter(file => file.content_id).map(file => [file.content_id!, `${path}/attachments/${file.id}`]));
+  const rendering = await renderMailHtml(body.html, cid, `${path}/render`, new URL(c.req.url).hostname);
+  return { message, rendering };
+}
+async function renderingStillAvailable(c: Parameters<typeof authenticateMail>[0], original: MessageRow) {
+  await authorize(c.env, actor(c), resource(c), "read");
+  await belongs(c.env, resource(c), locator(original.id));
+  const latest = await partition(c.env, locator(original.id)).get(original.id, actor(c).user_id);
+  if (latest.body_r2_key !== original.body_r2_key) fail(409, "Message content changed. Reload the message.");
+}
+mail.get("/mailboxes/:m/messages/:id/render", async c => {
+  const { message, rendering } = await mailRendering(c);
+  await renderingStillAvailable(c, message);
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ html: rendering.html, assets: rendering.assets.map(asset => ({ source: `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(message.id)}/render/assets/${asset.id}` })), failures: rendering.failures });
+});
+mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async c => {
+  if (!/^\d{1,2}$/.test(c.req.param("asset"))) fail(404, "Image not found");
+  const { message, rendering } = await mailRendering(c);
+  const asset = rendering.assets.find(asset => asset.id === c.req.param("asset"));
+  if (!asset) fail(404, "Image not found");
+  let response: Response;
+  try { response = await loadMailRenderImage(asset, new URL(c.req.url).hostname); }
+  catch { fail(502, "Image could not be loaded safely"); }
+  await renderingStillAvailable(c, message);
+  return response;
+});
 mail.get("/mailboxes/:m/messages/:id/original", async (c) => {
   await authorize(c.env, actor(c), resource(c), "read");
   await belongs(c.env, resource(c), locator(c.req.param("id")));

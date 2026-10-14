@@ -2074,3 +2074,45 @@ test("rich mail preserves signatures, inline images and quoted HTML through edit
   await call(`/mailboxes/${otherBox.id}/settings`, { method: "PATCH", data: { signature: "Legacy text" } });
   assert.equal((await call(`/mailboxes/${otherBox.id}/settings`)).settings.signature_html, "");
 });
+
+test("formatted mail and cached images remain authorized, private, and tied to exact message resources", async (t) => {
+  const { remoteAssetCacheRequest, png } = await import('./mail-render-helpers.mjs');
+  const { mf, tokens, raw, call, admin, base, mailbox, draft } = await fixture(t);
+  const message = await draft({ subject: 'Newsletter rendering' });
+  const bucket = await mf.getR2Bucket('MAIL_BUCKET');
+  const object = (await bucket.list({ prefix: `bodies/${mailbox.id}/${message.id}/` })).objects[0];
+  const body = await (await bucket.get(object.key)).json();
+  // Received messages retain raw HTML in storage; legacy sanitized reads still stay strict.
+  body.html = '<style>.newsletter{color:purple}</style><div class="newsletter" onclick="alert(1)"><img src="https://cdn.example.com/news.png" width="32" height="32"><script>alert(1)</script>Hello</div>';
+  await bucket.put(object.key, JSON.stringify(body));
+  const cache = (await mf.getCaches()).default;
+  await cache.put(await remoteAssetCacheRequest('https://cdn.example.com/news.png', 'image'), new Response(png, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' } }));
+  const renderPath = base + '/messages/' + message.id + '/render';
+  const response = await raw('/api/mail' + renderPath, { token: tokens.owner });
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  const rendering = await response.json();
+  assert.match(rendering.html, /\.newsletter\{color:purple\}/);
+  assert.match(rendering.html, /class="newsletter"/);
+  assert.doesNotMatch(rendering.html, /onclick|script|cdn\.example/);
+  assert.deepEqual(rendering.assets, [{ source: '/api/mail' + renderPath + '/assets/0' }]);
+  const image = await raw(rendering.assets[0].source, { token: tokens.owner });
+  assert.equal(image.status, 200, await image.clone().text());
+  assert.equal(image.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(image.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.deepEqual(new Uint8Array(await image.arrayBuffer()), png);
+  for (const endpoint of [renderPath, renderPath + '/assets/0']) {
+    await call(endpoint, { token: tokens.outsider, expected: 403 });
+    await call(endpoint, { token: '', expected: 401 });
+  }
+  await call(base + '/members/reader', { method: 'PUT', data: { read: true } });
+  for (const endpoint of [renderPath, renderPath + '/assets/0']) await call(endpoint, { token: tokens.reader, expected: 404 });
+  for (const asset of ['99', '00', 'https%3A%2F%2Fevil.example.com']) await call(renderPath + '/assets/' + asset, { expected: 404 });
+  const other = (await admin('/mailboxes', { method: 'POST', data: { name: 'Other mailbox', kind: 'shared', owner_user_id: 'owner' }, expected: 201 })).mailbox;
+  await call('/mailboxes/' + other.id + '/messages/' + message.id + '/render', { expected: 404 });
+  const legacy = (await call(base + '/messages/' + message.id)).message;
+  assert.doesNotMatch(legacy.body.html, /<style|class="newsletter"|https:\/\/cdn\.example/);
+  await call(base + '/drafts/' + message.id, { method: 'PATCH', data: { version: 1, text: 'Updated content', html: '<p>Changed</p>' } });
+  assert.doesNotMatch((await call(renderPath)).html, /newsletter/);
+  await call(renderPath + '/assets/0', { expected: 404 });
+});

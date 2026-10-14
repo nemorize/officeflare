@@ -19,7 +19,7 @@ export interface RuleAction { type: string; folder_id?: string; }
 export interface MailRule { id: string; name: string; enabled: number; priority: number; version: number; conditions_json: string; actions_json?: string; action?: string; forward_to?: string | null; reject_reason?: string | null; }
 export interface Job { id: string; kind: string; status: string; progress: number; error_code: string | null; created_at: number; updated_at: number; }
 export const mailboxPath = (id: string) => `/api/mail/mailboxes/${encodeURIComponent(id)}`;
-export { bytes, mailDate, parseRecipients, scheduledTime, cancelableSubmission, retryableSubmission, submissionLabel, mailFailure, mailErrorDescription, htmlFrame, mailFrameHeight, MailOperation } from "./mail-helpers";
+export { bytes, mailDate, parseRecipients, scheduledTime, cancelableSubmission, retryableSubmission, submissionLabel, mailFailure, mailErrorDescription, htmlFrame, mailFrameHeight, embeddedMailImage, MailOperation } from "./mail-helpers";
 export async function downloadMail(path: string, name: string) {
   const blob = await api<Blob>(path, { response: "blob", signal: AbortSignal.timeout(120_000) });
   saveBlob(blob, name);

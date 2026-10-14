@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApiClient } from "../web/lib/api-client.ts";
-import { parseRecipients, scheduledTime, MailOperation, cancelableSubmission, retryableSubmission, htmlFrame, mailFrameHeight } from "../web/lib/mail-helpers.ts";
+import { parseRecipients, scheduledTime, MailOperation, cancelableSubmission, retryableSubmission, htmlFrame, mailFrameHeight, embeddedMailImage } from "../web/lib/mail-helpers.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
 test("mail uploads preserve bytes and encoded filenames through authentication refresh", async () => {
@@ -55,6 +55,12 @@ test("HTML email uses a restrictive frame policy that blocks remote images and s
   const frame = htmlFrame('<p>Mail body</p><img src="https://tracking.test/image">');
   assert.match(frame, /default-src 'none'/); assert.match(frame, /img-src blob: data:/); assert.match(frame, /form-action 'none'/); assert.match(frame, /base-uri 'none'/);
   assert.doesNotMatch(frame, /script-src.*unsafe-inline/);
+});
+test("verified mail images embed without relying on a sandbox's access to parent blob URLs", async () => {
+  const image = await embeddedMailImage(new Blob([new Uint8Array([0, 255, 1, 128])], { type: "image/png" }));
+  assert.equal(image, "data:image/png;base64,AP8BgA==");
+  await assert.rejects(embeddedMailImage(new Blob(["<script>alert(1)</script>"], { type: "text/html" })), /Unsupported/);
+  await assert.rejects(embeddedMailImage(new Blob([new Uint8Array(5 * 1024 ** 2 + 1)], { type: "image/png" })), /Unsupported/);
 });
 test("email sizing permits only its nonce-authorized observer and rejects forged size messages", () => {
   const nonce = "a".repeat(32), source = {};
