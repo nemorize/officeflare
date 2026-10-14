@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Button, CheckboxControl, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, Meter, SelectControl, Textarea, type InputProps, type CheckboxControlProps, type TextareaProps } from "./ui";
+import { Button, CheckboxControl, Dialog, DialogPopup, Field, Fieldset, Form, Icon, Input, SelectControl, Textarea, type InputProps, type CheckboxControlProps, type TextareaProps } from "./ui";
 import { api, ApiError } from "../lib/api";
 import { mailFailure } from "../lib/mail";
 import { useAccess } from "./console-access";
@@ -67,9 +67,6 @@ export function MailTextarea(props: TextareaProps) {
 export function MailFileInput({ onChange, multiple, disabled, ...props }: Omit<React.ComponentProps<"input">, "type" | "value" | "defaultValue">) {
   const input = useRef<HTMLInputElement>(null);
   return <div className="mail-file-input"><Input {...props} ref={input} type="file" hidden multiple={multiple} disabled={disabled} onChange={onChange} /><Button disabled={disabled} onClick={() => input.current?.click()}><Icon name="file" />{multiple ? "Choose files" : "Choose file"}</Button></div>;
-}
-export function MailMeter({ value, max, label }: { value: number; max: number; label: string }) {
-  return <Meter.Root value={value} min={0} max={max} aria-label={label}><Meter.Track><Meter.Indicator /></Meter.Track></Meter.Root>;
 }
 export function MailInput({ label, hint, fieldClassName, ...props }: Omit<InputProps, "onChange"> & { onChange?: React.ChangeEventHandler<HTMLInputElement>; label: string; hint?: string; fieldClassName?: string }) {
   const id = useId();
