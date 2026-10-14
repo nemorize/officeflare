@@ -109,6 +109,7 @@
 .mail-settings-nav > [data-ui="tabs-list"] { width: max-content; min-width: 100%; }
 .mail-preference-fields { display: grid; gap: 24px; padding-top: 24px; }
 .mail-preference-check { align-items: flex-start; }
+.mail-preference-check > [data-ui="checkbox-root"] { margin-block-start: 2px; }
 .mail-preference-check strong { display: block; font-weight: 500; }
 .mail-preference-check small { display: block; font-size: 12px; color: var(--ui-muted); margin-top: 4px; line-height: 1.6; }
 .mail-section .mail-preference-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 0; }
