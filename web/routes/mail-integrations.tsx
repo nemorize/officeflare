@@ -11,7 +11,7 @@ interface ApiKey { id: string; name: string; expires_at: number; revoked_at: num
 interface Scope { key_id?: string; mailbox_id: string; action: Exclude<MailRight, "manage">; }
 export function MailIntegrationsPage() {
   const mail = useMail();
-  return <div className="account-page mail-manage-page" key={mail.box?.id}><MailSettingsLayout title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions."><ApiKeys />{mail.capabilities?.features.webhooks && (mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>)}<Protocols /></MailSettingsLayout></div>;
+  return <div className="account-page mail-manage-page" key={mail.box?.id}><MailSettingsLayout title="Integrations" description="Connect scripts and mail tools with explicit mailbox permissions."><ApiKeys />{mail.capabilities?.features.webhooks && (mail.box ? <Webhooks /> : <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>)}<Jmap /><Mcp /></MailSettingsLayout></div>;
 }
 function Secret({ title, value, onClose }: { title: string; value: string; onClose: () => void }) {
   const action = useMailAction(), [copied, setCopied] = useState(false);
@@ -54,8 +54,41 @@ function Webhooks() {
     <MailModal open={open} title="Add webhook" description="Keep the signing secret to verify incoming notifications." onClose={() => setOpen(false)} busy={action.busy}><MailForm className="mail-form" onSubmit={(event) => { event.preventDefault(); void action.run(async () => { const result = await api<{ webhook: { secret: string } }>(path + "/webhooks", { method: "POST", body: { url } }); setSecret(result.webhook.secret); setOpen(false); resource.reload(); }); }}><MailInput label="Endpoint URL" type="url" placeholder="https://example.com/mail-events" required value={url} onChange={(event) => setUrl(event.target.value)} /><MailNotice error={action.error} /><Button type="submit" variant="primary" disabled={action.busy}>Create webhook</Button></MailForm></MailModal>{secret && <Secret title="Webhook signing secret" value={secret} onClose={() => setSecret(null)} />}<Confirm open={!!deleting} title="Disable webhook?" description={deleting?.url} label="Disable webhook" destructive onClose={() => setDeleting(null)} onConfirm={async () => { await api(`${path}/webhooks/${deleting!.id}`, { method: "DELETE" }); resource.reload(); }} />
   </MailSection>;
 }
-function Protocols() {
-  const action = useMailAction(), [session, setSession] = useState<{ accounts: Record<string, { name: string; isReadOnly: boolean }>; capabilities: Record<string, unknown> } | null>(null), [tools, setTools] = useState<{ name: string; description: string }[] | null>(null), [jmapResult, setJmapResult] = useState<string>("");
+function Jmap() {
+  const action = useMailAction(), [session, setSession] = useState<{ accounts: Record<string, { name: string; isReadOnly: boolean }>; capabilities: Record<string, unknown> } | null>(null);
   const origin = window.location.origin;
-  return <MailSection title="JMAP & MCP" description="Use a scoped mail API key as a Bearer token. JMAP supports a subset of methods; MCP send requests require human review."><div className="mail-protocol-grid"><div><h3>JMAP session</h3><code>{origin}/.well-known/jmap</code><h3>JMAP API</h3><code>{origin}/api/mail/jmap</code><Button onClick={() => { void action.run(async () => { const result = await api<NonNullable<typeof session>>("/api/mail/jmap/session"); setSession(result); }); }} disabled={action.busy}>Check JMAP session</Button>{session && <div role="status"><p>Session connected · {Object.keys(session.capabilities).length} capabilities</p>{Object.entries(session.accounts).map(([id, account]) => <p key={id}>{account.name} · {account.isReadOnly ? "Read only" : "Writable"}</p>)}<Button size="sm" disabled={action.busy} onClick={() => { void action.run(async () => { const accountId = Object.keys(session.accounts)[0]; if (!accountId) throw new Error("No readable JMAP accounts."); const result = await api<{ methodResponses: [string, { list?: unknown[]; type?: string }, string][] }>("/api/mail/jmap", { method: "POST", body: { using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"], methodCalls: [["Mailbox/get", { accountId }, "mailboxes"]] } }); const response = result.methodResponses[0]; if (!response || response[0] === "error") throw new Error(response?.[1].type ?? "JMAP request failed"); setJmapResult(`${response[1].list?.length ?? 0} folders returned.`); }); }}>Test folder request</Button><p>{jmapResult}</p></div>}</div><div><h3>MCP HTTP endpoint</h3><code>{origin}/mcp</code><p className="mail-hint">Tools can list mailboxes, search and read messages, create drafts and request a send for human review.</p><Button disabled={action.busy} onClick={() => { void action.run(async () => { const initialized = await api<{ result?: object; error?: { message: string } }>("/api/mail/mcp", { method: "POST", headers: { Accept: "application/json, text/event-stream" }, body: { jsonrpc: "2.0", id: "init", method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "Officeflare UI", version: "1" } } } }); if (initialized.error) throw new Error(initialized.error.message); const result = await api<{ result?: { tools: NonNullable<typeof tools> }; error?: { message: string } }>("/api/mail/mcp", { method: "POST", headers: { Accept: "application/json, text/event-stream" }, body: { jsonrpc: "2.0", id: "tools", method: "tools/list" } }); if (result.error) throw new Error(result.error.message); setTools(result.result?.tools ?? []); }); }}>Check MCP tools</Button>{tools && <ul className="mail-protocol-tools">{tools.map((tool) => <li key={tool.name}><strong>{tool.name}</strong><p>{tool.description}</p></li>)}</ul>}</div></div><MailNotice error={action.error} /></MailSection>;
+  const accounts = session ? Object.entries(session.accounts) : [], capabilityCount = session ? Object.keys(session.capabilities).length : 0;
+  return <MailSection title="JMAP" description="Use a scoped mail API key as a Bearer token. JMAP supports a subset of methods." action={<Button disabled={action.busy} onClick={() => { void action.run(async () => { setSession(await api<NonNullable<typeof session>>("/api/mail/jmap/session")); }); }}>Check JMAP session</Button>}>
+    <div className="mail-protocol-content">
+      <div className="mail-protocol-urls">
+        <div className="mail-protocol-endpoint"><h3>Session URL</h3><code>{origin}/.well-known/jmap</code></div>
+        <div className="mail-protocol-endpoint"><h3>API URL</h3><code>{origin}/api/mail/jmap</code></div>
+      </div>
+      <MailState loading={action.busy && !session} error={action.error} />
+      {session && <div className="mail-protocol-result">
+        <header><div><h3>Session details</h3><p>{capabilityCount} {capabilityCount === 1 ? "capability" : "capabilities"} · {accounts.length} {accounts.length === 1 ? "account" : "accounts"}</p></div><span className="mail-protocol-connected" role="status"><Icon name="check" width="12" height="12" />Connected</span></header>
+        <table className="mail-protocol-table" aria-label="JMAP session accounts"><thead><tr><th scope="col">Account</th><th scope="col">Access</th></tr></thead><tbody>
+          {accounts.map(([id, account]) => <tr key={id}><td>{account.name}</td><td><span className="mail-badge">{account.isReadOnly ? "Read only" : "Writable"}</span></td></tr>)}
+          {!accounts.length && <tr><td colSpan={2} className="mail-protocol-empty">No accessible mailboxes.</td></tr>}
+        </tbody></table>
+      </div>}
+    </div>
+  </MailSection>;
+}
+function Mcp() {
+  const action = useMailAction(), [tools, setTools] = useState<{ name: string; description: string }[] | null>(null);
+  return <MailSection title="MCP" description="Use a scoped mail API key as a Bearer token. Send requests require human review." action={<Button disabled={action.busy} onClick={() => { void action.run(async () => {
+    const initialized = await api<{ result?: object; error?: { message: string } }>("/api/mail/mcp", { method: "POST", headers: { Accept: "application/json, text/event-stream" }, body: { jsonrpc: "2.0", id: "init", method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "Officeflare UI", version: "1" } } } });
+    if (initialized.error) throw new Error(initialized.error.message);
+    const result = await api<{ result?: { tools: NonNullable<typeof tools> }; error?: { message: string } }>("/api/mail/mcp", { method: "POST", headers: { Accept: "application/json, text/event-stream" }, body: { jsonrpc: "2.0", id: "tools", method: "tools/list" } });
+    if (result.error) throw new Error(result.error.message);
+    setTools(result.result?.tools ?? []);
+  }); }}>Check MCP tools</Button>}>
+    <div className="mail-protocol-content">
+      <div className="mail-protocol-endpoint"><h3>HTTP endpoint</h3><code>{window.location.origin}/mcp</code></div>
+      <p className="mail-hint">Tools can list mailboxes, search and read messages, create drafts and request a send for human review.</p>
+      <MailState loading={action.busy && !tools} error={action.error} />
+      {tools && <ul className="mail-protocol-tools">{tools.map((tool) => <li key={tool.name}><strong>{tool.name}</strong><p>{tool.description}</p></li>)}</ul>}
+    </div>
+  </MailSection>;
 }
