@@ -7,6 +7,7 @@ import { AuthError, changePassword, login, recoverMfa, verifyMfa,
 import { sessions, useSession } from "../lib/session";
 import { SessionStorageError } from "../lib/session-manager";
 import { returnToWorkspace } from "../lib/profile";
+import { WorkspaceLoading } from "../components/workspace-loading";
 
 type Step = { kind: "login" }
   | { kind: "mfa"; challenge: MfaChallenge }
@@ -35,8 +36,7 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
-  const [title, description] = restoring
-    ? ["Checking your session", authSession.status === "loading" ? "Please wait…" : ""] : headings[step.kind];
+  const [title, description] = headings[step.kind];
 
   useEffect(() => {
     document.title = `${step.kind === "login" ? "Sign in" : title} · Officeflare`;
@@ -133,6 +133,7 @@ export function LoginPage() {
   }
 
   if (authSession.session) return <Navigate to={returnToWorkspace(location.state?.from)} replace />;
+  if (restoring) return <WorkspaceLoading error={authSession.error} onRetry={() => { void sessions.restore(); }} />;
 
   return (
     <div className="login-page">
@@ -146,9 +147,7 @@ export function LoginPage() {
           {(description || (step.kind === "mfa" && recovery)) &&
             <p>{step.kind === "mfa" && recovery ? "Enter one of your saved recovery codes." : description}</p>}
 
-          {restoring ? <>
-            {authSession.error && <p role="alert">{authSession.error}</p>}
-          </> : <Form onSubmit={submit} aria-busy={busy}>
+          <Form onSubmit={submit} aria-busy={busy}>
             <Fieldset.Root disabled={busy} aria-labelledby="login-heading">
               {step.kind === "login" && <>
                 <TextField id="email" name="email" label="Email" type="email" autoComplete="username"
@@ -206,9 +205,9 @@ export function LoginPage() {
                 <Button type="button" variant="ghost" className="login-secondary" onClick={startOver}>Start over</Button>
               </p>}
             </Fieldset.Root>
-          </Form>}
+          </Form>
 
-          {!restoring && step.kind === "login" && <p className="login-help">Contact your organization administrator if you need an account or have forgotten your password.</p>}
+          {step.kind === "login" && <p className="login-help">Contact your organization administrator if you need an account or have forgotten your password.</p>}
         </section>
       </main>
       <footer className="login-footer">Officeflare · Your workspace, connected.</footer>

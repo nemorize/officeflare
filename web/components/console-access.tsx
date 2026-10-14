@@ -18,6 +18,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController();
     if (!sessionId) return;
+    setState((previous) => previous.sessionId === sessionId && previous.status === "ready"
+      ? previous : { sessionId, permissions: [], status: "loading", error: "" });
     void api<{ permissions: string[] }>("/api/me/permissions", { signal: controller.signal }).then((result) => {
       if (!controller.signal.aborted) setState({ sessionId, permissions: result.permissions, status: "ready", error: "" });
     }).catch((failure: unknown) => {

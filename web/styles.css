@@ -82,6 +82,18 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .empty-page p { color: var(--ui-muted); }
 .empty-page a { width: fit-content; }
 
+.workspace-loading { display: grid; place-items: center; min-height: 100dvh; padding: 24px; background: var(--ui-background); color: var(--ui-text); }
+.workspace-loading-content { display: flex; flex-direction: column; align-items: center; gap: 32px; width: min(320px, 100%); }
+.workspace-loading-symbol { width: 104px; height: 104px; }
+.workspace-loading-progress[data-ui="progress-root"] { width: 200px; max-width: 100%; }
+.workspace-loading-progress [data-ui="progress-track"] { height: 4px; margin: 0; background: var(--ui-border); }
+.workspace-loading-progress [data-ui="progress-indicator"] { width: 45%; background: var(--ui-primary); animation: workspace-loading-progress 1.4s ease-in-out infinite; }
+.workspace-loading-error { display: grid; justify-items: center; gap: 16px; text-align: center; color: var(--ui-muted); }
+.workspace-loading[data-error] [data-ui="progress-indicator"] { animation: none; transform: translateX(60%); }
+@keyframes workspace-loading-progress { from { transform: translateX(-110%); } to { transform: translateX(225%); } }
+@media (max-width: 760px) { .workspace-loading-symbol { width: 88px; height: 88px; } }
+@media (prefers-reduced-motion: reduce) { .workspace-loading-progress [data-ui="progress-indicator"] { animation: none; transform: translateX(60%); } }
+
 @media (max-width: 480px) {
   .login-header { padding: 18px 20px; }
   .login-content { padding: 16px 16px 40px; }

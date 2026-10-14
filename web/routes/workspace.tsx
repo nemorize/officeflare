@@ -3,11 +3,12 @@ import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react
 import { Button, Icon, Menu, MenuPopup, OfficeflareMark, useNotifications } from "@/components/ui";
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
-import { AccessProvider, useAccess } from "../components/console-access";
+import { AccessProvider, WorkspaceHome, useAccess } from "../components/console-access";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
 import { MailSettingsButton, MailTopbar } from "../components/mail-chrome";
 import { MailResourceProvider } from "../components/mail-resource-context";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceLoading } from "../components/workspace-loading";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "../components/workspace-navigation";
@@ -120,10 +121,24 @@ export function WorkspaceLayout() {
   const auth = useSession();
   const location = useLocation();
   if (auth.status === "signed_out") return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (!auth.session) return <main className="empty-page" aria-busy={auth.status === "loading"}>
-    <OfficeflareMark /><h1>Checking your session</h1><p role="status">{auth.error || "Please wait…"}</p>
-  </main>;
-  return <AccountProvider><AccessProvider><NotificationCenterProvider key={auth.session.tokens.session_id}><MailResourceProvider><MailProvider key={auth.session.tokens.session_id}><DriveProvider key={auth.session.tokens.session_id}><WorkspaceChrome /></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccessProvider></AccountProvider>;
+  return <AccessProvider><WorkspaceStartup /></AccessProvider>;
+}
+
+function WorkspaceStartup() {
+  const auth = useSession(), access = useAccess(), location = useLocation(), sessionId = auth.session?.tokens.session_id;
+  const [openedSession, setOpenedSession] = useState<string>();
+  useEffect(() => {
+    if (sessionId && access.status === "ready") setOpenedSession(sessionId);
+  }, [sessionId, access.status]);
+  // Background permission refreshes must not unmount an open composer or workspace.
+  if (!auth.session || openedSession !== sessionId) return <WorkspaceLoading
+    error={!auth.session ? auth.error : access.status === "error" ? access.error : ""}
+    onRetry={!auth.session ? () => { void sessions.restore(); } : access.refresh}
+  />;
+  if (location.pathname === "/") return access.status === "ready"
+    ? <><WorkspaceLoading /><WorkspaceHome /></>
+    : <WorkspaceLoading error={access.error} onRetry={access.refresh} />;
+  return <AccountProvider><NotificationCenterProvider key={sessionId}><MailResourceProvider><MailProvider key={sessionId}><DriveProvider key={sessionId}><WorkspaceChrome /></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {
