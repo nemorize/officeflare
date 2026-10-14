@@ -1095,7 +1095,12 @@ mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async c => {
   if (!asset) fail(404, "Image not found");
   let response: Response;
   try { response = await loadMailRenderImage(asset, new URL(c.req.url).hostname); }
-  catch { fail(502, "Image could not be loaded safely"); }
+  catch (error) {
+    // Diagnose upstream failures without logging message identifiers or tracking URLs.
+    const reasons = new Set(["DNS lookup failed", "Private network resources are blocked", "Remote resource unavailable", "Unsupported remote image", "Unsupported remote resource type", "Remote resource is too large", "Empty remote resource", "Invalid remote redirect"]);
+    console.warn("Mail image proxy failure", error instanceof Error && reasons.has(error.message) ? error.message : error instanceof Error ? error.name : "Unknown error");
+    fail(502, "Image could not be loaded safely");
+  }
   await renderingStillAvailable(c, message);
   return response;
 });
