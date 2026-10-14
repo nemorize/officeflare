@@ -12,6 +12,24 @@ import {
   uploadDriveFile,
 } from "../web/lib/drive.ts";
 import { createApiClient } from "../web/lib/api-client.ts";
+import { driveSearchParams, isDriveSearch, readDriveSearch } from "../web/lib/drive-search.ts";
+
+test("Drive searches retain advanced constraints and reset without leaving hidden filters", () => {
+  const fields = { q: " Annual & budget ", type: "image/*", owner: " Team% ", scope: "shared", after: "2026-10-01", before: "2026-10-14" };
+  const params = driveSearchParams(fields);
+  assert.equal(params.get("kind"), "file");
+  assert.equal(params.get("content_type"), "image/*");
+  assert.deepEqual(readDriveSearch(new URLSearchParams(params.toString())), { ...fields, q: "Annual & budget", owner: "Team%" });
+  const clearedText = driveSearchParams({ ...readDriveSearch(params), q: "" });
+  assert.equal(isDriveSearch(clearedText), true);
+  assert.equal(clearedText.get("owner"), "Team%");
+  const folders = driveSearchParams({ ...readDriveSearch(params), type: "folder" });
+  assert.equal(folders.get("kind"), "folder");
+  assert.equal(folders.has("content_type"), false);
+  const reset = driveSearchParams(readDriveSearch(new URLSearchParams()));
+  assert.equal(reset.size, 0);
+  assert.equal(isDriveSearch(reset), false);
+});
 
 test("Drive selection supports single, additive and anchored range selection", () => {
   const ids = ["a", "b", "c", "d"];

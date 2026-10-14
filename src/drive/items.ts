@@ -3,7 +3,7 @@ import { body } from "../auth/input";
 import { now, uuid, type AppEnv } from "../auth/types";
 import { access, ancestors, audience, cleanPath, condition, descendants, first, identity, itemCondition, requireItem, rows, statement, treeSnapshot } from "./access";
 import { cursor, readCursor } from "./cursor";
-import { bool, fail, identifier, integer, name, text } from "./input";
+import { bool, fail, identifier, integer, mime, name, text } from "./input";
 import { mutate } from "./mutations";
 import { purgeStatements } from "./lifecycle";
 import { account, destination, ensureCapacity, quotaCondition } from "./storage";
@@ -26,12 +26,21 @@ export async function describe(c: DriveContext, item: DriveItem) {
 const version = (data: Record<string, unknown>) => integer(data.version, "version", 1);
 const pathId = (c: DriveContext) => identifier(c.req.param("itemId"));
 export function limit(c: DriveContext) { const value = c.req.query("limit") ?? "50"; if (!/^\d+$/.test(value)) fail(400, "Invalid limit"); return integer(Number(value), "limit", 1, 100); }
+function searchDate(value: string | undefined, key: string) {
+  if (!value) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
+  if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== value) fail(400, `Invalid ${key}`);
+  return date / 1000;
+}
 
 items.get("/", async c => {
   const user = c.get("identity").user.id, view = c.req.query("view") ?? "my", kind = c.req.query("kind");
   if (!["my", "shared", "starred", "recent", "trash", "all"].includes(view)) fail(400, "Invalid Drive view");
   if (kind && kind !== "file" && kind !== "folder") fail(400, "Invalid kind");
-  const q = text(c.req.query("q") ?? "", "q", 255), contentType = c.req.query("content_type"), parent = c.req.query("parent_id") ?? (view === "my" && !q ? "root" : "all");
+  const q = text(c.req.query("q") ?? "", "q", 255), owner = text(c.req.query("owner") ?? "", "owner", 255).trim(), afterDate = searchDate(c.req.query("after"), "after"), beforeDate = searchDate(c.req.query("before"), "before");
+  if (afterDate !== null && beforeDate !== null && afterDate > beforeDate) fail(400, "Invalid date range");
+  const requestedType = c.req.query("content_type"), contentType = requestedType ? requestedType.endsWith("/*") ? `${mime(`${requestedType.slice(0, -1)}octet-stream`).split("/")[0]}/*` : mime(requestedType) : undefined;
+  const parent = c.req.query("parent_id") ?? (view === "my" && !q && !owner && afterDate === null && beforeDate === null && !contentType ? "root" : "all");
   if (parent !== "root" && parent !== "all") { const folder = await requireItem(c, identifier(parent, "parent_id")); if (folder.kind !== "folder") fail(400, "Not a folder"); }
   const check = access(user, view === "trash" ? "owner" : "read", "d.id", view === "trash");
   const filters = [check.sql], bindings: Bind[] = [...check.args];
@@ -43,11 +52,18 @@ items.get("/", async c => {
   if (parent === "root") filters.push("d.parent_id IS NULL");
   else if (parent !== "all") { filters.push("d.parent_id=?"); bindings.push(parent); }
   if (kind) { filters.push("d.kind=?"); bindings.push(kind); }
-  if (contentType) { filters.push("v.content_type=?"); bindings.push(contentType); }
+  if (contentType) {
+    filters.push(contentType.endsWith("/*") ? "substr(v.content_type,1,?)=?" : "v.content_type=?");
+    if (contentType.endsWith("/*")) bindings.push(contentType.length - 1, contentType.slice(0, -1));
+    else bindings.push(contentType);
+  }
   if (q) { filters.push("(d.name LIKE ? ESCAPE '\\' OR d.description LIKE ? ESCAPE '\\')"); const search = `%${q.replace(/[\\%_]/g, value => "\\" + value)}%`; bindings.push(search, search); }
+  if (owner) { filters.push("(u.display_name LIKE ? ESCAPE '\\' OR u.email_address LIKE ? ESCAPE '\\')"); const search = `%${owner.replace(/[\\%_]/g, value => "\\" + value)}%`; bindings.push(search, search); }
+  if (afterDate !== null) { filters.push("d.updated_at>=?"); bindings.push(afterDate); }
+  if (beforeDate !== null) { filters.push("d.updated_at<?"); bindings.push(beforeDate + 86400); }
   const sort = c.req.query("sort"), order = c.req.query("order") ?? "asc";
   if (sort && !["name", "updated_at", "size"].includes(sort) || !["asc", "desc"].includes(order)) fail(400, "Invalid sort order");
-  const scope = JSON.stringify(["items", view, kind ?? "", contentType ?? "", parent, q, sort ?? "", sort ? order : ""]), pageSize = limit(c);
+  const scope = JSON.stringify(["items", view, kind ?? "", contentType ?? "", parent, q, sort ?? "", sort ? order : "", owner, afterDate, beforeDate]), pageSize = limit(c);
   const ordering = sort === "name" ? "d.name COLLATE NOCASE" : sort === "size" ? "COALESCE(v.size,0)" : view === "recent" && !sort ? "r.viewed_at" : "d.updated_at";
   const direction = sort ? order.toUpperCase() : "DESC", operator = direction === "ASC" ? ">" : "<", group = "CASE WHEN d.kind='folder' THEN 0 ELSE 1 END";
   const after = c.req.query("cursor") ? await readCursor(c.env, user, scope, c.req.query("cursor")!) : null;

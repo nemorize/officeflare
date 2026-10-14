@@ -427,6 +427,39 @@ test('Drive UI API supports safe account search, roles and complete ordered pagi
   await f.call(`/items/${c.id}/comments`,{actor:'viewer',method:'POST',data:{body:'No'},expected:404});
 });
 
+test("Drive advanced search combines owner, file type and inclusive dates without expanding access", async t => {
+  const f = await fixture(t), root = await f.folder("Shared reports");
+  await f.db.prepare("UPDATE users SET display_name='Project% Owner' WHERE id='owner'").run();
+  await f.share(root.id, "viewer", "viewer");
+  const a = await f.upload("Annual cover.png", "image", root.id, "owner", { content_type: "image/png" });
+  const b = await f.upload("Annual chart.jpg", "image", root.id, "owner", { content_type: "image/jpeg" });
+  const text = await f.upload("Annual report.txt", "report", root.id);
+  const privateImage = await f.upload("Annual private.png", "private", null, "owner", { content_type: "image/png" });
+  const nextDay = await f.upload("Annual next day.png", "image", root.id, "owner", { content_type: "image/png" });
+  const from = Date.parse("2026-10-14T00:00:00Z") / 1000;
+  for (const [entry, date] of [[a, from], [b, from + 86399], [text, from], [privateImage, from], [nextDay, from + 86400]])
+    await f.db.prepare("UPDATE drive_items SET updated_at=? WHERE id=?").bind(date, entry.id).run();
+  const filters = new URLSearchParams({ view: "shared", kind: "file", q: "Annual", content_type: "image/*", owner: "Project%", after: "2026-10-14", before: "2026-10-14", sort: "name" });
+  const results = await f.call(`/items?${filters}`, { actor: "viewer" });
+  assert.deepEqual(results.items.map(entry => entry.id), [b.id, a.id]);
+  assert.ok(results.items.every(entry => entry.effective_role === "viewer"));
+  assert.deepEqual((await f.call(`/items?${filters}`, { actor: "outsider" })).items, []);
+  assert.deepEqual((await f.call("/items?view=all&owner=owner%40office.test&content_type=text/*", { actor: "viewer" })).items.map(entry => entry.id), [text.id]);
+  assert.deepEqual((await f.call("/items?view=all&owner=_", { actor: "viewer" })).items, []);
+  assert.ok((await f.call("/items?owner=Project%25")).items.some(entry => entry.id === a.id));
+  const first = await f.call(`/items?${filters}&limit=1`, { actor: "viewer" });
+  assert.ok(first.next_cursor);
+  const second = await f.call(`/items?${filters}&limit=1&cursor=${encodeURIComponent(first.next_cursor)}`, { actor: "viewer" });
+  assert.equal(second.items[0].id, a.id);
+  assert.equal(second.next_cursor, null);
+  for (const [key, value] of [["owner", "office.test"], ["after", "2026-10-13"], ["before", "2026-10-15"], ["content_type", "image/png"]]) {
+    const changed = new URLSearchParams(filters); changed.set(key, value);
+    await f.call(`/items?${changed}&cursor=${encodeURIComponent(first.next_cursor)}`, { actor: "viewer", expected: 400 });
+  }
+  for (const invalid of ["after=2026-02-30", "before=not-a-date", "after=2026-10-15&before=2026-10-14", "content_type=image/**", "content_type=image", `owner=${"a".repeat(256)}`])
+    await f.call(`/items?view=all&${invalid}`, { expected: 400 });
+});
+
 test("Drive owner photos require readable files and refresh when the image changes", async t => {
   const f = await fixture(t), root = await f.folder("Owner photo access"), photoPath = "/people/owner/profile-image";
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ9kAAAAASUVORK5CYII=", "base64");

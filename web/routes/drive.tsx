@@ -43,6 +43,7 @@ import {
 import { DriveDetails } from "../components/drive-details";
 import { DrivePreview, downloadDriveItem } from "../components/drive-preview";
 import { api } from "../lib/api";
+import { driveSearchScopes, driveSearchTypes, isDriveSearch, readDriveSearch } from "../lib/drive-search";
 import {
   canEdit,
   driveDate,
@@ -76,7 +77,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     action = useDriveAction();
   const route = driveLocation(location.pathname),
     folder = linkedItem?.parent_id ?? route.folder,
-    view = folder ? "all" : route.view,
+    searching = isDriveSearch(params),
+    searchFields = readDriveSearch(params),
+    view = searching ? searchFields.scope : folder ? "all" : route.view,
     query = params.get("q") ?? "",
     kind = params.get("kind") ?? "",
     sort = params.get("sort") ?? (view === "recent" ? "updated_at" : "name"),
@@ -95,12 +98,13 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     drive.revision,
   );
   const listQuery = new URLSearchParams({
-    view: query ? "all" : view,
+    view,
     limit: "50",
     ...(view === "recent" && !params.has("sort") ? {} : { sort, order }),
-    ...(folder ? { parent_id: folder } : {}),
+    ...(folder ? { parent_id: folder } : searching ? { parent_id: "all" } : {}),
     ...(query ? { q: query } : {}),
     ...(kind ? { kind } : {}),
+    ...Object.fromEntries(["content_type", "owner", "after", "before"].flatMap(key => params.get(key) ? [[key, params.get(key)!]] : [])),
   });
   const collection = useDriveCollection<DriveItem>(
     `/api/drive/items?${listQuery}`,
@@ -132,8 +136,8 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     dragDepth = useRef(0);
   const writable = drive.can("create") && (folder
     ? !!folderResource.data && (folderResource.data.item.actions?.create ?? canEdit(folderResource.data.item))
-    : view === "my" && !query);
-  const title = query
+    : view === "my" && !searching);
+  const title = searching
     ? "Search results"
     : (folderResource.data?.item.name ??
       ({
@@ -157,7 +161,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     setDialog(null);
     setDragging(false);
     dragDepth.current = 0;
-  }, [location.pathname, query, kind, sort, order]);
+  }, [location.pathname, listQuery.toString()]);
   useEffect(() => {
     if (!collection.loading)
       setSelection(
@@ -197,6 +201,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
   }, [folderResource.data]);
   const changeFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
+    if (key === "kind") next.delete("content_type");
     if (value) next.set(key, value);
     else next.delete(key);
     setParams(next);
@@ -404,9 +409,16 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <span className="drive-page-title">{title}</span>
               {folder && <Icon name="folder" width="20" height="20" />}
             </h1>
-            {query && (
+            {searching && (
               <p>
-                Results for <strong>“{query}”</strong>
+                {[
+                  query && `“${query}”`,
+                  (params.get("content_type") || kind) && (driveSearchTypes.find(option => option.value === searchFields.type)?.label ?? searchFields.type),
+                  searchFields.scope !== "all" && driveSearchScopes.find(option => option.value === searchFields.scope)?.label,
+                  searchFields.owner && `Owner: ${searchFields.owner}`,
+                  searchFields.after && `From ${searchFields.after}`,
+                  searchFields.before && `Through ${searchFields.before}`,
+                ].filter(Boolean).join(" · ") || "All accessible files"}
               </p>
             )}
           </div>
@@ -651,7 +663,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <span />
               <Icon
                 name={
-                  query
+                  searching
                     ? "search"
                     : view === "shared"
                       ? "users"
@@ -669,7 +681,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <span />
             </div>
             <h2>
-              {query
+              {searching
                 ? "No matching files"
                 : view === "shared"
                   ? "Shared files appear here"
@@ -684,7 +696,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                           : "A place for everything"}
             </h2>
             <p>
-              {query
+              {searching
                 ? "Try a different name or clear your filters."
                 : view === "shared"
                   ? "Files and folders shared with your account will appear here."
@@ -704,7 +716,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 Upload files
               </Button>
             )}
-            {query && (
+            {searching && (
               <Button onClick={() => navigate("/drive")}>Clear search</Button>
             )}
           </div>

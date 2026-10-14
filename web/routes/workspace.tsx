@@ -55,7 +55,7 @@ function WorkspaceChrome() {
   const { pathname: locationPath } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
-  const [busy, setBusy] = useState(false), [mobileMenu, setMobileMenu] = useState(false);
+  const [busy, setBusy] = useState(false), [mobileMenu, setMobileMenu] = useState(false), [driveSidebarCollapsed, setDriveSidebarCollapsed] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
@@ -80,7 +80,7 @@ function WorkspaceChrome() {
     finally { setBusy(false); }
   }
 
-  return <div data-ui-theme="neutral" className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
+  return <div data-ui-theme="neutral" className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
       <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
@@ -102,7 +102,7 @@ function WorkspaceChrome() {
 
       </aside>
       <div ref={content} className="workspace-content">
-        {isDrive ? <DriveTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
+        {isDrive ? <DriveTopbar sidebarCollapsed={driveSidebarCollapsed} onToggleSidebar={() => setDriveSidebarCollapsed(value => !value)} mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
           <WorkspaceMenuButton label="Open navigation" onClick={() => setMobileMenu(true)} />
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>}
