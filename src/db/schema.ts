@@ -463,3 +463,71 @@ export const driveAccessRequests = sqliteTable("drive_access_requests", {
   id: text().primaryKey().notNull(), item_id: text().notNull().references(() => driveItems.id), user_id: text().notNull().references(() => users.id), role: text().notNull(), message: text().notNull().default(""), status: text().notNull().default("pending"), created_at: timestamp("created_at"), decided_at: integer(),
 });
 export const driveGarbage = sqliteTable("drive_garbage", { blob_key: text().primaryKey().notNull(), not_before: timestamp("not_before"), lease_until: integer().notNull().default(0) });
+
+// migrations/0019_calendar_core.sql is the DDL source for STRICT, time-union checks,
+// and the calendar-scoped label foreign key. Calendar mutations use atomic D1 claims.
+export const calendars = sqliteTable("calendars", {
+  id: text().primaryKey().notNull(), data_owner_user_id: text().notNull().references(() => users.id),
+  kind: text({ enum: ["personal", "shared", "resource", "system", "external"] }).notNull(), name: text().notNull(),
+  description: text().notNull().default(""), location: text().notNull().default(""), time_zone: text().notNull().default("UTC"),
+  default_visibility: text().notNull().default("private"), status: text().notNull().default("active"),
+  version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"), trashed_at: integer(),
+}, table => [index("calendars_owner").on(table.data_owner_user_id, table.trashed_at, table.status)]);
+export const calendarPrimaryCalendars = sqliteTable("calendar_primary_calendars", {
+  user_id: text().primaryKey().notNull().references(() => users.id), calendar_id: text().notNull().unique().references(() => calendars.id),
+});
+export const calendarAcl = sqliteTable("calendar_acl", {
+  id: text().primaryKey().notNull(), calendar_id: text().notNull().references(() => calendars.id), scope_type: text().notNull(), scope_key: text().notNull(), role: text().notNull(),
+  expires_at: integer(), granted_by: text().references(() => users.id), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [uniqueIndex("calendar_acl_scope").on(table.calendar_id, table.scope_type, table.scope_key), index("calendar_acl_subject").on(table.scope_type, table.scope_key, table.expires_at)]);
+export const calendarSubscriptions = sqliteTable("calendar_subscriptions", {
+  user_id: text().notNull().references(() => users.id), calendar_id: text().notNull().references(() => calendars.id), name_override: text(), color: text(),
+  selected: integer().notNull().default(1), hidden: integer().notNull().default(0), sort_order: integer().notNull().default(0),
+  default_reminders_json: text().notNull().default("[]"), notification_policy_json: text().notNull().default("{}"), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [primaryKey({ columns: [table.user_id, table.calendar_id] }), index("calendar_subscriptions_user").on(table.user_id, table.selected, table.sort_order)]);
+export const calendarPreferences = sqliteTable("calendar_preferences", {
+  user_id: text().primaryKey().notNull().references(() => users.id), time_zone: text().notNull().default("UTC"), secondary_time_zone: text(), locale: text().notNull().default("en"),
+  week_start: integer().notNull().default(1), default_view: text().notNull().default("week"), default_duration_minutes: integer().notNull().default(30),
+  invitation_policy: text().notNull().default("all"), display_options_json: text().notNull().default("{}"), default_reminders_json: text().notNull().default("[]"),
+  version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+});
+export const calendarLabels = sqliteTable("calendar_labels", {
+  id: text().primaryKey().notNull(), calendar_id: text().notNull().references(() => calendars.id), name: text().notNull(), color: text().notNull(), sort_order: integer().notNull().default(0),
+  version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"), deleted_at: integer(),
+}, table => [uniqueIndex("calendar_labels_calendar_id").on(table.calendar_id, table.id)]);
+export const calendarEvents = sqliteTable("calendar_events", {
+  id: text().primaryKey().notNull(), organizer_calendar_id: text().notNull().references(() => calendars.id), organizer_user_id: text().references(() => users.id),
+  organizer_email: text().notNull(), creator_user_id: text().references(() => users.id), authority: text().notNull().default("native"), i_cal_uid: text().notNull(), sequence: integer().notNull().default(0),
+  event_type: text().notNull().default("default"), status: text().notNull().default("confirmed"), title: text().notNull().default(""), description_html: text().notNull().default(""), location_json: text().notNull().default("{}"),
+  time_kind: text({ enum: ["timed", "all_day"] }).notNull(), start_at: integer(), end_at: integer(), start_date: text(), end_date: text(), start_local: text(), end_local: text(), start_time_zone: text(), end_time_zone: text(),
+  recurrence_json: text().notNull().default("[]"), recurrence_until_at: integer(), visibility: text().notNull().default("default"), transparency: text().notNull().default("busy"),
+  guest_permissions_json: text().notNull().default("{}"), type_properties_json: text().notNull().default("{}"), shared_properties_json: text().notNull().default("{}"), source_json: text().notNull().default("{}"),
+  version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"), trashed_at: integer(),
+}, table => [uniqueIndex("calendar_events_uid").on(table.organizer_calendar_id, table.i_cal_uid),
+  index("calendar_events_timed").on(table.organizer_calendar_id, table.start_at, table.end_at).where(sql`${table.trashed_at} IS NULL`),
+  index("calendar_events_dates").on(table.organizer_calendar_id, table.start_date, table.end_date).where(sql`${table.trashed_at} IS NULL`),
+  index("calendar_events_recurring").on(table.organizer_calendar_id, table.recurrence_until_at).where(sql`${table.recurrence_json}<>'[]' AND ${table.trashed_at} IS NULL`)]);
+export const calendarEventScopes = sqliteTable("calendar_event_scopes", {
+  id: text().primaryKey().notNull(), event_id: text().notNull().references(() => calendarEvents.id), occurrence_key: text().notNull().default(""),
+}, table => [uniqueIndex("calendar_event_scopes_key").on(table.event_id, table.occurrence_key), uniqueIndex("calendar_event_scopes_event").on(table.id, table.event_id)]);
+export const calendarEventOverrides = sqliteTable("calendar_event_overrides", {
+  scope_id: text().primaryKey().notNull().references(() => calendarEventScopes.id, { onDelete: "cascade" }), cancelled: integer().notNull().default(0), patch_json: text().notNull().default("{}"),
+  effective_start_at: integer(), effective_end_at: integer(), effective_start_date: text(), effective_end_date: text(), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [index("calendar_overrides_timed").on(table.effective_start_at, table.effective_end_at), index("calendar_overrides_dates").on(table.effective_start_date, table.effective_end_date)]);
+export const calendarEventCopies = sqliteTable("calendar_event_copies", {
+  id: text().primaryKey().notNull(), event_id: text().notNull().references(() => calendarEvents.id), calendar_id: text().notNull().references(() => calendars.id),
+  copy_kind: text().notNull().default("organizer"), color_override: text(), label_id: text(), use_default_reminders: integer().notNull().default(1), private_properties_json: text().notNull().default("{}"), hidden_at: integer(), removed_at: integer(),
+  version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [uniqueIndex("calendar_event_copies_event").on(table.event_id, table.calendar_id), index("calendar_copies_calendar").on(table.calendar_id, table.removed_at, table.event_id)]);
+export const calendarOperations = sqliteTable("calendar_operations", {
+  id: text().primaryKey().notNull(), actor_key: text().notNull(), actor_user_id: text().references(() => users.id), operation: text().notNull(), idempotency_key: text(), request_hash: text().notNull(), result_json: text().notNull(), created_at: timestamp("created_at"), expires_at: integer().notNull(),
+}, table => [uniqueIndex("calendar_operations_key").on(table.actor_key, table.operation, table.idempotency_key)]);
+export const calendarSeriesLinks = sqliteTable("calendar_series_links", {
+  previous_event_id: text().notNull().references(() => calendarEvents.id), next_event_id: text().notNull().references(() => calendarEvents.id), split_occurrence_key: text().notNull(), operation_id: text().notNull().references(() => calendarOperations.id),
+}, table => [primaryKey({ columns: [table.previous_event_id, table.next_event_id] })]);
+export const calendarChanges = sqliteTable("calendar_changes", {
+  seq: integer().primaryKey({ autoIncrement: true }), calendar_id: text().references(() => calendars.id), audience_user_id: text().references(() => users.id), resource_type: text().notNull(), resource_id: text().notNull(), occurrence_key: text(), operation: text().notNull(), version: integer().notNull(), created_at: timestamp("created_at"),
+}, table => [index("calendar_changes_calendar").on(table.calendar_id, table.seq), index("calendar_changes_user").on(table.audience_user_id, table.seq)]);
+export const calendarActivity = sqliteTable("calendar_activity", {
+  id: text().primaryKey().notNull(), operation_id: text().notNull().references(() => calendarOperations.id), actor_user_id: text().references(() => users.id), calendar_id: text().references(() => calendars.id), event_id: text(), action: text().notNull(), details_json: text().notNull(), created_at: timestamp("created_at"),
+}, table => [index("calendar_activity_event").on(table.event_id, table.created_at, table.id)]);

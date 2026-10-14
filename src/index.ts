@@ -39,6 +39,10 @@ app.onError((error, c) => {
   }
 
   if (c.req.path === "/api" || c.req.path.startsWith("/api/")) {
+    // Preserve structured domain errors and the headers set by API middleware.
+    if (error instanceof HTTPException && error.getResponse().headers.get("content-type")?.startsWith("application/json")) {
+      return c.newResponse(error.getResponse().body, { status, headers: error.getResponse().headers });
+    }
     return c.json({ error: message }, { status, headers });
   }
 

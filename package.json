@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
+    "@js-temporal/polyfill": "0.5.1",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-image": "3.31.4",
     "@tiptap/extension-table": "3.31.4",
@@ -69,6 +70,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "7.18.4",
+    "rrule": "2.8.1",
     "sanitize-html": "2.18.0"
   }
 }
