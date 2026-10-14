@@ -39,6 +39,16 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
   const deliveries = async (id) =>
     (await call(`/calendars/primary/events/${id}/invitation-deliveries`))
       .deliveries;
+  const flushAfterSnapshot = async (id, query) => {
+    const response = await f.faults.fetch(
+      "https://office.test/test-calendar/flush",
+      {
+        method: "POST",
+        body: JSON.stringify({ ids: [id], after_snapshot: query }),
+      },
+    );
+    assert.equal(response.status, 200, await response.text());
+  };
   const publicCall = (path, options = {}) =>
     call(path, { actor: null, ...options });
   const createLink = async (id, extra = {}) =>
@@ -115,7 +125,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     }
   });
   await t.test(
-    "system sender uses configured domain and provider without personal Mail access",
+    "transactional system sender and personal organizer mailboxes are configured independently",
     async () => {
       await db.batch([
         db.prepare(
@@ -126,6 +136,21 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ),
         db.prepare(
           "INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,send_enabled) VALUES('system-calendar-address','calendar-domain','system-calendar-box','calendar',1)",
+        ),
+        db.prepare(
+          "INSERT INTO roles(id,key,label) VALUES('calendar-mail-test','calendar-mail-test','Calendar sender test')",
+        ),
+        db.prepare(
+          "INSERT INTO role_permissions(role_id,permission_key) VALUES('calendar-mail-test','mail.access')",
+        ),
+        db.prepare(
+          "INSERT INTO user_roles(user_id,role_id) VALUES('alice','calendar-mail-test'),('bob','calendar-mail-test')",
+        ),
+        db.prepare(
+          "INSERT INTO mail_mailboxes(id,owner_user_id,name,kind,status) VALUES('alice-calendar-box','alice','Alice personal mail','personal','active'),('bob-calendar-box','bob','Bob personal mail','personal','active')",
+        ),
+        db.prepare(
+          "INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,is_primary,send_enabled) VALUES('alice-calendar-address','calendar-domain','alice-calendar-box','alice',1,1),('bob-calendar-address','calendar-domain','bob-calendar-box','bob',1,1)",
         ),
       ]);
       await call("/admin/settings", { actor: "alice", expected: 403 });
@@ -215,7 +240,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       const message = messages.find((value) =>
         value.to.includes("external@example.test"),
       );
-      assert.equal(message.from, "calendar@calendar.test");
+      assert.equal(message.from, "alice@calendar.test");
       assert.deepEqual(message.cc, []);
       assert.equal(message.attachments.length, 1);
       const file = message.attachments[0];
@@ -224,6 +249,10 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       assert.match(file.type, /text\/calendar.*method=REQUEST/);
       const ics = Buffer.from(file.content, "base64").toString("utf8");
       assert.match(ics, /METHOD:REQUEST/);
+      assert.match(
+        ics.replace(/\r\n /g, ""),
+        /ORGANIZER;SENT-BY="mailto:alice@calendar.test":mailto:alice@office.test/,
+      );
       assert.match(ics, /DTSTART;VALUE=DATE:20261210/);
       assert.match(ics, /DTEND;VALUE=DATE:20261211/);
       assert.match(
@@ -1560,6 +1589,274 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
           })
         ).is_revoked,
         false,
+      );
+    },
+  );
+  await t.test(
+    "invitations use the organizer's sendable personal address without a system sender",
+    async () => {
+      await db
+        .prepare(
+          "UPDATE calendar_workspace_settings SET system_address_id=NULL WHERE id='workspace'",
+        )
+        .run();
+      try {
+        const value = await create({
+          ...day("2028-04-01"),
+          attendees: [
+            { email_address: "personal-primary@example.test" },
+            { user_id: "no-calendar" },
+          ],
+        });
+        await flush((await deliveries(value.event.id)).map((item) => item.id));
+        assert.equal(
+          (await sent()).find((item) =>
+            item.to.includes("personal-primary@example.test"),
+          ).from,
+          "alice@calendar.test",
+        );
+        assert.equal(
+          (await deliveries(value.event.id)).find(
+            (item) => item.recipient_user_id === "no-calendar",
+          ).status,
+          "inbox_committed",
+        );
+        await db
+          .prepare(
+            "INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,send_enabled) VALUES('alice-calendar-alias','calendar-domain','alice-calendar-box','alice-alias',1)",
+          )
+          .run();
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
+          )
+          .run();
+        const alias = await create({
+          ...day("2028-04-02"),
+          attendees: [{ email_address: "personal-alias@example.test" }],
+        });
+        await flush((await deliveries(alias.event.id)).map((item) => item.id));
+        assert.equal(
+          (await sent()).find((item) =>
+            item.to.includes("personal-alias@example.test"),
+          ).from,
+          "alice-alias@calendar.test",
+        );
+      } finally {
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+          )
+          .run();
+        await db
+          .prepare("DELETE FROM mail_addresses WHERE id='alice-calendar-alias'")
+          .run();
+        await db
+          .prepare(
+            "UPDATE calendar_workspace_settings SET system_address_id='system-calendar-address' WHERE id='workspace'",
+          )
+          .run();
+      }
+    },
+  );
+  await t.test(
+    "unavailable personal mail suppresses external invitations instead of using the system address",
+    async () => {
+      const cases = [
+        [
+          "no personal mailbox",
+          "UPDATE mail_mailboxes SET kind='shared' WHERE id='alice-calendar-box'",
+          "UPDATE mail_mailboxes SET kind='personal' WHERE id='alice-calendar-box'",
+        ],
+        [
+          "disabled mailbox",
+          "UPDATE mail_mailboxes SET status='disabled' WHERE id='alice-calendar-box'",
+          "UPDATE mail_mailboxes SET status='active' WHERE id='alice-calendar-box'",
+        ],
+        [
+          "provisioning mailbox",
+          "UPDATE mail_mailboxes SET status='provisioning' WHERE id='alice-calendar-box'",
+          "UPDATE mail_mailboxes SET status='active' WHERE id='alice-calendar-box'",
+        ],
+        [
+          "disabled address",
+          "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
+          "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+        ],
+        [
+          "disabled domain",
+          "UPDATE mail_domains SET outbound_enabled=0 WHERE id='calendar-domain'",
+          "UPDATE mail_domains SET outbound_enabled=1 WHERE id='calendar-domain'",
+        ],
+        [
+          "disabled provider",
+          "UPDATE mail_provider_connections SET enabled=0 WHERE id='cloudflare-bindings'",
+          "UPDATE mail_provider_connections SET enabled=1 WHERE id='cloudflare-bindings'",
+        ],
+        [
+          "revoked Mail access",
+          "DELETE FROM role_permissions WHERE role_id='calendar-mail-test' AND permission_key='mail.access'",
+          "INSERT INTO role_permissions(role_id,permission_key) VALUES('calendar-mail-test','mail.access')",
+        ],
+      ];
+      for (const [label, disable, restore] of cases) {
+        const value = await create({
+          ...day("2028-04-03"),
+          attendees: [
+            {
+              email_address: `unavailable-${cases.findIndex((item) => item[0] === label)}@example.test`,
+            },
+            { user_id: "bob" },
+          ],
+        });
+        const rows = await deliveries(value.event.id),
+          external = rows.find((item) => item.channel === "email"),
+          before = (await sent()).length;
+        await db.prepare(disable).run();
+        try {
+          await flush([external.id]);
+          const result = (await deliveries(value.event.id)).find(
+            (item) => item.id === external.id,
+          );
+          assert.equal(result.status, "suppressed", label);
+          assert.equal(result.error_code, "personal_sender_unavailable", label);
+          assert.equal((await sent()).length, before, label);
+          assert.equal(
+            rows.find((item) => item.recipient_user_id === "bob").status,
+            "inbox_committed",
+          );
+        } finally {
+          await db.prepare(restore).run();
+        }
+      }
+    },
+  );
+  await t.test(
+    "revocation after snapshot creation prevents SMTP and a safe retry preserves the original ICS",
+    async () => {
+      const value = await create({
+        ...day("2028-04-04"),
+        attendees: [{ email_address: "sender-race@example.test" }],
+      });
+      const pending = (await deliveries(value.event.id)).find(
+          (item) => item.channel === "email",
+        ),
+        before = (await sent()).length;
+      try {
+        await flushAfterSnapshot(
+          pending.id,
+          "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
+        );
+        assert.equal(
+          (await deliveries(value.event.id))[0].status,
+          "retry_wait",
+        );
+        assert.equal((await sent()).length, before);
+        const key = `calendar/deliveries/${pending.id}/invite.ics`,
+          original = await (await bucket.get(key)).text();
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+          )
+          .run();
+        await db
+          .prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?")
+          .bind(pending.id)
+          .run();
+        await flush([pending.id]);
+        assert.equal((await deliveries(value.event.id))[0].status, "accepted");
+        assert.equal(await (await bucket.get(key)).text(), original);
+        assert.equal(
+          (await sent()).find((item) =>
+            item.to.includes("sender-race@example.test"),
+          ).from,
+          "alice@calendar.test",
+        );
+      } finally {
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+          )
+          .run();
+      }
+    },
+  );
+  await t.test(
+    "a saved invitation cannot switch provider connections on retry",
+    async () => {
+      const value = await create({
+        ...day("2028-04-05"),
+        attendees: [{ email_address: "sender-binding@example.test" }],
+      });
+      const pending = (await deliveries(value.event.id))[0],
+        before = (await sent()).length;
+      await db
+        .prepare(
+          "INSERT INTO mail_provider_connections(id,provider,name) VALUES('calendar-replacement-provider','cloudflare','Replacement')",
+        )
+        .run();
+      try {
+        await flushAfterSnapshot(
+          pending.id,
+          "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
+        );
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+          )
+          .run();
+        await db
+          .prepare(
+            "UPDATE mail_domains SET outbound_connection_id='calendar-replacement-provider' WHERE id='calendar-domain'",
+          )
+          .run();
+        await db
+          .prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?")
+          .bind(pending.id)
+          .run();
+        await flush([pending.id]);
+        const result = (await deliveries(value.event.id))[0];
+        assert.equal(result.status, "failed");
+        assert.equal(result.error_code, "sender_configuration_changed");
+        assert.equal((await sent()).length, before);
+      } finally {
+        await db
+          .prepare(
+            "UPDATE mail_domains SET outbound_connection_id='cloudflare-bindings' WHERE id='calendar-domain'",
+          )
+          .run();
+        await db
+          .prepare(
+            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
+          )
+          .run();
+      }
+    },
+  );
+  await t.test(
+    "delegated calendar invitations use the calendar organizer's personal mailbox",
+    async () => {
+      const target = (await call("/bootstrap", { actor: "bob" }))
+        .primary_calendar_id;
+      const value = await create(
+        {
+          ...day("2028-04-06"),
+          attendees: [{ email_address: "delegated-organizer@example.test" }],
+        },
+        target,
+      );
+      const rows = (
+        await call(
+          `/calendars/${target}/events/${value.event.id}/invitation-deliveries`,
+          { actor: "bob" },
+        )
+      ).deliveries;
+      await flush(rows.map((item) => item.id));
+      assert.equal(
+        (await sent()).find((item) =>
+          item.to.includes("delegated-organizer@example.test"),
+        ).from,
+        "bob@calendar.test",
       );
     },
   );

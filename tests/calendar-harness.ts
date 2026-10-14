@@ -21,7 +21,10 @@ export class FakeEmail extends WorkerEntrypoint<Env> {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if (new URL(request.url).pathname === "/test-calendar/flush") {
-      const data = (await request.json()) as { ids?: string[] };
+      const data = (await request.json()) as {
+        ids?: string[];
+        after_snapshot?: string;
+      };
       const jobs =
         data.ids ??
         (
@@ -29,7 +32,33 @@ export default {
             "SELECT id FROM calendar_invitation_deliveries WHERE status IN('queued','retry_wait')",
           ).all<{ id: string }>()
         ).results.map((value) => value.id);
-      await Promise.all(jobs.map((id) => deliverCalendar(env as AuthEnv, id)));
+      let injected = false;
+      const deliveryEnv = data.after_snapshot
+        ? {
+            ...env,
+            MAIL_BUCKET: new Proxy(env.MAIL_BUCKET, {
+              get(target, key) {
+                if (key === "put")
+                  return async (...args: Parameters<R2Bucket["put"]>) => {
+                    const result = await target.put(...args);
+                    if (
+                      !injected &&
+                      args[0].startsWith("calendar/snapshots/")
+                    ) {
+                      injected = true;
+                      await env.DB.prepare(data.after_snapshot!).run();
+                    }
+                    return result;
+                  };
+                const value = Reflect.get(target, key);
+                return typeof value === "function" ? value.bind(target) : value;
+              },
+            }),
+          }
+        : env;
+      await Promise.all(
+        jobs.map((id) => deliverCalendar(deliveryEnv as AuthEnv, id)),
+      );
       return Response.json({ processed: jobs.length });
     }
     if (new URL(request.url).pathname === "/test-calendar/recover") {

@@ -11,6 +11,11 @@ import { recipientUser, noInternalRecipientSql } from "./recipients";
 import { calendarFile, plainText } from "./ical";
 import { notificationStatements } from "./delivery";
 import { recoverNotifications } from "../notifications/jobs";
+import {
+  personalInvitationSender,
+  personalSenderCondition,
+  type PersonalInvitationSender,
+} from "./sender";
 export async function recoverCalendar(env: AuthEnv) {
   const db = env.DB.withSession("first-primary");
   const unresolved = await rows<{ id: string }>(
@@ -61,7 +66,7 @@ export async function recoverCalendar(env: AuthEnv) {
       })),
     );
 }
-async function sender(env: AuthEnv) {
+async function systemSender(env: AuthEnv) {
   const value = await first<{
     email_address: string;
     provider: string;
@@ -232,9 +237,20 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
       if (resolved.user || resolved.ambiguous)
         return void (await finish("suppressed", "internal_recipient"));
     }
-    const from = await sender(env),
+    const personal =
+      payload.kind === "invitation"
+        ? await personalInvitationSender(
+            env,
+            payload.event?.organizer_user_id ?? null,
+          )
+        : null;
+    if (payload.kind === "invitation" && !personal)
+      return void (await finish("suppressed", "personal_sender_unavailable"));
+    const from = personal ?? (await systemSender(env)),
       adapter = provider(from.provider),
       attachments: Attachment[] = [];
+    const snapshotKey = `calendar/snapshots/${id}.json`,
+      previousSnapshot = await env.MAIL_BUCKET.get(snapshotKey);
     let text = "",
       subject = "";
     if (payload.kind === "invitation") {
@@ -248,11 +264,12 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
               : "invite.ics",
         ics = calendarFile(payload, from.email_address),
         key = `calendar/deliveries/${id}/${filename}`;
-      await env.MAIL_BUCKET.put(key, ics, {
-        httpMetadata: {
-          contentType: `text/calendar; charset=UTF-8; method=${method}`,
-        },
-      });
+      if (!previousSnapshot)
+        await env.MAIL_BUCKET.put(key, ics, {
+          httpMetadata: {
+            contentType: `text/calendar; charset=UTF-8; method=${method}`,
+          },
+        });
       attachments.push({
         id: uuid(),
         filename,
@@ -286,24 +303,49 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
       headers: { "Message-ID": delivery.message_id },
       attachments,
     };
-    const snapshotKey = `calendar/snapshots/${id}.json`,
-      previousSnapshot = await env.MAIL_BUCKET.get(snapshotKey);
     if (previousSnapshot) {
-      snapshot = await unseal<SubmissionSnapshot>(
+      snapshot = await unseal<
+        SubmissionSnapshot & { calendar_sender?: PersonalInvitationSender }
+      >(
         env,
         `snapshot:${id}`,
         (await previousSnapshot.json()) as Parameters<typeof unseal>[2],
       );
       if (snapshot.from !== from.email_address)
         return void (await finish("failed", "sender_configuration_changed"));
+      const binding = (
+        snapshot as SubmissionSnapshot & {
+          calendar_sender?: PersonalInvitationSender;
+        }
+      ).calendar_sender;
+      if (
+        personal &&
+        (!binding ||
+          binding.user_id !== personal.user_id ||
+          binding.auth_version !== personal.auth_version ||
+          binding.mailbox_id !== personal.mailbox_id ||
+          binding.address_id !== personal.address_id ||
+          binding.connection_id !== personal.connection_id ||
+          binding.provider !== personal.provider ||
+          binding.version !== personal.version)
+      )
+        return void (await finish("failed", "sender_configuration_changed"));
     } else
       await env.MAIL_BUCKET.put(
         snapshotKey,
-        JSON.stringify(await seal(env, `snapshot:${id}`, snapshot)),
+        JSON.stringify(
+          await seal(env, `snapshot:${id}`, {
+            ...snapshot,
+            ...(personal ? { calendar_sender: personal } : {}),
+          }),
+        ),
       );
     if (
-      new TextEncoder().encode(text).length +
-        attachments.reduce((sum, file) => sum + (file.size_bytes * 4) / 3, 0) >
+      new TextEncoder().encode(snapshot.text).length +
+        snapshot.attachments.reduce(
+          (sum, file) => sum + (file.size_bytes * 4) / 3,
+          0,
+        ) >
       Math.min(
         adapter.capabilities.max_send_bytes,
         from.max_send_bytes ?? Infinity,
@@ -314,11 +356,12 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
       payload.kind === "invitation"
         ? ` AND EXISTS(SELECT 1 FROM calendar_events e JOIN calendars cal ON cal.id=e.organizer_calendar_id JOIN users owner ON owner.id=cal.data_owner_user_id WHERE e.id=calendar_invitation_deliveries.event_id AND e.sequence=calendar_invitation_deliveries.sequence AND ${active("owner")} AND cal.status='active' AND (cal.trashed_at IS NULL OR calendar_invitation_deliveries.action='cancel')) AND EXISTS(SELECT 1 FROM calendar_event_attendees a WHERE a.id=calendar_invitation_deliveries.attendee_id AND a.user_id IS NULL AND ${noInternalRecipientSql("a.email_key")} AND (a.removed_at IS NULL OR calendar_invitation_deliveries.action='cancel'))`
         : "";
+    const senderGuard = personal ? personalSenderCondition(personal) : null;
     const started = await db
       .prepare(
-        `UPDATE calendar_invitation_deliveries SET status='sending' WHERE id=? AND ${guard}${sendGuard}`,
+        `UPDATE calendar_invitation_deliveries SET status='sending' WHERE id=? AND ${guard}${sendGuard}${senderGuard ? ` AND (${senderGuard.sql})` : ""}`,
       )
-      .bind(id, id, lease)
+      .bind(id, id, lease, ...(senderGuard?.args ?? []))
       .run();
     if (started.meta.changes !== 1)
       return void (await finish("retry_wait", "delivery_state_changed"));
