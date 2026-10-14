@@ -191,7 +191,6 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         </div>
       </div>
       <div className="mail-filter-footer">
-        <span>Search in {mail.box?.name ?? "this mailbox"}</span>
         <Button variant="primary" type="submit">
           Search
         </Button>

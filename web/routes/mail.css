@@ -293,8 +293,7 @@
 .mail-filter-form h2 { font-size: 16px; font-weight: 600; margin: 0 0 24px; }
 .mail-filter-subject { grid-column: 1 / -1; }
 .mail-filter-checks { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; }
-.mail-filter-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
-.mail-filter-footer span { color: var(--ui-muted); font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.mail-filter-footer { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 24px; }
 .mail-filter-footer > [data-ui-button] { flex-shrink: 0; }
 [data-ui="drawer-popup"].mail-search-drawer { width: min(440px, 100vw); max-width: none; overflow: hidden; }
 .mail-drawer-viewport [data-ui="drawer-popup"]::before { display: none; }
