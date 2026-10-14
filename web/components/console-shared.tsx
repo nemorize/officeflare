@@ -37,7 +37,7 @@ export function useResource<T>(path: string | null) {
 export function ResourceState({ loading, error, kind = "section", label = "Loading…", rows = 3 }: { loading: boolean; error: string; kind?: "section" | "list" | "form"; label?: string; rows?: number }) {
   return loading ? <LoadingSkeleton kind={kind} label={label} rows={rows} /> : <Notice error={error} />;
 }
-export function Confirm({ open, title, description, label, onClose, onConfirm, destructive = false, theme }: { open: boolean; title: string; description: ReactNode; label: string; onClose: () => void; onConfirm: () => Promise<void>; destructive?: boolean; theme?: "neutral" }) {
+export function Confirm({ open, title, description, children, className, label, onClose, onConfirm, destructive = false, theme }: { open: boolean; title: string; description: ReactNode; children?: ReactNode; className?: string; label: string; onClose: () => void; onConfirm: () => Promise<void>; destructive?: boolean; theme?: "neutral" }) {
   const access = useAccess(), notify = useNotifications(), running = useRef(false);
   const [busy, setBusy] = useState(false);
   async function confirm() {
@@ -47,8 +47,9 @@ export function Confirm({ open, title, description, label, onClose, onConfirm, d
     catch (failure) { notify.error(errorMessage(failure)); if (failure instanceof ApiError && failure.status === 403) access.refresh(); }
     finally { running.current = false; setBusy(false); }
   }
-  return <AlertDialog.Root open={open} onOpenChange={(next) => { if (!next && !running.current) onClose(); }}><AlertDialogPopup data-ui-theme={theme}>
-    <AlertDialog.Title>{title}</AlertDialog.Title><AlertDialog.Description>{description}</AlertDialog.Description>
+  return <AlertDialog.Root open={open} onOpenChange={(next) => { if (!next && !running.current) onClose(); }}><AlertDialogPopup className={className} data-ui-theme={theme}>
+    <AlertDialog.Title>{title}</AlertDialog.Title><AlertDialog.Description render={<div />}>{description}</AlertDialog.Description>
+    {children}
     <div className="account-actions"><Button disabled={busy} onClick={onClose}>Cancel</Button><Button variant={destructive ? "danger" : "primary"} disabled={busy} onClick={() => { void confirm(); }}>{busy ? "Saving…" : label}</Button></div>
   </AlertDialogPopup></AlertDialog.Root>;
 }

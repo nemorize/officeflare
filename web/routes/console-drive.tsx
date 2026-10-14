@@ -29,10 +29,10 @@ function AccountPicker({ value, onChange, exclude, writable = false }: { value: 
 function AdminConfirm({ open, title, description, children, label, destructive, onClose, onConfirm }: { open: boolean; title: string; description: ReactNode; children?: ReactNode; label: string; destructive?: boolean; onClose: () => void; onConfirm: (reason: string) => Promise<void> }) {
   const [reason, setReason] = useState("");
   useEffect(() => { if (open) setReason(""); }, [open, title]);
-  return <Confirm theme="neutral" open={open} title={title} label={label} destructive={destructive} onClose={onClose} description={<><span>{description}</span><div className="console-drive-confirm-fields">{children}<TextField label="Reason" name="admin_reason" required maxLength={1000} value={reason} onValueChange={setReason} placeholder="Describe why this change is needed" /></div></>} onConfirm={async () => {
+  return <Confirm className="console-drive-confirm" theme="neutral" open={open} title={title} label={label} destructive={destructive} onClose={onClose} description={description} onConfirm={async () => {
     if (!reason.trim()) throw new Error("Enter a reason for this administrative action.");
     await onConfirm(reason.trim());
-  }} />;
+  }}><div className="console-drive-confirm-fields">{children}<TextField label="Reason" name="admin_reason" required maxLength={1000} value={reason} onValueChange={setReason} placeholder="Describe why this change is needed" /></div></Confirm>;
 }
 function usePaged<T>(path: string, filters: Record<string, string>) {
   const [cursors, setCursors] = useState<(string | null)[]>([null]), [revision, setRevision] = useState(0);

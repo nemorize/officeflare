@@ -57,7 +57,14 @@ details.console-role-summary > .console-permission-picker { margin-block-start: 
 .console-drive-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin-block: 20px; }
 .console-drive-filters > [data-ui="field-root"] { flex: 1; min-width: 160px; }
 .console-drive-form-grid, .console-drive-confirm-fields { display: grid; gap: 16px; }
-.console-drive-confirm-fields { margin-block-start: 18px; }
+.console-drive-confirm[data-ui] { width: min(480px, 100%); max-width: none; max-height: calc(100dvh - 48px); overflow-y: auto; }
+.console-drive-confirm [data-ui="alert-dialog-title"] { margin: 0; }
+.console-drive-confirm [data-ui="alert-dialog-description"] { margin: 8px 0 0; }
+.console-drive-confirm-fields { margin-block-start: 20px; }
+.console-drive-confirm [data-ui="text-field"] { margin: 0; gap: 8px; }
+.console-drive-confirm [data-ui="input"] { max-width: none; }
+.console-drive-confirm [data-ui="select-trigger"] { width: 100%; justify-content: space-between; }
+.console-drive-confirm .account-actions { flex-wrap: wrap; }
 .console-drive-policy-review { margin-block: 20px; }
 .console-drive-row-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .console-drive-job { display: flex; justify-content: space-between; gap: 16px; margin-block-start: 20px; }
