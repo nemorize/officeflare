@@ -10,7 +10,7 @@ import calendarRoutes, {
 } from "../calendar/calendars";
 import eventRoutes from "../calendar/events";
 import personalRoutes from "../calendar/personal";
-import { calendars, rows } from "../calendar/access";
+import { active, calendars, rows } from "../calendar/access";
 import { pageLimit, fail } from "../calendar/input";
 import { cursor, readCursor } from "../calendar/cursor";
 import sharingRoutes, { adminSettings } from "../calendar/sharing";
@@ -123,6 +123,13 @@ calendar.get("/bootstrap", async (c) => {
     labels,
     capabilities,
   });
+});
+calendar.get("/people", requirePermission("calendar.sharing.internal"), async (c) => {
+  const query = (c.req.query("q") ?? "").trim().toLowerCase();
+  if (query.length < 2) return c.json({ people: [] });
+  if (query.length > 255) fail(400, "INVALID_INPUT", "Search is too long");
+  return c.json({ people: await rows(c.env,
+    `SELECT u.id,u.display_name,u.email_address FROM users u WHERE ${active("u")} AND instr(lower(COALESCE(u.display_name,'')||' '||u.email_address),?)>0 ORDER BY u.display_name,u.email_address,u.id LIMIT 20`, query) });
 });
 calendar.get("/changes", async (c) => {
   const user = c.get("identity").user,

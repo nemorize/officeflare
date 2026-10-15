@@ -23,13 +23,13 @@ const harness = await build({
   external: ["cloudflare:workers", "../dist/index.js", "node:*"],
   target: "es2022",
 });
-export async function fixture(t) {
+export async function fixture(t, { assets = false } = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const common = {
     compatibilityDate: "2026-09-29",
     compatibilityFlags: ["nodejs_compat"],
     d1Databases: { DB: "calendar-tests" },
-    r2Buckets: ["MAIL_BUCKET", "DRIVE_BUCKET"],
+    r2Buckets: ["MAIL_BUCKET", "DRIVE_BUCKET", ...(assets ? ["PROFILE_BUCKET"] : [])],
     serviceBindings: {
       EMAIL: { name: "calendar-harness", entrypoint: "FakeEmail" },
     },
@@ -50,7 +50,9 @@ export async function fixture(t) {
     convertV4MiniflareOptions({
       log: new Log(LogLevel.ERROR),
       workers: [
-        { ...common, name: "officeflare", modules: workerModules },
+        { ...common, name: "officeflare", modules: workerModules,
+          ...(assets ? { durableObjects: { NOTIFICATION_HUB: { className: "NotificationHubDO", useSQLite: true } }, assets: { directory: "dist/client", run_worker_first: ["/api", "/api/*"], routerConfig: { has_user_worker: true }, assetConfig: { not_found_handling: "single-page-application" } } } : {}),
+        },
         {
           ...common,
           name: "calendar-harness",

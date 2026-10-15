@@ -195,7 +195,7 @@ routes.get("/calendars/:calendarId/acl", async (c) => {
   return c.json({
     acl: await rows(
       c.env,
-      "SELECT * FROM calendar_acl WHERE calendar_id=? ORDER BY created_at,id",
+      "SELECT a.*,u.display_name,u.email_address FROM calendar_acl a LEFT JOIN users u ON a.scope_type='user' AND u.id=a.scope_key WHERE a.calendar_id=? ORDER BY a.created_at,a.id",
       cal.id,
     ),
   });

@@ -32,6 +32,7 @@ const MailDataPage = lazy(() => import("./routes/mail-data").then((module) => ({
 const MailConsolePage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailConsolePage })));
 const SharedMailboxEditorPage = lazy(() => import("./routes/console-shared-mailboxes").then((module) => ({ default: module.SharedMailboxEditorPage })));
 const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailDomainEditorPage })));
+const CalendarPage = lazy(() => import("./routes/calendar").then(module => ({ default: module.CalendarPage })));
 const CalendarInvitationPage = lazy(() => import('./routes/calendar-invitation').then(module => ({ default: module.CalendarInvitationPage })));
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
@@ -42,7 +43,7 @@ const router = createBrowserRouter(createRoutesFromElements(<>
           <Route path="/share/drive/:token" element={<Suspense fallback={<p className="empty-page">Opening shared files…</p>}><PublicDrivePage /></Suspense>} />
           <Route element={<WorkspaceLayout />}>
             <Route path="/" element={<WorkspaceHome />} />
-            {workspaceApps.filter((app) => app.path !== "/mail" && app.path !== "/drive").flatMap((app) => app.menu.map((item) =>
+            {workspaceApps.filter((app) => app.path !== "/mail" && app.path !== "/drive" && app.path !== "/calendar").flatMap((app) => app.menu.map((item) =>
               <Route key={item.path} path={item.path} element={<ServiceGate permission={app.permission}><EmptyWorkspacePage title={item.name} /></ServiceGate>} />
             ))}
             <Route path="/drive/items/:itemId" element={<ServiceGate permission="drive.access"><DriveLinkedItemPage /></ServiceGate>} />
@@ -55,6 +56,7 @@ const router = createBrowserRouter(createRoutesFromElements(<>
             <Route path="/profile/security" element={<SecurityPage />} />
             <Route path="/profile/sessions" element={<SessionsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            {["/calendar", "/calendar/shared", "/calendar/trash"].map(path => <Route key={path} path={path} element={<ServiceGate permission="calendar.access"><CalendarPage /></ServiceGate>} />)}
             <Route path="/calendar/invitations/:attendeeId" element={<CalendarInvitationPage />} />
             <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
             <Route path="/console" element={<ConsoleGate />}>

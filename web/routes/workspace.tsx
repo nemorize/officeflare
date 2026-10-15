@@ -11,6 +11,8 @@ import { LoadingSkeleton } from "../components/loading-skeleton";
 import { WorkspaceLoading } from "../components/workspace-loading";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
+import { CalendarProvider, useCalendar } from "../components/calendar-context";
+import { CalendarSidebar, CalendarTopbar } from "../components/calendar-chrome";
 import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "../components/workspace-navigation";
 import { NotificationBell } from "../components/notification-center";
 import { NotificationCenterProvider } from "../components/notification-center-context";
@@ -52,7 +54,7 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
 }
 
 function WorkspaceChrome() {
-  const notify = useNotifications(), mail = useMail();
+  const notify = useNotifications(), mail = useMail(), calendar = useCalendar();
   const { pathname: locationPath } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
@@ -62,6 +64,7 @@ function WorkspaceChrome() {
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
   const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
   const isDrive = pathname === "/drive" || pathname.startsWith("/drive/");
+  const isCalendar = (pathname === "/calendar" || pathname.startsWith("/calendar/")) && !pathname.startsWith("/calendar/invitations/");
   const isNotifications = pathname === "/notifications";
   const access = useAccess(), systemMenu = consoleMenu(access.permissions);
   const visibleApps = workspaceApps.filter((app) => access.permissions.includes(app.permission));
@@ -69,7 +72,7 @@ function WorkspaceChrome() {
   const sidebarName = isNotifications ? "Notifications" : isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
   const sidebarMenu = isNotifications ? notificationMenu : isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
-  const title = current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
+  const title = pathname.startsWith("/calendar/invitations/") ? "Calendar invitation" : isCalendar ? "Calendar" : current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
   useEffect(() => { content.current?.scrollTo(0, 0); setMobileMenu(false); }, [pathname]);
 
@@ -81,7 +84,7 @@ function WorkspaceChrome() {
     finally { setBusy(false); }
   }
 
-  return <div data-ui-theme="neutral" className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}`}>
+  return <div data-ui-theme="neutral" className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}>
     <a href="#workspace-main" className="workspace-skip-link">Skip to content</a>
     <aside className="workspace-rail" aria-label="Applications">
       <Link to="/" className="workspace-mark" aria-label="Officeflare home"><OfficeflareMark /></Link>
@@ -96,18 +99,18 @@ function WorkspaceChrome() {
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header"><span>{sidebarName}</span>{isMail && activeApp && <MailSettingsButton />}</div>
-        {access.status === "loading" ? <LoadingSkeleton label="Loading navigation…" /> : isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
+        {access.status === "loading" ? <LoadingSkeleton label="Loading navigation…" /> : isCalendar && activeApp ? <CalendarSidebar /> : isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "Administration" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}
         </nav>}
 
       </aside>
       <div ref={content} className="workspace-content">
-        {isDrive ? <DriveTopbar sidebarCollapsed={driveSidebarCollapsed} onToggleSidebar={() => setDriveSidebarCollapsed(value => !value)} mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
+        {isCalendar ? <CalendarTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>} /> : isDrive ? <DriveTopbar sidebarCollapsed={driveSidebarCollapsed} onToggleSidebar={() => setDriveSidebarCollapsed(value => !value)} mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : isMail ? <MailTopbar mobileAccount={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}/> : <header className="workspace-topbar">
           <WorkspaceMenuButton label="Open navigation" onClick={() => setMobileMenu(true)} />
           <div className="workspace-breadcrumb"><span>{sidebarName}</span><Icon name="chevron" width="12" height="12" /><span>{title}</span></div>
         </header>}
-        {!isDrive && !isMail && <WorkspaceNavigationDrawer open={mobileMenu} onOpenChange={setMobileMenu} title={sidebarName} account={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}><nav aria-label={sidebarName + " navigation"} className="workspace-nav">{sidebarMenu.map(item => <NavLink key={item.path} to={item.path} end={!isConsole} onClick={() => setMobileMenu(false)}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}</nav></WorkspaceNavigationDrawer>}
+        {!isCalendar && !isDrive && !isMail && <WorkspaceNavigationDrawer open={mobileMenu} onOpenChange={setMobileMenu} title={sidebarName} account={<div className="notification-mobile-actions"><NotificationBell /><ProfileMenu busy={busy} signOut={() => { void signOut(); }} /></div>}><nav aria-label={sidebarName + " navigation"} className="workspace-nav">{sidebarMenu.map(item => <NavLink key={item.path} to={item.path} end={!isConsole} onClick={() => setMobileMenu(false)}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}</nav></WorkspaceNavigationDrawer>}
         {auth.error && <div className="workspace-notice" role="alert"><Icon name="info" /><span>{auth.error}</span></div>}
         <main id="workspace-main" className="workspace-main" tabIndex={-1}>
           <Suspense fallback={<LoadingSkeleton kind="page" label="Opening page…" />}><Outlet /></Suspense>
@@ -138,7 +141,7 @@ function WorkspaceStartup() {
   if (location.pathname === "/") return access.status === "ready"
     ? <><WorkspaceLoading /><WorkspaceHome /></>
     : <WorkspaceLoading error={access.error} onRetry={access.refresh} />;
-  return <AccountProvider><NotificationCenterProvider key={sessionId}><MailResourceProvider><MailProvider key={sessionId}><DriveProvider key={sessionId}><WorkspaceChrome /></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccountProvider>;
+  return <AccountProvider><NotificationCenterProvider key={sessionId}><MailResourceProvider><MailProvider key={sessionId}><DriveProvider key={sessionId}><CalendarProvider key={sessionId}><WorkspaceChrome /></CalendarProvider></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {
