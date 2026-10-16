@@ -265,10 +265,10 @@
   transition: background 0.12s;
 }
 .drive-file-row:hover {
-  background: #fafafa;
+  background: var(--ui-raised);
 }
 .drive-file-row.is-selected {
-  background: var(--ui-hover);
+  background: var(--ui-selected);
   color: var(--ui-text);
 }
 .drive-row-name {
@@ -390,11 +390,11 @@
   overflow: hidden;
 }
 .drive-layout-grid .drive-file-row:hover {
-  background: #fafafa;
+  background: var(--ui-raised);
   border-color: var(--ui-control-border);
 }
 .drive-layout-grid .drive-file-row.is-selected {
-  background: var(--ui-hover);
+  background: var(--ui-selected);
   border-color: var(--ui-muted);
 }
 .drive-layout-grid .drive-row-name {
@@ -466,7 +466,7 @@
 .drive-layout-grid .drive-file-row:not(:has(.drive-card-preview)) {
   grid-template-rows: 39px 30px;
   height: 85px;
-  background: #fafafa;
+  background: var(--ui-raised);
 }
 .drive-layout-grid
   .drive-file-row:not(:has(.drive-card-preview))
@@ -484,7 +484,7 @@
   right: 20px;
 }
 .drive-layout-grid .drive-file-row:not(:has(.drive-card-preview)).is-selected {
-  background: var(--ui-hover);
+  background: var(--ui-selected);
 }
 .drive-empty,
 .drive-state {
@@ -535,7 +535,7 @@
   border: 1px solid var(--ui-border);
   border-radius: 26px;
   transform: rotate(-9deg);
-  background: #fafafa;
+  background: var(--ui-raised);
 }
 .drive-empty-art svg {
   position: relative;
@@ -581,7 +581,7 @@
   gap: 9px;
   background: var(--ui-danger-surface);
   color: var(--ui-danger);
-  border: 1px solid #f2d2d0;
+  border: 1px solid var(--ui-danger-border);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 11px;
@@ -1105,7 +1105,7 @@
   width: 10px;
 }
 .drive-comment-thread.is-resolved {
-  background: #fafafa;
+  background: var(--ui-raised);
 }
 .drive-comment-form > div:last-child {
   display: flex;
@@ -1169,7 +1169,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 11px 10px 16px;
-  background: #fafafa;
+  background: var(--ui-raised);
   border-bottom: 1px solid var(--ui-border);
 }
 .drive-upload-tray header > span,
@@ -1746,7 +1746,7 @@
   height: 16px;
 }
 .drive-nav a.active {
-  background: var(--ui-hover);
+  background: var(--ui-selected);
   color: var(--ui-text);
 }
 .drive-field [data-ui="input"] {

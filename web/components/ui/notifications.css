@@ -20,7 +20,7 @@
 .app-notification-content { display: flex; align-items: flex-start; gap: 10px; }
 .app-notification [data-ui="toast-title"] { flex: 1; margin: 1px 0 0; font-size: 13px; font-weight: 500; line-height: 1.5; }
 .app-notification-icon { flex: 0 0 18px; margin-block-start: 2px; color: var(--ui-muted); }
-.app-notification[data-type="success"] .app-notification-icon { color: #23804c; }
+.app-notification[data-type="success"] .app-notification-icon { color: var(--ui-success); }
 .app-notification[data-type="error"] .app-notification-icon { color: var(--ui-danger); }
 .app-notification [data-ui="toast-close"] { flex: 0 0 24px; margin: -2px -2px 0 0; padding: 0; width: 24px; min-height: 24px; color: var(--ui-muted); }
 @media (prefers-reduced-motion: reduce) { [data-ui="toast-root"].app-notification { transition: none; } }

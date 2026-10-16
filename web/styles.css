@@ -1,23 +1,45 @@
 @import "./components/ui/components.css";
 
-/* Light surfaces and compact controls measured from the supplied app screenshots. */
+/* Shared appearance follows the system scheme, including native form controls. */
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --ui-background: #ffffff;
   --ui-chrome: #f6f6f6;
   --ui-sidebar: #fcfcfc;
   --ui-surface: #f4f4f4;
   --ui-hover: #efeff0;
+  --ui-selected: #efeff0;
+  --ui-rail-selected: #e9eaea;
+  --ui-tab-selected: #ffffff;
+  --ui-raised: #fafafa;
   --ui-border: #ededed;
   --ui-control-border: #dedee0;
+  --ui-control-focus: #878b92;
+  --ui-check-border: #c8c9cb;
+  --ui-track: #e6e6e8;
+  --ui-thumb: #ffffff;
   --ui-text: #1a1c1f;
   --ui-muted: #6a6b6d;
   --ui-subtle: #676b73;
+  --ui-nav-text: #454649;
   --ui-primary: #0a0a0a;
-  --ui-accent: #0a0a0a;
+  --ui-primary-hover: #292929;
+  --ui-on-primary: #ffffff;
+  --ui-accent: var(--ui-primary);
   --ui-focus-ring: 0 0 0 1px var(--ui-accent);
   --ui-danger: #db3636;
   --ui-danger-surface: #fff1f0;
+  --ui-danger-hover: #ffe6e4;
+  --ui-danger-border: #ffd4d1;
+  --ui-success: #347953;
+  --ui-success-surface: #edf5ef;
+  --ui-warning: #876d32;
+  --ui-warning-surface: #faf5e9;
+  --ui-negative: #9c4747;
+  --ui-negative-surface: #fcf0f0;
+  --ui-link: #2563eb;
+  --ui-tooltip: #242424;
+  --ui-backdrop: #00000024;
   --ui-radius-control: 9px;
   --ui-radius-frame: 12px;
   --ui-radius-panel: 16px;
@@ -33,6 +55,49 @@
   color: var(--ui-text);
   background: var(--ui-background);
   -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ui-background: #1b1d21;
+    --ui-chrome: #141619;
+    --ui-sidebar: #191b1f;
+    --ui-surface: #2b3036;
+    --ui-hover: #343a42;
+    --ui-selected: #3c434d;
+    --ui-rail-selected: #3c434d;
+    --ui-tab-selected: #444c57;
+    --ui-raised: #22262b;
+    --ui-border: #2c3035;
+    --ui-control-border: #515862;
+    --ui-control-focus: #a5afbd;
+    --ui-check-border: #78828f;
+    --ui-track: #424952;
+    --ui-thumb: #e6e8eb;
+    --ui-text: #edf0f3;
+    --ui-muted: #b0b7c1;
+    --ui-subtle: #a2aab6;
+    --ui-nav-text: #d2d7df;
+    --ui-primary: #e6e8eb;
+    --ui-primary-hover: #ffffff;
+    --ui-on-primary: #181a1e;
+    --ui-danger: #ff9494;
+    --ui-danger-surface: #3b2428;
+    --ui-danger-hover: #4b2c31;
+    --ui-danger-border: #66383e;
+    --ui-success: #98d9ae;
+    --ui-success-surface: #24382c;
+    --ui-warning: #e6c17a;
+    --ui-warning-surface: #3c3221;
+    --ui-negative: #ffaaaa;
+    --ui-negative-surface: #3b2428;
+    --ui-link: #9bbcff;
+    --ui-tooltip: #e6e8eb;
+    --ui-backdrop: #00000080;
+    --ui-shadow-popup: 0 4px 20px #00000050, 0 1px 4px #00000030;
+    --ui-shadow-dialog: 0 16px 56px #00000070, 0 2px 8px #00000040;
+    --ui-shadow-frame: -2px 0 16px #00000020;
+  }
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -76,7 +141,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .login-card .login-secondary { width: 100%; }
 .login-card .login-help { margin-block-start: 24px; font-size: 12px; line-height: 1.6; }
 .login-footer { color: var(--ui-subtle); font-size: 12px; text-align: center; padding: 20px; }
-.ui-inline-alert { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid #ffd4d1; border-radius: 10px; background: var(--ui-danger-surface); color: var(--ui-danger); }
+.ui-inline-alert { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--ui-danger-border); border-radius: 10px; background: var(--ui-danger-surface); color: var(--ui-danger); }
 .ui-inline-alert svg { margin-block-start: 2px; }
 .empty-page { max-width: 440px; margin: 20vh auto; padding: 24px; display: grid; gap: 16px; }
 .empty-page p { color: var(--ui-muted); }

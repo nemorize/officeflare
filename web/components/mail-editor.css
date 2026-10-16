@@ -10,7 +10,7 @@
 .mail-html-content .tiptap:focus-visible { outline: 0; box-shadow: none; }
 .mail-html-content .tiptap p { margin: 0 0 12px; }
 .mail-html-content .tiptap ul, .mail-html-content .tiptap ol { padding-left: 24px; }
-.mail-html-content .tiptap a { color: #2563eb; text-decoration: underline; }
+.mail-html-content .tiptap a { color: var(--ui-link); text-decoration: underline; }
 .mail-html-content .tiptap img { max-width: 100%; height: auto; max-height: 360px; object-fit: contain; }
 .mail-html-content .tiptap .ProseMirror-selectednode { outline: 2px solid var(--ui-accent); }
 .mail-html-content .tiptap table { border-collapse: collapse; width: 100%; table-layout: fixed; margin-block: 12px; }
@@ -29,7 +29,7 @@
 .mail-composer .mail-html-content .tiptap { padding-inline: 0; }
 .mail-quoted-body { flex-shrink: 0; padding-block: 12px; border-top: 1px solid var(--ui-border); }
 .mail-quoted-body > summary { cursor: pointer; font-size: 12px; color: var(--ui-muted); }
-.mail-quoted-body iframe { width: 100%; border: 0; height: 260px; margin-top: 12px; }
+.mail-quoted-body iframe { width: 100%; border: 0; height: 260px; margin-top: 12px; background: white; color-scheme: only light; }
 .mail-quoted-body pre { white-space: pre-wrap; font: 12px/1.7 Arial, sans-serif; padding: 12px; }
 @media (max-width: 760px) {
   .mail-html-format-row { gap: 2px; }
