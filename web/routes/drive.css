@@ -1504,7 +1504,7 @@
     grid-template-columns: 32px minmax(120px, 1fr) 105px 60px 32px;
   }
   .drive-layout-list .drive-row-owner,
-  .drive-layout-list .drive-table-header [role="columnheader"]:nth-child(3) {
+  .drive-layout-list .drive-column-owner {
     display: none;
   }
   .drive-page-header {
@@ -1528,7 +1528,7 @@
     gap: 7px;
   }
   .drive-layout-list .drive-row-size,
-  .drive-layout-list .drive-table-header [role="columnheader"]:nth-child(5) {
+  .drive-layout-list .drive-column-size {
     display: none;
   }
   .drive-row-date {
@@ -1852,6 +1852,10 @@
 
 @media (max-width: 760px) {
   .drive-layout-list .drive-table-header, .drive-layout-list .drive-file-row { grid-template-columns: 44px minmax(0, 1fr) 76px 44px; }
+  .drive-page:not(.drive-selection-mode) .drive-layout-list .drive-table-header,
+  .drive-page:not(.drive-selection-mode) .drive-layout-list .drive-file-row { grid-template-columns: minmax(0, 1fr) 76px 44px; }
+  .drive-page .drive-layout-list :is(.drive-row-owner, .drive-column-owner, .drive-row-size, .drive-column-size) { display: none; }
+  .drive-selection-mode .drive-layout-grid .drive-row-select { opacity: 1; }
   .drive-layout-grid .drive-file-row { grid-template-columns: minmax(0, 1fr) 44px; grid-template-rows: 44px 112px 44px; }
   .drive-layout-grid .drive-file-row:not(:has(.drive-card-preview)) { grid-template-rows: 44px 44px; height: 104px; }
   .drive-layout-grid .drive-file-row:not(:has(.drive-card-preview)) .drive-row-select { right: 8px; }

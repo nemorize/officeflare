@@ -43,6 +43,7 @@ import {
 import { DriveDetails } from "../components/drive-details";
 import { DrivePreview, downloadDriveItem } from "../components/drive-preview";
 import { api } from "../lib/api";
+import { useWorkspaceMobile } from "../lib/workspace-responsive";
 import { driveSearchScopes, driveSearchTypes, isDriveSearch, readDriveSearch } from "../lib/drive-search";
 import {
   canEdit,
@@ -73,6 +74,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     navigate = useNavigate(),
     [params, setParams] = useSearchParams(),
     drive = useDrive(),
+    mobile = useWorkspaceMobile(),
     notify = useNotifications(),
     action = useDriveAction();
   const route = driveLocation(location.pathname),
@@ -112,11 +114,22 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     drive.revision,
   );
   const [selection, setSelection] = useState(new Set<string>()),
+    [selectionMode, setSelectionMode] = useState(false),
+    selectionButton = useRef<HTMLButtonElement>(null),
     anchor = useRef<string | null>(null),
     [detailsOpen, setDetailsOpen] = useState(false),
     [preview, setPreview] = useState<DriveItem | null>(null);
   const selected = collection.items.filter((item) => selection.has(item.id)),
-    selectedId = selection.size === 1 ? [...selection][0]! : null;
+    selectedId = selection.size === 1 ? [...selection][0]! : null,
+    selecting = mobile && (selectionMode || selection.size > 0),
+    showCheckboxes = !mobile || selecting;
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelection(new Set());
+    anchor.current = null;
+    setDetailsOpen(false);
+    if (mobile) selectionButton.current?.focus();
+  };
   const selectedResource = useDriveResource<{ item: DriveItem }>(
     detailsOpen && selectedId
       ? `/api/drive/items/${selectedId}${view === "trash" ? "?include_trashed=true" : ""}`
@@ -155,7 +168,11 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     document.title = `${title} · Drive · Officeflare`;
   }, [title]);
   useEffect(() => {
+    if (!mobile) setSelectionMode(false);
+  }, [mobile]);
+  useEffect(() => {
     setSelection(new Set());
+    setSelectionMode(false);
     anchor.current = null;
     setDetailsOpen(false);
     setDialog(null);
@@ -229,6 +246,15 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       ),
     );
     if (!event?.shiftKey) anchor.current = item.id;
+  };
+  const toggleSelected = (item: DriveItem) => {
+    if (mobile) setSelectionMode(true);
+    setSelection((old) => {
+      const next = new Set(old);
+      next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+      return next;
+    });
+    anchor.current = item.id;
   };
   const open = (item: DriveItem) => {
     if (view === "trash") {
@@ -306,8 +332,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         setSelection(new Set(collection.items.map((item) => item.id)));
       }
       if (event.key === "Escape") {
-        setSelection(new Set());
-        setDetailsOpen(false);
+        exitSelection();
       }
       if (
         event.key === "Delete" &&
@@ -371,7 +396,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     !collection.loading && !collection.error && !collection.items.length;
   return (
     <section
-      className="drive-page"
+      className={`drive-page${selecting ? " drive-selection-mode" : ""}`}
       onDragEnter={onDrag}
       onDragLeave={onDrag}
       onDragOver={(event) => {
@@ -442,7 +467,18 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               onClick={drive.refresh}
               disabled={collection.loading}
             />
-            <DriveIconButton
+            {mobile ? <Button
+              ref={selectionButton}
+              variant="ghost"
+              size="touch"
+              aria-label={selecting ? "Exit selection mode" : "Select files"}
+              aria-pressed={selecting}
+              disabled={!collection.items.length && !selecting}
+              onClick={() => {
+                if (selecting) exitSelection();
+                else setSelectionMode(true);
+              }}
+            >{selecting ? "Done" : "Select"}</Button> : <DriveIconButton
               icon="sidebar"
               label={
                 detailsOpen ? "Hide file information" : "Show file information"
@@ -450,7 +486,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               aria-pressed={detailsOpen}
               disabled={!selectedId}
               onClick={() => setDetailsOpen(!detailsOpen)}
-            />
+            />}
           </div>
         </header>
         {view === "trash" && (
@@ -564,9 +600,18 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <DriveIconButton
                 icon="close"
                 label="Clear selection"
-                onClick={() => setSelection(new Set())}
+                onClick={() => {
+                  setSelection(new Set());
+                  if (mobile) selectionButton.current?.focus();
+                }}
               />
               <strong>{selection.size} selected</strong>
+              {mobile && selectedId && <DriveIconButton
+                icon="sidebar"
+                label={detailsOpen ? "Hide file information" : "Show file information"}
+                aria-pressed={detailsOpen}
+                onClick={() => setDetailsOpen(!detailsOpen)}
+              />}
               {view === "trash" ? (
                 <>
                   <Button
@@ -730,7 +775,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               aria-multiselectable="true"
             >
               <div className="drive-table-header" role="row">
-                <div role="columnheader">
+                {showCheckboxes && <div role="columnheader">
                   <DriveCheckbox hitArea
                     aria-label="Select all loaded items"
                     checked={
@@ -749,13 +794,13 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                       )
                     }
                   />
-                </div>
+                </div>}
                 <div role="columnheader">Name</div>
-                <div role="columnheader">Owner</div>
+                <div role="columnheader" className="drive-column-owner">Owner</div>
                 <div role="columnheader">
                   {view === "trash" ? "Date deleted" : "Last modified"}
                 </div>
-                <div role="columnheader">File size</div>
+                <div role="columnheader" className="drive-column-size">File size</div>
                 <div role="columnheader">
                   <span className="visually-hidden">Actions</span>
                 </div>
@@ -790,18 +835,21 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                       onClick={(event) => {
                         if (
                           !(event.target as HTMLElement).closest(
-                            'button,input,[role="checkbox"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
+                            'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
                           )
-                        )
-                          select(item, event);
+                        ) {
+                          if (selecting) toggleSelected(item);
+                          else if (mobile) open(item);
+                          else select(item, event);
+                        }
                       }}
                       onDoubleClick={(event) => {
                         if (
                           !(event.target as HTMLElement).closest(
-                            'button,input,[role="checkbox"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
+                            'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
                           )
                         )
-                          open(item);
+                          if (!selecting) open(item);
                       }}
                       onKeyDown={(event) => {
                         if (
@@ -809,28 +857,24 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                           event.key === "Enter"
                         ) {
                           event.preventDefault();
-                          open(item);
+                          if (selecting) toggleSelected(item);
+                          else open(item);
                         }
                         if (
                           event.target === event.currentTarget &&
                           event.key === " "
                         ) {
                           event.preventDefault();
-                          setSelection((old) => {
-                            const next = new Set(old);
-                            next.has(item.id)
-                              ? next.delete(item.id)
-                              : next.add(item.id);
-                            return next;
-                          });
+                          toggleSelected(item);
                         }
                       }}
                     >
-                      <div className="drive-row-select" role="gridcell">
+                      {showCheckboxes && <div className="drive-row-select" role="gridcell">
                         <DriveCheckbox hitArea
                           aria-label={`Select ${item.name}`}
                           checked={selection.has(item.id)}
                           onCheckedChange={(checked) => {
+                            if (mobile) setSelectionMode(true);
                             setSelection((old) => {
                               const next = new Set(old);
                               checked
@@ -841,24 +885,26 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                             anchor.current = item.id;
                           }}
                         />
-                      </div>
+                      </div>}
                       <div className="drive-row-name" role="gridcell">
                         <DriveFileIcon item={item} />
                         <Button variant="text"
                           className="drive-name-button"
                           onClick={(event) => {
-                            if (
-                              window.matchMedia("(max-width:640px)").matches ||
+                            if (selecting) toggleSelected(item);
+                            else if (
+                              mobile ||
                               event.detail === 0
                             )
                               open(item);
                             else select(item, event);
                           }}
-                          onDoubleClick={() => open(item)}
+                          onDoubleClick={() => { if (!selecting) open(item); }}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
                               event.preventDefault();
-                              open(item);
+                              if (selecting) toggleSelected(item);
+                              else open(item);
                             }
                           }}
                           title={item.name}
