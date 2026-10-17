@@ -1,8 +1,8 @@
 @import "./components/ui/components.css";
 
-/* Shared appearance follows the system scheme, including native form controls. */
+/* The theme controller resolves the saved preference before the first paint. */
 :root {
-  color-scheme: light dark;
+  color-scheme: only light;
   --ui-background: #ffffff;
   --ui-chrome: #f6f6f6;
   --ui-sidebar: #fcfcfc;
@@ -57,47 +57,46 @@
   -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ui-background: #1b1d21;
-    --ui-chrome: #141619;
-    --ui-sidebar: #191b1f;
-    --ui-surface: #2b3036;
-    --ui-hover: #343a42;
-    --ui-selected: #3c434d;
-    --ui-rail-selected: #3c434d;
-    --ui-tab-selected: #444c57;
-    --ui-raised: #22262b;
-    --ui-border: #2c3035;
-    --ui-control-border: #515862;
-    --ui-control-focus: #a5afbd;
-    --ui-check-border: #78828f;
-    --ui-track: #424952;
-    --ui-thumb: #e6e8eb;
-    --ui-text: #edf0f3;
-    --ui-muted: #b0b7c1;
-    --ui-subtle: #a2aab6;
-    --ui-nav-text: #d2d7df;
-    --ui-primary: #e6e8eb;
-    --ui-primary-hover: #ffffff;
-    --ui-on-primary: #181a1e;
-    --ui-danger: #ff9494;
-    --ui-danger-surface: #3b2428;
-    --ui-danger-hover: #4b2c31;
-    --ui-danger-border: #66383e;
-    --ui-success: #98d9ae;
-    --ui-success-surface: #24382c;
-    --ui-warning: #e6c17a;
-    --ui-warning-surface: #3c3221;
-    --ui-negative: #ffaaaa;
-    --ui-negative-surface: #3b2428;
-    --ui-link: #9bbcff;
-    --ui-tooltip: #e6e8eb;
-    --ui-backdrop: #00000080;
-    --ui-shadow-popup: 0 4px 20px #00000050, 0 1px 4px #00000030;
-    --ui-shadow-dialog: 0 16px 56px #00000070, 0 2px 8px #00000040;
-    --ui-shadow-frame: -2px 0 16px #00000020;
-  }
+:root[data-color-scheme="dark"] {
+  color-scheme: only dark;
+  --ui-background: #1b1d21;
+  --ui-chrome: #141619;
+  --ui-sidebar: #191b1f;
+  --ui-surface: #2b3036;
+  --ui-hover: #343a42;
+  --ui-selected: #3c434d;
+  --ui-rail-selected: #3c434d;
+  --ui-tab-selected: #444c57;
+  --ui-raised: #22262b;
+  --ui-border: #2c3035;
+  --ui-control-border: #515862;
+  --ui-control-focus: #a5afbd;
+  --ui-check-border: #78828f;
+  --ui-track: #424952;
+  --ui-thumb: #e6e8eb;
+  --ui-text: #edf0f3;
+  --ui-muted: #b0b7c1;
+  --ui-subtle: #a2aab6;
+  --ui-nav-text: #d2d7df;
+  --ui-primary: #e6e8eb;
+  --ui-primary-hover: #ffffff;
+  --ui-on-primary: #181a1e;
+  --ui-danger: #ff9494;
+  --ui-danger-surface: #3b2428;
+  --ui-danger-hover: #4b2c31;
+  --ui-danger-border: #66383e;
+  --ui-success: #98d9ae;
+  --ui-success-surface: #24382c;
+  --ui-warning: #e6c17a;
+  --ui-warning-surface: #3c3221;
+  --ui-negative: #ffaaaa;
+  --ui-negative-surface: #3b2428;
+  --ui-link: #9bbcff;
+  --ui-tooltip: #e6e8eb;
+  --ui-backdrop: #00000080;
+  --ui-shadow-popup: 0 4px 20px #00000050, 0 1px 4px #00000030;
+  --ui-shadow-dialog: 0 16px 56px #00000070, 0 2px 8px #00000040;
+  --ui-shadow-frame: -2px 0 16px #00000020;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

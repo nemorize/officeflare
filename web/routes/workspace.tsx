@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react
 import { Button, Icon, Menu, MenuPopup, OfficeflareMark, useNotifications } from "@/components/ui";
 import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
+import { ThemeMenu } from "../components/theme-menu";
 import { AccessProvider, WorkspaceHome, useAccess } from "../components/console-access";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
 import { MailSettingsButton, MailTopbar } from "../components/mail-chrome";
@@ -47,6 +48,8 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
       <div className="workspace-menu-identity"><strong>{user?.display_name || "Your account"}</strong><span>{email}</span></div>
       <Menu.Separator />
       {account.map((item) => <Menu.Item key={item.path} onClick={() => navigate(item.path)}><Icon name={item.icon} />{item.name}</Menu.Item>)}
+      <Menu.Separator />
+      <ThemeMenu />
       <Menu.Separator />
       <Menu.Item onClick={signOut} disabled={busy} data-variant="danger"><Icon name="logout" />{busy ? "Signing out…" : "Sign out"}</Menu.Item>
     </MenuPopup>

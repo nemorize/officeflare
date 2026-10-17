@@ -1,4 +1,5 @@
 import { lazy, StrictMode, Suspense } from "react";
+import "./lib/browser-theme";
 import { createRoot, type Root } from "react-dom/client";
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Link, Navigate, Route } from "react-router";
 import { LoginPage } from "./routes/login";

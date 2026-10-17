@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      (() => {
+        let preference = "system";
+        try { preference = localStorage.getItem("officeflare.color-theme") || "system"; } catch {}
+        const scheme = preference === "dark" || preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.colorScheme = scheme;
+        document.documentElement.style.colorScheme = `only ${scheme}`;
+        document.querySelector('meta[name="color-scheme"]').setAttribute("content", scheme);
+      })();
+    </script>
     <meta name="description" content="Sign in to your Officeflare workspace." />
     <title>Sign in · Officeflare</title>
   </head>
