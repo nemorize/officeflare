@@ -17,6 +17,7 @@ export interface MailProvider {
     send: boolean;
     max_send_bytes: number;
     max_recipients: number;
+    max_attachment_bytes?: number;
   };
   config_fields: ProviderField[];
   secret_fields: ProviderField[];
@@ -42,7 +43,7 @@ const field = (key: string, label = key, help?: string): ProviderField => ({ key
 const secret = (key: string, label = key, help?: string): ProviderField => ({ key, label, required: true, secret: true, help });
 const optionalField = (key: string, label = key, help?: string): ProviderField => ({ key, label, help });
 const standard = (id: string, label: string, secretFields: ProviderField[], options: {
-  config?: ProviderField[]; maxBytes?: number; maxRecipients?: number; receive?: boolean;
+  config?: ProviderField[]; maxBytes?: number; maxRecipients?: number; maxAttachmentBytes?: number; receive?: boolean;
 } = {}): MailProvider => ({
   id,
   label,
@@ -51,6 +52,7 @@ const standard = (id: string, label: string, secretFields: ProviderField[], opti
     send: true,
     max_send_bytes: options.maxBytes ?? 5 * 1024 * 1024,
     max_recipients: options.maxRecipients ?? 50,
+    ...(options.maxAttachmentBytes ? { max_attachment_bytes: options.maxAttachmentBytes } : {}),
   },
   config_fields: options.config ?? [],
   secret_fields: secretFields,
@@ -93,7 +95,7 @@ const cloudflare: MailProvider = {
 export const providers: MailProvider[] = [
   cloudflare,
   standard("cloudflare-rest", "Cloudflare Email Sending (REST)", [secret("apiToken", "API token")], { config: [field("accountId", "Account ID")], maxBytes: 5 * 1024 * 1024 }),
-  standard("ncloud-sens", "Naver Cloud SENS Mail", [secret("accessKey", "Access key"), secret("secretKey", "Secret key")], { config: [field("serviceId", "Mail service ID"), optionalField("senderName", "Sender name")], maxBytes: 500 * 1024, maxRecipients: 50 }),
+  standard("ncloud-sens", "Naver Cloud SENS Mail", [secret("accessKey", "Access key"), secret("secretKey", "Secret key")], { config: [field("serviceId", "Mail service ID"), optionalField("senderName", "Sender name")], maxBytes: 30 * 1024 * 1024, maxAttachmentBytes: 10 * 1024 * 1024, maxRecipients: 50 }),
   standard("resend", "Resend", [secret("apiKey", "API key")], { maxBytes: 40 * 1024 * 1024, maxRecipients: 50 }),
   standard("postmark", "Postmark", [secret("serverToken", "Server token")], { config: [{ key: "messageStream", label: "Message stream" }], maxBytes: 10 * 1024 * 1024 }),
   standard("sendgrid", "Twilio SendGrid", [secret("apiKey", "API key")], { maxBytes: 30 * 1024 * 1024, maxRecipients: 1000 }),
@@ -263,6 +265,40 @@ function required(value: string | undefined, fieldName: string): string {
   if (!value) throw providerError("provider_configuration_missing");
   return value;
 }
+async function uploadNcloudSensAttachment(file: AttachmentData, accessKey: string, secretKey: string): Promise<string> {
+  const path = "/api/v1/files", timestamp = String(Date.now());
+  const signingString = `POST\n${path}\n${timestamp}\n${accessKey}`;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secretKey), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = base64(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingString))));
+  const bytes = Uint8Array.from(atob(file.content), (character) => character.charCodeAt(0));
+  const form = new FormData();
+  form.append("fileList", new Blob([bytes], { type: file.content_type }), file.filename);
+  let response: Response;
+  try {
+    response = await fetch(`https://mail.apigw.ntruss.com${path}`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "x-ncp-apigw-timestamp": timestamp,
+        "x-ncp-iam-access-key": accessKey,
+        "x-ncp-apigw-signature-v2": signature,
+      },
+      body: form,
+      signal: AbortSignal.timeout(25_000),
+      redirect: "error",
+    });
+  } catch {
+    // An upload failure cannot mean that the mail itself was accepted.
+    throw providerError("E_PROVIDER_REJECTED");
+  }
+  if (response.status === 429) throw providerError("E_RATE_LIMIT_EXCEEDED");
+  if (!response.ok) throw providerError("E_PROVIDER_REJECTED");
+  let result: { files?: { fileId?: string; fileName?: string }[] };
+  try { result = await response.json() as typeof result; } catch { throw providerError("E_PROVIDER_REJECTED"); }
+  const fileId = result.files?.find((uploaded) => uploaded.fileName === file.filename)?.fileId ?? result.files?.[0]?.fileId;
+  if (!fileId) throw providerError("E_PROVIDER_REJECTED");
+  return fileId;
+}
 function textResponseId(body: Record<string, any>, headers: Headers, submissionId?: string): string {
   return messageId(
     body.id ?? body.messageId ?? body.message_id ?? body.MessageID ?? body.MessageId ??
@@ -295,9 +331,22 @@ async function sendWithProvider(env: Env, id: string, snapshot: SubmissionSnapsh
       break;
     case "ncloud-sens": {
       const serviceId = required(config.serviceId, "serviceId"), accessKey = required(credentials.accessKey, "accessKey"), secretKey = required(credentials.secretKey, "secretKey");
-      if (files.length) throw providerError("E_PROVIDER_ATTACHMENT_UNSUPPORTED");
       if (!/^ncp:mail:[a-z0-9-]+:[^/]+:[^/]+$/i.test(serviceId)) throw providerError("provider_configuration_missing");
-      if (snapshot.cc.length || snapshot.bcc.length || snapshot.reply_to || Object.keys(snapshot.headers).length) throw providerError("E_PROVIDER_FEATURE_UNSUPPORTED");
+      if (snapshot.reply_to || Object.keys(snapshot.headers).length) throw providerError("E_PROVIDER_FEATURE_UNSUPPORTED");
+      if (files.some((file) => file.disposition === "inline" || file.content_id)) throw providerError("E_PROVIDER_FEATURE_UNSUPPORTED");
+      const encoder = new TextEncoder(), bodyContent = snapshot.html || snapshot.text;
+      if (encoder.encode(snapshot.subject).length > 500 || encoder.encode(bodyContent).length > 500 * 1024) throw providerError("E_CONTENT_TOO_LARGE");
+      let attachmentBytes = 0;
+      for (const file of files) {
+        let size: number;
+        try { size = atob(file.content).length; } catch { throw providerError("E_VALIDATION_ERROR"); }
+        if (size > 10 * 1024 * 1024) throw providerError("E_CONTENT_TOO_LARGE");
+        attachmentBytes += size;
+      }
+      if (attachmentBytes > 20 * 1024 * 1024) throw providerError("E_CONTENT_TOO_LARGE");
+      const attachFileIds: string[] = [];
+      for (const file of files) attachFileIds.push(await uploadNcloudSensAttachment(file, accessKey, secretKey));
+      const hasCopyRecipients = snapshot.cc.length > 0 || snapshot.bcc.length > 0;
       const path = `/mail/v2/services/${serviceId}/requests`, timestamp = String(Date.now());
       const signingString = `POST\n${path}\n${timestamp}\n${accessKey}`;
       const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secretKey), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -307,9 +356,14 @@ async function sendWithProvider(env: Env, id: string, snapshot: SubmissionSnapsh
       body = {
         senderAddress: snapshot.from,
         ...(config.senderName ? { senderName: config.senderName } : {}),
-        title: snapshot.subject, body: snapshot.html || snapshot.text,
-        individual: true,
-        recipients: snapshot.to.map((address) => ({ address, type: "TO" })),
+        title: snapshot.subject, body: bodyContent,
+        individual: !hasCopyRecipients,
+        ...(attachFileIds.length ? { attachFileIds } : {}),
+        recipients: [
+          ...snapshot.to.map((address) => ({ address, type: "TO" })),
+          ...snapshot.cc.map((address) => ({ address, type: "CC" })),
+          ...snapshot.bcc.map((address) => ({ address, type: "BCC" })),
+        ],
       };
       break;
     }

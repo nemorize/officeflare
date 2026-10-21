@@ -76,6 +76,51 @@ test("Resend receives the normalized message and a stable provider idempotency k
   assert.deepEqual(result, { provider_message_id: "resend-message" });
 });
 
+test("Cloudflare binding and REST adapters submit normalized messages", async (t) => {
+  let bindingMessage;
+  const boundEnv = { ...env, EMAIL: { async send(message) { bindingMessage = message; return { messageId: "cloudflare-binding-message" }; } } };
+  const bindingResult = await provider("cloudflare").send(boundEnv, snapshot({ reply_to: "reply@example.test" }));
+  assert.deepEqual(bindingResult, { provider_message_id: "cloudflare-binding-message" });
+  assert.equal(bindingMessage.from, "sender@example.test");
+  assert.deepEqual(bindingMessage.to, ["recipient@example.test"]);
+  assert.equal(bindingMessage.replyTo, "reply@example.test");
+
+  const c = await connection("cloudflare-rest", { accountId: "account-123" }, { apiToken: "cloudflare-secret" });
+  let request;
+  mockFetch(t, async (url, init) => {
+    request = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
+    return Response.json({ success: true, result: { message_id: "cloudflare-rest-message" } });
+  });
+  const restResult = await provider("cloudflare-rest").send(env, snapshot(), c, "cloudflare-submission");
+  assert.equal(request.url, "https://api.cloudflare.com/client/v4/accounts/account-123/email/sending/send");
+  assert.equal(request.headers.get("authorization"), "Bearer cloudflare-secret");
+  assert.deepEqual(request.body.to, ["recipient@example.test"]);
+  assert.deepEqual(restResult, { provider_message_id: "cloudflare-rest-message" });
+});
+
+test("Brevo, Mailtrap, Lettermint, and Unosend adapters accept free-plan API responses", async (t) => {
+  const cases = [
+    { id: "brevo", config: {}, credentials: { apiKey: "brevo-secret" }, url: "https://api.brevo.com/v3/smtp/email", header: ["api-key", "brevo-secret"], response: { messageId: "brevo-message" } },
+    { id: "mailtrap", config: {}, credentials: { apiToken: "mailtrap-secret" }, url: "https://send.api.mailtrap.io/api/send", header: ["authorization", "Bearer mailtrap-secret"], response: { success: true, message_ids: ["mailtrap-message"] } },
+    { id: "lettermint", config: {}, credentials: { apiToken: "lettermint-secret" }, url: "https://api.lettermint.co/v1/send", header: ["x-lettermint-token", "lettermint-secret"], response: { id: "lettermint-message" } },
+    { id: "unosend", config: {}, credentials: { apiKey: "unosend-secret" }, url: "https://www.unosend.co/api/v1/emails", header: ["authorization", "Bearer unosend-secret"], response: { id: "unosend-message" } },
+  ];
+  for (const item of cases) await t.test(item.id, async (t) => {
+    const c = await connection(item.id, item.config, item.credentials);
+    let request;
+    mockFetch(t, async (url, init) => {
+      request = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
+      return Response.json(item.response);
+    });
+    const result = await provider(item.id).send(env, snapshot(), c, `${item.id}-submission`);
+    assert.equal(request.url, item.url);
+    assert.equal(request.headers.get(item.header[0]), item.header[1]);
+    assert.equal(result.provider_message_id, item.response.id ?? item.response.messageId ?? item.response.message_ids[0]);
+    assert.ok(request.body.subject);
+    assert.ok(request.body.to);
+  });
+});
+
 test("Maileroo receives documented address and attachment fields with a stable reference", async (t) => {
   const c = await connection("maileroo", {}, { apiKey: "maileroo-secret" });
   let request;
@@ -149,22 +194,47 @@ test("ZeptoMail accepts only its official HTTPS send endpoints", async (t) => {
   await assert.rejects(provider("zeptomail").send(env, snapshot(), invalid), (error) => error.code === "provider_configuration_missing");
 });
 
-test("SENS signs the exact request path and submits recipients individually", async (t) => {
+test("SENS signs the exact request path and supports CC/BCC in shared-recipient requests", async (t) => {
   const serviceId = "ncp:mail:kr:123456:main";
   const c = await connection("ncloud-sens", { serviceId }, { accessKey: "access-key", secretKey: "secret-key" });
-  let request;
+  const requests = [];
   mockFetch(t, async (url, init) => {
-    request = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
+    const request = { url: String(url), headers: new Headers(init.headers), body: init.body };
+    requests.push(request);
+    if (request.url === "https://mail.apigw.ntruss.com/api/v1/files") {
+      assert.ok(request.body instanceof FormData);
+      const upload = request.body.get("fileList");
+      assert.equal(upload.name, "invoice.pdf");
+      assert.equal(await upload.text(), "pdf-bytes");
+      return Response.json({ files: [{ fileName: "invoice.pdf", fileId: "sens-file" }] });
+    }
+    request.body = JSON.parse(request.body);
     return Response.json({ requestId: "sens-request" }, { status: 202 });
   });
-  const result = await provider("ncloud-sens").send(env, snapshot({ to: ["one@example.test", "two@example.test"] }), c, "submission-456");
+  await provider("ncloud-sens").send(env, snapshot({ to: ["one@example.test", "two@example.test"] }), c, "submission-456");
+  const result = await provider("ncloud-sens").send(env, snapshot({
+    to: ["one@example.test", "two@example.test"],
+    cc: ["copy@example.test"],
+    bcc: ["hidden@example.test"],
+    attachments: [{ id: "file", filename: "invoice.pdf", content_type: "application/pdf", size_bytes: 9, content_id: null, r2_key: "attachments/invoice", disposition: "attachment" }],
+  }), c, "submission-789");
+  const uploadRequest = requests[1], request = requests[2];
   assert.equal(request.url, `https://sens.apigw.ntruss.com/mail/v2/services/${serviceId}/requests`);
-  assert.equal(request.body.individual, true);
-  assert.deepEqual(request.body.recipients.map((item) => item.address), ["one@example.test", "two@example.test"]);
-  const timestamp = request.headers.get("x-ncp-apigw-timestamp");
+  assert.equal(requests[0].body.individual, true);
+  assert.equal(request.body.individual, false);
+  assert.deepEqual(request.body.attachFileIds, ["sens-file"]);
+  assert.deepEqual(request.body.recipients, [
+    { address: "one@example.test", type: "TO" },
+    { address: "two@example.test", type: "TO" },
+    { address: "copy@example.test", type: "CC" },
+    { address: "hidden@example.test", type: "BCC" },
+  ]);
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signed = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`POST\n/mail/v2/services/${serviceId}/requests\n${timestamp}\naccess-key`)));
-  assert.equal(request.headers.get("x-ncp-apigw-signature-v2"), Buffer.from(signed).toString("base64"));
+  for (const [signedRequest, path] of [[uploadRequest, "/api/v1/files"], [request, `/mail/v2/services/${serviceId}/requests`]]) {
+    const timestamp = signedRequest.headers.get("x-ncp-apigw-timestamp");
+    const signed = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`POST\n${path}\n${timestamp}\naccess-key`)));
+    assert.equal(signedRequest.headers.get("x-ncp-apigw-signature-v2"), Buffer.from(signed).toString("base64"));
+  }
   assert.deepEqual(result, { provider_message_id: "sens-request" });
 });
 
