@@ -172,11 +172,11 @@ export function MailSidebar() {
   const count = (path: string) => path === "/mail/drafts" ? summary?.folders.drafts?.total : path === "/mail/scheduled" ? summary?.outbox : path === "/mail/snoozed" ? summary?.snoozed : summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
   const nav = (items: readonly (readonly [string,string,import("./ui").IconProps["name"]])[]) => items.map(([path,name,icon]) => <NavLink end key={path} to={mail.href(path)} onClick={() => menu.setMobileMenu(false)}><Icon name={icon}/><span>{name}</span>{!!count(path) && <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>{count(path)}</small>}</NavLink>);
   return <div className="mail-sidebar-content">
-    <div className="mail-sidebar-actions">
+    <div className="workspace-create-action mail-sidebar-actions">
       {mail.boxes.length > 1 && <MailField className="mail-box-picker" label="Mailbox">
         <MailSelect aria-label="Select mailbox" value={mail.box?.id ?? ""} onValueChange={mail.selectBox} options={[...(!mail.box ? [{ value:"", label:"Choose a mailbox" }] : []), ...mail.boxes.map((box) => ({ value:box.id,label:box.name }))]}/>
       </MailField>}
-      <Button className="mail-compose-button" variant="primary" size="touch" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); menu.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
+      <Button className="workspace-create-button mail-compose-button" variant="primary" size="lg" disabled={!mail.box?.access?.read || !mail.box?.access?.write} onClick={() => { mail.compose(); menu.setMobileMenu(false); }}><Icon name="plus"/>Compose</Button>
     </div>
     <nav className="workspace-nav" aria-label="Mail navigation">
       <div className="mail-nav-group">

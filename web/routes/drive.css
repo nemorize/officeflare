@@ -24,16 +24,6 @@
   flex: 1;
   min-height: 0;
 }
-.drive-sidebar-new {
-  padding: 4px 12px 20px;
-}
-.drive-sidebar-new .drive-new-button[data-ui-button] {
-  width: 100%;
-  justify-content: flex-start;
-}
-.drive-new-button svg:last-child {
-  margin-left: auto;
-}
 .drive-nav {
   padding-bottom: 20px;
 }

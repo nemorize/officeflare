@@ -60,7 +60,7 @@ export function DriveNewMenu() {
   return (
     <Menu.Root>
       <Menu.Trigger
-        render={<Button variant="primary" size="touch" className="drive-new-button" />}
+        render={<Button variant="primary" size="lg" className="workspace-create-button drive-new-button" />}
         disabled={!drive.target.writable}
       >
         <Icon name="plus" width="18" height="18" />

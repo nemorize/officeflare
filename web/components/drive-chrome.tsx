@@ -37,7 +37,7 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
     location = useLocation();
   return (
     <div className="drive-sidebar-body">
-      <div className="drive-sidebar-new">
+      <div className="workspace-create-action drive-sidebar-new">
         <DriveNewMenu />
       </div>
       <nav aria-label="Drive navigation" className="workspace-nav drive-nav">

@@ -13,6 +13,10 @@
 .workspace-sidebar { display: flex; flex-direction: column; background: var(--ui-sidebar); border-inline-end: 1px solid var(--ui-border); min-height: 0; }
 .workspace-sidebar-header { display: flex; flex-direction: column; justify-content: center; height: var(--workspace-header-height); flex-shrink: 0; padding: 0 18px; font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
 .workspace-sidebar-caption { font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--ui-subtle); }
+:is(.workspace-sidebar, .workspace-drawer-body) .workspace-create-action { flex-shrink: 0; padding: 4px 16px 20px; }
+:is(.workspace-sidebar, .workspace-drawer-body) .workspace-create-button[data-ui-button] { width: 100%; min-height: var(--ui-control-height); justify-content: flex-start; gap: 13px; }
+.workspace-create-button > svg:first-child { width: 19px; height: 19px; flex-shrink: 0; }
+.workspace-create-button > svg:last-child:not(:first-child) { margin-inline-start: auto; }
 .workspace-nav { padding: 0 8px 24px; overflow-y: auto; }
 .workspace-nav h2 { color: var(--ui-muted); font-size: 12px; font-weight: 500; padding: 0 10px; margin-block-end: 9px; }
 .workspace-nav a, .workspace-nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-height: 34px; margin-block: 3px; font-size: 12px; border-radius: 8px; color: var(--ui-nav-text); }

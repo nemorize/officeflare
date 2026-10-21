@@ -45,7 +45,7 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
     {!calendars.length && <p className="calendar-sidebar-empty">{title === "My calendars" ? "Your calendars will appear here." : "Calendars shared with you appear here."}</p>}
   </section>;
   return <div className="calendar-sidebar-body">
-    <div className="calendar-create"><Button variant="primary" size="lg" disabled={!calendar.can("events.create") || !calendar.data} onClick={() => { calendar.setCreate({ date: calendar.date }); onNavigate?.(); }}><Icon name="plus" width="19" height="19" />Create<Icon name="down" width="12" height="12" /></Button></div>
+    <div className="workspace-create-action calendar-create"><Button className="workspace-create-button" variant="primary" size="lg" disabled={!calendar.can("events.create") || !calendar.data} onClick={() => { calendar.setCreate({ date: calendar.date }); onNavigate?.(); }}><Icon name="plus" width="19" height="19" />New<Icon name="down" width="12" height="12" /></Button></div>
     <CalendarMiniMonth onSelect={onNavigate} />
     <div className="calendar-sidebar-calendars">{section("My calendars", own, true)}{section("Other calendars", other)}</div>
     <nav className="workspace-nav calendar-sidebar-links" aria-label="Calendar navigation">

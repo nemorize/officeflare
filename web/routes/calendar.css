@@ -6,9 +6,6 @@
   .workspace-calendar.calendar-sidebar-collapsed .workspace-sidebar { visibility: hidden; overflow: hidden; }
 }
 .calendar-sidebar-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
-.calendar-create { padding: 4px 16px 20px; }
-.calendar-create [data-ui-button] { width: 100%; justify-content: flex-start; gap: 13px; }
-.calendar-create svg:last-child { margin-left: auto; }
 .calendar-mini { padding: 0 18px 22px; }
 .calendar-mini-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .calendar-mini-heading strong { font-size: 12px; font-weight: 600; }
