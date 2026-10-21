@@ -20,6 +20,9 @@ export interface Connection {
   name: string;
   enabled: number;
   version: number;
+  config_json?: string;
+  secret_ciphertext?: string | null;
+  secret_nonce?: string | null;
 }
 export interface Mailbox {
   id: string;

@@ -38,7 +38,7 @@ import {
   text,
 } from "../mail/input";
 import { mailbox, partition } from "../mail/mailbox";
-import { providers, provider } from "../mail/providers";
+import { providers, provider, publicProvider, parseProviderConfig, parseProviderSecrets } from "../mail/providers";
 import {
   exportStream,
   startImport,
@@ -85,6 +85,28 @@ const input = (c: Parameters<typeof authenticateMail>[0], fields: string[]) =>
   jsonBody(c.req.raw, fields);
 const resource = (c: Parameters<typeof authenticateMail>[0]) =>
   c.req.param("m")!;
+const safeProviderConfig = (value?: string) => {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch { return {}; }
+};
+const publicConnection = (connection: Connection | null) => connection && ({
+  id: connection.id,
+  provider: connection.provider,
+  name: connection.name,
+  enabled: connection.enabled,
+  version: connection.version,
+  config: safeProviderConfig(connection.config_json),
+  secret_configured: !!connection.secret_ciphertext,
+});
+const providerCatalog = async (env: Env) => {
+  const configured = await all<Connection>(env, "SELECT id,provider,name,enabled,version,config_json FROM mail_provider_connections WHERE enabled=1 ORDER BY created_at,id");
+  const defaults = new Map<string, string>();
+  for (const entry of configured) if (!defaults.has(entry.provider)) defaults.set(entry.provider, entry.id);
+  defaults.set("cloudflare", defaults.get("cloudflare") ?? "cloudflare-bindings");
+  return providers.map((entry) => ({ ...publicProvider(entry), default_connection_id: defaults.get(entry.id) ?? null }));
+};
 const key = (c: Parameters<typeof authenticateMail>[0]) => {
   const supplied = c.req.header("Idempotency-Key");
   if (supplied !== undefined && !/^[A-Za-z0-9._:-]{1,128}$/.test(supplied))
@@ -203,44 +225,63 @@ const mailCapabilities = (env: Env) => ({
 mail.get("/capabilities", (c) => c.json(mailCapabilities(c.env)));
 mail.get("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.read");
+  const connections = await all<Connection>(
+    c.env,
+    "SELECT * FROM mail_provider_connections ORDER BY created_at,id",
+  );
   return c.json({
-    connections: await all<Connection>(
-      c.env,
-      "SELECT * FROM mail_provider_connections ORDER BY created_at,id",
-    ),
+    connections: connections.map((entry) => ({
+      id: entry.id,
+      provider: entry.provider,
+      name: entry.name,
+      enabled: entry.enabled,
+      version: entry.version,
+      config: safeProviderConfig(entry.config_json),
+      secret_configured: !!entry.secret_ciphertext,
+    })),
   });
+});
+mail.get("/provider-catalog", async (c) => {
+  await administrator(c, "admin.mail.providers.read");
+  return c.json({ providers: await providerCatalog(c.env) });
 });
 mail.post("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["provider", "name", "enabled"]),
+  const data = await input(c, ["provider", "name", "enabled", "config", "secrets"]),
     name = text(data.name, "name", 100),
     selected = provider(text(data.provider, "provider", 64)),
-    connectionId = id();
+    connectionId = id(),
+    config = parseProviderConfig(data.config, selected),
+    secrets = parseProviderSecrets(data.secrets, selected),
+    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : null;
   await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
-      "INSERT INTO mail_provider_connections(id,provider,name,enabled) VALUES(?,?,?,?)",
+      "INSERT INTO mail_provider_connections(id,provider,name,enabled,config_json,secret_ciphertext,secret_nonce) VALUES(?,?,?,?,?,?,?)",
     )
     .bind(
       connectionId,
       selected.id,
       name,
       data.enabled === undefined ? 1 : flag(data.enabled, "enabled"),
+      JSON.stringify(config),
+      sealed?.ciphertext ?? null,
+      sealed?.nonce ?? null,
     )
     .run();
   return c.json(
     {
-      connection: await first(
+      connection: publicConnection(await first<Connection>(
         c.env,
         "SELECT * FROM mail_provider_connections WHERE id=?",
         connectionId,
-      ),
+      )),
     },
     201,
   );
 });
 mail.patch("/provider-connections/:id", async (c) => {
   await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["name", "enabled", "version"]),
+  const data = await input(c, ["name", "enabled", "version", "config", "secrets"]),
     version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
   const existing = await first<Connection>(
     c.env,
@@ -248,15 +289,23 @@ mail.patch("/provider-connections/:id", async (c) => {
     c.req.param("id"),
   );
   if (!existing) fail(404, "Connection not found");
+  const selected = provider(existing.provider),
+    config = data.config === undefined ? safeProviderConfig(existing.config_json) : parseProviderConfig(data.config, selected),
+    sealed = data.secrets === undefined ? null : await seal(c.env, JSON.stringify(parseProviderSecrets(data.secrets, selected)));
   const result = await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
-      "UPDATE mail_provider_connections SET name=?,enabled=?,version=version+1,updated_at=? WHERE id=? AND version=?",
+      "UPDATE mail_provider_connections SET name=?,enabled=?,config_json=?,secret_ciphertext=CASE WHEN ? THEN ? ELSE secret_ciphertext END,secret_nonce=CASE WHEN ? THEN ? ELSE secret_nonce END,version=version+1,updated_at=? WHERE id=? AND version=?",
     )
     .bind(
       data.name === undefined ? existing.name : text(data.name, "name", 100),
       data.enabled === undefined
         ? existing.enabled
         : flag(data.enabled, "enabled"),
+      JSON.stringify(config),
+      sealed ? 1 : 0,
+      sealed?.ciphertext ?? null,
+      sealed ? 1 : 0,
+      sealed?.nonce ?? null,
       epoch(),
       existing.id,
       version,
@@ -264,22 +313,18 @@ mail.patch("/provider-connections/:id", async (c) => {
     .run();
   if (!result.meta.changes) fail(409, "Connection version changed");
   return c.json({
-    connection: await first(
+    connection: publicConnection(await first<Connection>(
       c.env,
       "SELECT * FROM mail_provider_connections WHERE id=?",
       existing.id,
-    ),
+    )),
   });
 });
 mail.get("/domains", async (c) => {
   await administrator(c, "admin.mail.domains.read");
   return c.json({
     domains: await all(c.env, "SELECT d.*,i.provider inbound_provider,o.provider outbound_provider FROM mail_domains d LEFT JOIN mail_provider_connections i ON i.id=d.inbound_connection_id LEFT JOIN mail_provider_connections o ON o.id=d.outbound_connection_id ORDER BY d.name"),
-    providers: providers.map(({ id, capabilities }) => ({
-      provider: id,
-      capabilities,
-      default_connection_id: id === "cloudflare" ? "cloudflare-bindings" : null,
-    })),
+    providers: await providerCatalog(c.env),
   });
 });
 mail.post("/domains", async (c) => {

@@ -210,6 +210,7 @@ async function fixture(t, target = "6000000000", queues = false) {
 test("sending size limits follow the From provider and administrator configuration", async (t) => {
   const { call, admin, base, mailbox, domain, address, draft, mf, tokens } = await fixture(t, "6000000000", true);
   const providerMaximum = (await call("/providers")).providers[0].capabilities.max_send_bytes;
+  const globalLimits = (await call("/capabilities")).limits;
   const oneMiB = 1024 ** 2, bucket = await mf.getR2Bucket("MAIL_BUCKET");
   let alternateDomain, alternateAddress, firstUpload, combinedDraft;
   const upload = async (size, expected = 201, name = "budget.bin") => {
@@ -221,7 +222,8 @@ test("sending size limits follow the From provider and administrator configurati
   await t.test("domain settings validate permissions, provider ceilings and nullable defaults", async () => {
     assert.equal(domain.max_send_bytes, null);
     assert.equal((await call(base + "/addresses")).addresses[0].max_send_bytes, providerMaximum);
-    assert.equal((await call("/capabilities")).limits.max_upload_bytes, maxAttachmentBytes(providerMaximum));
+    assert.equal(globalLimits.max_upload_bytes, maxAttachmentBytes(globalLimits.max_send_bytes));
+    assert.ok(globalLimits.max_send_bytes >= providerMaximum);
     await call("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB }, expected: 403 });
     for (const value of [0, -1, 1.5, "1048576", providerMaximum + 1]) {
       await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: value }, expected: 400 });
@@ -389,7 +391,7 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
   const { db, tokens, raw, call, admin, base, address, mailbox, draft } =
     await fixture(t);
   await t.test(
-    "Cloudflare is the only adapter while connection schemas retain provider identity",
+    "Provider catalog exposes direct sending adapters while preserving Cloudflare bindings",
     async () => {
       assert.equal(
         (await call("/providers")).providers[0].provider,
@@ -398,15 +400,38 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
       const domainSettings = await admin("/domains");
       assert.equal(domainSettings.domains[0].inbound_provider, "cloudflare");
       assert.equal(domainSettings.domains[0].outbound_provider, "cloudflare");
-      assert.deepEqual(domainSettings.providers.map(({ provider, default_connection_id }) => ({ provider, default_connection_id })), [{ provider: "cloudflare", default_connection_id: "cloudflare-bindings" }]);
+      assert.deepEqual(domainSettings.providers.map(({ provider, default_connection_id }) => ({ provider, default_connection_id })), [
+        { provider: "cloudflare", default_connection_id: "cloudflare-bindings" },
+        ...domainSettings.providers.slice(1).map(({ provider }) => ({ provider, default_connection_id: null })),
+      ]);
       await call("/domains", { expected: 403 });
       await admin("/provider-connections", {
         method: "POST",
-        data: { provider: "ses", name: "unsupported" },
-        expected: 422,
+        data: { provider: "ses", name: "missing config" },
+        expected: 400,
       });
+      const created = await admin("/provider-connections", {
+        method: "POST",
+        expected: 201,
+        data: {
+          provider: "cloudflare-rest",
+          name: "Cloudflare REST",
+          config: { accountId: "account-123" },
+          secrets: { apiToken: "provider-secret-value" },
+        },
+      });
+      assert.deepEqual(created.connection.config, { accountId: "account-123" });
+      assert.equal(created.connection.secret_configured, true);
+      assert.equal(JSON.stringify(created).includes("provider-secret-value"), false);
+      const stored = await db.prepare("SELECT config_json,secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?").bind(created.connection.id).first();
+      assert.equal(JSON.parse(stored.config_json).accountId, "account-123");
+      assert.notEqual(stored.secret_ciphertext, "provider-secret-value");
+      assert.ok(stored.secret_ciphertext && stored.secret_nonce);
+      const catalog = await admin("/provider-catalog");
+      assert.equal(catalog.providers.find((entry) => entry.provider === "cloudflare-rest").default_connection_id, created.connection.id);
       const connections = await admin("/provider-connections");
-      assert.equal(connections.connections[0].provider, "cloudflare");
+      assert.equal(connections.connections.find((entry) => entry.id === created.connection.id).secret_configured, true);
+      assert.equal(JSON.stringify(connections).includes("provider-secret-value"), false);
       await call("/provider-connections", { expected: 403 });
       await call(base + "/messages", {
         token: tokens.administrator,

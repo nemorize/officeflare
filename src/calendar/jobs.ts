@@ -71,9 +71,16 @@ async function systemSender(env: AuthEnv) {
     email_address: string;
     provider: string;
     max_send_bytes: number | null;
+    id: string;
+    name: string;
+    enabled: number;
+    version: number;
+    config_json: string;
+    secret_ciphertext: string | null;
+    secret_nonce: string | null;
   }>(
     env,
-    "SELECT a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes FROM calendar_workspace_settings s JOIN mail_addresses a ON a.id=s.system_address_id JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE s.id='workspace' AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
+    "SELECT a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,p.id,p.name,p.enabled,p.version,p.config_json,p.secret_ciphertext,p.secret_nonce FROM calendar_workspace_settings s JOIN mail_addresses a ON a.id=s.system_address_id JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE s.id='workspace' AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
   );
   if (!value)
     throw Object.assign(
@@ -365,7 +372,7 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
       .run();
     if (started.meta.changes !== 1)
       return void (await finish("retry_wait", "delivery_state_changed"));
-    const accepted = await adapter.send(env, snapshot);
+    const accepted = await adapter.send(env, snapshot, from, id);
     acceptedId = accepted.provider_message_id;
     await env.MAIL_BUCKET.put(
       `calendar/receipts/${id}.json`,

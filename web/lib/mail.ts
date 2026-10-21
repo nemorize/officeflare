@@ -13,7 +13,7 @@ export interface MailSettings { signature: string; signature_html: string; reten
 export interface Capabilities { features: Record<string, boolean>; providers: { provider: string; [key: string]: unknown }[]; limits: { max_upload_bytes: number; max_send_bytes: number; max_inbound_bytes: number; max_page_size: number }; }
 export interface Connection { id: string; provider: string; name: string; enabled: number; version: number; }
 export interface Domain { id: string; name: string; is_default: number; inbound_connection_id: string | null; outbound_connection_id: string | null; inbound_provider?: string | null; outbound_provider?: string | null; inbound_enabled: number; outbound_enabled: number; max_send_bytes: number | null; plus_addressing: number; catch_all_mailbox_id: string | null; }
-export interface DomainProvider { provider: string; capabilities: { receive: boolean; send: boolean; max_send_bytes: number }; default_connection_id: string | null; }
+export interface DomainProvider { provider: string; label?: string; capabilities: { receive: boolean; send: boolean; max_send_bytes: number }; default_connection_id: string | null; }
 export interface Condition { field: string; operator: string; value: string; }
 export interface RuleAction { type: string; folder_id?: string; }
 export interface MailRule { id: string; name: string; enabled: number; priority: number; version: number; conditions_json: string; actions_json?: string; action?: string; forward_to?: string | null; reject_reason?: string | null; }

@@ -20,7 +20,7 @@ const harness = await build({
   write: false,
   format: "esm",
   platform: "browser",
-  external: ["cloudflare:workers", "../dist/index.js", "node:*"],
+  external: ["cloudflare:workers", "cloudflare:sockets", "../dist/index.js", "node:*"],
   target: "es2022",
 });
 export async function fixture(t, { assets = false } = {}) {

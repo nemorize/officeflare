@@ -49,7 +49,8 @@ export async function sendSubmission(
   }
   const job = await store.claim(submissionId);
   if (!job) return;
-  let snapshot: SubmissionSnapshot;
+  let snapshot: SubmissionSnapshot,
+    providerConnection: Awaited<ReturnType<typeof sender>> | undefined;
   try {
     const selected = await sender(
       env,
@@ -66,6 +67,7 @@ export async function sendSubmission(
       selected.connection_id !== job.connection_id
     )
       fail(409, "Sending provider connection changed");
+    providerConnection = selected;
     const object = await env.MAIL_BUCKET.get(job.snapshot_r2_key);
     if (!object) fail(409, "Submission snapshot is unavailable");
     snapshot = await object.json<SubmissionSnapshot>();
@@ -85,7 +87,7 @@ export async function sendSubmission(
   }
   let result: { provider_message_id: string };
   try {
-    result = await provider(job.provider).send(env, snapshot);
+    result = await provider(job.provider).send(env, snapshot, providerConnection, submissionId);
   } catch (error) {
     const code =
       error && typeof error === "object" && "code" in error
@@ -97,6 +99,10 @@ export async function sendSubmission(
     ].includes(code);
     const known = [
       "LOCAL_ATTACHMENT_MISSING",
+      "provider_configuration_missing",
+      "E_PROVIDER_REJECTED",
+      "E_PROVIDER_ATTACHMENT_UNSUPPORTED",
+      "E_PROVIDER_FEATURE_UNSUPPORTED",
       "E_VALIDATION_ERROR",
       "E_FIELD_MISSING",
       "E_TOO_MANY_RECIPIENTS",

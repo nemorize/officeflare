@@ -10,23 +10,78 @@ import { Check, ConsolePageHeader } from "../components/console-shared";
 import { SharedMailboxes } from "./console-shared-mailboxes";
 import "./console.css";
 import "./mail.css";
-export function MailConsolePage({ page }: { page: string }) { return <section className="account-page console-page mail-console-page">{page === "mailboxes" ? <SharedMailboxes /> : <Domains />}</section>; }
+export function MailConsolePage({ page }: { page: string }) { return <section className="account-page console-page mail-console-page">{page === "mailboxes" ? <SharedMailboxes /> : page === "providers" ? <ProviderConnections /> : <Domains />}</section>; }
 function useMailboxDirectory() {
   const permissions = useAccess().permissions;
   return useMailResource<{ mailboxes: Mailbox[] }>(permissions.includes("admin.mail.mailboxes.read") ? "/api/mail/mailboxes?all=true" : permissions.includes("mail.access") ? "/api/mail/mailboxes" : null);
 }
 function Domains() {
   const permissions = useAccess().permissions, resource = useMailResource<{ domains: Domain[]; providers: DomainProvider[] }>("/api/mail/domains"), manage = permissions.includes("admin.mail.domains.manage");
+  const providerName = (provider: string | null | undefined) => provider ? resource.data?.providers.find((entry) => entry.provider === provider)?.label ?? provider : "No provider";
   return <><ConsolePageHeader title="Mail domains" description="Configure common domains, delivery providers and inbound routing.">
     {manage && <Button nativeButton={false} render={<Link to="/console/mail/domains/new" />} variant="primary">Register domain</Button>}
   </ConsolePageHeader><MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
     <div className="mail-domain-grid">{resource.data?.domains.map((domain) => <article key={domain.id} className="mail-domain-card">
       <h2><span>{domain.name}</span>{!!domain.is_default && <span className="mail-badge mail-domain-default">Default</span>}</h2><p><span className="mail-badge">Receive {domain.inbound_enabled ? "enabled" : "disabled"}</span><span className="mail-badge">Send {domain.outbound_enabled ? "enabled" : "disabled"}</span></p>
-      <p className="mail-hint">Receiving: {domain.inbound_provider ?? "No provider"} · Sending: {domain.outbound_provider ?? "No provider"}</p>
+      <p className="mail-hint">Receiving: {providerName(domain.inbound_provider)} · Sending: {providerName(domain.outbound_provider)}</p>
       <Button nativeButton={false} render={<Link to={`/console/mail/domains/${encodeURIComponent(domain.id)}`} />} size="sm">{manage ? "Configure domain" : "View domain"}</Button>
     </article>)}</div>
     {resource.data && !resource.data.domains.length && <div className="mail-empty"><h2>No mail domains registered</h2><p>Register a domain and configure Cloudflare delivery. User and shared addresses are managed with their accounts.</p></div>}
   </>;
+}
+type ProviderField = { key: string; label: string; required?: boolean; secret?: boolean; help?: string; options?: string[] };
+type ProviderCatalogEntry = { provider: string; label: string; capabilities: { receive: boolean; send: boolean; max_send_bytes: number; max_recipients: number }; config_fields: ProviderField[]; secret_fields: ProviderField[]; default_connection_id: string | null };
+type ProviderConnection = { id: string; provider: string; name: string; enabled: number; version: number; config: Record<string, string>; secret_configured: boolean };
+function ProviderConnections() {
+  const permissions = useAccess().permissions, resource = useMailResource<{ connections: ProviderConnection[] }>("/api/mail/provider-connections"), catalog = useMailResource<{ providers: ProviderCatalogEntry[] }>("/api/mail/provider-catalog"), notify = useNotifications();
+  const [editing, setEditing] = useState<ProviderConnection | null>(null), [creating, setCreating] = useState(false), [revision, setRevision] = useState(0);
+  const providerList = catalog.data?.providers ?? [];
+  const reload = () => { resource.reload(); catalog.reload(); };
+  return <><ConsolePageHeader title="Mail providers" description="Connect sending services and assign them to mail domains.">
+    {permissions.includes("admin.mail.providers.manage") && <Button variant="primary" onClick={() => { setEditing(null); setCreating(true); setRevision((value) => value + 1); }}>Add provider</Button>}
+  </ConsolePageHeader>
+  <MailState loading={(resource.loading || catalog.loading) && !resource.data} error={resource.error || catalog.error} retry={reload} />
+  {(creating || editing) && <ProviderConnectionForm key={`${editing?.id ?? "new"}:${revision}`} existing={editing ?? undefined} providers={providerList} canManage={permissions.includes("admin.mail.providers.manage")} onCancel={() => { setCreating(false); setEditing(null); }} onSaved={(message) => { setCreating(false); setEditing(null); notify.success(message); reload(); }} />}
+  {resource.data && <div className="mail-provider-grid">{resource.data.connections.map((connection) => <article className="mail-domain-card" key={connection.id}>
+    <h2><span>{connection.name}</span><span className="mail-badge">{connection.enabled ? "Enabled" : "Disabled"}</span></h2>
+    <p className="mail-hint">{providerList.find((item) => item.provider === connection.provider)?.label ?? connection.provider}</p>
+    <p className="mail-hint">{connection.secret_configured ? "Credentials saved" : "No credentials"}{connection.config && Object.keys(connection.config).length ? ` · ${Object.keys(connection.config).length} settings` : ""}</p>
+    {permissions.includes("admin.mail.providers.manage") && <Button size="sm" onClick={() => { setCreating(false); setEditing(connection); setRevision((value) => value + 1); }}>Configure</Button>}
+  </article>)}{!resource.data.connections.length && <div className="mail-empty"><h2>No provider connections</h2><p>Add a sending provider, then select it on a mail domain.</p></div>}</div>}
+  </>;
+}
+function ProviderConnectionForm({ existing, providers, canManage, onCancel, onSaved }: { existing?: ProviderConnection; providers: ProviderCatalogEntry[]; canManage: boolean; onCancel: () => void; onSaved: (message: string) => void }) {
+  const action = useMailAction(), [selected, setSelected] = useState(existing?.provider ?? "cloudflare-rest"), [name, setName] = useState(existing?.name ?? ""), [enabled, setEnabled] = useState(!!(existing?.enabled ?? 1));
+  const [config, setConfig] = useState<Record<string, string>>(existing?.config ?? {}), [secrets, setSecrets] = useState<Record<string, string>>({});
+  const definition = providers.find((entry) => entry.provider === selected);
+  const save = async () => {
+    if (!definition) throw new Error("Choose a supported provider.");
+    const isNew = !existing;
+    await api(`/api/mail/provider-connections${existing ? `/${encodeURIComponent(existing.id)}` : ""}`, {
+      method: existing ? "PATCH" : "POST",
+      body: {
+        ...(existing ? { version: existing.version } : { provider: selected }),
+        name,
+        enabled,
+        config,
+        ...(Object.values(secrets).some(Boolean) ? { secrets } : {}),
+      },
+    });
+    onSaved(isNew ? "Provider connection added." : "Provider connection saved.");
+  };
+  return <MailSection title={existing ? `Configure ${existing.name}` : "New provider connection"} description="Credentials are encrypted before they are saved. They are never returned by the API.">
+    <MailForm className="mail-form" onSubmit={(event) => { event.preventDefault(); void action.run(save); }}><MailFieldset disabled={action.busy || !canManage}>
+      {!existing && <MailField label="Provider"><MailSelect value={selected} onValueChange={(value) => { const next = providers.find((item) => item.provider === value); setSelected(value); setConfig(Object.fromEntries((next?.config_fields ?? []).filter((item) => item.options?.length).map((item) => [item.key, item.options![0]!] ))); setSecrets({}); }} options={providers.filter((item) => item.capabilities.send).map((item) => ({ value: item.provider, label: item.label }))} /></MailField>}
+      <MailInput label="Connection name" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} />
+      {definition?.config_fields.map((item) => item.options
+        ? <MailField key={item.key} label={item.label} hint={item.help}><MailSelect value={config[item.key] ?? item.options[0] ?? ""} onValueChange={(value) => setConfig((current) => ({ ...current, [item.key]: value }))} options={item.options.map((value) => ({ value, label: value === "tls" ? "TLS (port 465)" : value === "starttls" ? "STARTTLS (port 587)" : value }))} /></MailField>
+        : <MailInput key={item.key} label={item.label} hint={item.help} required={!!item.required} value={config[item.key] ?? ""} onChange={(event) => setConfig((current) => ({ ...current, [item.key]: event.target.value }))} />)}
+      {existing && definition?.secret_fields.length ? <p className="mail-hint">To rotate credentials, re-enter every required credential. Saved values are never returned.</p> : null}
+      {definition?.secret_fields.map((item) => <MailInput key={item.key} label={item.label} hint={item.help} required={!existing && !!item.required} type="password" autoComplete="new-password" value={secrets[item.key] ?? ""} onChange={(event) => setSecrets((current) => ({ ...current, [item.key]: event.target.value }))} />)}
+      {definition?.provider === "cloudflare" && <p className="mail-hint">This connection uses the Worker EMAIL binding and does not need an API token.</p>}
+      <Check checked={enabled} onChange={setEnabled}>Connection enabled</Check>
+    </MailFieldset><MailNotice error={action.error} /><div className="mail-actions"><Button disabled={action.busy} onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary" disabled={action.busy || !canManage}>{action.busy ? "Saving…" : existing ? "Save connection" : "Add connection"}</Button></div></MailForm>
+  </MailSection>;
 }
 export function MailDomainEditorPage({ creating = false }: { creating?: boolean }) {
   const { id } = useParams(), navigate = useNavigate(), notify = useNotifications(), permissions = useAccess().permissions;
@@ -48,7 +103,7 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
   const [sendLimit, setSendLimit] = useState(existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "");
   const providerMaximum = providers.find((provider) => provider.provider === outbound)?.capabilities.max_send_bytes ?? 0;
   const [receive, setReceive] = useState(!!existing?.inbound_enabled), [send, setSend] = useState(!!existing?.outbound_enabled), [plus, setPlus] = useState(existing ? !!existing.plus_addressing : true), [catchAll, setCatchAll] = useState(existing?.catch_all_mailbox_id ?? "");
-  const providerName = (provider: string) => provider === "cloudflare" ? "Cloudflare" : provider;
+  const providerName = (provider: string) => providers.find((entry) => entry.provider === provider)?.label ?? (provider === "cloudflare" ? "Cloudflare" : provider);
   const providerOptions = (direction: "receive" | "send", selected: string) => [
     { value: "", label: "No provider" },
     ...providers.map((provider) => ({ value: provider.provider, label: providerName(provider.provider), disabled: !provider.capabilities[direction] })),
