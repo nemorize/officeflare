@@ -6,10 +6,7 @@ import { fail } from "./types";
 
 export function sendingLimits(name: string, configured: number | null) {
   const capabilities = provider(name).capabilities;
-  const limits = messageSizeLimits(capabilities.max_send_bytes, configured);
-  return capabilities.max_attachment_bytes === undefined
-    ? limits
-    : { ...limits, max_upload_bytes: Math.min(limits.max_upload_bytes, capabilities.max_attachment_bytes) };
+  return messageSizeLimits(capabilities.max_send_bytes, configured);
 }
 export function configuredSendLimit(value: unknown, name: string | null) {
   if (value === null) return null;

@@ -46,7 +46,8 @@ function ProviderConnections() {
     <h2><span>{connection.name}</span><span className="mail-badge">{connection.enabled ? "Enabled" : "Disabled"}</span></h2>
     <p className="mail-hint">{providerList.find((item) => item.provider === connection.provider)?.label ?? connection.provider}</p>
     <p className="mail-hint">{connection.secret_configured ? "Credentials saved" : "No credentials"}{connection.config && Object.keys(connection.config).length ? ` · ${Object.keys(connection.config).length} settings` : ""}</p>
-    {permissions.includes("admin.mail.providers.manage") && <Button size="sm" onClick={() => { setCreating(false); setEditing(connection); setRevision((value) => value + 1); }}>Configure</Button>}
+    {permissions.includes("admin.mail.providers.manage") && providerList.some((item) => item.provider === connection.provider) && <Button size="sm" onClick={() => { setCreating(false); setEditing(connection); setRevision((value) => value + 1); }}>Configure</Button>}
+    {!providerList.some((item) => item.provider === connection.provider) && <p className="mail-hint">This provider is no longer supported. Reassign any domains that use it to an available sender.</p>}
   </article>)}{!resource.data.connections.length && <div className="mail-empty"><h2>No provider connections</h2><p>Add a sending provider, then select it on a mail domain.</p></div>}</div>}
   </>;
 }

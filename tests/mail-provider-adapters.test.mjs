@@ -53,10 +53,14 @@ function mockFetch(t, implementation) {
   t.after(() => { globalThis.fetch = previous; });
 }
 
-test("provider registry includes the direct HTTP, SMTP, JMAP, Cloudflare REST, and SENS adapters", () => {
+test("provider registry contains only adapters that support Reply-To", () => {
   const ids = new Set(providers.map((entry) => entry.id));
-  for (const id of ["cloudflare", "cloudflare-rest", "ncloud-sens", "smtp", "jmap", "resend", "postmark", "sendgrid", "ses", "mailgun", "mailersend", "brevo", "mailtrap", "maileroo", "lettermint", "mailpace", "zeptomail", "mailchannels", "plunk", "loops", "mailchimp-transactional", "sparkpost", "iterable", "microsoft-graph", "scaleway", "unosend", "sequenzy", "jetemail", "primitive", "lettr", "sendheron", "helo"])
+  for (const id of ["cloudflare", "cloudflare-rest", "smtp", "jmap", "resend", "postmark", "sendgrid", "ses", "mailgun", "mailersend", "brevo", "mailtrap", "maileroo", "lettermint", "mailpace", "zeptomail", "mailchannels", "plunk", "mailchimp-transactional", "sparkpost", "microsoft-graph", "scaleway", "unosend", "jetemail", "lettr", "sendheron", "helo"])
     assert.ok(ids.has(id), `missing ${id}`);
+  for (const id of ["ncloud-sens", "loops", "iterable", "sequenzy", "primitive"]) {
+    assert.equal(ids.has(id), false, `unsupported ${id} must not be available`);
+    assert.throws(() => provider(id), /Unsupported provider/);
+  }
   assert.throws(() => parseProviderConfig({ host: "smtp.example.test", port: "587", security: "plain" }, provider("smtp")), /Invalid Connection security/);
   assert.equal(publicProvider(provider("smtp")).secret_fields.some((item) => item.key === "password"), true);
 });
@@ -143,6 +147,18 @@ test("Maileroo receives documented address and attachment fields with a stable r
   assert.deepEqual(result, { provider_message_id: "maileroo-reference" });
 });
 
+test("MailChannels maps Reply-To through its supported message headers", async (t) => {
+  const c = await connection("mailchannels", {}, { apiKey: "mailchannels-secret" });
+  let request;
+  mockFetch(t, async (url, init) => {
+    request = { url: String(url), body: JSON.parse(init.body) };
+    return Response.json({ status: "sent", message_id: "mailchannels-message" });
+  });
+  const result = await provider("mailchannels").send(env, snapshot({ reply_to: "reply@example.test" }), c);
+  assert.equal(request.body.headers["Reply-To"], "reply@example.test");
+  assert.deepEqual(result, { provider_message_id: "mailchannels-message" });
+});
+
 test("SparkPost models CC and BCC as envelope recipients and reuses its idempotency key", async (t) => {
   const c = await connection("sparkpost", { region: "eu" }, { apiKey: "sparkpost-secret" });
   let request;
@@ -192,50 +208,6 @@ test("ZeptoMail accepts only its official HTTPS send endpoints", async (t) => {
   assert.deepEqual(result, { provider_message_id: "zeptomail-message" });
   const invalid = await connection("zeptomail", { sendUrl: "https://attacker.example/v1.1/email" }, { sendToken: "zeptomail-secret" });
   await assert.rejects(provider("zeptomail").send(env, snapshot(), invalid), (error) => error.code === "provider_configuration_missing");
-});
-
-test("SENS signs the exact request path and supports CC/BCC in shared-recipient requests", async (t) => {
-  const serviceId = "ncp:mail:kr:123456:main";
-  const c = await connection("ncloud-sens", { serviceId }, { accessKey: "access-key", secretKey: "secret-key" });
-  const requests = [];
-  mockFetch(t, async (url, init) => {
-    const request = { url: String(url), headers: new Headers(init.headers), body: init.body };
-    requests.push(request);
-    if (request.url === "https://mail.apigw.ntruss.com/api/v1/files") {
-      assert.ok(request.body instanceof FormData);
-      const upload = request.body.get("fileList");
-      assert.equal(upload.name, "invoice.pdf");
-      assert.equal(await upload.text(), "pdf-bytes");
-      return Response.json({ files: [{ fileName: "invoice.pdf", fileId: "sens-file" }] });
-    }
-    request.body = JSON.parse(request.body);
-    return Response.json({ requestId: "sens-request" }, { status: 202 });
-  });
-  await provider("ncloud-sens").send(env, snapshot({ to: ["one@example.test", "two@example.test"] }), c, "submission-456");
-  const result = await provider("ncloud-sens").send(env, snapshot({
-    to: ["one@example.test", "two@example.test"],
-    cc: ["copy@example.test"],
-    bcc: ["hidden@example.test"],
-    attachments: [{ id: "file", filename: "invoice.pdf", content_type: "application/pdf", size_bytes: 9, content_id: null, r2_key: "attachments/invoice", disposition: "attachment" }],
-  }), c, "submission-789");
-  const uploadRequest = requests[1], request = requests[2];
-  assert.equal(request.url, `https://sens.apigw.ntruss.com/mail/v2/services/${serviceId}/requests`);
-  assert.equal(requests[0].body.individual, true);
-  assert.equal(request.body.individual, false);
-  assert.deepEqual(request.body.attachFileIds, ["sens-file"]);
-  assert.deepEqual(request.body.recipients, [
-    { address: "one@example.test", type: "TO" },
-    { address: "two@example.test", type: "TO" },
-    { address: "copy@example.test", type: "CC" },
-    { address: "hidden@example.test", type: "BCC" },
-  ]);
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("secret-key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  for (const [signedRequest, path] of [[uploadRequest, "/api/v1/files"], [request, `/mail/v2/services/${serviceId}/requests`]]) {
-    const timestamp = signedRequest.headers.get("x-ncp-apigw-timestamp");
-    const signed = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`POST\n${path}\n${timestamp}\naccess-key`)));
-    assert.equal(signedRequest.headers.get("x-ncp-apigw-signature-v2"), Buffer.from(signed).toString("base64"));
-  }
-  assert.deepEqual(result, { provider_message_id: "sens-request" });
 });
 
 test("JMAP uploads attachments and creates an email submission through its advertised session", async (t) => {
