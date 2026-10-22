@@ -39,7 +39,7 @@ export const returnToWorkspace = (path: unknown) =>
   typeof path === "string" && ([
     "/", "/mail", "/mail/drafts", "/mail/sent", "/mail/archive", "/mail/trash", "/mail/spam", "/mail/starred", "/mail/snoozed", "/mail/all", "/mail/scheduled",
     "/mail/rules", "/mail/settings", "/mail/integrations", "/mail/data", "/mail/activity",
-    "/console/mail/domains", "/console/mail/mailboxes", "/console/mail/providers",
+    "/console/mail/domains", "/console/mail/mailboxes",
     "/calendar", "/calendar/shared", "/drive", "/drive/shared", "/drive/recent", "/drive/starred", "/drive/trash",
     "/profile", "/profile/security", "/profile/sessions", "/profile/notifications", "/notifications",
   ].includes(path) || /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) || /^\/console\/mail\/(?:domains|mailboxes)\/[A-Za-z0-9_-]{1,100}$/.test(path) || /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path))

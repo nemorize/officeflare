@@ -46,7 +46,7 @@ import {
   startRestore,
 } from "../mail/data";
 import { jmap, mcp } from "../mail/protocols";
-import { seal } from "../mail/secrets";
+import { seal, unseal } from "../mail/secrets";
 import type { Permission } from "../authorization/permissions";
 import {
   belongs,
@@ -247,13 +247,20 @@ mail.get("/provider-catalog", async (c) => {
 });
 mail.post("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["provider", "name", "enabled", "config", "secrets"]),
+  const data = await input(c, ["provider", "name", "enabled", "config", "secrets", "source_connection_id"]),
     name = text(data.name, "name", 100),
     selected = provider(text(data.provider, "provider", 64)),
     connectionId = id(),
-    config = parseProviderConfig(data.config, selected),
-    secrets = parseProviderSecrets(data.secrets, selected),
-    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : null;
+    sourceConnectionId = data.source_connection_id === undefined ? null : text(data.source_connection_id, "source_connection_id", 100),
+    source = sourceConnectionId ? await first<Connection>(c.env, "SELECT * FROM mail_provider_connections WHERE id=?", sourceConnectionId) : null;
+  if (sourceConnectionId && !source) fail(404, "Source connection not found");
+  if (source && source.provider !== selected.id) fail(400, "Source connection uses a different provider");
+  if (source && !!source.secret_ciphertext !== !!source.secret_nonce) fail(500, "Source connection credentials are incomplete");
+  const config = data.config === undefined && source ? safeProviderConfig(source.config_json) : parseProviderConfig(data.config, selected),
+    submittedSecrets = data.secrets !== undefined && data.secrets !== null && typeof data.secrets === "object" && !Array.isArray(data.secrets) && Object.values(data.secrets as Record<string, unknown>).some((value) => value !== "" && value !== undefined),
+    secrets = parseProviderSecrets(data.secrets, selected, !source || submittedSecrets || !source.secret_ciphertext),
+    inheritedSecrets = source?.secret_ciphertext && source.secret_nonce ? await unseal(c.env, source.secret_ciphertext, source.secret_nonce) : null,
+    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : inheritedSecrets ? await seal(c.env, inheritedSecrets) : null;
   await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
       "INSERT INTO mail_provider_connections(id,provider,name,enabled,config_json,secret_ciphertext,secret_nonce) VALUES(?,?,?,?,?,?,?)",
@@ -358,6 +365,8 @@ mail.post("/domains", async (c) => {
         );
   if (inbound) await connection(c.env, inbound);
   const sendingConnection = outbound ? await connection(c.env, outbound) : null;
+  if (sendingConnection && sendingConnection.provider !== "cloudflare" && await first(c.env, "SELECT id FROM mail_domains WHERE outbound_connection_id=? LIMIT 1", outbound))
+    fail(409, "Sending provider connections are configured per domain");
   const maxSendBytes = configuredSendLimit(data.max_send_bytes ?? null, sendingConnection?.provider ?? null);
   const receive =
       data.inbound_enabled === undefined
@@ -460,6 +469,8 @@ mail.patch("/domains/:id", async (c) => {
         ? existing.outbound_connection_id
         : values.outbound_connection_id;
   const sendingConnection = outbound ? await first<Connection>(c.env, "SELECT * FROM mail_provider_connections WHERE id=?", String(outbound)) : null;
+  if ("outbound_connection_id" in data && sendingConnection && sendingConnection.provider !== "cloudflare" && await first(c.env, "SELECT id FROM mail_domains WHERE outbound_connection_id=? AND id<>? LIMIT 1", String(outbound), existing.id))
+    fail(409, "Sending provider connections are configured per domain");
   const maxSendBytes = configuredSendLimit(data.max_send_bytes === undefined ? existing.max_send_bytes : data.max_send_bytes, sendingConnection?.provider ?? null);
   if ("max_send_bytes" in data) values.max_send_bytes = maxSendBytes;
   if (

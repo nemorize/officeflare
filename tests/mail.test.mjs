@@ -388,7 +388,7 @@ test("mail UI metadata, sharing, attachment editing and send recovery use author
   });
 });
 test("mail backend permissions, providers, drafts, search and scheduling", async (t) => {
-  const { db, tokens, raw, call, admin, base, address, mailbox, draft } =
+  const { db, tokens, raw, call, admin, base, address, mailbox, domain, draft } =
     await fixture(t);
   await t.test(
     "Provider catalog exposes direct sending adapters while preserving Cloudflare bindings",
@@ -427,8 +427,28 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
       assert.equal(JSON.parse(stored.config_json).accountId, "account-123");
       assert.notEqual(stored.secret_ciphertext, "provider-secret-value");
       assert.ok(stored.secret_ciphertext && stored.secret_nonce);
+      const cloned = await admin("/provider-connections", {
+        method: "POST",
+        expected: 201,
+        data: {
+          provider: "cloudflare-rest",
+          name: "Domain-specific Cloudflare REST",
+          source_connection_id: created.connection.id,
+          config: { accountId: "domain-account-456" },
+        },
+      });
+      assert.deepEqual(cloned.connection.config, { accountId: "domain-account-456" });
+      const clonedStored = await db.prepare("SELECT secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?").bind(cloned.connection.id).first();
+      assert.notEqual(clonedStored.secret_ciphertext, stored.secret_ciphertext);
+      assert.notEqual(clonedStored.secret_nonce, stored.secret_nonce);
+      await admin("/domains", { method: "POST", expected: 201, data: { name: "provider-one.test", inbound_connection_id: null, outbound_connection_id: created.connection.id } });
+      await admin("/domains", { method: "POST", expected: 409, data: { name: "provider-two.test", inbound_connection_id: null, outbound_connection_id: created.connection.id } });
+      await admin("/domains", { method: "POST", expected: 201, data: { name: "provider-two.test", inbound_connection_id: null, outbound_connection_id: cloned.connection.id } });
+      const configuredDomains = (await admin("/domains")).domains;
+      const secondProviderDomain = configuredDomains.find((entry) => entry.name === "provider-two.test");
+      await admin(`/domains/${secondProviderDomain.id}`, { method: "PATCH", expected: 409, data: { outbound_connection_id: created.connection.id } });
       const catalog = await admin("/provider-catalog");
-      assert.equal(catalog.providers.find((entry) => entry.provider === "cloudflare-rest").default_connection_id, created.connection.id);
+      assert.ok([created.connection.id, cloned.connection.id].includes(catalog.providers.find((entry) => entry.provider === "cloudflare-rest").default_connection_id));
       const connections = await admin("/provider-connections");
       assert.equal(connections.connections.find((entry) => entry.id === created.connection.id).secret_configured, true);
       assert.equal(JSON.stringify(connections).includes("provider-secret-value"), false);
@@ -442,8 +462,9 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
       assert.equal(unauthorized.status, 401);
       const selected = await db
         .prepare(
-          "SELECT inbound_connection_id,outbound_connection_id FROM mail_domains",
+          "SELECT inbound_connection_id,outbound_connection_id FROM mail_domains WHERE id=?",
         )
+        .bind(domain.id)
         .first();
       assert.equal(selected.inbound_connection_id, "cloudflare-bindings");
       assert.equal(selected.outbound_connection_id, "cloudflare-bindings");

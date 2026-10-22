@@ -80,6 +80,6 @@ test("email sizing permits only its nonce-authorized observer and rejects forged
   assert.equal(mailFrameHeight({ ...data, height: 1_000_000 }, nonce, source, source), 24_000);
 });
 test("new mail routes restore safely after login without accepting arbitrary paths", () => {
-  for (const path of ["/mail/settings", "/mail/integrations", "/mail/data", "/mail/spam", "/mail/snoozed", "/mail/folders/abcd-1234", "/console/mail/domains", "/console/mail/domains/new", "/console/mail/domains/abcd-1234", "/console/mail/mailboxes", "/console/mail/mailboxes/new", "/console/mail/mailboxes/abcd-1234", "/console/mail/providers"]) assert.equal(returnToWorkspace(path), path);
-  for (const path of ["/mail/contacts", "/mail/templates", "//evil.test/mail", "/mail/folders/../../console", "/mail/settings?redirect=evil", "/console/mail/unknown", "/console/mail/domains/../users", "/console/mail/domains/abcd/extra", "/console/mail/mailboxes/../users", "/console/mail/mailboxes/abcd/extra"]) assert.equal(returnToWorkspace(path), "/");
+  for (const path of ["/mail/settings", "/mail/integrations", "/mail/data", "/mail/spam", "/mail/snoozed", "/mail/folders/abcd-1234", "/console/mail/domains", "/console/mail/domains/new", "/console/mail/domains/abcd-1234", "/console/mail/mailboxes", "/console/mail/mailboxes/new", "/console/mail/mailboxes/abcd-1234"]) assert.equal(returnToWorkspace(path), path);
+  for (const path of ["/mail/contacts", "/mail/templates", "//evil.test/mail", "/mail/folders/../../console", "/mail/settings?redirect=evil", "/console/mail/unknown", "/console/mail/providers", "/console/mail/domains/../users", "/console/mail/domains/abcd/extra", "/console/mail/mailboxes/../users", "/console/mail/mailboxes/abcd/extra"]) assert.equal(returnToWorkspace(path), "/");
 });

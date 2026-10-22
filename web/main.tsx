@@ -74,7 +74,6 @@ const router = createBrowserRouter(createRoutesFromElements(<>
                 <Route path="accounts/:id" element={<ConsoleGate permissions={["admin.drive.accounts.read"]}><DriveAccountEditorPage /></ConsoleGate>} />
               </Route>
               {["domains", "mailboxes"].map((page) => <Route key={page} path={`mail/${page}`} element={<ConsoleGate permissions={[`admin.mail.${page}.read`]}><MailConsolePage key={page} page={page} /></ConsoleGate>} />)}
-              <Route path="mail/providers" element={<ConsoleGate permissions={["admin.mail.providers.read"]}><MailConsolePage page="providers" /></ConsoleGate>} />
               <Route path="mail/domains/new" element={<ConsoleGate permissions={["admin.mail.domains.manage"]}><MailDomainEditorPage key="new" creating /></ConsoleGate>} />
               <Route path="mail/domains/:id" element={<ConsoleGate permissions={["admin.mail.domains.read"]}><MailDomainEditorPage /></ConsoleGate>} />
               <Route path="mail/mailboxes/new" element={<ConsoleGate permissions={["admin.mail.mailboxes.manage"]}><SharedMailboxEditorPage key="new" creating /></ConsoleGate>} />

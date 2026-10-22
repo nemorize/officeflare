@@ -12,7 +12,6 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
   { path: "/console/users", name: "Users", icon: "users", permissions: ["admin.users.read"] },
   { path: "/console/roles", name: "Roles", icon: "shield", permissions: ["admin.roles.read"] },
   { path: "/console/mail/domains", name: "Mail domains", icon: "mail", permissions: ["admin.mail.domains.read"] },
-  { path: "/console/mail/providers", name: "Mail providers", icon: "settings", permissions: ["admin.mail.providers.read"] },
   { path: "/console/mail/mailboxes", name: "Shared mailboxes", icon: "inbox", permissions: ["admin.mail.mailboxes.read"] },
   { path: "/console/drive", name: "Drive", icon: "drive", permissions: driveAdminPermissions },
 ];

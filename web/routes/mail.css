@@ -23,10 +23,6 @@
 .mail-hint { font-size: 12px; color: var(--ui-muted); line-height: 1.7; overflow-wrap: anywhere; }
 .mail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .mail-field { gap: 8px; min-width: 0; }
-.mail-provider-inline-config { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); }
-.mail-provider-inline-config > div:first-child h3 { font-size: 13px; font-weight: 500; }
-.mail-provider-inline-config > div:first-child p { margin-top: 5px; }
-.mail-provider-inline-config > .mail-hint { margin: 0; }
 
 .mail-field [data-ui="input"] { width: 100%; max-width: none; }
 .mail-select[data-ui="select-trigger"] { width: 100%; min-width: 0; justify-content: space-between; }
