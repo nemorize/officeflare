@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "../lib/api";
-import { type DomainProvider, type Domain, type Mailbox } from "../lib/mail";
+import { type DomainProvider, type ProviderField, type Domain, type Mailbox } from "../lib/mail";
 import { useAccess } from "../components/console-access";
 import { MailField, MailInput, MailNotice, MailSection, MailState, useMailAction, useMailResource, MailForm, MailSelect, MailFieldset } from "../components/mail-common";
 import { MailRules } from "../components/mail-rules";
@@ -29,8 +29,7 @@ function Domains() {
     {resource.data && !resource.data.domains.length && <div className="mail-empty"><h2>No mail domains registered</h2><p>Register a domain and configure Cloudflare delivery. User and shared addresses are managed with their accounts.</p></div>}
   </>;
 }
-type ProviderField = { key: string; label: string; required?: boolean; secret?: boolean; help?: string; options?: string[] };
-type ProviderCatalogEntry = { provider: string; label: string; capabilities: { receive: boolean; send: boolean; max_send_bytes: number; max_recipients: number }; config_fields: ProviderField[]; secret_fields: ProviderField[]; default_connection_id: string | null };
+type ProviderCatalogEntry = DomainProvider & { label: string };
 type ProviderConnection = { id: string; provider: string; name: string; enabled: number; version: number; config: Record<string, string>; secret_configured: boolean };
 function ProviderConnections() {
   const permissions = useAccess().permissions, resource = useMailResource<{ connections: ProviderConnection[] }>("/api/mail/provider-connections"), catalog = useMailResource<{ providers: ProviderCatalogEntry[] }>("/api/mail/provider-catalog"), notify = useNotifications();
@@ -87,33 +86,68 @@ function ProviderConnectionForm({ existing, providers, canManage, onCancel, onSa
 export function MailDomainEditorPage({ creating = false }: { creating?: boolean }) {
   const { id } = useParams(), navigate = useNavigate(), notify = useNotifications(), permissions = useAccess().permissions;
   const resource = useMailResource<{ domains: Domain[]; providers: DomainProvider[] }>("/api/mail/domains"), boxes = useMailboxDirectory(), domain = resource.data?.domains.find((entry) => entry.id === id), manage = permissions.includes("admin.mail.domains.manage");
+  const canManageProviders = permissions.includes("admin.mail.providers.manage"), providerConnections = useMailResource<{ connections: ProviderConnection[] }>(permissions.includes("admin.mail.providers.read") ? "/api/mail/provider-connections" : null);
   return <section className="account-page console-page console-detail-page mail-console-page"><Link to="/console/mail/domains" className="console-back">← Mail domains</Link>
     <ConsolePageHeader title={creating ? "Register mail domain" : domain?.name ?? "Mail domain"} description="Configure the shared domain, delivery providers and inbound routing." />
     <MailState loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
     {resource.data && !creating && !domain && <MailNotice error="This mail domain could not be found." />}
-    {resource.data && (creating || domain) && <><DomainEditor key={creating ? "new" : domain!.id} existing={domain} providers={resource.data.providers} boxes={boxes.data?.mailboxes ?? []} canManage={manage} defaultDomain={creating ? !resource.data.domains.some((entry) => entry.is_default) : !!domain?.is_default} onSaved={(domainId) => { notify.success(creating ? "Domain registered." : "Domain settings saved."); if (creating) navigate(`/console/mail/domains/${encodeURIComponent(domainId)}`); else resource.reload(); }} />
+    {resource.data && (creating || domain) && <><DomainEditor key={creating ? "new" : domain!.id} existing={domain} providers={resource.data.providers} boxes={boxes.data?.mailboxes ?? []} providerConnections={providerConnections.data?.connections ?? []} providerConnectionsLoading={permissions.includes("admin.mail.providers.read") && (providerConnections.loading || !providerConnections.data && !providerConnections.error)} providerConnectionsError={providerConnections.error} reloadProviderConnections={providerConnections.reload} canManage={manage} canManageProviders={canManageProviders} defaultDomain={creating ? !resource.data.domains.some((entry) => entry.is_default) : !!domain?.is_default} onSaved={(domainId) => { notify.success(creating ? "Domain registered." : "Domain settings saved."); if (creating) navigate(`/console/mail/domains/${encodeURIComponent(domainId)}`); else resource.reload(); providerConnections.reload(); }} />
       {domain && <><MailSection title="Addresses" description="Manage personal addresses with users and team addresses with shared mailboxes."><div className="mail-actions">{permissions.includes("admin.users.read") && <Button nativeButton={false} render={<Link to="/console/users" />}>Manage users</Button>}{permissions.includes("admin.mail.mailboxes.read") && <Button nativeButton={false} render={<Link to="/console/mail/mailboxes" />}>Shared mailboxes</Button>}</div></MailSection><details className="console-role-summary"><summary>Advanced inbound routing</summary><MailRules path={`/api/mail/domains/${domain.id}/rules`} routing canManage={manage} /></details></>}
     </>}
   </section>;
 }
-function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, onSaved }: { existing?: Domain; providers: DomainProvider[]; boxes: Mailbox[]; canManage: boolean; defaultDomain: boolean; onSaved: (id: string) => void }) {
+function DomainEditor({ existing, providers, boxes, providerConnections, providerConnectionsLoading, providerConnectionsError, reloadProviderConnections, canManage, canManageProviders, defaultDomain, onSaved }: { existing?: Domain; providers: DomainProvider[]; boxes: Mailbox[]; providerConnections: ProviderConnection[]; providerConnectionsLoading: boolean; providerConnectionsError: string; reloadProviderConnections: () => void; canManage: boolean; canManageProviders: boolean; defaultDomain: boolean; onSaved: (id: string) => void }) {
   const action = useMailAction(), setup = useMailResource<{ receive: { action: string }; send: { action: string }; verification: string }>(existing ? `/api/mail/domains/${existing.id}/setup` : null);
   const initialProvider = (direction: "inbound" | "outbound") => existing ? existing[`${direction}_provider`] ?? (existing[`${direction}_connection_id`] ? "cloudflare" : "") : providers[0]?.provider ?? "";
   const [isDefault, setDefault] = useState(defaultDomain);
   const [name, setName] = useState(existing?.name ?? ""), [inbound, setInbound] = useState(initialProvider("inbound")), [outbound, setOutbound] = useState(initialProvider("outbound"));
+  const initialOutboundConnection = existing?.outbound_connection_id ?? providers.find((provider) => provider.provider === initialProvider("outbound"))?.default_connection_id ?? null;
+  const [outboundConnectionId, setOutboundConnectionId] = useState<string | null>(initialOutboundConnection), [providerConfig, setProviderConfig] = useState<Record<string, string>>({}), [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({}), [providerConnectionName, setProviderConnectionName] = useState(""), [createdConnection, setCreatedConnection] = useState<ProviderConnection | null>(null);
+  const [providerConfigDirty, setProviderConfigDirty] = useState(false);
   const [sendLimit, setSendLimit] = useState(existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "");
-  const providerMaximum = providers.find((provider) => provider.provider === outbound)?.capabilities.max_send_bytes ?? 0;
+  const selectedProvider = providers.find((provider) => provider.provider === outbound), selectedConnection = providerConnections.find((connection) => connection.id === outboundConnectionId && connection.provider === outbound) ?? (createdConnection?.id === outboundConnectionId && createdConnection.provider === outbound ? createdConnection : undefined), providerMaximum = selectedProvider?.capabilities.max_send_bytes ?? 0;
   const [receive, setReceive] = useState(!!existing?.inbound_enabled), [send, setSend] = useState(!!existing?.outbound_enabled), [plus, setPlus] = useState(existing ? !!existing.plus_addressing : true), [catchAll, setCatchAll] = useState(existing?.catch_all_mailbox_id ?? "");
+  useEffect(() => {
+    if (providerConfigDirty) return;
+    const saved = providerConnections.find((connection) => connection.id === outboundConnectionId && connection.provider === outbound) ?? (createdConnection?.id === outboundConnectionId && createdConnection.provider === outbound ? createdConnection : undefined);
+    const definition = providers.find((provider) => provider.provider === outbound);
+    setProviderConfig(saved?.config ?? Object.fromEntries((definition?.config_fields ?? []).filter((field) => field.options?.length).map((field) => [field.key, field.options![0]!])));
+    if (saved) setProviderConnectionName(saved.name);
+    else if (definition && !providerConnectionName) setProviderConnectionName(`${name || "Mail domain"} · ${definition.label}`);
+  }, [outboundConnectionId, outbound, providerConnections, providers, providerConfigDirty, name, createdConnection, providerConnectionName]);
   const providerName = (provider: string) => providers.find((entry) => entry.provider === provider)?.label ?? (provider === "cloudflare" ? "Cloudflare" : provider);
   const providerOptions = (direction: "receive" | "send", selected: string) => [
     { value: "", label: "No provider" },
-    ...providers.map((provider) => ({ value: provider.provider, label: providerName(provider.provider), disabled: !provider.capabilities[direction] })),
-    ...(selected && !providers.some((provider) => provider.provider === selected) ? [{ value: selected, label: `${providerName(selected)} (unavailable)` }] : []),
+    ...providers.filter((provider) => provider.capabilities[direction]).map((provider) => ({ value: provider.provider, label: providerName(provider.provider) })),
+    ...(selected && !providers.some((provider) => provider.provider === selected && provider.capabilities[direction]) ? [{ value: selected, label: `${providerName(selected)} (unsupported)` }] : []),
   ];
-  const connectionFor = (selected: string, direction: "inbound" | "outbound") => !selected ? null : existing && selected === initialProvider(direction) ? existing[`${direction}_connection_id`] : providers.find((provider) => provider.provider === selected)?.default_connection_id ?? null;
   const submit = async () => {
-    const inboundId = connectionFor(inbound, "inbound"), outboundId = connectionFor(outbound, "outbound");
-    if (receive && !inboundId || send && !outboundId) throw new Error("Choose a configured provider for each enabled direction.");
+    const inboundId = !inbound ? null : existing && inbound === initialProvider("inbound") ? existing.inbound_connection_id : providers.find((provider) => provider.provider === inbound)?.default_connection_id ?? null;
+    let outboundId = outbound ? outboundConnectionId ?? selectedProvider?.default_connection_id ?? null : null;
+    if (receive && !inboundId) throw new Error("Choose a configured provider for each enabled direction.");
+    if (outbound && selectedProvider && canManageProviders && (selectedProvider.config_fields.length || selectedProvider.secret_fields.length)) {
+      if (providerConnectionsLoading) throw new Error("Provider connections are still loading. Try again in a moment.");
+      if (providerConnectionsError) throw new Error("Could not load provider connections. Reload the page before saving provider settings.");
+      const secretsEntered = Object.values(providerSecrets).some(Boolean);
+      if (outboundId && selectedConnection) {
+        if (!selectedConnection.enabled) throw new Error("This provider connection is disabled. Enable it from Mail providers before assigning it to a domain.");
+        if (providerConfigDirty || secretsEntered) {
+          const result = await api<{ connection: ProviderConnection }>(`/api/mail/provider-connections/${encodeURIComponent(selectedConnection.id)}`, { method: "PATCH", body: { version: selectedConnection.version, config: providerConfig, ...(secretsEntered ? { secrets: providerSecrets } : {}) } });
+          setCreatedConnection(result.connection);
+          setProviderSecrets({});
+          setProviderConfigDirty(false);
+        }
+      } else if (!outboundId && selectedProvider.provider !== "cloudflare") {
+        const result = await api<{ connection: ProviderConnection }>("/api/mail/provider-connections", { method: "POST", body: { provider: selectedProvider.provider, name: providerConnectionName, enabled: true, config: providerConfig, secrets: providerSecrets } });
+        outboundId = result.connection.id;
+        setOutboundConnectionId(outboundId);
+        setCreatedConnection(result.connection);
+        setProviderSecrets({});
+        setProviderConfigDirty(false);
+      }
+    }
+    if (outbound && !outboundId) throw new Error("Add credentials for this sending provider before assigning it to the domain.");
+    if (send && !outboundId) throw new Error("Choose a configured provider for each enabled direction.");
     const result = await api<{ domain: Domain }>(`/api/mail/domains${existing ? `/${existing.id}` : ""}`, {
       method: existing ? "PATCH" : "POST",
       body: {
@@ -132,8 +166,21 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
         <MailInput label="Domain" placeholder="example.com" required disabled={!!existing} value={name} maxLength={253} onChange={(event) => setName(event.target.value)} />
         <div className="mail-form-grid">
           <MailField label="Receiving provider"><MailSelect value={inbound} onValueChange={(value) => { setInbound(value); if (!value) setReceive(false); }} options={providerOptions("receive", inbound)} /></MailField>
-          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { setOutbound(value); if (!value) { setSend(false); setSendLimit(""); } else { const maximum = providers.find((provider) => provider.provider === value)?.capabilities.max_send_bytes ?? 0; if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum) setSendLimit(String(maximum / 1024 ** 2)); } }} options={providerOptions("send", outbound)} /></MailField>
+          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { const next = providers.find((provider) => provider.provider === value), current = existing?.outbound_provider === value ? providerConnections.find((connection) => connection.id === existing.outbound_connection_id) : undefined, nextConnectionId = current?.id ?? next?.default_connection_id ?? null; setOutbound(value); setOutboundConnectionId(nextConnectionId); setCreatedConnection(null); setProviderConfigDirty(false); setProviderSecrets({}); setProviderConnectionName(current?.name ?? (next ? `${name || "Mail domain"} · ${next.label}` : "")); if (!value) { setSend(false); setSendLimit(""); } else { const maximum = next?.capabilities.max_send_bytes ?? 0; if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum) setSendLimit(String(maximum / 1024 ** 2)); } }} options={providerOptions("send", outbound)} /></MailField>
         </div>
+        {outbound && selectedProvider && (selectedProvider.config_fields.length > 0 || selectedProvider.secret_fields.length > 0) && <section className="mail-provider-inline-config" aria-label={`${selectedProvider.label} settings`}>
+          <div><h3>{selectedProvider.label} settings</h3><p className="mail-hint">Enter the credentials and service values required by this sending provider.</p></div>
+          {providerConnectionsLoading && canManageProviders ? <MailState loading error="" kind="form" /> : providerConnectionsError && canManageProviders ? <MailState loading={false} error={providerConnectionsError} retry={reloadProviderConnections} /> : !canManageProviders ? <p className="mail-hint">Provider credentials are managed separately. Ask an administrator with “Manage mail providers” access to configure this sender.</p> : <>
+            {!outboundConnectionId && selectedProvider.provider !== "cloudflare" && <MailInput label="Connection name" required maxLength={100} value={providerConnectionName} onChange={(event) => setProviderConnectionName(event.target.value)} />}
+            {selectedProvider.config_fields.map((field) => field.options
+              ? <MailField key={field.key} label={field.label} hint={field.help}><MailSelect value={providerConfig[field.key] ?? field.options[0] ?? ""} onValueChange={(value) => { setProviderConfig((current) => ({ ...current, [field.key]: value })); setProviderConfigDirty(true); }} options={field.options.map((value) => ({ value, label: value === "tls" ? "TLS (port 465)" : value === "starttls" ? "STARTTLS (port 587)" : value }))} /></MailField>
+              : <MailInput key={field.key} label={field.label} hint={field.help} required={!!field.required} value={providerConfig[field.key] ?? ""} onChange={(event) => { setProviderConfig((current) => ({ ...current, [field.key]: event.target.value })); setProviderConfigDirty(true); }} />)}
+            {selectedProvider.secret_fields.length > 0 && selectedConnection?.secret_configured && <p className="mail-hint">Credentials are already saved and hidden. Leave these fields blank to keep them, or re-enter every required credential to replace them.</p>}
+            {selectedProvider.secret_fields.map((field) => <MailInput key={field.key} label={field.label} hint={field.help} required={!!field.required && (!selectedConnection?.secret_configured || Object.values(providerSecrets).some(Boolean))} type="password" autoComplete="new-password" value={providerSecrets[field.key] ?? ""} onChange={(event) => setProviderSecrets((current) => ({ ...current, [field.key]: event.target.value }))} />)}
+            {selectedConnection && !selectedConnection.enabled && <p className="mail-notice" role="status">This connection is disabled. Enable it from Mail providers before assigning it to a domain.</p>}
+            {selectedConnection && <p className="mail-hint">Using “{selectedConnection.name}”. Changes to its configuration also affect other domains assigned to this connection.</p>}
+          </>}
+        </section>}
         <MailInput label="Maximum message size (MiB)" hint={providerMaximum ? `Provider maximum: ${providerMaximum / 1024 ** 2} MiB. Leave empty to use that maximum. Includes the body, images and encoded attachments.` : "Choose a sending provider to set a message size limit."} type="number" min={1 / 1024 ** 2} max={providerMaximum / 1024 ** 2} step="any" disabled={!providerMaximum} placeholder={providerMaximum ? String(providerMaximum / 1024 ** 2) : ""} value={sendLimit} onChange={(event) => setSendLimit(event.target.value)} />
         {(inbound === "cloudflare" || outbound === "cloudflare") && <MailSection title="Cloudflare setup" description="This provider uses the deployed Worker bindings; no separate API key or connection is required.">
           <MailState loading={setup.loading} error={setup.error} retry={setup.reload} /><ul className="mail-setup-steps">
@@ -149,7 +196,7 @@ function DomainEditor({ existing, providers, boxes, canManage, defaultDomain, on
         <Check checked={plus} onChange={setPlus}>Enable plus addressing (name+tag@example.com)</Check>
         {existing && <MailField label="Catch-all mailbox" hint="Unmatched recipients in this domain are delivered to the selected mailbox."><MailSelect value={catchAll} onValueChange={setCatchAll} options={[{ value: "", label: "No catch-all" }, ...(catchAll && !boxes.some((box) => box.id === catchAll) ? [{ value: catchAll, label: catchAll }] : []), ...boxes.filter((box) => box.status === "active").map((box) => ({ value: box.id, label: box.name }))]} /></MailField>}
       </MailFieldset>
-      <MailNotice error={action.error} />{canManage && <div className="mail-actions"><Button nativeButton={false} disabled={action.busy} render={<Link to="/console/mail/domains" />}>Cancel</Button><Button type="submit" variant="primary" disabled={action.busy}>{action.busy ? "Saving…" : existing ? "Save domain" : "Register domain"}</Button></div>}
+      <MailNotice error={action.error} />{canManage && <div className="mail-actions"><Button nativeButton={false} disabled={action.busy} render={<Link to="/console/mail/domains" />}>Cancel</Button><Button type="submit" variant="primary" disabled={action.busy || canManageProviders && providerConnectionsLoading}>{action.busy ? "Saving…" : existing ? "Save domain" : "Register domain"}</Button></div>}
     </MailForm>
   </MailSection>;
 }
