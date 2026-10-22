@@ -127,9 +127,6 @@
 .mail-storage-overview { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
 .mail-storage-overview strong { font-size: 26px; font-weight: 500; }
 .mail-storage-overview span { color: var(--ui-muted); font-size: 12px; }
-.mail-setup-steps { display: grid; gap: 24px; padding-left: 18px; margin-bottom: 24px; }
-.mail-setup-steps strong { font-size: 13px; font-weight: 500; }
-.mail-setup-steps p { font-size: 12px; color: var(--ui-muted); line-height: 1.8; margin-top: 8px; }
 
 /* Shared mail controls and settings. */
 [data-ui="form"].mail-form,

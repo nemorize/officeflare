@@ -427,28 +427,25 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
       assert.equal(JSON.parse(stored.config_json).accountId, "account-123");
       assert.notEqual(stored.secret_ciphertext, "provider-secret-value");
       assert.ok(stored.secret_ciphertext && stored.secret_nonce);
-      const cloned = await admin("/provider-connections", {
+      const secondConnection = await admin("/provider-connections", {
         method: "POST",
         expected: 201,
         data: {
           provider: "cloudflare-rest",
           name: "Domain-specific Cloudflare REST",
-          source_connection_id: created.connection.id,
           config: { accountId: "domain-account-456" },
+          secrets: { apiToken: "second-provider-secret" },
         },
       });
-      assert.deepEqual(cloned.connection.config, { accountId: "domain-account-456" });
-      const clonedStored = await db.prepare("SELECT secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?").bind(cloned.connection.id).first();
-      assert.notEqual(clonedStored.secret_ciphertext, stored.secret_ciphertext);
-      assert.notEqual(clonedStored.secret_nonce, stored.secret_nonce);
+      assert.deepEqual(secondConnection.connection.config, { accountId: "domain-account-456" });
       await admin("/domains", { method: "POST", expected: 201, data: { name: "provider-one.test", inbound_connection_id: null, outbound_connection_id: created.connection.id } });
       await admin("/domains", { method: "POST", expected: 409, data: { name: "provider-two.test", inbound_connection_id: null, outbound_connection_id: created.connection.id } });
-      await admin("/domains", { method: "POST", expected: 201, data: { name: "provider-two.test", inbound_connection_id: null, outbound_connection_id: cloned.connection.id } });
+      await admin("/domains", { method: "POST", expected: 201, data: { name: "provider-two.test", inbound_connection_id: null, outbound_connection_id: secondConnection.connection.id } });
       const configuredDomains = (await admin("/domains")).domains;
       const secondProviderDomain = configuredDomains.find((entry) => entry.name === "provider-two.test");
       await admin(`/domains/${secondProviderDomain.id}`, { method: "PATCH", expected: 409, data: { outbound_connection_id: created.connection.id } });
       const catalog = await admin("/provider-catalog");
-      assert.ok([created.connection.id, cloned.connection.id].includes(catalog.providers.find((entry) => entry.provider === "cloudflare-rest").default_connection_id));
+      assert.equal(catalog.providers.find((entry) => entry.provider === "cloudflare-rest").default_connection_id, null);
       const connections = await admin("/provider-connections");
       assert.equal(connections.connections.find((entry) => entry.id === created.connection.id).secret_configured, true);
       assert.equal(JSON.stringify(connections).includes("provider-secret-value"), false);

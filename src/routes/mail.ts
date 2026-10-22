@@ -46,7 +46,7 @@ import {
   startRestore,
 } from "../mail/data";
 import { jmap, mcp } from "../mail/protocols";
-import { seal, unseal } from "../mail/secrets";
+import { seal } from "../mail/secrets";
 import type { Permission } from "../authorization/permissions";
 import {
   belongs,
@@ -100,12 +100,8 @@ const publicConnection = (connection: Connection | null) => connection && ({
   config: safeProviderConfig(connection.config_json),
   secret_configured: !!connection.secret_ciphertext,
 });
-const providerCatalog = async (env: Env) => {
-  const configured = await all<Connection>(env, "SELECT id,provider,name,enabled,version,config_json FROM mail_provider_connections WHERE enabled=1 ORDER BY created_at,id");
-  const defaults = new Map<string, string>();
-  for (const entry of configured) if (!defaults.has(entry.provider)) defaults.set(entry.provider, entry.id);
-  defaults.set("cloudflare", defaults.get("cloudflare") ?? "cloudflare-bindings");
-  return providers.map((entry) => ({ ...publicProvider(entry), default_connection_id: defaults.get(entry.id) ?? null }));
+const providerCatalog = () => {
+  return providers.map((entry) => ({ ...publicProvider(entry), default_connection_id: entry.id === "cloudflare" ? "cloudflare-bindings" : null }));
 };
 const key = (c: Parameters<typeof authenticateMail>[0]) => {
   const supplied = c.req.header("Idempotency-Key");
@@ -243,24 +239,17 @@ mail.get("/provider-connections", async (c) => {
 });
 mail.get("/provider-catalog", async (c) => {
   await administrator(c, "admin.mail.providers.read");
-  return c.json({ providers: await providerCatalog(c.env) });
+  return c.json({ providers: providerCatalog() });
 });
 mail.post("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["provider", "name", "enabled", "config", "secrets", "source_connection_id"]),
+  const data = await input(c, ["provider", "name", "enabled", "config", "secrets"]),
     name = text(data.name, "name", 100),
     selected = provider(text(data.provider, "provider", 64)),
     connectionId = id(),
-    sourceConnectionId = data.source_connection_id === undefined ? null : text(data.source_connection_id, "source_connection_id", 100),
-    source = sourceConnectionId ? await first<Connection>(c.env, "SELECT * FROM mail_provider_connections WHERE id=?", sourceConnectionId) : null;
-  if (sourceConnectionId && !source) fail(404, "Source connection not found");
-  if (source && source.provider !== selected.id) fail(400, "Source connection uses a different provider");
-  if (source && !!source.secret_ciphertext !== !!source.secret_nonce) fail(500, "Source connection credentials are incomplete");
-  const config = data.config === undefined && source ? safeProviderConfig(source.config_json) : parseProviderConfig(data.config, selected),
-    submittedSecrets = data.secrets !== undefined && data.secrets !== null && typeof data.secrets === "object" && !Array.isArray(data.secrets) && Object.values(data.secrets as Record<string, unknown>).some((value) => value !== "" && value !== undefined),
-    secrets = parseProviderSecrets(data.secrets, selected, !source || submittedSecrets || !source.secret_ciphertext),
-    inheritedSecrets = source?.secret_ciphertext && source.secret_nonce ? await unseal(c.env, source.secret_ciphertext, source.secret_nonce) : null,
-    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : inheritedSecrets ? await seal(c.env, inheritedSecrets) : null;
+    config = parseProviderConfig(data.config, selected),
+    secrets = parseProviderSecrets(data.secrets, selected),
+    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : null;
   await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
       "INSERT INTO mail_provider_connections(id,provider,name,enabled,config_json,secret_ciphertext,secret_nonce) VALUES(?,?,?,?,?,?,?)",
@@ -331,7 +320,7 @@ mail.get("/domains", async (c) => {
   await administrator(c, "admin.mail.domains.read");
   return c.json({
     domains: await all(c.env, "SELECT d.*,i.provider inbound_provider,o.provider outbound_provider FROM mail_domains d LEFT JOIN mail_provider_connections i ON i.id=d.inbound_connection_id LEFT JOIN mail_provider_connections o ON o.id=d.outbound_connection_id ORDER BY d.name"),
-    providers: await providerCatalog(c.env),
+    providers: providerCatalog(),
   });
 });
 mail.post("/domains", async (c) => {
@@ -496,33 +485,6 @@ mail.patch("/domains/:id", async (c) => {
       "SELECT * FROM mail_domains WHERE id=?",
       existing.id,
     ),
-  });
-});
-mail.get("/domains/:id/setup", async (c) => {
-  await administrator(c, "admin.mail.domains.read");
-  const entry = await first<Domain>(
-    c.env,
-    "SELECT * FROM mail_domains WHERE id=?",
-    c.req.param("id"),
-  );
-  if (!entry) fail(404, "Domain not found");
-  return c.json({
-    domain: entry,
-    receive: {
-      provider: entry.inbound_connection_id
-        ? (await connection(c.env, entry.inbound_connection_id)).provider
-        : null,
-      action: "Enable Email Routing and route catch-all to this Worker",
-    },
-    send: {
-      provider: entry.outbound_connection_id
-        ? (await connection(c.env, entry.outbound_connection_id)).provider
-        : null,
-      action:
-        "Onboard and verify the sending domain in Cloudflare Email Service",
-    },
-    verification:
-      "Cloudflare validates sending readiness on each send; enabling a local domain does not configure DNS",
   });
 });
 mail.get("/domains/:id/rules", async (c) => {
