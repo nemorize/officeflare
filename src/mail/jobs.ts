@@ -490,7 +490,7 @@ async function deliverWebhook(
         "X-Officeflare-Signature": signature,
       },
       body: job.payload_json,
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(10000),
     });
     await response.body?.cancel();

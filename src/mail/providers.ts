@@ -235,7 +235,8 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
       headers: { "content-type": "application/json", accept: "application/json", ...headers },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(25_000),
-      redirect: "error",
+      // Workers supports manual/follow only; never forward provider credentials.
+      redirect: "manual",
     });
   } catch {
     // A transport failure can happen after the remote provider has accepted the
@@ -645,7 +646,7 @@ type JmapMethodResponse = [string, Record<string, any>, string];
 async function jmapPost(apiUrl: string, token: string, using: string[], methodCalls: unknown[], uncertain = false) {
   let response: Response;
   try {
-    response = await fetch(apiUrl, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ using, methodCalls }), signal: AbortSignal.timeout(25_000), redirect: "error" });
+    response = await fetch(apiUrl, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ using, methodCalls }), signal: AbortSignal.timeout(25_000), redirect: "manual" });
   } catch { throw providerError(uncertain ? "acceptance_unknown" : "provider_configuration_missing"); }
   if (!response.ok) throw providerError(response.status >= 500 && uncertain ? "acceptance_unknown" : response.status === 429 ? "E_RATE_LIMIT_EXCEEDED" : "E_PROVIDER_REJECTED");
   const result = await response.json() as { methodResponses?: JmapMethodResponse[] };
@@ -656,7 +657,7 @@ async function sendJmap(config: ProviderConfig, credentials: ProviderSecret, sna
   const sessionUrl = required(config.sessionUrl, "sessionUrl"), token = required(credentials.accessToken, "accessToken");
   validateHttpsEndpoint(sessionUrl);
   let sessionResponse: Response;
-  try { sessionResponse = await fetch(sessionUrl, { headers: { authorization: `Bearer ${token}`, accept: "application/json" }, signal: AbortSignal.timeout(15_000), redirect: "error" }); }
+  try { sessionResponse = await fetch(sessionUrl, { headers: { authorization: `Bearer ${token}`, accept: "application/json" }, signal: AbortSignal.timeout(15_000), redirect: "manual" }); }
   catch { throw providerError("provider_configuration_missing"); }
   if (!sessionResponse.ok) throw providerError("provider_configuration_missing");
   const sessionData = await sessionResponse.json() as { apiUrl?: string; uploadUrl?: string; primaryAccounts?: Record<string, string> };
@@ -675,7 +676,7 @@ async function sendJmap(config: ProviderConfig, credentials: ProviderSecret, sna
   for (const file of files) {
     const bytes = Uint8Array.from(atob(file.content), (char) => char.charCodeAt(0));
     let response: Response;
-    try { response = await fetch(uploadUrl, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": file.content_type }, body: new Blob([bytes]), signal: AbortSignal.timeout(25_000), redirect: "error" }); }
+    try { response = await fetch(uploadUrl, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": file.content_type }, body: new Blob([bytes]), signal: AbortSignal.timeout(25_000), redirect: "manual" }); }
     catch { throw providerError("E_PROVIDER_REJECTED"); }
     if (!response.ok) throw providerError(response.status >= 500 ? "acceptance_unknown" : "E_PROVIDER_REJECTED");
     const blob = await response.json() as { blobId?: string };
