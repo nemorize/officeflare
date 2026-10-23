@@ -31,7 +31,9 @@ api.use("*", async (c, next) => {
   const mailBody = path.startsWith("/api/mail/");
   const profileImage = path === "/api/me/profile-image";
   const driveUpload = /^\/api\/drive\/uploads\/[^/]+\/(?:content|parts\/[^/]+)$/.test(path);
-  const maxSize = driveUpload ? PART_BYTES : profileImage ? 2 * 1024 * 1024 : largeUpload ? 26 * 1024 * 1024 : mailBody ? 5 * 1024 * 1024 : 64 * 1024;
+  // JSON escaping can expand the 1 MiB calendar payload up to sixfold.
+  const calendarImport = /^\/api\/calendar\/calendars\/[^/]+\/imports$/.test(path);
+  const maxSize = driveUpload ? PART_BYTES : calendarImport ? 6 * 1024 * 1024 + 1024 : profileImage ? 2 * 1024 * 1024 : largeUpload ? 26 * 1024 * 1024 : mailBody ? 5 * 1024 * 1024 : 64 * 1024;
   return bodyLimit({ maxSize, onError: () => { throw new HTTPException(413, { message: "Request body is too large" }); } })(c, next);
 });
 api.route("/mail", mail);

@@ -61,6 +61,7 @@
     "drizzle-orm": "0.45.3",
     "hono": "4.13.12",
     "htmlparser2": "12.0.0",
+    "ical.js": "2.2.1",
     "image-size": "2.0.2",
     "ipaddr.js": "2.2.0",
     "jose": "6.2.12",
