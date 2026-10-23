@@ -1,5 +1,6 @@
 # Run npm run auth:keys to create .dev.vars with fresh local secrets.
-# Existing .dev.vars files are never overwritten by the generator.
+# Existing files get MAIL_ENCRYPTION_KEY added if it is missing; existing keys are preserved.
 # Secret values must not be committed. Production uses Workers Secrets.
 AUTH_SIGNING_KEYS='{"active_kid":"replace","keys":[{"kid":"replace","kty":"EC","crv":"P-256","x":"replace","y":"replace","d":"replace"}]}'
 MFA_ENCRYPTION_KEYS='{"active_version":1,"keys":{"1":"replace-with-32-random-bytes-in-base64url"}}'
+MAIL_ENCRYPTION_KEY='replace-with-32-random-bytes-in-base64url'
