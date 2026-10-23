@@ -9,6 +9,7 @@ import calendarRoutes, {
   subscriptions,
 } from "../calendar/calendars";
 import eventRoutes from "../calendar/events";
+import importRoutes from "../calendar/imports";
 import personalRoutes from "../calendar/personal";
 import { active, calendars, rows } from "../calendar/access";
 import { pageLimit, fail } from "../calendar/input";
@@ -59,6 +60,9 @@ const capabilities = {
   notification_delivery: true,
   email_delivery: true,
   ics: true,
+  ics_import: true,
+  max_import_bytes: 1048576,
+  max_import_entries: 200,
   reminders: false,
   free_busy: true,
   availability: true,
@@ -170,6 +174,7 @@ calendar.get("/changes", async (c) => {
 });
 calendar.route("/", calendarRoutes);
 calendar.route("/", eventRoutes);
+calendar.route("/", importRoutes);
 calendar.route("/", personalRoutes);
 calendar.route("/", sharingRoutes);
 calendar.route("/", linkRoutes);

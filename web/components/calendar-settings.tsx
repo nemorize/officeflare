@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Button, CheckboxControl, Icon, Input, SelectControl, Textarea, useNotifications } from "./ui";
 import { CalendarField, CalendarIconButton, CalendarModal, CalendarNotice, useCalendarAction, useCalendarResource } from "./calendar-controls";
 import { CalendarWorkingHours } from "./calendar-working-hours";
+import { CalendarImportDialog } from "./calendar-import";
 import { CalendarShareLinks } from "./calendar-collaboration";
 import { CalendarTimeZoneField } from "./calendar-editor";
 import { useCalendar } from "./calendar-context";
@@ -49,6 +50,7 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
   const [name, setName] = useState(cal?.name ?? ""), [description, setDescription] = useState(cal?.description ?? ""), [zone, setZone] = useState(cal?.time_zone ?? calendar.zone), [color, setColor] = useState(sub?.color ?? calendarColors[0]!.value), [tab, setTab] = useState("general");
   const editable = id === "new" || calendarRank(cal) >= 5;
   if (!calendar.data) return null;
+  if (id === "import") return <CalendarImportDialog onClose={onClose} />;
   if (id === "working-hours") return <CalendarWorkingHours onClose={onClose} />;
   if (id === "preferences") return <CalendarGeneralPreferences onClose={onClose} />;
   if (id === "shortcuts") return <CalendarModal title="Keyboard shortcuts" onClose={onClose}><div className="calendar-shortcuts">{[["C", "Create event"], ["T", "Go to today"], ["J / K", "Next / previous period"], ["D / W / M / A", "Day / week / month / schedule"], ["Esc", "Close an open dialog"]].map(([key, label]) => <p key={key}><span>{label}</span><kbd>{key}</kbd></p>)}</div></CalendarModal>;
