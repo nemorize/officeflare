@@ -252,10 +252,13 @@ textarea[data-ui="input"] { height: auto; min-height: 86px; resize: vertical; li
 @media (hover: hover) and (pointer: fine) {
   [data-ui="toggle"][data-variant="star"]:hover:not(:disabled):not([data-disabled]) { background: var(--ui-hover); }
 }
-[data-ui="button-group"] { display: inline-flex; align-items: stretch; gap: 0; width: fit-content; }
-[data-ui="button-group"] > [data-ui-button] { border-radius: 0; }
-[data-ui="button-group"] > [data-ui-button]:first-child { border-start-start-radius: 999px; border-end-start-radius: 999px; }
-[data-ui="button-group"] > [data-ui-button]:last-child { border-start-end-radius: 999px; border-end-end-radius: 999px; }
+[data-ui="button-group"] { display: inline-flex; align-items: stretch; gap: 0; width: max-content; flex: 0 0 max-content; }
+[data-ui="button-group"] > [data-ui-button] { flex: 0 0 auto; min-width: max-content; position: relative; border-radius: 0; transition: background-color 120ms, border-color 120ms, box-shadow 120ms; }
+[data-ui="button-group"] > [data-ui-button]:first-child,
+[data-ui="button-group"] > [data-ui-button]:first-child:is(:hover, :active, :focus, [data-popup-open]) { border-start-start-radius: 999px; border-end-start-radius: 999px; }
+[data-ui="button-group"] > [data-ui-button]:last-child,
+[data-ui="button-group"] > [data-ui-button]:last-child:is(:hover, :active, :focus, [data-popup-open]) { border-start-end-radius: 999px; border-end-end-radius: 999px; }
+[data-ui="button-group"] > [data-ui-button]:focus-visible { z-index: 1; }
 [data-ui="button-group"] > [data-ui-button] + [data-ui-button] { margin-inline-start: -1px; }
 [data-ui="button-group"] > [data-ui-button][data-variant="primary"] + [data-ui-button] { border-inline-start-color: color-mix(in srgb, var(--ui-on-primary) 20%, transparent); }
 [data-ui="chip"] { display: inline-flex; align-items: center; max-width: 100%; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 999px; }
