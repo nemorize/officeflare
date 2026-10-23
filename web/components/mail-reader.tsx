@@ -8,6 +8,7 @@ import {
   mailboxPath,
   mailDate,
   MailOperation,
+  cancelableSubmission,
   type Message,
   type MessageDetail,
 } from "../lib/mail";
@@ -526,8 +527,33 @@ function MessageCard({
                 {message.draft ? (
                   <Button
                     variant="primary"
-                    disabled={!canWrite || message.draft.state !== "editable"}
-                    onClick={() => mail.compose(message.id, true)}
+                    disabled={
+                      !canWrite ||
+                      action.busy ||
+                      (message.draft.state !== "editable" &&
+                        (!mail.box?.access?.send ||
+                          !message.submissions.some((submission) =>
+                            cancelableSubmission(submission.status),
+                          )))
+                    }
+                    onClick={() => {
+                      void action.run(async () => {
+                        if (message.draft?.state !== "editable") {
+                          const pending = message.submissions.find((submission) =>
+                            cancelableSubmission(submission.status),
+                          );
+                          if (!pending) throw new Error("This message is already being sent.");
+                          await api(`${path}/submissions/${pending.id}/cancel`, {
+                            method: "POST",
+                          });
+                          mail.refresh();
+                          mail.feedback(pending.status === "unknown"
+                            ? "Draft reopened. The provider may already have accepted this email."
+                            : "Send canceled. Draft is ready to continue.");
+                        }
+                        mail.compose(message.id, true);
+                      });
+                    }}
                   >
                     Continue draft
                   </Button>

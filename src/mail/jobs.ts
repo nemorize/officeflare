@@ -27,6 +27,7 @@ export async function sendSubmission(
   if (accepted) {
     const value = await accepted.json<{ provider_message_id: string }>();
     const job = await store.submission(submissionId);
+    if (!(await store.complete(submissionId, value.provider_message_id))) return;
     await rememberDelivery(
       env,
       job.provider,
@@ -36,7 +37,6 @@ export async function sendSubmission(
       partitionId,
       submissionId,
     );
-    await store.complete(submissionId, value.provider_message_id);
     await mailbox(env, mailboxId).rememberProvider(
       job.provider,
       job.connection_id,
@@ -149,6 +149,7 @@ export async function sendSubmission(
   await env.MAIL_BUCKET.put(receiptKey, JSON.stringify(result), {
     httpMetadata: { contentType: "application/json" },
   });
+  if (!(await store.complete(submissionId, result.provider_message_id))) return;
   await rememberDelivery(
     env,
     job.provider,
@@ -158,7 +159,6 @@ export async function sendSubmission(
     partitionId,
     submissionId,
   );
-  await store.complete(submissionId, result.provider_message_id);
   await mailbox(env, mailboxId).rememberProvider(
     job.provider,
     job.connection_id,

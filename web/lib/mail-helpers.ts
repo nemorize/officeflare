@@ -11,7 +11,7 @@ export function scheduledTime(value: string, now = Date.now()): number | undefin
   if (!Number.isFinite(timestamp) || timestamp <= now || timestamp > now + 366 * 86400_000) throw new Error("Choose a future time within 366 days.");
   return Math.floor(timestamp / 1000);
 }
-export const cancelableSubmission = (status: string) => ["scheduled", "queued", "retry_wait"].includes(status);
+export const cancelableSubmission = (status: string) => ["scheduled", "queued", "retry_wait", "unknown"].includes(status);
 export const retryableSubmission = (status: string) => status === "failed";
 export const submissionLabel = (status: string) => ({ accepted: "Accepted by provider", unknown: "Acceptance unknown", retry_wait: "Waiting to retry", processing: "Sending", queued: "Queued", scheduled: "Scheduled", canceled: "Canceled", failed: "Failed" }[status] ?? status);
 export function mailErrorDescription(code: string) {

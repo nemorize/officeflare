@@ -409,9 +409,7 @@ function MailList({
                     `${path}/messages/${row.id}`,
                   );
                   const pending = message.submissions.find((submission) =>
-                    ["scheduled", "queued", "retry_wait"].includes(
-                      submission.status,
-                    ),
+                    cancelableSubmission(submission.status),
                   );
                   if (!pending) throw new Error("Send is no longer pending");
                   await api(`${path}/submissions/${pending.id}/cancel`, {
@@ -428,7 +426,9 @@ function MailList({
                   `${failed} sends could not be canceled. They may already be processing.`,
                 );
               mail.feedback(
-                "Pending sends canceled. Messages moved to Drafts.",
+                rows.some((row) => row.submission_status === "unknown")
+                  ? "Drafts reopened. A message with unknown acceptance may already have been sent."
+                  : "Pending sends canceled. Messages moved to Drafts.",
               );
             });
           }}

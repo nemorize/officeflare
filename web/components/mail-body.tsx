@@ -154,8 +154,8 @@ export function SendStatus({ submission }: { submission: Submission }) {
         )}
         {value.status === "unknown" && (
           <small>
-            The provider may have accepted this message. Retrying is disabled to
-            prevent duplicate sends.
+            The provider may have accepted this message. Canceling reopens the
+            draft, but cannot recall an email already accepted by the provider.
           </small>
         )}
         {value.recipients?.map((recipient) => (
@@ -181,6 +181,9 @@ export function SendStatus({ submission }: { submission: Submission }) {
                 });
                 resource.reload();
                 mail.refresh();
+                mail.feedback(value.status === "unknown"
+                  ? "Draft reopened. The provider may already have accepted this email."
+                  : "Send canceled. Draft reopened.");
               });
             }}
           >

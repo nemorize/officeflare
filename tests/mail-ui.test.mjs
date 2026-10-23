@@ -48,8 +48,8 @@ test("recipient and scheduling validation rejects malformed addresses and expire
 test("sending controls never retry ambiguous acceptance or cancel a processing send", () => {
   assert.equal(retryableSubmission("failed"), true);
   for (const status of ["unknown", "accepted", "queued", "processing", "scheduled"]) assert.equal(retryableSubmission(status), false);
-  for (const status of ["scheduled", "queued", "retry_wait"]) assert.equal(cancelableSubmission(status), true);
-  for (const status of ["accepted", "unknown", "processing", "failed"]) assert.equal(cancelableSubmission(status), false);
+  for (const status of ["scheduled", "queued", "retry_wait", "unknown"]) assert.equal(cancelableSubmission(status), true);
+  for (const status of ["accepted", "processing", "failed"]) assert.equal(cancelableSubmission(status), false);
 });
 test("HTML email uses a restrictive frame policy that blocks remote images and scripts", () => {
   const frame = htmlFrame('<p>Mail body</p><img src="https://tracking.test/image">');

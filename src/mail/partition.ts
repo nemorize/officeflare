@@ -724,7 +724,10 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   complete(submissionId: string, providerMessageId: string) {
     const job = this.submission(submissionId);
-    if (job.status === "accepted") return;
+    if (job.status === "accepted") return true;
+    // A user may cancel an uncertain send and reopen its draft. A late receipt
+    // must not turn that canceled submission back into a sent message.
+    if (job.status === "canceled") return false;
     if (!["processing", "unknown"].includes(job.status))
       fail(409, "Submission is not processing");
     this.ctx.storage.transactionSync(() => {
@@ -757,6 +760,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       this.sql.exec("DELETE FROM drafts WHERE message_id=?", job.message_id);
       this.change(job.message_id, "accepted");
     });
+    return true;
   }
   failure(
     submissionId: string,
@@ -791,7 +795,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   cancel(submissionId: string, actorId: string) {
     this.submissionView(submissionId, actorId);
     const job = this.submission(submissionId);
-    if (!["scheduled", "queued", "retry_wait"].includes(job.status))
+    if (!["scheduled", "queued", "retry_wait", "unknown"].includes(job.status))
       fail(409, "Submission cannot be canceled after processing starts");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
