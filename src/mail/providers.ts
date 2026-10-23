@@ -151,7 +151,7 @@ export function parseProviderConfig(value: unknown, selected: MailProvider): Pro
   }
   return result;
 }
-export function parseProviderSecrets(value: unknown, selected: MailProvider): ProviderSecret {
+function parseProviderSecretValues(value: unknown, selected: MailProvider, partial: boolean): ProviderSecret {
   const result: ProviderSecret = {};
   if (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value)))
     fail(400, "Provider secrets must be an object");
@@ -160,14 +160,25 @@ export function parseProviderSecrets(value: unknown, selected: MailProvider): Pr
   if (Object.keys(source).some((key) => !allowed.has(key))) fail(400, "Unsupported provider secret field");
   for (const item of selected.secret_fields) {
     const raw = source[item.key];
-    if (raw === undefined || raw === "") {
-      if (item.required) fail(400, `${item.label} is required`);
+    if (raw === undefined) {
+      if (item.required && !partial) fail(400, `${item.label} is required`);
       continue;
     }
     if (typeof raw !== "string" || raw.length > 8192 || /[\r\n\0]/.test(raw)) fail(400, `Invalid ${item.label}`);
-    result[item.key] = raw.trim();
+    const normalized = raw.trim();
+    if (!normalized) {
+      if (item.required && !partial) fail(400, `${item.label} is required`);
+      continue;
+    }
+    result[item.key] = normalized;
   }
   return result;
+}
+export function parseProviderSecrets(value: unknown, selected: MailProvider): ProviderSecret {
+  return parseProviderSecretValues(value, selected, false);
+}
+export function parseProviderSecretUpdates(value: unknown, selected: MailProvider): ProviderSecret {
+  return parseProviderSecretValues(value, selected, true);
 }
 
 function providerError(code: string): Error & { code: string } {

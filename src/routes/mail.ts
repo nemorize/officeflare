@@ -38,7 +38,7 @@ import {
   text,
 } from "../mail/input";
 import { mailbox, partition } from "../mail/mailbox";
-import { providers, provider, publicProvider, parseProviderConfig, parseProviderSecrets } from "../mail/providers";
+import { providers, provider, publicProvider, parseProviderConfig, parseProviderSecrets, parseProviderSecretUpdates } from "../mail/providers";
 import {
   exportStream,
   startImport,
@@ -46,7 +46,7 @@ import {
   startRestore,
 } from "../mail/data";
 import { jmap, mcp } from "../mail/protocols";
-import { seal } from "../mail/secrets";
+import { seal, unseal } from "../mail/secrets";
 import type { Permission } from "../authorization/permissions";
 import {
   belongs,
@@ -287,7 +287,16 @@ mail.patch("/provider-connections/:id", async (c) => {
   if (!existing) fail(404, "Connection not found");
   const selected = provider(existing.provider),
     config = data.config === undefined ? safeProviderConfig(existing.config_json) : parseProviderConfig(data.config, selected),
-    sealed = data.secrets === undefined ? null : await seal(c.env, JSON.stringify(parseProviderSecrets(data.secrets, selected)));
+    secretUpdates = data.secrets === undefined ? {} : parseProviderSecretUpdates(data.secrets, selected),
+    hasSecretUpdates = Object.keys(secretUpdates).length > 0;
+  let sealed: Awaited<ReturnType<typeof seal>> | null = null;
+  if (hasSecretUpdates) {
+    const existingSecrets = existing.secret_ciphertext && existing.secret_nonce
+      ? JSON.parse(await unseal(c.env, existing.secret_ciphertext, existing.secret_nonce)) as Record<string, unknown>
+      : {};
+    const mergedSecrets = parseProviderSecrets({ ...existingSecrets, ...secretUpdates }, selected);
+    sealed = await seal(c.env, JSON.stringify(mergedSecrets));
+  }
   const result = await administrativeControl(c, "admin.mail.providers.manage")
     .prepare(
       "UPDATE mail_provider_connections SET name=?,enabled=?,config_json=?,secret_ciphertext=CASE WHEN ? THEN ? ELSE secret_ciphertext END,secret_nonce=CASE WHEN ? THEN ? ELSE secret_nonce END,version=version+1,updated_at=? WHERE id=? AND version=?",
@@ -298,9 +307,9 @@ mail.patch("/provider-connections/:id", async (c) => {
         ? existing.enabled
         : flag(data.enabled, "enabled"),
       JSON.stringify(config),
-      sealed ? 1 : 0,
+      hasSecretUpdates ? 1 : 0,
       sealed?.ciphertext ?? null,
-      sealed ? 1 : 0,
+      hasSecretUpdates ? 1 : 0,
       sealed?.nonce ?? null,
       epoch(),
       existing.id,

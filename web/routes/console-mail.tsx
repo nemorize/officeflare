@@ -49,7 +49,7 @@ function DomainEditor({ existing, providers, boxes, providerConnections, provide
   const [isDefault, setDefault] = useState(defaultDomain);
   const [name, setName] = useState(existing?.name ?? ""), [inbound, setInbound] = useState(initialProvider("inbound")), [outbound, setOutbound] = useState(initialProvider("outbound"));
   const initialOutboundConnection = existing?.outbound_connection_id ?? (initialProvider("outbound") === "cloudflare" ? providers.find((provider) => provider.provider === "cloudflare")?.default_connection_id ?? null : null);
-  const [outboundConnectionId, setOutboundConnectionId] = useState<string | null>(initialOutboundConnection), [providerConfig, setProviderConfig] = useState<Record<string, string>>({}), [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({}), [providerConnectionEnabled, setProviderConnectionEnabled] = useState(true), [createdConnection, setCreatedConnection] = useState<ProviderConnection | null>(null);
+  const [outboundConnectionId, setOutboundConnectionId] = useState<string | null>(initialOutboundConnection), [providerConfig, setProviderConfig] = useState<Record<string, string>>({}), [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({}), [providerSecretEdits, setProviderSecretEdits] = useState<Record<string, boolean>>({}), [providerConnectionEnabled, setProviderConnectionEnabled] = useState(true), [createdConnection, setCreatedConnection] = useState<ProviderConnection | null>(null);
   const [providerConfigDirty, setProviderConfigDirty] = useState(false);
   const [sendLimit, setSendLimit] = useState(existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "");
   const selectedProvider = providers.find((provider) => provider.provider === outbound), selectedConnection = createdConnection?.id === outboundConnectionId && createdConnection.provider === outbound ? createdConnection : providerConnections.find((connection) => connection.id === outboundConnectionId && connection.provider === outbound), providerMaximum = selectedProvider?.capabilities.max_send_bytes ?? 0;
@@ -74,22 +74,25 @@ function DomainEditor({ existing, providers, boxes, providerConnections, provide
     if (outbound && selectedProvider && canManageProviders && (selectedProvider.config_fields.length || selectedProvider.secret_fields.length)) {
       if (providerConnectionsLoading) throw new Error("Provider connections are still loading. Try again in a moment.");
       if (providerConnectionsError) throw new Error("Could not load provider connections. Reload the page before saving provider settings.");
-      const secretsEntered = Object.values(providerSecrets).some(Boolean);
+      const secretUpdates = Object.fromEntries(selectedProvider.secret_fields.filter((field) => providerSecrets[field.key]?.trim()).map((field) => [field.key, providerSecrets[field.key]!.trim()]));
+      const secretsEntered = Object.keys(secretUpdates).length > 0;
       if (outboundId && !selectedConnection) throw new Error("Could not load the selected sending provider connection. Reload the page before saving.");
       if (!outboundId) {
         if (send && !providerConnectionEnabled) throw new Error("Enable this provider connection before enabling sending for the domain.");
-        const result = await api<{ connection: ProviderConnection }>("/api/mail/provider-connections", { method: "POST", body: { provider: selectedProvider.provider, name: `${name || "Mail domain"} · ${selectedProvider.label}`, enabled: providerConnectionEnabled, config: providerConfig, ...(secretsEntered ? { secrets: providerSecrets } : {}) } });
+        const result = await api<{ connection: ProviderConnection }>("/api/mail/provider-connections", { method: "POST", body: { provider: selectedProvider.provider, name: `${name || "Mail domain"} · ${selectedProvider.label}`, enabled: providerConnectionEnabled, config: providerConfig, ...(secretsEntered ? { secrets: secretUpdates } : {}) } });
         outboundId = result.connection.id;
         setOutboundConnectionId(outboundId);
         setCreatedConnection(result.connection);
         setProviderSecrets({});
+        setProviderSecretEdits({});
         setProviderConfigDirty(false);
       } else if (selectedConnection) {
         if (send && !providerConnectionEnabled) throw new Error("Enable this provider connection before enabling sending for the domain.");
         if (providerConfigDirty || secretsEntered || providerConnectionEnabled !== !!selectedConnection.enabled) {
-          const result = await api<{ connection: ProviderConnection }>(`/api/mail/provider-connections/${encodeURIComponent(selectedConnection.id)}`, { method: "PATCH", body: { version: selectedConnection.version, name: `${name || "Mail domain"} · ${providerName(selectedProvider.provider)}`, enabled: providerConnectionEnabled, config: providerConfig, ...(secretsEntered ? { secrets: providerSecrets } : {}) } });
+          const result = await api<{ connection: ProviderConnection }>(`/api/mail/provider-connections/${encodeURIComponent(selectedConnection.id)}`, { method: "PATCH", body: { version: selectedConnection.version, name: `${name || "Mail domain"} · ${providerName(selectedProvider.provider)}`, enabled: providerConnectionEnabled, config: providerConfig, ...(secretsEntered ? { secrets: secretUpdates } : {}) } });
           setCreatedConnection(result.connection);
           setProviderSecrets({});
+          setProviderSecretEdits({});
           setProviderConfigDirty(false);
         }
       }
@@ -114,15 +117,20 @@ function DomainEditor({ existing, providers, boxes, providerConnections, provide
         <MailInput label="Domain" placeholder="example.com" required disabled={!!existing} value={name} maxLength={253} onChange={(event) => setName(event.target.value)} />
         <div className="mail-form-grid">
           <MailField label="Receiving provider"><MailSelect value={inbound} onValueChange={(value) => { setInbound(value); if (!value) setReceive(false); }} options={providerOptions("receive", inbound)} /></MailField>
-          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { const next = providers.find((provider) => provider.provider === value), current = createdConnection?.provider === value ? createdConnection : existing?.outbound_provider === value ? providerConnections.find((connection) => connection.id === existing.outbound_connection_id) : undefined, nextConnectionId = current?.id ?? (value === "cloudflare" ? next?.default_connection_id ?? null : null); setOutbound(value); setOutboundConnectionId(nextConnectionId); setProviderConfigDirty(false); setProviderSecrets({}); setProviderConnectionEnabled(current ? !!current.enabled : true); if (!value) { setSend(false); setSendLimit(""); } else { const maximum = next?.capabilities.max_send_bytes ?? 0; if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum) setSendLimit(String(maximum / 1024 ** 2)); } }} options={providerOptions("send", outbound)} /></MailField>
+          <MailField label="Sending provider"><MailSelect value={outbound} onValueChange={(value) => { const next = providers.find((provider) => provider.provider === value), current = createdConnection?.provider === value ? createdConnection : existing?.outbound_provider === value ? providerConnections.find((connection) => connection.id === existing.outbound_connection_id) : undefined, nextConnectionId = current?.id ?? (value === "cloudflare" ? next?.default_connection_id ?? null : null); setOutbound(value); setOutboundConnectionId(nextConnectionId); setProviderConfigDirty(false); setProviderSecrets({}); setProviderSecretEdits({}); setProviderConnectionEnabled(current ? !!current.enabled : true); if (!value) { setSend(false); setSendLimit(""); } else { const maximum = next?.capabilities.max_send_bytes ?? 0; if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum) setSendLimit(String(maximum / 1024 ** 2)); } }} options={providerOptions("send", outbound)} /></MailField>
         </div>
         {outbound && selectedProvider && (selectedProvider.config_fields.length > 0 || selectedProvider.secret_fields.length > 0) && <>
           {!canManageProviders ? <p className="mail-hint">Your role needs the “Manage sending providers” permission to configure this domain’s sender.</p> : providerConnectionsLoading ? <MailState loading error="" kind="form" /> : providerConnectionsError ? <MailState loading={false} error={providerConnectionsError} retry={reloadProviderConnections} /> : <>
             {selectedProvider.config_fields.map((field) => field.options
               ? <MailField key={field.key} label={field.label} hint={field.help}><MailSelect value={providerConfig[field.key] ?? field.options[0] ?? ""} onValueChange={(value) => { setProviderConfig((current) => ({ ...current, [field.key]: value })); setProviderConfigDirty(true); }} options={field.options.map((value) => ({ value, label: value === "tls" ? "TLS (port 465)" : value === "starttls" ? "STARTTLS (port 587)" : value }))} /></MailField>
               : <MailInput key={field.key} label={field.label} hint={field.help} required={!!field.required} value={providerConfig[field.key] ?? ""} onChange={(event) => { setProviderConfig((current) => ({ ...current, [field.key]: event.target.value })); setProviderConfigDirty(true); }} />)}
-            {selectedProvider.secret_fields.length > 0 && selectedConnection?.secret_configured && <p className="mail-hint">Credentials are already saved and hidden. Leave these fields blank to keep them, or re-enter every required credential to replace them.</p>}
-            {selectedProvider.secret_fields.map((field) => <MailInput key={field.key} label={field.label} hint={field.help} required={!!field.required && (!selectedConnection?.secret_configured || Object.values(providerSecrets).some(Boolean))} type="password" autoComplete="new-password" value={providerSecrets[field.key] ?? ""} onChange={(event) => setProviderSecrets((current) => ({ ...current, [field.key]: event.target.value }))} />)}
+            {selectedProvider.secret_fields.map((field) => {
+              const saved = !!selectedConnection?.secret_configured, enabled = !saved || !!providerSecretEdits[field.key];
+              return <div className="mail-secret-field-row" key={field.key}>
+                <MailInput label={field.label} hint={field.help} required={!!field.required && !saved} disabled={!enabled} placeholder={saved ? "Enter to change" : ""} type="password" autoComplete="new-password" value={providerSecrets[field.key] ?? ""} onChange={(event) => { const value = event.target.value; setProviderSecrets((current) => ({ ...current, [field.key]: value })); if (value) setProviderSecretEdits((current) => ({ ...current, [field.key]: true })); }} />
+                {saved && <div className="mail-secret-change"><Check checked={!!providerSecretEdits[field.key]} onChange={(checked) => { setProviderSecretEdits((current) => ({ ...current, [field.key]: checked })); if (!checked) setProviderSecrets((current) => ({ ...current, [field.key]: "" })); }}>Change</Check></div>}
+              </div>;
+            })}
             {selectedConnection && <Check checked={providerConnectionEnabled} onChange={(checked) => { setProviderConnectionEnabled(checked); setProviderConfigDirty(true); }}>Sending provider connection enabled</Check>}
           </>}
         </>}

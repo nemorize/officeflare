@@ -2,13 +2,18 @@ import { workerModules } from "./worker-modules.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, webcrypto } from "node:crypto";
 import { generateKeyPair, exportJWK } from "jose";
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { hashPassword } from "../src/auth/password.ts";
 import { permissionClosure } from "../src/authorization/permissions.ts";
 import { maxAttachmentBytes } from "../src/mail/size.ts";
 const password = "a long password for mail backend tests";
+async function decryptProviderSecrets(bindings, stored) {
+  const key = await webcrypto.subtle.importKey("raw", Buffer.from(bindings.MAIL_ENCRYPTION_KEY, "base64"), "AES-GCM", false, ["decrypt"]);
+  const plaintext = await webcrypto.subtle.decrypt({ name: "AES-GCM", iv: Buffer.from(stored.secret_nonce, "base64") }, key, Buffer.from(stored.secret_ciphertext, "base64"));
+  return JSON.parse(new TextDecoder().decode(plaintext));
+}
 async function fixture(t, target = "6000000000", queues = false) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const mf = new Miniflare(
@@ -388,7 +393,7 @@ test("mail UI metadata, sharing, attachment editing and send recovery use author
   });
 });
 test("mail backend permissions, providers, drafts, search and scheduling", async (t) => {
-  const { db, tokens, raw, call, admin, base, address, mailbox, domain, draft } =
+  const { mf, db, tokens, raw, call, admin, base, address, mailbox, domain, draft } =
     await fixture(t);
   await t.test(
     "Provider catalog exposes direct sending adapters while preserving Cloudflare bindings",
@@ -427,6 +432,28 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
       assert.equal(JSON.parse(stored.config_json).accountId, "account-123");
       assert.notEqual(stored.secret_ciphertext, "provider-secret-value");
       assert.ok(stored.secret_ciphertext && stored.secret_nonce);
+      const ses = await admin("/provider-connections", {
+        method: "POST",
+        expected: 201,
+        data: {
+          provider: "ses",
+          name: "SES",
+          config: { region: "us-east-1" },
+          secrets: { accessKeyId: "old-access-key", secretAccessKey: "preserved-secret", sessionToken: "preserved-session" },
+        },
+      });
+      const updatedSes = await admin(`/provider-connections/${ses.connection.id}`, {
+        method: "PATCH",
+        data: { version: ses.connection.version, secrets: { accessKeyId: "new-access-key" } },
+      });
+      assert.equal(updatedSes.connection.secret_configured, true);
+      const sesStored = await db.prepare("SELECT secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?").bind(ses.connection.id).first();
+      const bindings = await mf.getBindings("officeflare");
+      assert.deepEqual(await decryptProviderSecrets(bindings, sesStored), {
+        accessKeyId: "new-access-key",
+        secretAccessKey: "preserved-secret",
+        sessionToken: "preserved-session",
+      });
       const secondConnection = await admin("/provider-connections", {
         method: "POST",
         expected: 201,
