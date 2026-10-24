@@ -3,6 +3,7 @@ import { Button, CheckboxControl, Icon, Input, SelectControl, Textarea, useNotif
 import { CalendarField, CalendarIconButton, CalendarModal, CalendarNotice, useCalendarAction, useCalendarResource } from "./calendar-controls";
 import { CalendarWorkingHours } from "./calendar-working-hours";
 import { CalendarImportDialog } from "./calendar-import";
+import { CalendarFeedDialog } from "./calendar-feed";
 import { CalendarShareLinks } from "./calendar-collaboration";
 import { CalendarTimeZoneField } from "./calendar-editor";
 import { useCalendar } from "./calendar-context";
@@ -50,6 +51,8 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
   const [name, setName] = useState(cal?.name ?? ""), [description, setDescription] = useState(cal?.description ?? ""), [zone, setZone] = useState(cal?.time_zone ?? calendar.zone), [color, setColor] = useState(sub?.color ?? calendarColors[0]!.value), [tab, setTab] = useState("general");
   const editable = id === "new" || calendarRank(cal) >= 5;
   if (!calendar.data) return null;
+  if (id === "subscribe") return <CalendarFeedDialog onClose={onClose} />;
+  if (cal?.kind === "external" && calendarRank(cal) >= 6) return <CalendarFeedDialog cal={cal} onClose={onClose} />;
   if (id === "import") return <CalendarImportDialog onClose={onClose} />;
   if (id === "working-hours") return <CalendarWorkingHours onClose={onClose} />;
   if (id === "preferences") return <CalendarGeneralPreferences onClose={onClose} />;

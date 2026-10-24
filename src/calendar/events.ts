@@ -1183,6 +1183,7 @@ routes.post(`${paths}/:eventId/duplicate`, async (c) => {
     destination = data.target_calendar_id
       ? await requireCalendar(c, identifier(data.target_calendar_id), 3)
       : cal;
+  if (destination.kind === "external") fail(403, "READ_ONLY_CALENDAR", "External calendars are read-only. Choose a different destination.");
   const clone: Event = {
       ...event,
       id: uuid(),
@@ -1429,7 +1430,7 @@ routes.post(`${paths}/:eventId/recurrence-preview`, async (c) => {
 });
 routes.get("/trash/events", async (c) => {
   const available = (await calendars(c, true)).filter(
-      (cal) => cal.effective_role === "data_owner",
+      (cal) => cal.effective_role === "data_owner" && cal.kind !== "external",
     ),
     limit = pageLimit(c),
     scope = JSON.stringify([

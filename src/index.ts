@@ -8,6 +8,7 @@ import { consume, recover } from "./mail/jobs";
 import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
 import { recoverDrive } from "./drive/jobs";
 import { consumeCalendar, recoverCalendar } from "./calendar/jobs";
+import { recoverCalendarFeeds, syncCalendarFeed } from "./calendar/feed-sync";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
 export { NotificationHubDO } from "./notifications/hub";
@@ -58,12 +59,18 @@ export default {
     if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications")) await consumeNotifications(batch, env);
     else {
       const calendarMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind === 'calendar.delivery');
-      const mailMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind !== 'calendar.delivery');
+      const feedMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind === 'calendar.feed');
+      const mailMessages = batch.messages.filter(message => !['calendar.delivery', 'calendar.feed'].includes((message.body as { kind?: string })?.kind ?? ''));
+      for (const message of feedMessages) {
+        const id = (message.body as { id?: unknown }).id;
+        if (typeof id === 'string') { try { await syncCalendarFeed(env, id); message.ack(); } catch { message.retry(); } }
+        else message.ack();
+      }
       if (calendarMessages.length) await consumeCalendar({ ...batch, messages: calendarMessages }, env);
       if (mailMessages.length) await consume({ ...batch, messages: mailMessages }, env);
     }
   },
   scheduled: async (_event, env, ctx) => {
-    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env), recoverCalendar(env)]));
+    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env), recoverCalendar(env), recoverCalendarFeeds(env)]));
   },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;

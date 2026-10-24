@@ -138,6 +138,8 @@ export async function requireCalendar(
       (cal) => cal.id === resolved && rank[cal.effective_role] >= min,
     );
   if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+  if ((min === 3 || min === 4) && value.kind === "external")
+    fail(403, "READ_ONLY_CALENDAR", "External calendars are read-only. Edit events at their source.");
   return value;
 }
 export function calendarCondition(
@@ -148,7 +150,7 @@ export function calendarCondition(
 ) {
   const access = calendarAccess(c.get("identity").user.id, "cal", min, trash);
   return condition(
-    `EXISTS(SELECT 1 FROM calendars cal WHERE cal.id=? AND cal.version=? AND ${access.sql})`,
+    `EXISTS(SELECT 1 FROM calendars cal WHERE cal.id=? AND cal.version=? ${min === 3 || min === 4 ? "AND cal.kind<>'external'" : ""} AND ${access.sql})`,
     cal.id,
     cal.version,
     ...access.args,
@@ -182,7 +184,7 @@ export async function requireEvent(
   if (
     !value ||
     (edit &&
-      (rank[cal.effective_role] < 3 ||
+      (cal.kind === "external" || rank[cal.effective_role] < 3 ||
         (privateEvent(value, cal) && rank[cal.effective_role] < 4) ||
         value.authority !== "native"))
   )

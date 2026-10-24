@@ -31,9 +31,9 @@ type Property = InstanceType<typeof ICAL.Property>;
 
 // Split only at component boundaries, so one malformed property does not prevent
 // otherwise valid events from being imported. Folded lines remain intact.
-function components(content: string) {
-  if (!content.trim() || new TextEncoder().encode(content).length > MAX_IMPORT_BYTES)
-    invalid("Choose a non-empty iCalendar file of up to 1 MiB.");
+function components(content: string, limits: { maxBytes: number; maxEntries: number; allowEmpty: boolean }) {
+  if (!content.trim() || new TextEncoder().encode(content).length > limits.maxBytes)
+    invalid("The iCalendar file is empty or exceeds the size limit.");
   const lines = content.replace(/^\uFEFF/, "").replace(/\r\n|\r/g, "\n").replace(/\n[ \t]/g, "").trim().split("\n");
   const stack: string[] = [], header: string[] = [], parts: { name: string; raw: string }[] = [];
   let block: string[] = [], ended = false;
@@ -54,7 +54,7 @@ function components(content: string) {
       if (stack.length === 1) {
         parts.push({ name: end[1]!.toLowerCase(), raw: block.join("\r\n") });
         block = [];
-        if (parts.length > MAX_IMPORT_ENTRIES + 100) invalid("Too many calendar components.");
+        if (parts.length > limits.maxEntries + 100) invalid("Too many calendar components.");
       }
     } else if (stack.length === 1) header.push(line);
     else if (stack.length > 1) block.push(line);
@@ -66,8 +66,8 @@ function components(content: string) {
   const scale = root.getFirstPropertyValue("calscale");
   if (scale && String(scale).toUpperCase() !== "GREGORIAN") invalid("Only Gregorian calendars are supported.");
   const entries = parts.filter(part => part.name !== "vtimezone");
-  if (!entries.length) invalid("No calendar entries were found.");
-  if (entries.length > MAX_IMPORT_ENTRIES) invalid(`Import at most ${MAX_IMPORT_ENTRIES} entries at a time.`);
+  if (!entries.length && !limits.allowEmpty) invalid("No calendar entries were found.");
+  if (entries.length > limits.maxEntries) invalid(`Import at most ${limits.maxEntries} entries at a time.`);
   return { parts, entries };
 }
 function one(component: Component, name: string) {
@@ -198,8 +198,8 @@ function status(component: Component) {
   if (!["confirmed", "tentative", "cancelled"].includes(result)) invalid("Unsupported event STATUS.");
   return result;
 }
-export function parseCalendarImport(content: string, cal: Calendar) {
-  const { parts, entries } = components(content), aliases = new Map<string, string>();
+export function parseCalendarImport(content: string, cal: Calendar, limits = { maxBytes: MAX_IMPORT_BYTES, maxEntries: MAX_IMPORT_ENTRIES, allowEmpty: false }) {
+  const { parts, entries } = components(content, limits), aliases = new Map<string, string>();
   for (const part of parts.filter(part => part.name === "vtimezone")) {
     try {
       const component = new ICAL.Component(ICAL.parse(part.raw)), id = value(component, "tzid"), location = value(component, "x-lic-location");

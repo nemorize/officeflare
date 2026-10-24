@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type M
 import { Button, Icon } from "./ui";
 import { CalendarModal } from "./calendar-controls";
 import { useCalendar } from "./calendar-context";
-import { calendarColors, calendarRank, eventKey, type CalendarEvent } from "../lib/calendar";
+import { calendarColors, calendarWritable, eventKey, type CalendarEvent } from "../lib/calendar";
 import { addDays, civilDate, dateLabel, endpointLocal, eventDateLabel, eventDayBounds, eventTimeLabel, HOUR_HEIGHT, monthPlacements, occursOn, timedPlacements, timeLabel, todayIn } from "../lib/calendar-date";
 
 export interface CalendarViewActions {
@@ -20,7 +20,7 @@ export function CalendarEventButton({ item, onOpen, onDrag, block = false, showT
   block?: boolean; showTime?: boolean; continuation?: boolean; style?: CSSProperties; className?: string;
 }) {
   const calendar = useCalendar(), appearance = useEventAppearance();
-  const movable = !item.invitation_id && !item.is_redacted && calendar.can("events.update") && calendarRank(calendar.data?.calendars.find(cal => cal.id === item.calendar_id)) >= 3;
+  const movable = !item.invitation_id && !item.is_redacted && calendar.can("events.update") && calendarWritable(calendar.data?.calendars.find(cal => cal.id === item.calendar_id));
   const locale = calendar.data?.preferences.locale ?? "en";
   return <button type="button" className={`calendar-event${block ? " calendar-event-block" : ""}${item.response_status === "declined" ? " calendar-event-declined" : ""}${item.response_status === "needs_action" || item.response_status === "tentative" ? " calendar-event-tentative" : ""} ${className}`}
     style={{ ...appearance(item), ...style }} draggable={movable && !!onDrag}
@@ -62,7 +62,7 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
     const column = Math.max(0, Math.min(weeks[0]!.length - 1, Math.floor((clientX - rect.left) / (rect.width / weeks[0]!.length))));
     return weeks[week]![column]!;
   };
-  const canCreate = calendar.can("events.create") && !!calendar.data?.calendars.some(cal => calendarRank(cal) >= 3);
+  const canCreate = calendar.can("events.create") && !!calendar.data?.calendars.some(cal => calendarWritable(cal));
   return <div className="calendar-month-view">
     <div className="calendar-month-weekdays" style={{ gridTemplateColumns: `repeat(${weeks[0]!.length}, minmax(0, 1fr))` }}>{weeks[0]!.map(date => <span key={date}>{dateLabel(date, { weekday: "short" }, locale)}</span>)}</div>
     <div className="calendar-month-weeks" ref={container} style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(0, 1fr))` }}
@@ -114,7 +114,7 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
     scroller.current?.scrollTo({ top: hour * HOUR_HEIGHT });
   }, [calendar.range.start, calendar.view]);
   const pointerMinute = (event: { clientY: number }, element: HTMLElement) => Math.max(0, Math.min(1440, Math.round((event.clientY - element.getBoundingClientRect().top) / HOUR_HEIGHT * 60 / 15) * 15));
-  const canCreate = calendar.can("events.create") && !!calendar.data?.calendars.some(cal => calendarRank(cal) >= 3);
+  const canCreate = calendar.can("events.create") && !!calendar.data?.calendars.some(cal => calendarWritable(cal));
   const nowLocal = endpointLocal({ date_time: new Date(now).toISOString(), time_zone: calendar.zone }, calendar.zone);
   const allDay = calendar.events.filter(event => !!event.start.date), allPlacements = monthPlacements(allDay, days, calendar.zone);
   const allRows = Math.max(1, ...allPlacements.map(value => value.row + 1)), visibleAllRows = allDayExpanded ? allRows : Math.min(3, allRows);
@@ -156,7 +156,7 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
           }} style={{ top: slot * HOUR_HEIGHT / 2, height: HOUR_HEIGHT / 2 }} aria-label={`Create event, ${dateLabel(day, { weekday: "long", month: "short", day: "numeric" }, locale)}, ${timeLabel(slot * 30, locale)}`} disabled={!canCreate} onClick={event => { if (!event.detail) calendar.setCreate({ date: day, minute: slot * 30 }); }} />)}
           {selection?.day === day && <div className="calendar-time-selection" style={{ top: Math.min(selection.start, selection.end - 15) / 60 * HOUR_HEIGHT, height: Math.abs(Math.max(selection.start + 15, selection.end) - Math.min(selection.start, selection.end - 15)) / 60 * HOUR_HEIGHT }}>{timeLabel(Math.min(selection.start, selection.end - 15), locale)} – {timeLabel(Math.max(selection.start + 15, selection.end), locale)}</div>}
           {timedPlacements(calendar.events, day, calendar.zone).map(({ event, start, end, column, columns, span }) => {
-            const canEdit = !event.invitation_id && !event.is_redacted && calendar.can("events.update") && calendarRank(calendar.data?.calendars.find(cal => cal.id === event.calendar_id)) >= 3;
+            const canEdit = !event.invitation_id && !event.is_redacted && calendar.can("events.update") && calendarWritable(calendar.data?.calendars.find(cal => cal.id === event.calendar_id));
             const last = endpointLocal(event.end, calendar.zone).date === day;
             return <div className="calendar-timed-placement" key={eventKey(event)} style={{ top: start / 60 * HOUR_HEIGHT, height: ((resizing?.event === event ? resizing.end : end) - start) / 60 * HOUR_HEIGHT, left: `${column / columns * 100}%`, width: `calc(${span / columns * 100}% - 4px)` }}>
               <CalendarEventButton item={event} block onOpen={actions.onOpen} onDrag={(item, offset) => setDragging(item ? { event: item, offset } : null)} />

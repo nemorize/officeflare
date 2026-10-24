@@ -84,6 +84,7 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
         {active && <Menu.Item onClick={() => setSearchOpen(true)}><Icon name="search" />Search events</Menu.Item>}
         <Menu.Item onClick={() => calendar.setSettings("preferences")}><Icon name="settings" />Settings</Menu.Item>
         {calendar.can("events.create") && <Menu.Item onClick={() => calendar.setSettings("import")}><Icon name="upload" />Import events (.ics)</Menu.Item>}
+        {calendar.can("calendars.create") && <Menu.Item onClick={() => calendar.setSettings("subscribe")}><Icon name="link" />Subscribe by URL</Menu.Item>}
         <Menu.Item onClick={() => calendar.setSettings("working-hours")}><Icon name="clock" />Working hours</Menu.Item>
         <Menu.Item onClick={() => calendar.refresh(true)}><Icon name="refresh" />Refresh</Menu.Item>
         <Menu.Item onClick={() => calendar.setSettings("shortcuts")}><Icon name="code" />Keyboard shortcuts</Menu.Item>

@@ -479,6 +479,13 @@ export const calendars = sqliteTable("calendars", {
 export const calendarPrimaryCalendars = sqliteTable("calendar_primary_calendars", {
   user_id: text().primaryKey().notNull().references(() => users.id), calendar_id: text().notNull().unique().references(() => calendars.id),
 });
+export const calendarFeeds = sqliteTable("calendar_feeds", {
+  calendar_id: text().primaryKey().notNull().references(() => calendars.id), source_secret: text(), source_hash: text(), source_host: text().notNull(),
+  enabled: integer().notNull().default(1), version: integer().notNull().default(1), etag: text(), last_modified: text(),
+  last_attempt_at: integer(), last_success_at: integer(), next_sync_at: integer().notNull().default(0), lease_token: text(), lease_until: integer().notNull().default(0),
+  failure_count: integer().notNull().default(0), error_code: text(), error_message: text(), event_count: integer().notNull().default(0), warnings_json: text().notNull().default("[]"),
+  created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+}, table => [index("calendar_feeds_due").on(table.enabled, table.next_sync_at, table.lease_until)]);
 export const calendarAcl = sqliteTable("calendar_acl", {
   id: text().primaryKey().notNull(), calendar_id: text().notNull().references(() => calendars.id), scope_type: text().notNull(), scope_key: text().notNull(), role: text().notNull(),
   expires_at: integer(), granted_by: text().references(() => users.id), version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),

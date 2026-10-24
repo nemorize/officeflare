@@ -6,7 +6,7 @@ import { RecipientField } from "./mail-recipients";
 import { LoadingSkeleton } from "./loading-skeleton";
 import { ApiError } from "../lib/api";
 import { MailOperation, parseRecipients } from "../lib/mail-helpers";
-import { calendarApi, calendarRank, eventPath, type CalendarEvent, type CalendarScope } from "../lib/calendar";
+import { calendarApi, calendarWritable, eventPath, type CalendarEvent, type CalendarScope } from "../lib/calendar";
 import { addDays, dateInstant, dateLabel, endpointLocal, eventTimeLabel, Temporal, validDate } from "../lib/calendar-date";
 import { draftForEvent, draftTimes, eventChanges, initialNewEvent, recurrenceChanged, type EventDraft } from "../lib/calendar-editor";
 
@@ -54,7 +54,7 @@ export function CalendarEventEditor({ event, request, onClose, onSaved }: { even
       const source = event ? { ...(instance.data?.event ?? master.data!.event), recurrence: master.data!.event.recurrence, version: master.data!.event.version }
         : initialNewEvent(request?.date ?? calendar.date, calendar.zone, calendar.data.preferences.default_duration_minutes, request?.minute, request?.allDay, request?.endDate, request?.endMinute);
       const value = draftForEvent(source, calendar.zone);
-      value.calendarId = event?.calendar_id ?? calendar.data.calendars.find(cal => cal.id === calendar.data!.primary_calendar_id && calendarRank(cal) >= 3)?.id ?? calendar.data.calendars.find(cal => calendarRank(cal) >= 3)?.id ?? "";
+      value.calendarId = event?.calendar_id ?? calendar.data.calendars.find(cal => cal.id === calendar.data!.primary_calendar_id && calendarWritable(cal))?.id ?? calendar.data.calendars.find(cal => calendarWritable(cal))?.id ?? "";
       setDraft(value); setInitial(value); initialized.current = true;
     } catch (error) { action.setError(error instanceof Error ? error.message : "Unable to open this event."); }
   }, [master.data, instance.data, calendar.data, event, request]);
@@ -95,7 +95,7 @@ export function CalendarEventEditor({ event, request, onClose, onSaved }: { even
               {!event && calendar.can("events.invite") && <div className="calendar-editor-row"><Icon name="users" /><div className="calendar-editor-guests"><RecipientField label="Guests" value={guests} onChange={setGuests} /><p className="calendar-field-hint">Add internal or external guests by email.</p></div></div>}
               <div className="calendar-editor-row"><Icon name="navigation" /><Input aria-label="Location" placeholder="Add location" value={draft.location} maxLength={1024} onChange={event => update("location", event.target.value)} /></div>
               <div className="calendar-editor-row"><Icon name="align" /><Textarea aria-label="Description" placeholder="Add a description" rows={4} value={draft.description} maxLength={50000} onChange={event => update("description", event.target.value)} /></div>
-              <div className="calendar-editor-row"><Icon name="calendar" /><div className="calendar-editor-calendar-options"><SelectControl aria-label="Calendar" value={draft.calendarId} disabled={!!event} onValueChange={value => update("calendarId", value)} options={calendar.data!.calendars.filter(cal => calendarRank(cal) >= 3).map(cal => ({ value: cal.id, label: cal.name }))} /><SelectControl aria-label="Show as" value={draft.transparency} onValueChange={value => update("transparency", value)} options={[{ value: "busy", label: "Busy" }, { value: "free", label: "Free" }]} /><SelectControl aria-label="Event visibility" value={draft.visibility} onValueChange={value => update("visibility", value)} options={[{ value: "default", label: "Default visibility" }, { value: "private", label: "Private" }, { value: "public", label: "Public" }]} /></div></div>
+              <div className="calendar-editor-row"><Icon name="calendar" /><div className="calendar-editor-calendar-options"><SelectControl aria-label="Calendar" value={draft.calendarId} disabled={!!event} onValueChange={value => update("calendarId", value)} options={calendar.data!.calendars.filter(cal => calendarWritable(cal)).map(cal => ({ value: cal.id, label: cal.name }))} /><SelectControl aria-label="Show as" value={draft.transparency} onValueChange={value => update("transparency", value)} options={[{ value: "busy", label: "Busy" }, { value: "free", label: "Free" }]} /><SelectControl aria-label="Event visibility" value={draft.visibility} onValueChange={value => update("visibility", value)} options={[{ value: "default", label: "Default visibility" }, { value: "private", label: "Private" }, { value: "public", label: "Public" }]} /></div></div>
             </div>}
             <CalendarNotice error={action.error} />
           </div><div className="calendar-editor-footer"><span>{guests.trim() ? "Internal guests are notified. External email requires an available personal mailbox." : ""}</span><Button variant="ghost" disabled={action.busy} onClick={close}>Cancel</Button><Button variant="primary" type="submit" disabled={action.busy || !draft.calendarId}>{action.busy ? "Saving…" : "Save"}</Button></div>

@@ -47,7 +47,7 @@ export async function boundedBody(response: Response, maximum: number): Promise<
   for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
   return body;
 }
-async function publicDns(hostname: string, fetcher: RemoteFetcher, signal: AbortSignal) {
+export async function publicDns(hostname: string, fetcher: RemoteFetcher, signal: AbortSignal) {
   const records = await Promise.all(["A", "AAAA"].map(async type => {
     const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`;
     // Workers only implement manual/follow. Reject non-2xx below without following DNS redirects.

@@ -167,6 +167,15 @@
 .calendar-import-report li span { margin-top: 4px; }
 .calendar-import-report li p { margin: 8px 0 0; color: var(--ui-muted); line-height: 1.5; }
 .calendar-import-report li[data-status=error] { border-color: var(--ui-danger); }
+.calendar-feed-status { margin-top: 24px; padding: 16px; border: 1px solid var(--ui-border); border-radius: 8px; font-size: 12px; }
+.calendar-feed-status dl { display: grid; gap: 8px; margin: 12px 0; }
+.calendar-feed-status dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.calendar-feed-status dt { color: var(--ui-muted); }
+.calendar-feed-status dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.calendar-feed-status details { margin: 12px 0; }
+.calendar-feed-disconnect { margin-top: 20px; font-size: 12px; }
+.calendar-feed-connection { margin-top: 24px; font-size: 12px; }
+.calendar-feed-connection summary { cursor: pointer; font-weight: 500; overflow-wrap: anywhere; }
 .calendar-field { min-width: 0; display: flex; flex-direction: column; gap: 7px; font-size: 12px; }
 .calendar-field [data-ui=field-label] { font-size: 12px; font-weight: 500; }
 .calendar-field [data-ui=input], .calendar-field [data-ui=select-trigger], .calendar-field [data-ui=textarea] { max-width: none; width: 100%; }

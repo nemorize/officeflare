@@ -10,6 +10,7 @@ import calendarRoutes, {
 } from "../calendar/calendars";
 import eventRoutes from "../calendar/events";
 import importRoutes from "../calendar/imports";
+import feedRoutes from "../calendar/feeds";
 import personalRoutes from "../calendar/personal";
 import { active, calendars, rows } from "../calendar/access";
 import { pageLimit, fail } from "../calendar/input";
@@ -61,6 +62,9 @@ const capabilities = {
   email_delivery: true,
   ics: true,
   ics_import: true,
+  ics_subscriptions: true,
+  external_calendar_sync_direction: "read_only",
+  external_calendar_refresh_seconds: 3600,
   max_import_bytes: 1048576,
   max_import_entries: 200,
   reminders: false,
@@ -175,6 +179,7 @@ calendar.get("/changes", async (c) => {
 calendar.route("/", calendarRoutes);
 calendar.route("/", eventRoutes);
 calendar.route("/", importRoutes);
+calendar.route("/", feedRoutes);
 calendar.route("/", personalRoutes);
 calendar.route("/", sharingRoutes);
 calendar.route("/", linkRoutes);

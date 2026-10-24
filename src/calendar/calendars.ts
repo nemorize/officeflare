@@ -468,6 +468,7 @@ routes.patch("/calendars/:calendarId", async (c) => {
     checks: [calendarCondition(c, { ...cal, version }, 5)],
     build: (proof) => [
       update(c, "calendars", values, "id=?", [cal.id], proof),
+      ...(cal.kind === "external" && values.time_zone && values.time_zone !== cal.time_zone ? [c.env.DB.prepare(`UPDATE calendar_feeds SET etag=NULL,last_modified=NULL,next_sync_at=unixepoch(),version=version+1,lease_until=0,lease_token=NULL WHERE calendar_id=? AND ${proof}`).bind(cal.id)] : []),
       change(c, proof, cal.id, "calendar", cal.id, version + 1),
     ],
   });

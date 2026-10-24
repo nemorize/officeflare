@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Button, Input, SelectControl } from "./ui";
 import { CalendarField, CalendarModal, CalendarNotice, useCalendarAction } from "./calendar-controls";
 import { useCalendar } from "./calendar-context";
-import { calendarApi, calendarRank } from "../lib/calendar";
+import { calendarApi, calendarWritable } from "../lib/calendar";
 import { MailOperation } from "../lib/mail-helpers";
 import { ApiError } from "../lib/api";
 
@@ -14,7 +14,7 @@ interface ImportResult {
 }
 export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
   const calendar = useCalendar(), action = useCalendarAction();
-  const destinations = calendar.data?.calendars.filter(cal => calendarRank(cal) >= 3) ?? [];
+  const destinations = calendar.data?.calendars.filter(cal => calendarWritable(cal)) ?? [];
   const [calendarId, setCalendarId] = useState(destinations.find(cal => cal.is_primary)?.id ?? destinations[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null), [content, setContent] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);

@@ -51,6 +51,7 @@ export const calendarViews: { value: CalendarView; label: string; key: string }[
   { value: "month", label: "Month", key: "M" }, { value: "agenda", label: "Schedule", key: "A" },
 ];
 export const calendarRank = (cal?: CalendarRecord) => cal ? ["free_busy", "reader", "writer_without_private", "writer", "manager", "data_owner"].indexOf(cal.effective_role) + 1 : 0;
+export const calendarWritable = (cal?: CalendarRecord) => !!cal && cal.kind !== "external" && calendarRank(cal) >= 3;
 export const eventKey = (event: CalendarEvent) => `${event.calendar_id}:${event.id}:${event.occurrence_key ?? ""}`;
 export const eventPath = (event: Pick<CalendarEvent, "calendar_id" | "id">) => `/calendars/${encodeURIComponent(event.calendar_id)}/events/${encodeURIComponent(event.id)}`;
 export const calendarFailure = (error: unknown) => error instanceof ApiError && error.status === 412

@@ -2,6 +2,7 @@ import worker from "../dist/index.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { deliverCalendar, recoverCalendar } from "../src/calendar/jobs";
 import type { AuthEnv } from "../src/auth/types";
+import { syncCalendarFeed, recoverCalendarFeeds } from "../src/calendar/feed-sync";
 export class FakeEmail extends WorkerEntrypoint<Env> {
   async send(message: unknown) {
     const id = `<${crypto.randomUUID()}@calendar.test>`;
@@ -20,6 +21,31 @@ export class FakeEmail extends WorkerEntrypoint<Env> {
 // Test-only races at the claim boundary. Production routes never accept these headers.
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if (["/test-calendar/feed-sync", "/test-calendar/feed-recover"].includes(new URL(request.url).pathname)) {
+      const data = await request.json() as { id: string; content?: string; status?: number; headers?: Record<string, string>; dns?: string; before_commit?: string; fail_batch?: boolean };
+      const requests: { url: string; headers: Record<string, string> }[] = [];
+      const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input); requests.push({ url, headers: Object.fromEntries(new Headers(init?.headers)) });
+        if (url.startsWith("https://cloudflare-dns.com/")) return Response.json({ Status: 0, Answer: [{ type: 1, data: data.dns ?? "93.184.216.34" }] });
+        if (data.before_commit) await env.DB.prepare(data.before_commit).run();
+        return new Response([204, 304].includes(data.status ?? 200) ? null : data.content ?? "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n", { status: data.status ?? 200, headers: data.headers });
+      };
+      const feedEnv = data.fail_batch ? { ...env, DB: new Proxy(env.DB, {
+        get(target, key) {
+          if (key === "withSession") return (...args: Parameters<D1Database["withSession"]>) => {
+            const session = target.withSession(...args);
+            return new Proxy(session, { get(current, property) {
+              if (property === "batch") return (statements: D1PreparedStatement[]) => current.batch([...statements, current.prepare("INSERT INTO missing_calendar_test_table VALUES(1)")]);
+              const item = Reflect.get(current, property); return typeof item === "function" ? item.bind(current) : item;
+            } });
+          };
+          const item = Reflect.get(target, key); return typeof item === "function" ? item.bind(target) : item;
+        },
+      }) } : env;
+      if (new URL(request.url).pathname.endsWith("feed-recover")) await recoverCalendarFeeds(feedEnv as AuthEnv, fetcher);
+      else await syncCalendarFeed(feedEnv as AuthEnv, data.id, fetcher);
+      return Response.json({ requests });
+    }
     if (new URL(request.url).pathname === "/test-calendar/flush") {
       const data = (await request.json()) as {
         ids?: string[];
