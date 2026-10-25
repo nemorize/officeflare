@@ -19,7 +19,7 @@ export function migrate(
     fail(503, "Mail database requires a newer Worker version");
   for (let version = current + 1; version <= migrations.length; version++) {
     storage.transactionSync(() => {
-      for (const statement of migrations[version - 1]!.split(";").filter((s) =>
+      for (const statement of migrations[version - 1]!.split(migrations[version - 1]!.includes("-- statement-breakpoint") ? "-- statement-breakpoint" : ";").filter((s) =>
         s.trim(),
       ))
         sql.exec(statement);

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../auth/types";
+import { requestDatabase } from "../db/request";
+import { RequestPerformance, observedObjects } from "../observability/performance";
 import { createDatabase } from "../db";
 import auth from "./auth";
 import me from "./me";
@@ -21,9 +23,13 @@ api.use("*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   c.header("Pragma", "no-cache");
   c.header("X-Content-Type-Options", "nosniff");
+  const trace = new RequestPerformance();
+  c.set("performance", trace);
+  c.env = { ...c.env, DB: requestDatabase(c.env.DB, trace), MAILBOX: c.env.MAILBOX && observedObjects(c.env.MAILBOX, trace), MAIL_PARTITION: c.env.MAIL_PARTITION && observedObjects(c.env.MAIL_PARTITION, trace) };
   // Start each auth request at the primary, including when D1 read replicas are enabled.
   c.set("db", createDatabase(c.env.DB));
   await next();
+  c.header("Server-Timing", trace.header());
 });
 api.use("*", async (c, next) => {
   const path = c.req.path;

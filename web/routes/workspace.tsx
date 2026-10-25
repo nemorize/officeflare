@@ -10,6 +10,7 @@ import { MailSettingsButton, MailTopbar } from "../components/mail-chrome";
 import { MailResourceProvider } from "../components/mail-resource-context";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { WorkspaceLoading } from "../components/workspace-loading";
+import { DriveResourceProvider } from "../components/drive-resource-context";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
@@ -144,7 +145,7 @@ function WorkspaceStartup() {
   if (location.pathname === "/") return access.status === "ready"
     ? <><WorkspaceLoading /><WorkspaceHome /></>
     : <WorkspaceLoading error={access.error} onRetry={access.refresh} />;
-  return <AccountProvider><NotificationCenterProvider key={sessionId}><MailResourceProvider><MailProvider key={sessionId}><DriveProvider key={sessionId}><CalendarProvider key={sessionId}><WorkspaceChrome /></CalendarProvider></DriveProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccountProvider>;
+  return <AccountProvider><NotificationCenterProvider key={sessionId}><MailResourceProvider><MailProvider key={sessionId}><DriveResourceProvider><DriveProvider key={sessionId}><CalendarProvider key={sessionId}><WorkspaceChrome /></CalendarProvider></DriveProvider></DriveResourceProvider></MailProvider></MailResourceProvider></NotificationCenterProvider></AccountProvider>;
 }
 
 export function EmptyWorkspacePage({ title }: { title: string }) {

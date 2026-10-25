@@ -12,17 +12,20 @@ import { driveAbilities } from "./policy";
 
 export const items = new Hono<AppEnv>();
 export async function describe(c: DriveContext, item: DriveItem) {
-  const version = item.current_version_id ? await first<DriveVersion>(c.env, "SELECT * FROM drive_versions WHERE id=? AND item_id=?", item.current_version_id, item.id) : null;
   const user = c.get("identity").user.id;
-  const owner = await first<{ id: string; display_name: string | null; email_address: string; has_profile_image: number; profile_image_version: string | null }>(c.env, "SELECT id,display_name,email_address,profile_image_key IS NOT NULL has_profile_image,profile_image_key profile_image_version FROM users WHERE id=?", item.owner_user_id);
-  const ownerWritable = !await first(c.env, "SELECT 1 FROM drive_accounts WHERE user_id=? AND status<>'active' UNION ALL SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=? OR target_user_id=?) AND status IN ('queued','running','failed') LIMIT 1", item.owner_user_id, item.owner_user_id, item.owner_user_id);
-  const grant = item.owner_user_id === user ? "owner" : (await first<{ role: string }>(c.env,
-    `SELECT role FROM drive_permissions WHERE user_id=? AND item_id IN (${ancestors("?")} SELECT id FROM ancestors)
-      AND (expires_at IS NULL OR expires_at>unixepoch()) ORDER BY CASE role WHEN 'editor' THEN 3 WHEN 'commenter' THEN 2 ELSE 1 END DESC LIMIT 1`, user, item.id))?.role;
-  return { ...item, purged_at: undefined, effective_role: grant ?? null, owner: owner ? { ...owner, has_profile_image: !!owner.has_profile_image, profile_image_version: owner.profile_image_version?.split("/").at(-1) ?? null } : null, actions: (await driveAbilities(c))({ effective_role: grant }, ownerWritable),
-    current_version: version ? { id: version.id, size: version.size, content_type: version.content_type, etag: version.etag, sha256: version.sha256,
-      created_at: version.created_at, created_by: version.created_by } : null };
+  const [detail, abilities] = await Promise.all([first<{ owner: string; current_version: string | null; owner_writable: number; effective_role: string | null }>(c.env,
+    `SELECT json_object('id',u.id,'display_name',u.display_name,'email_address',u.email_address,'has_profile_image',u.profile_image_key IS NOT NULL,'profile_image_version',u.profile_image_key) owner,
+      CASE WHEN v.id IS NULL THEN NULL ELSE json_object('id',v.id,'size',v.size,'content_type',v.content_type,'etag',v.etag,'sha256',v.sha256,'created_at',v.created_at,'created_by',v.created_by) END current_version,
+      (NOT EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND status<>'active') AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=? OR target_user_id=?) AND status IN ('queued','running','failed'))) owner_writable,
+      CASE WHEN u.id=? THEN 'owner' ELSE (SELECT role FROM drive_permissions WHERE user_id=? AND item_id IN (${ancestors("?")} SELECT id FROM ancestors) AND (expires_at IS NULL OR expires_at>unixepoch()) ORDER BY CASE role WHEN 'editor' THEN 3 WHEN 'commenter' THEN 2 ELSE 1 END DESC LIMIT 1) END effective_role
+      FROM users u LEFT JOIN drive_versions v ON v.id=? AND v.item_id=? WHERE u.id=?`,
+    item.owner_user_id, item.owner_user_id, item.owner_user_id, user, user, item.id, item.current_version_id, item.id, item.owner_user_id), driveAbilities(c)]);
+  const owner = detail ? JSON.parse(detail.owner) : null;
+  if (owner) { owner.has_profile_image = !!owner.has_profile_image; owner.profile_image_version = owner.profile_image_version?.split("/").at(-1) ?? null; }
+  return { ...item, purged_at: undefined, effective_role: detail?.effective_role ?? null, owner,
+    actions: abilities({ effective_role: detail?.effective_role }, !!detail?.owner_writable), current_version: detail?.current_version ? JSON.parse(detail.current_version) : null };
 }
+
 const version = (data: Record<string, unknown>) => integer(data.version, "version", 1);
 const pathId = (c: DriveContext) => identifier(c.req.param("itemId"));
 export function limit(c: DriveContext) { const value = c.req.query("limit") ?? "50"; if (!/^\d+$/.test(value)) fail(400, "Invalid limit"); return integer(Number(value), "limit", 1, 100); }
@@ -74,7 +77,7 @@ items.get("/", async c => {
     filters.push(`(${group}>? OR (${group}=? AND (${ordering}${operator}? OR (${ordering}=? AND d.id${operator}?))))`);
     bindings.push(folderGroup, folderGroup, value, value, id);
   } else if (after) { filters.push(`(${ordering}<? OR (${ordering}=? AND d.id<?))`); bindings.push(after[0], after[0], after[1]); }
-  const result = await rows<DriveItem & { size: number | null; content_type: string | null; sha256: string | null; starred: number; sort_time: number | string; owner_name: string | null; owner_email: string; owner_has_profile_image: number; owner_profile_image_version: string | null; owner_writable: number; effective_role: string | null }>(c.env,
+  const [result, abilities] = await Promise.all([rows<DriveItem & { size: number | null; content_type: string | null; sha256: string | null; starred: number; sort_time: number | string; owner_name: string | null; owner_email: string; owner_has_profile_image: number; owner_profile_image_version: string | null; owner_writable: number; effective_role: string | null }>(c.env,
     `SELECT d.*,v.size,v.content_type,v.sha256,CASE WHEN s.item_id IS NULL THEN 0 ELSE 1 END starred,${ordering} sort_time,u.display_name owner_name,u.email_address owner_email,u.profile_image_key IS NOT NULL owner_has_profile_image,u.profile_image_key owner_profile_image_version,
       (NOT EXISTS(SELECT 1 FROM drive_accounts da WHERE da.user_id=d.owner_user_id AND da.status<>'active') AND NOT EXISTS(SELECT 1 FROM drive_admin_jobs j WHERE (j.source_user_id=d.owner_user_id OR j.target_user_id=d.owner_user_id) AND j.status IN ('queued','running','failed'))) owner_writable,
       CASE WHEN d.owner_user_id=? THEN 'owner' ELSE (SELECT p.role FROM drive_permissions p WHERE p.user_id=?
@@ -83,10 +86,9 @@ items.get("/", async c => {
       FROM drive_items d LEFT JOIN drive_versions v ON v.id=d.current_version_id
       JOIN users u ON u.id=d.owner_user_id
       LEFT JOIN drive_stars s ON s.item_id=d.id AND s.user_id=? LEFT JOIN drive_recents r ON r.item_id=d.id AND r.user_id=?
-      WHERE ${filters.map(filter => `(${filter})`).join(" AND ")} ORDER BY ${sort ? `${group} ASC,` : ""}${ordering} ${direction},d.id ${direction} LIMIT ?`, user, user, user, user, ...bindings, pageSize + 1);
+      WHERE ${filters.map(filter => `(${filter})`).join(" AND ")} ORDER BY ${sort ? `${group} ASC,` : ""}${ordering} ${direction},d.id ${direction} LIMIT ?`, user, user, user, user, ...bindings, pageSize + 1), driveAbilities(c)]);
   const page = result.slice(0, pageSize);
   const last = page.at(-1);
-  const abilities = await driveAbilities(c);
   return c.json({ items: page.map(({ sort_time: _, purged_at: _purged, starred, owner_name, owner_email, owner_has_profile_image, owner_profile_image_version, owner_writable, ...item }) => ({ ...item, starred: !!starred, actions: abilities(item, !!owner_writable), owner: { id: item.owner_user_id, display_name: owner_name, email_address: owner_email, has_profile_image: !!owner_has_profile_image, profile_image_version: owner_profile_image_version?.split("/").at(-1) ?? null } })),
     next_cursor: result.length > pageSize && last ? await cursor(c.env, user, scope, sort
       ? [sort === "name" ? 0 : Number(last.sort_time), JSON.stringify([last.kind === "folder" ? 0 : 1, sort === "name" ? last.name : "", last.id])]

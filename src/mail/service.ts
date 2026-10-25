@@ -181,6 +181,7 @@ export async function createDraft(
   if (existing) {
     if (existing.request_hash !== requestHash)
       fail(409, "Idempotency key reused with different request");
+    await scheduleOutbox(env, mailboxId, partitionId);
     return getMessage(env, actor, mailboxId, existing.resource_id);
   }
   const includeSignature =
@@ -288,7 +289,7 @@ export async function createDraft(
   );
   committed = true;
   await mailbox(env, mailboxId).completeAllocation(operation);
-  await flushOutbox(env, mailboxId, partitionId);
+  await scheduleOutbox(env, mailboxId, partitionId);
   return getMessage(env, actor, mailboxId, resourceId);
   } catch (error) {
     if (!committed) await Promise.allSettled(createdKeys.map((key) => env.MAIL_BUCKET.delete(key)));
@@ -349,6 +350,7 @@ export async function submitDraft(
   if (existing) {
     if (existing.request_hash !== requestHash)
       fail(409, "Idempotency key reused with different request");
+    await scheduleOutbox(env, mailboxId, locator(resourceId));
     return existing;
   }
   const message = await store.get(resourceId, actor.user_id),
@@ -429,7 +431,7 @@ export async function submitDraft(
     reference_id: submissionId,
     due_at: scheduledAt,
   });
-  await flushOutbox(env, mailboxId, locator(resourceId));
+  await scheduleOutbox(env, mailboxId, locator(resourceId));
   return submission;
 }
 const flatten = (addresses?: MimeAddress[]): string[] =>
@@ -674,21 +676,21 @@ export async function receive(message: ForwardableEmailMessage, env: Env) {
     );
   }
 }
-export async function flushOutbox(
-  env: Env,
-  mailboxId: string,
-  partitionId: string,
-) {
-  const store = partition(env, partitionId);
-  for (const item of await store.outbox()) {
-    const payload = JSON.parse(item.payload_json) as {
-      message_id: string;
-      operation: string;
-      private_user_id?: string | null;
-    };
-    await mailbox(env, mailboxId).emit(payload);
-    await dispatchWebhooks(env, mailboxId, item.id, payload);
-    await store.markDispatched(item.id);
-  }
+export async function scheduleOutbox(env: Env, mailboxId: string, partitionId: string) {
+  // The durable task survives response loss, isolate shutdown and queue send failure.
+  await mailbox(env, mailboxId).schedule({ id: "outbox:" + partitionId, partition_id: partitionId, kind: "outbox", reference_id: partitionId, due_at: epoch() });
+}
+export async function flushOutbox(env: Env, mailboxId: string, partitionId: string) {
+  const store = partition(env, partitionId), items = await store.outbox();
+  if (!items.length) return;
+  const payloads = items.map(item => ({ ...JSON.parse(item.payload_json), event_id: item.id }));
+  const hooks = payloads.some(payload => !payload.private_user_id)
+    ? await all<{ id: string; owner_user_id: string }>(env, "SELECT id,owner_user_id FROM mail_webhooks WHERE mailbox_id=? AND enabled=1", mailboxId) : [];
+  await mailbox(env, mailboxId).emitMany(payloads);
+  for (let start = 0; start < items.length; start += 8) await Promise.all(items.slice(start, start + 8).map((item, index) =>
+    dispatchWebhooks(env, mailboxId, item.id, payloads[start + index], hooks)));
+  await store.markDispatchedMany(items.map(item => item.id));
+  // Every page is bounded. Queue failures retry this task; receipts make replay safe.
+  if ((await store.outbox()).length) await env.MAIL_QUEUE.send({ kind: "outbox", mailbox_id: mailboxId, partition_id: partitionId, reference_id: partitionId });
 }
 export const dispatchWebhooks = queueWebhooks;

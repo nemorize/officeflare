@@ -388,11 +388,12 @@ export async function queueWebhooks(
     operation: string;
     private_user_id?: string | null;
   },
+  hooks?: { id: string; owner_user_id: string }[],
 ) {
   if (payload.private_user_id) return;
   const partitionId = locator(payload.message_id),
     store = partition(env, partitionId);
-  for (const hook of await all<{ id: string; owner_user_id: string }>(
+  for (const hook of hooks ?? await all<{ id: string; owner_user_id: string }>(
     env,
     "SELECT id,owner_user_id FROM mail_webhooks WHERE mailbox_id=? AND enabled=1",
     mailboxId,

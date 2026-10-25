@@ -18,15 +18,15 @@ export function hydrateMailResources(cache: MailResourceCache, path: string, dat
   if (!data || typeof data !== "object") return;
   if (path.startsWith("/api/mail/ui/bootstrap?")) {
     const result = data as MailBootstrap;
-    cache.replace("/api/mail/mailboxes", { mailboxes: result.mailboxes });
-    cache.replace("/api/mail/preferences", { preferences: result.preferences });
-    cache.replace("/api/mail/capabilities", result.capabilities);
+    cache.hydrateFrom(path, "/api/mail/mailboxes", { mailboxes: result.mailboxes });
+    cache.hydrateFrom(path, "/api/mail/preferences", { preferences: result.preferences });
+    cache.hydrateFrom(path, "/api/mail/capabilities", result.capabilities);
     if (result.mailbox_id) {
       const base = `/api/mail/mailboxes/${result.mailbox_id}`;
-      cache.replace(base + "/folders", { folders: result.folders });
-      if (result.summary) cache.replace(base + "/summary", { summary: result.summary });
-      cache.replace(base + "/ui/watermark", { cursor: result.cursor });
-      if (result.page) cache.replace(result.view_path, result.page);
+      cache.hydrateFrom(path, base + "/folders", { folders: result.folders });
+      if (result.summary) cache.hydrateFrom(path, base + "/summary", { summary: result.summary });
+      cache.hydrateFrom(path, base + "/ui/watermark", { cursor: result.cursor });
+      if (result.page) cache.hydrateFrom(path, result.view_path, result.page);
       cache.rememberMessages(base, result.page?.messages ?? []);
     }
   }

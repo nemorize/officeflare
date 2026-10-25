@@ -80,6 +80,12 @@ export function CalendarPage() {
     onResize: (event, date, minute) => { try { void prepare(event, { start: event.start, end: localEndpoint(addDays(date, Math.floor(minute / 1440)), minuteTime(minute % 1440), calendar.zone) }); } catch (failure) { notify.error(calendarFailure(failure)); } },
   };
   const closeEditor = () => { setEditing(null); calendar.setCreate(null); };
+  // The grid does not depend on metadata or event results. Paint it immediately
+  // and keep creation disabled until an editable calendar is available.
+  if (main && !calendar.data && !calendar.error && !calendar.query && calendar.view !== "agenda") return <section className="calendar-page calendar-main-page" aria-label="Calendar" aria-busy="true">
+    <div className="calendar-loading-line" role="status"><span className="visually-hidden">Opening your calendar…</span></div>
+    {calendar.view === "month" ? <CalendarMonth actions={actions} /> : <CalendarTimeGrid actions={actions} />}
+  </section>;
   return <section className={`calendar-page${main ? " calendar-main-page" : ""}`} aria-label="Calendar">
     {!calendar.data ? <div className="calendar-startup"><LoadingSkeleton kind="page" label="Opening your calendar…" /><CalendarNotice error={calendar.error} />{calendar.error && <Button onClick={() => calendar.refresh(true)}>Try again</Button>}</div> : <>
       <CalendarNotice error={calendar.error || (main ? calendar.eventsError || action.error : "")} />

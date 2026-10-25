@@ -3,6 +3,7 @@ import schema from "./mailbox.sql";
 import removeContacts from "./mailbox-v2.sql";
 import removeTemplates from "./mailbox-v3.sql";
 import htmlSignatures from "./mailbox-v4.sql";
+import eventReceipts from "./mailbox-v5.sql";
 import { migrate } from "./migrations";
 import { authorize } from "./control";
 import { hash } from "./input";
@@ -41,7 +42,7 @@ export class MailboxDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, removeContacts, removeTemplates, htmlSignatures]);
+      migrate(ctx.storage, [schema, removeContacts, removeTemplates, htmlSignatures, eventReceipts]);
     });
   }
   async initialize(mailboxId: string) {
@@ -480,21 +481,14 @@ export class MailboxDO extends DurableObject<Env> {
     );
     return true;
   }
-  async schedule(task: {
-    id: string;
-    partition_id: string;
-    kind: string;
-    reference_id: string;
-    due_at: number;
-  }) {
-    this.sql.exec(
-      "INSERT INTO scheduled_tasks(id,partition_id,kind,reference_id,due_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET due_at=excluded.due_at,dispatched_at=NULL",
-      task.id,
-      task.partition_id,
-      task.kind,
-      task.reference_id,
-      task.due_at,
-    );
+  async schedule(task: ScheduledMailTask) { return this.scheduleMany([task]); }
+  async scheduleMany(tasks: ScheduledMailTask[]) {
+    if (tasks.length > 2000) fail(400, "Too many scheduled tasks");
+    this.ctx.storage.transactionSync(() => {
+      for (const task of tasks) this.sql.exec(
+        "INSERT INTO scheduled_tasks(id,partition_id,kind,reference_id,due_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET due_at=excluded.due_at,dispatched_at=NULL",
+        task.id, task.partition_id, task.kind, task.reference_id, task.due_at);
+    });
     await this.resetAlarm();
   }
   private async resetAlarm() {
@@ -550,33 +544,38 @@ export class MailboxDO extends DurableObject<Env> {
         mailbox_id: mailboxId,
         reference_id: job.id,
       });
-    for (const entry of this.partitions())
-      await partition(this.env, entry.id).maintenance(
-        Number(this.settings().retention_days) || null,
+    // Delivery alarms run frequently; retention and repair stay hourly.
+    const maintenance = row<{ completed_at: number }>(this.sql, "SELECT completed_at FROM maintenance_state WHERE id=1")!;
+    if (maintenance.completed_at <= epoch() - 3600) {
+      for (const entry of this.partitions())
+        await partition(this.env, entry.id).maintenance(
+          Number(this.settings().retention_days) || null,
+        );
+      this.sql.exec("DELETE FROM allocations WHERE expires_at<?", epoch());
+      this.sql.exec("DELETE FROM request_keys WHERE expires_at<?", epoch());
+      this.sql.exec(
+        "DELETE FROM recent_provider_messages WHERE expires_at<?",
+        epoch(),
       );
-    this.sql.exec("DELETE FROM allocations WHERE expires_at<?", epoch());
-    this.sql.exec("DELETE FROM request_keys WHERE expires_at<?", epoch());
-    this.sql.exec(
-      "DELETE FROM recent_provider_messages WHERE expires_at<?",
-      epoch(),
-    );
-    this.sql.exec("DELETE FROM websocket_tickets WHERE expires_at<?", epoch());
-    this.sql.exec(
-      "DELETE FROM auto_reply_receipts WHERE replied_at<?",
-      epoch() - 86400,
-    );
-    this.sql.exec(
-      "DELETE FROM scheduled_tasks WHERE dispatched_at<?",
-      epoch() - 7 * 86400,
-    );
-    this.sql.exec(
-      "DELETE FROM events WHERE created_at<? OR sequence<(SELECT coalesce(max(sequence),0)-1000 FROM events)",
-      epoch() - 7 * 86400,
-    );
-    this.sql.exec(
-      "DELETE FROM audit_events WHERE created_at<? OR sequence<(SELECT coalesce(max(sequence),0)-10000 FROM audit_events)",
-      epoch() - 30 * 86400,
-    );
+      this.sql.exec("DELETE FROM websocket_tickets WHERE expires_at<?", epoch());
+      this.sql.exec(
+        "DELETE FROM auto_reply_receipts WHERE replied_at<?",
+        epoch() - 86400,
+      );
+      this.sql.exec(
+        "DELETE FROM scheduled_tasks WHERE dispatched_at<?",
+        epoch() - 7 * 86400,
+      );
+      this.sql.exec(
+        "DELETE FROM events WHERE created_at<? OR sequence<(SELECT coalesce(max(sequence),0)-1000 FROM events)",
+        epoch() - 7 * 86400,
+      );
+      this.sql.exec(
+        "DELETE FROM audit_events WHERE created_at<? OR sequence<(SELECT coalesce(max(sequence),0)-10000 FROM audit_events)",
+        epoch() - 30 * 86400,
+      );
+      this.sql.exec("UPDATE maintenance_state SET completed_at=? WHERE id=1", epoch());
+    }
     await this.resetAlarm();
   }
   rememberProvider(
@@ -755,38 +754,39 @@ export class MailboxDO extends DurableObject<Env> {
     sockets[1].serializeAttachment(actor);
     return new Response(null, { status: 101, webSocket: sockets[0] });
   }
-  async emit(message: {
-    message_id: string;
-    thread_id?: string;
-    version?: number;
-    operation: string;
-    private_user_id?: string | null;
-  }) {
-    const payload = {
-      mailbox_id: this.identity(),
-      message_id: message.message_id,
-      thread_id: message.thread_id,
-      version: message.version,
-      operation: message.operation,
-    };
-    const event = row<{ sequence: number }>(
-      this.sql,
-      "INSERT INTO events(payload_json,private_user_id,created_at) VALUES(?,?,?) RETURNING sequence",
-      JSON.stringify(payload),
-      message.private_user_id ?? null,
-      epoch(),
-    )!;
+  async emit(message: MailEvent) { return this.emitMany([message]); }
+  async emitMany(messages: MailEvent[]) {
+    if (messages.length > 50) fail(400, "Too many events");
+    const mailboxId = this.identity();
+    const events = this.ctx.storage.transactionSync(() => messages.flatMap(message => {
+      const payload = { mailbox_id: mailboxId, message_id: message.message_id, thread_id: message.thread_id, version: message.version, operation: message.operation };
+      const event = row<{ sequence: number }>(this.sql,
+        "INSERT OR IGNORE INTO events(payload_json,private_user_id,created_at,event_id) VALUES(?,?,?,?) RETURNING sequence",
+        JSON.stringify(payload), message.private_user_id ?? null, epoch(), message.event_id ?? null);
+      const receipt = event ?? (message.event_id ? row<{ sequence: number }>(this.sql, "SELECT sequence FROM events WHERE event_id=?", message.event_id) : null);
+      return receipt ? [{ payload: { ...payload, sequence: receipt.sequence }, privateUser: message.private_user_id }] : [];
+    }));
+    if (!events.length) return;
+    const groups = new Map<string, { actor: MailActor; sockets: WebSocket[] }>();
     for (const socket of this.ctx.getWebSockets()) {
       const actor = socket.deserializeAttachment() as MailActor;
-      if (message.private_user_id && message.private_user_id !== actor.user_id)
-        continue;
-      try {
-        await authorize(this.env, actor, this.identity(), "read");
-        socket.send(JSON.stringify({ ...payload, sequence: event.sequence }));
-      } catch {
-        socket.close(1008, "Access revoked");
-      }
+      if (!events.some(event => !event.privateUser || event.privateUser === actor.user_id)) continue;
+      const key = JSON.stringify(actor), group = groups.get(key) ?? { actor, sockets: [] };
+      group.sockets.push(socket); groups.set(key, group);
     }
+    const entries = [...groups.values()];
+    for (let start = 0; start < entries.length; start += 8) await Promise.all(entries.slice(start, start + 8).map(async ({ actor, sockets }) => {
+      try {
+        await authorize(this.env, actor, mailboxId, "read");
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error;
+        for (const socket of sockets) socket.close(1008, "Access revoked");
+        return;
+      }
+      for (const socket of sockets) for (const event of events) if (!event.privateUser || event.privateUser === actor.user_id) {
+        try { socket.send(JSON.stringify(event.payload)); } catch { /* Closed sockets catch up using the event log. */ }
+      }
+    }));
   }
   async webSocketMessage(socket: WebSocket) {
     try {
@@ -801,4 +801,21 @@ export class MailboxDO extends DurableObject<Env> {
       socket.close(1008, "Access revoked");
     }
   }
+}
+
+interface MailEvent {
+  event_id?: string;
+  message_id: string;
+  thread_id?: string;
+  version?: number;
+  operation: string;
+  private_user_id?: string | null;
+}
+
+interface ScheduledMailTask {
+  id: string;
+  partition_id: string;
+  kind: string;
+  reference_id: string;
+  due_at: number;
 }

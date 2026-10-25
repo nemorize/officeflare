@@ -1,3 +1,4 @@
+import { measured } from "../observability/performance";
 import { and, eq, exists, isNotNull, isNull, ne, not, notExists, or, sql, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { createMiddleware } from "hono/factory";
@@ -65,12 +66,16 @@ export function administratorRemains(db: Database, userId: string) {
   );
 }
 
+export function requestPermissions(c: AuthContext): Promise<Permission[]> {
+  let pending = c.get("permissions");
+  if (!pending) { pending = measured(c, "authorization", () => permissionsFor(c.get("db"), c.get("identity").user.id)); c.set("permissions", pending); }
+  return pending;
+}
+
 export async function can(c: AuthContext, permission: Permission, resource?: ResourceRef): Promise<boolean> {
   // Current actions are global. A resource requires its own policy; global grants never imply it.
   if (!isPermission(permission) || resource !== undefined) return false;
-  const db = c.get("db"), { user } = c.get("identity");
-  return !!await db.select({ id: users.id }).from(users)
-    .where(and(eq(users.id, user.id), permissionCondition(db, user.id, permission))).get();
+  return (await requestPermissions(c)).includes(permission);
 }
 
 export function forbidden(message = "Permission denied"): never {

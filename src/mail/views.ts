@@ -36,6 +36,8 @@ export async function queryThreads(
     : entries;
   if (selected && targets.length !== selected.length)
     fail(400, "Invalid cursor partitions");
+  // A single partition already has complete conversation totals.
+  if (targets.length === 1) return { messages: (await partition(env, targets[0]!.id).threadPage({ ...query, actor_id: actor.user_id, exclude_drafts: true })).map(entry => ({ ...entry, is_read: Number(entry.unread_count === 0), is_starred: Number(entry.starred_count > 0) })), partitions: [targets[0]!.id] };
   const base = { ...query, actor_id: actor.user_id, exclude_drafts: true };
   const frontiers = new Map<
     string,

@@ -14,7 +14,16 @@ export type Challenge = typeof userAuthChallenges.$inferSelect;
 export interface Identity { user: User; session: Session }
 export type AppEnv = {
   Bindings: AuthEnv;
-  Variables: { db: Database; identity: Identity; driveAction?: import("../authorization/permissions").Permission[] };
+  Variables: {
+    db: Database;
+    identity: Identity;
+    initializeCalendar?: () => Promise<void>;
+    drivePolicy?: Promise<import("../drive/policy").DriveSettings>;
+    driveWritable?: Promise<boolean>;
+    performance?: import("../observability/performance").RequestPerformance;
+    permissions?: Promise<import("../authorization/permissions").Permission[]>;
+    driveAction?: import("../authorization/permissions").Permission[];
+  };
 };
 export type AuthContext = Context<AppEnv>;
 export const now = () => Math.floor(Date.now() / 1000);

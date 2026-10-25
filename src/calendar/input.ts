@@ -127,11 +127,11 @@ export function expectedVersion(
     fail(428, "VERSION_REQUIRED", "A version or If-Match is required");
   return version;
 }
-export function pageLimit(c: CalendarContext) {
-  return integer(Number(c.req.query("limit") ?? 100), "limit", 1, 500);
+export function pageLimit(c: CalendarContext, query?: URLSearchParams) {
+  return integer(Number((query ? query.get("limit") : c.req.query("limit")) ?? 100), "limit", 1, 500);
 }
-export function queryFlag(c: CalendarContext, name: string, fallback = false) {
-  const value = c.req.query(name);
+export function queryFlag(c: CalendarContext, name: string, fallback = false, query?: URLSearchParams) {
+  const value = query ? query.get(name) ?? undefined : c.req.query(name);
   if (value === undefined) return fallback;
   if (value !== "true" && value !== "false")
     fail(400, "INVALID_INPUT", `Invalid ${name}`);

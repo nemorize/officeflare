@@ -722,3 +722,11 @@ test("Drive administrators can safely release former owners' unfinished uploads 
   assert.equal((await f.bucket.list()).objects.length, 0);
   assert.equal((await adminCall(f, "/activity?kind=admin&action=uploads_cancelled")).items.length, 1);
 });
+
+test("Drive bootstrap shares permissions and returns quota without writes for an existing account", async t => {
+  const f=await fixture(t); await f.call("/quota");
+  const response=await f.raw("/bootstrap");assert.equal(response.status,200);
+  const result=await response.json();assert.ok(result.quota.available_bytes>=0);assert.ok(result.capabilities.permissions.includes("drive.access"));
+  const timing=response.headers.get("server-timing");assert.match(timing,/d1_rows_written;desc="0"/);
+  const queries=Number(/d1_queries;desc="(\d+)"/.exec(timing)?.[1]);assert.ok(queries<=7,`Expected bounded bootstrap queries, got ${queries}`);
+});

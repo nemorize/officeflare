@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../auth/types";
 import type { Permission } from "../authorization/permissions";
-import { permissionsFor } from "../authorization/access";
+import { requestPermissions } from "../authorization/access";
 import { actionCondition, condition, first, writableOwner } from "./access";
 import { fail } from "./input";
 import type { DriveContext, DriveEnv } from "./types";
@@ -17,14 +17,23 @@ export async function settings(env: DriveEnv) {
   if (!value) fail(503, "Drive settings are unavailable");
   return value;
 }
+export function requestSettings(c: DriveContext) {
+  let pending = c.get("drivePolicy");
+  if (!pending) { pending = settings(c.env); c.set("drivePolicy", pending); }
+  return pending;
+}
+export function requestWritable(c: DriveContext) {
+  let pending = c.get("driveWritable");
+  if (!pending) { const check = writableOwner(c.get("identity").user.id); pending = first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args).then(Boolean); c.set("driveWritable", pending); }
+  return pending;
+}
 export const uploadPolicy = (size: number) => condition("EXISTS(SELECT 1 FROM drive_settings WHERE id=1 AND max_file_bytes>=?)", size);
 export function linkPolicy(passwordProtected: boolean, expires: number | null, created = Math.floor(Date.now() / 1000)) {
   return condition(`EXISTS(SELECT 1 FROM drive_settings WHERE id=1 AND public_sharing_enabled=1 AND (public_link_password_required=0 OR ?=1) AND (public_link_max_days=0 OR (? IS NOT NULL AND ?>unixepoch() AND ?<=?+public_link_max_days*86400)))`, +passwordProtected, expires, expires, expires, created);
 }
 export const publicLinkPolicy = (alias: string) => `EXISTS(SELECT 1 FROM drive_settings policy WHERE policy.id=1 AND policy.public_sharing_enabled=1 AND (policy.public_link_password_required=0 OR ${alias}.password_hash IS NOT NULL) AND (policy.public_link_max_days=0 OR (${alias}.expires_at IS NOT NULL AND ${alias}.expires_at<=${alias}.created_at+policy.public_link_max_days*86400)))`;
 export async function driveAbilities(c: DriveContext) {
-  const [grants, policy] = await Promise.all([permissionsFor(c.get("db"), c.get("identity").user.id), settings(c.env)]);
-  const write = writableOwner(c.get("identity").user.id), writable = !!await first(c.env, `SELECT 1 WHERE ${write.sql}`, ...write.args);
+  const [grants, policy, writable] = await Promise.all([requestPermissions(c), requestSettings(c), requestWritable(c)]);
   return (item: { effective_role?: string | null }, ownerWritable: boolean) => {
     const owner = item.effective_role === "owner", edit = owner || item.effective_role === "editor", comment = edit || item.effective_role === "commenter";
     const has = (key: string) => grants.includes(key as Permission), writeToOwner = writable && ownerWritable;

@@ -27,6 +27,7 @@ export async function signAccess(env: AuthEnv, session: Session) {
     .setJti(crypto.randomUUID()).setIssuedAt(timestamp)
     .setExpirationTime(Math.min(timestamp + ACCESS_TTL, session.expires_at)).sign(key);
 }
+const verificationKeys = new Map<string, ReturnType<typeof importJWK>>();
 export async function verifyAccess(env: AuthEnv, token: string) {
   const ring = signingRing(env);
   try {
@@ -34,7 +35,10 @@ export async function verifyAccess(env: AuthEnv, token: string) {
       const jwk = ring.keys.find((key) => key.kid === header.kid);
       if (!jwk) throw new Error("Unknown key");
       const { d: _private, ...publicKey } = jwk;
-      return importJWK({ ...publicKey, alg: "ES256", key_ops: undefined }, "ES256");
+      const identity = JSON.stringify(publicKey);
+      let key = verificationKeys.get(identity);
+      if (!key) { key = importJWK({ ...publicKey, alg: "ES256", key_ops: undefined }, "ES256"); verificationKeys.set(identity, key); if (verificationKeys.size > 16) verificationKeys.delete(verificationKeys.keys().next().value!); }
+      return key;
     }, { algorithms: ["ES256"], typ: "at+jwt", issuer: env.AUTH_ISSUER,
       audience: env.AUTH_AUDIENCE, requiredClaims: ["sub", "sid", "ver", "iat", "exp", "jti"] });
     if (typeof payload.sub !== "string" || typeof payload.sid !== "string" ||

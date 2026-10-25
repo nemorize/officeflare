@@ -38,6 +38,7 @@ export interface CalendarAttachment {
   mime_type?: string; unavailable: boolean; version?: number;
 }
 export interface CalendarBootstrap {
+  initial_events?: { query: string; events: CalendarEvent[]; next_cursor: string | null; error?: { status: number; message: string } };
   primary_calendar_id: string; calendars: CalendarRecord[]; subscriptions: CalendarSubscription[];
   preferences: CalendarPreferences; capabilities: Record<string, unknown>;
 }
@@ -62,15 +63,19 @@ export function calendarApi<T>(path: string, options: ApiOptions = {}) {
     ...options, headers: { ...(options.method === "POST" ? new MailOperation().headers(options.body ?? {}) : {}), ...options.headers },
   });
 }
-export async function loadCalendarEvents(query: URLSearchParams, signal: AbortSignal) {
+export async function loadCalendarEvents(query: URLSearchParams, signal: AbortSignal, onPage?: (events: CalendarEvent[]) => void, initial?: { events: CalendarEvent[]; next_cursor: string | null; error?: { status: number; message: string } }) {
   const events: CalendarEvent[] = [];
   let cursor: string | null = null;
+  if (initial?.error) throw new ApiError(initial.error.status, initial.error.message);
+  if (initial) { signal.throwIfAborted(); events.push(...initial.events); cursor = initial.next_cursor; onPage?.([...events]); if (!cursor) return events; }
   do {
     const page = new URLSearchParams(query);
     page.set("limit", "500");
     if (cursor) page.set("cursor", cursor);
     const result = await calendarApi<{ events: CalendarEvent[]; next_cursor: string | null }>(`/events?${page}`, { signal });
+    signal.throwIfAborted();
     events.push(...result.events); cursor = result.next_cursor;
+    onPage?.([...events]);
   } while (cursor && !signal.aborted);
   return events;
 }

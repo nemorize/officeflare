@@ -60,7 +60,7 @@ import { prepareDeliveries } from "./delivery";
 import {
   allAttendees,
   effectiveAttendees,
-  attendeeStates,
+  attendeeStatesForUsers,
 } from "./attendance-store";
 import { wakeCalendar } from "./jobs";
 import {
@@ -146,26 +146,30 @@ function changed(
     operation,
   );
 }
-async function list(c: CalendarContext) {
-  const all = await calendars(c);
+export async function listEvents(c: CalendarContext, input?: URLSearchParams, available?: Calendar[]) {
+  const param = (key: string) => input ? input.get(key) ?? undefined : c.req.query(key);
+  const all = available ?? await calendars(c);
+  // Resolve every requested calendar against the same authorized snapshot.
+  const byId = new Map(all.map(cal => [cal.id, cal]));
+  const resolve = (id: string) => {
+    const cal = id === "primary" ? all.find(cal => cal.is_primary) : byId.get(id);
+    if (!cal) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+    return cal;
+  };
   let selected: Calendar[];
   if (c.req.param("calendarId"))
-    selected = [
-      await requireCalendar(c, identifier(c.req.param("calendarId"))),
-    ];
-  else if (c.req.query("calendar_ids")) {
+    selected = [resolve(identifier(c.req.param("calendarId")))];
+  else if (param("calendar_ids")) {
     const ids = [
       ...new Set(
-        c.req
-          .query("calendar_ids")!
+        param("calendar_ids")!
           .split(",")
           .map((value) => identifier(value)),
       ),
     ];
     if (ids.length > 50)
       fail(400, "INVALID_INPUT", "At most 50 calendars may be queried");
-    selected = [];
-    for (const id of ids) selected.push(await requireCalendar(c, id));
+    selected = [...new Set(ids.map(resolve))];
   } else {
     const subs = await rows<{ calendar_id: string }>(
       c.env,
@@ -176,11 +180,11 @@ async function list(c: CalendarContext) {
       subs.some((sub) => sub.calendar_id === cal.id),
     );
   }
-  const expanded = queryFlag(c, "expand_recurring", true),
-    showDeleted = queryFlag(c, "show_deleted"),
-    range = queryRange(c.req.query("time_min"), c.req.query("time_max")),
-    query = text(c.req.query("q") ?? "", "q", 255, true).toLocaleLowerCase(),
-    limit = pageLimit(c);
+  const expanded = queryFlag(c, "expand_recurring", true, input),
+    showDeleted = queryFlag(c, "show_deleted", false, input),
+    range = queryRange(param("time_min"), param("time_max")),
+    query = text(param("q") ?? "", "q", 255, true).toLocaleLowerCase(),
+    limit = pageLimit(c, input);
   const filter = JSON.stringify([
       "events",
       selected.map((cal) => [cal.id, cal.version, cal.effective_role]).sort(),
@@ -189,17 +193,17 @@ async function list(c: CalendarContext) {
       showDeleted,
       query,
     ]),
-    after = c.req.query("cursor")
+    after = param("cursor")
       ? String(
           await readCursor(
             c.env,
             c.get("identity").user.id,
             filter,
-            c.req.query("cursor")!,
+            param("cursor")!,
           ),
         )
       : "";
-  if (!selected.length) return c.json({ events: [], next_cursor: null });
+  if (!selected.length) return { events: [], next_cursor: null };
   const candidates = await rows<Event>(
     c.env,
     `SELECT e.* FROM calendar_events e JOIN calendars organizer ON organizer.id=e.organizer_calendar_id JOIN users owner ON owner.id=organizer.data_owner_user_id WHERE organizer.status='active' AND organizer.trashed_at IS NULL AND owner.disabled_at IS NULL AND owner.deleted_at IS NULL AND owner.password_hash IS NOT NULL AND owner.password_reset_required=0 AND (e.organizer_calendar_id IN (SELECT value FROM json_each(?)) OR EXISTS(SELECT 1 FROM calendar_event_copies cp JOIN calendar_event_attendees a ON a.user_id=(SELECT data_owner_user_id FROM calendars WHERE id=cp.calendar_id) JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE cp.event_id=e.id AND s.event_id=e.id AND a.removed_at IS NULL AND cp.removed_at IS NULL AND cp.calendar_id IN(SELECT value FROM json_each(?)))) ${showDeleted ? "" : "AND e.trashed_at IS NULL"} AND (e.recurrence_json<>'[]' OR (e.start_at<? AND e.end_at>?) OR (e.start_date<? AND e.end_date>?)) ORDER BY e.id LIMIT 2001`,
@@ -214,37 +218,30 @@ async function list(c: CalendarContext) {
     fail(422, "TOO_MANY_EVENTS", "Narrow the date range or calendar selection");
   if (candidates.filter((event) => event.recurrence_json !== "[]").length > 100)
     fail(422, "TOO_MANY_SERIES", "Query fewer calendars or recurring series");
-  const overrides = await loadOverrides(
+  if (!candidates.length) return { events: [], next_cursor: null };
+  const foreign = candidates.some(event => !selected.some(cal => cal.id === event.organizer_calendar_id));
+  const [overrides, copies, invitationState, sourceCalendars, prefs] = await Promise.all([loadOverrides(
       c,
       candidates.map((event) => event.id),
     ),
-    copies = await rows<Copy>(
+    rows<Copy>(
       c.env,
       "SELECT * FROM calendar_event_copies WHERE event_id IN (SELECT value FROM json_each(?)) AND removed_at IS NULL",
       JSON.stringify(candidates.map((event) => event.id)),
     ),
-    result: { key: string; value: ReturnType<typeof eventDto> }[] = [];
-  const invitationStates = new Map<
-    string,
-    Awaited<ReturnType<typeof attendeeStates>>
-  >();
-  for (const owner of new Set(selected.map((cal) => cal.data_owner_user_id)))
-    invitationStates.set(
-      owner,
-      await attendeeStates(
+    foreign ? attendeeStatesForUsers(
         c,
         candidates.map((value) => value.id),
-        owner,
-      ),
-    );
-  const sourceCalendars = await rows<Calendar>(
+        [...new Set(selected.map(cal => cal.data_owner_user_id))],
+      ) : Promise.resolve(() => null),
+    foreign ? rows<Calendar>(
     c.env,
     "SELECT * FROM calendars WHERE id IN(SELECT value FROM json_each(?))",
     JSON.stringify([
       ...new Set(candidates.map((value) => value.organizer_calendar_id)),
     ]),
-  );
-  const prefs = await rows<{
+  ) : Promise.resolve([]),
+  foreign ? rows<{
     user_id: string;
     invitation_policy: string;
     display_options_json: string;
@@ -254,7 +251,8 @@ async function list(c: CalendarContext) {
     JSON.stringify([
       ...new Set(selected.map((value) => value.data_owner_user_id)),
     ]),
-  );
+  ) : Promise.resolve([])]);
+  const result: { key: string; value: ReturnType<typeof eventDto> }[] = [];
   for (const event of candidates) {
     const cal =
       selected.find((value) => value.id === event.organizer_calendar_id) ??
@@ -293,7 +291,7 @@ async function list(c: CalendarContext) {
     if (expanded || cal.effective_role === "free_busy" || foreign)
       for (const item of instances) {
         const attendee = foreign
-            ? invitationStates.get(cal.data_owner_user_id)!(event.id, item.key)
+            ? invitationState(cal.data_owner_user_id, event.id, item.key)
             : null,
           personal = prefs.find(
             (value) => value.user_id === cal.data_owner_user_id,
@@ -364,16 +362,16 @@ async function list(c: CalendarContext) {
   result.sort((a, b) => a.key.localeCompare(b.key));
   const page = result.filter((value) => value.key > after).slice(0, limit),
     hasMore = result.some((value) => value.key > (page.at(-1)?.key ?? after));
-  return c.json({
+  return {
     events: page.map((value) => value.value),
     next_cursor: hasMore
       ? await cursor(c.env, c.get("identity").user.id, filter, page.at(-1)!.key)
       : null,
-  });
+  };
 }
 const routes = new Hono<AppEnv>();
-routes.get("/events", list);
-routes.get(paths, list);
+routes.get("/events", async c => c.json(await listEvents(c)));
+routes.get(paths, async c => c.json(await listEvents(c)));
 routes.post(paths, async (c) => {
   const data = await body(c, createFields),
     cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 3),

@@ -92,6 +92,7 @@ export default {
       return Response.json({ recovered: true });
     }
     let injected = false;
+    const executed: string[] = [];
     const queries = new WeakMap<object, string>();
     const wrap = (
       value: D1PreparedStatement,
@@ -101,6 +102,8 @@ export default {
         get(target, key) {
           if (key === "bind")
             return (...args: unknown[]) => wrap(target.bind(...args), query);
+          if (key === "all" || key === "first" || key === "run")
+            return (...args: unknown[]) => { executed.push(query); return (target[key] as (...args: unknown[]) => unknown)(...args); };
           const item = Reflect.get(target, key);
           return typeof item === "function" ? item.bind(target) : item;
         },
@@ -149,6 +152,11 @@ export default {
         return typeof item === "function" ? item.bind(target) : item;
       },
     });
-    return worker.fetch(request, { ...env, DB: db }, ctx);
+    const response = await worker.fetch(request, { ...env, DB: db }, ctx);
+    if (!request.headers.has("x-test-calendar-queries")) return response;
+    const measured = new Response(response.body, response);
+    measured.headers.set("x-test-calendar-catalog-reads", String(executed.filter(sql => sql.startsWith("SELECT cal.*")).length));
+    measured.headers.set("x-test-calendar-query-count", String(executed.length));
+    return measured;
   },
 };

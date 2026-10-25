@@ -1,3 +1,4 @@
+import { measured } from "../observability/performance";
 import { mailViewOptions, mailGrouped } from "../mail/ui-query";
 import { queryThreads, mailboxSummary } from "../mail/views";
 import { configuredSendLimit, mailboxSendingLimits, providerSendMaximum, sendingLimits } from "../mail/limits";
@@ -53,6 +54,7 @@ import {
   bodyKey,
   createDraft,
   flushOutbox,
+  scheduleOutbox,
   getMessage,
   queryMessages,
   readBody,
@@ -85,6 +87,13 @@ const input = (c: Parameters<typeof authenticateMail>[0], fields: string[]) =>
   jsonBody(c.req.raw, fields);
 const resource = (c: Parameters<typeof authenticateMail>[0]) =>
   c.req.param("m")!;
+async function deferOutbox(c: Parameters<typeof authenticateMail>[0], partitionId: string) {
+  await measured(c, "outbox_schedule", () => scheduleOutbox(c.env, resource(c), partitionId));
+  backgroundOutbox(c, partitionId);
+}
+function backgroundOutbox(c: Parameters<typeof authenticateMail>[0], partitionId: string) {
+  c.executionCtx.waitUntil(flushOutbox(c.env, resource(c), partitionId).catch(() => { console.warn("Mail outbox deferred to durable retry"); }));
+}
 const safeProviderConfig = (value?: string) => {
   try {
     const parsed = JSON.parse(value || "{}");
@@ -134,11 +143,7 @@ mail.use("/mailboxes/:m/*", async (c, next) => {
     c.res.status < 400 &&
     ["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method)
   )
-    await mailbox(c.env, mailboxId).audit(
-      actor(c).user_id,
-      c.req.method,
-      c.req.path,
-    );
+    await measured(c, "audit", () => mailbox(c.env, mailboxId).audit(actor(c).user_id, c.req.method, c.req.path));
 });
 mail.onError((error, c) => {
   if (error instanceof HTTPException) {
@@ -1223,7 +1228,7 @@ mail.patch("/mailboxes/:m/messages/:id", async (c) => {
       reference_id: message.id,
       due_at: changes.snoozed_until,
     });
-  await flushOutbox(c.env, resource(c), locator(message.id));
+  await deferOutbox(c, locator(message.id));
   return c.json({ message: publicMessage(message) });
 });
 mail.post("/mailboxes/:m/messages/:id/permanent-delete", async (c) => {
@@ -1234,7 +1239,7 @@ mail.post("/mailboxes/:m/messages/:id/permanent-delete", async (c) => {
     c.req.param("id"),
     actor(c).user_id,
   );
-  await flushOutbox(c.env, resource(c), locator(c.req.param("id")));
+  await deferOutbox(c, locator(c.req.param("id")));
   return c.body(null, 204);
 });
 mail.post("/mailboxes/:m/images", async (c) => {
@@ -1321,10 +1326,9 @@ mail.post("/mailboxes/:m/drafts", async (c) => {
     "compose_state",
     "editor_body",
   ]);
-  return c.json(
-    { message: await createDraft(c.env, actor(c), resource(c), data, key(c)) },
-    201,
-  );
+  const message = await createDraft(c.env, actor(c), resource(c), data, key(c));
+  backgroundOutbox(c, locator(message.id));
+  return c.json({ message }, 201);
 });
 mail.get("/mailboxes/:m/drafts/:id", async (c) =>
   c.json({
@@ -1407,7 +1411,7 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
     attachments,
   });
   committed = true;
-  await flushOutbox(c.env, resource(c), locator(message.id));
+  await deferOutbox(c, locator(message.id));
   return c.json({
     message: await getMessage(c.env, actor(c), resource(c), message.id),
   });
@@ -1425,7 +1429,7 @@ mail.delete("/mailboxes/:m/drafts/:id", async (c) => {
     actor(c).user_id,
     true,
   );
-  await flushOutbox(c.env, resource(c), locator(c.req.param("id")));
+  await deferOutbox(c, locator(c.req.param("id")));
   return c.body(null, 204);
 });
 mail.post("/mailboxes/:m/drafts/:id/submissions", async (c) => {
@@ -1437,21 +1441,9 @@ mail.post("/mailboxes/:m/drafts/:id/submissions", async (c) => {
     "scheduled_at",
     "undo_window",
   ]);
-  return c.json(
-    {
-      submission: publicSubmission(
-        await submitDraft(
-          c.env,
-          actor(c),
-          resource(c),
-          c.req.param("id"),
-          data,
-          key(c),
-        ),
-      ),
-    },
-    202,
-  );
+  const submission = await submitDraft(c.env, actor(c), resource(c), c.req.param("id"), data, key(c));
+  backgroundOutbox(c, locator(c.req.param("id")));
+  return c.json({ submission: publicSubmission(submission) }, 202);
 });
 mail.get("/mailboxes/:m/submissions/:id", async (c) => {
   await authorize(c.env, actor(c), resource(c), "read");
@@ -1794,7 +1786,7 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
     changes.folder_id = text(data.folder_id, "folder_id", 100);
   for (const name of ["is_read", "is_starred", "is_spam"] as const)
     if (name in data) changes[name] = flag(data[name], name);
-  const results = [];
+  const results = [], changedPartitions = new Set<string>();
   for (const item of data.items) {
     if (!item || typeof item !== "object") fail(400, "Invalid bulk item");
     const resourceId = text(item.id, "id", 73),
@@ -1808,7 +1800,7 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
         version,
         changes,
       );
-      await flushOutbox(c.env, resource(c), locator(resourceId));
+      changedPartitions.add(locator(resourceId));
       results.push({ id: resourceId, success: true, version: message.version });
     } catch (error) {
       results.push({
@@ -1822,6 +1814,7 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
       });
     }
   }
+  for (const id of changedPartitions) await deferOutbox(c, id);
   return c.json({ results });
 });
 for (const operation of ["reply", "reply-all", "forward"] as const)
@@ -1904,6 +1897,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
       requestKey,
       { text: content.text || htmlText(content.html), html: cleanHtml(content.html, Object.fromEntries(source.attachments.filter((file) => file.content_id).map((file) => [file.content_id!, "cid:" + file.content_id]))) },
     );
+    backgroundOutbox(c, locator(draft.id));
     return c.json({ message: draft }, 201);
   });
 mail.post("/mailboxes/:m/imports", async (c) => {
@@ -2136,31 +2130,46 @@ mail.post("/mailboxes/:m/ui/commands", async c => {
     scope.delete("cursor"); scope.set("limit", "100");
     const plan = new Map<string, { id: string; version: number; changes: ReturnType<typeof validateChanges> }>();
     const partitions = new Set((await mailbox(c.env, resource(c)).partitions()).map(entry => entry.id));
-    for (const target of data.targets) {
+    const targets = data.targets.map((target, index) => {
       if (!target || typeof target !== "object") fail(400, "Invalid target");
-      const targetId = text(target.id, "id", 73), version = integer(target.version, "version", 1, Number.MAX_SAFE_INTEGER), changes = validateChanges(target.changes ?? data.changes);
-      if (!partitions.has(locator(targetId))) fail(404, "Mail resource not found");
-      const anchor = await partition(c.env, locator(targetId)).get(targetId, actor(c).user_id);
-      if (target.thread === true) {
-        if (anchor.draft_owner_id) fail(400, "Drafts cannot be expanded as conversations");
-        if (anchor.version !== version) { plan.set(targetId, { id: targetId, version, changes }); continue; }
-        const query = pageQuery(c, scope);
-        let before: { received_at: number; id: string } | undefined;
-        while (true) {
-          const page = await queryMessages(c.env, actor(c), resource(c), { ...query, limit: 100, before, thread_id: anchor.thread_id, exclude_drafts: true });
-          for (const message of page.messages) plan.set(message.id, { id: message.id, version: message.version, changes });
-          if (plan.size > 2000) fail(400, "Select fewer conversations");
-          if (page.messages.length < 100) break;
-          const last = page.messages.at(-1)!; before = { received_at: last.received_at, id: last.id };
+      const id = text(target.id, "id", 73), version = integer(target.version, "version", 1, Number.MAX_SAFE_INTEGER), changes = validateChanges(target.changes ?? data.changes);
+      if (!partitions.has(locator(id))) fail(404, "Mail resource not found");
+      return { id, version, changes, thread: target.thread === true, index };
+    });
+    await measured(c, "plan", async () => {
+      const groups = new Map<string, string[]>();
+      for (const target of targets) groups.set(locator(target.id), [...(groups.get(locator(target.id)) ?? []), target.id]);
+      const entries = [...groups], anchors = new Map<string, MessageRow>();
+      for (let start = 0; start < entries.length; start += 4) await Promise.all(entries.slice(start, start + 4).map(async ([id, ids]) => {
+        for (const message of await partition(c.env, id).headers(ids, actor(c).user_id)) anchors.set(message.id, message);
+      }));
+      const threads = new Map<string, typeof targets[number]>(), planned = new Map<string, { index: number; item: NonNullable<typeof items>[number] }>();
+      for (const target of targets) {
+        const anchor = anchors.get(target.id); if (!anchor) fail(404, "Message not found");
+        if (target.thread && anchor.draft_owner_id) fail(400, "Drafts cannot be expanded as conversations");
+        if (target.thread && anchor.version === target.version) threads.set(anchor.thread_id, target);
+        else planned.set(target.id, { index: target.index, item: { id: target.id, version: target.version, changes: target.changes } });
+      }
+      if (threads.size) {
+        const page = await queryMessages(c.env, actor(c), resource(c), { ...pageQuery(c, scope), limit: 2001, thread_ids: [...threads.keys()], exclude_drafts: true });
+        if (page.messages.length > 2000) fail(400, "Select fewer conversations");
+        for (const message of page.messages) {
+          const target = threads.get(message.thread_id)!;
+          if ((planned.get(message.id)?.index ?? -1) <= target.index) planned.set(message.id, { index: target.index, item: { id: message.id, version: message.version, changes: target.changes } });
         }
-      } else plan.set(targetId, { id: targetId, version, changes });
-    }
+      }
+      for (const [id, value] of planned) plan.set(id, value.item);
+      if (plan.size > 2000) fail(400, "Select fewer conversations");
+    });
     items = await mailbox(c.env, resource(c)).commandPlan(planKey, requestHash, [...plan.values()]);
   }
-  const results = await mailbox(c.env, resource(c)).changeMessages(actor(c).user_id, operation, requestHash, items!);
-  for (const result of results) if (result.success && result.message.snoozed_until) await mailbox(c.env, resource(c)).schedule({ id: "snooze:" + result.id, partition_id: locator(result.id), kind: "snooze", reference_id: result.id, due_at: result.message.snoozed_until });
+  const results = await measured(c, "patch", () => mailbox(c.env, resource(c)).changeMessages(actor(c).user_id, operation, requestHash, items!));
+  const snoozes = results.flatMap(result => result.success && result.message.snoozed_until ? [{ id: "snooze:" + result.id, partition_id: locator(result.id), kind: "snooze", reference_id: result.id, due_at: result.message.snoozed_until }] : []);
+  if (snoozes.length) await mailbox(c.env, resource(c)).scheduleMany(snoozes);
+  c.get("performance")?.count("mail_targets", items!.length);
   const partitions = [...new Set(items!.map(item => locator(item.id)))];
-  for (let start = 0; start < partitions.length; start += 4) await Promise.all(partitions.slice(start, start + 4).map(id => flushOutbox(c.env, resource(c), id)));
-  const summary = await mailboxSummary(c.env, actor(c), resource(c));
+  c.get("performance")?.count("mail_partitions", partitions.length);
+  for (let start = 0; start < partitions.length; start += 4) await Promise.all(partitions.slice(start, start + 4).map(id => deferOutbox(c, id)));
+  const summary = await measured(c, "summary", () => mailboxSummary(c.env, actor(c), resource(c)));
   return c.json({ mailbox_id: resource(c), results: results.map(result => result.success ? { ...result, before: listItem(result.before), message: listItem(result.message) } : result), summary });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import { Button, Icon } from "./ui";
 import { CalendarModal } from "./calendar-controls";
 import { useCalendar } from "./calendar-context";
@@ -47,7 +47,8 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
   const [selection, setSelection] = useState<{ start: string; end: string; pointer: number } | null>(null);
   const suppressClick = useRef(false);
   const showWeekends = calendar.data?.preferences.display_options.show_weekends !== false;
-  const weeks = Array.from({ length: calendar.range.days.length / 7 }, (_, index) => calendar.range.days.slice(index * 7, index * 7 + 7).filter(date => showWeekends || civilDate(date).dayOfWeek < 6));
+  const weeks = useMemo(() => Array.from({ length: calendar.range.days.length / 7 }, (_, index) => calendar.range.days.slice(index * 7, index * 7 + 7).filter(date => showWeekends || civilDate(date).dayOfWeek < 6)), [calendar.range.days, showWeekends]);
+  const weekPlacements = useMemo(() => weeks.map(week => monthPlacements(calendar.events, week, calendar.zone)), [calendar.events, weeks, calendar.zone]);
   const rowLimit = Math.max(1, Math.floor((height / weeks.length - 48) / 23));
   const [overflow, setOverflow] = useState<string | null>(null);
   useEffect(() => {
@@ -75,7 +76,7 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
       onPointerUp={event => { if (!selection) return; event.currentTarget.releasePointerCapture(event.pointerId); suppressClick.current = true; window.setTimeout(() => { suppressClick.current = false; }, 0); calendar.setCreate({ date: selection.start < selection.end ? selection.start : selection.end, endDate: selection.start > selection.end ? selection.start : selection.end, allDay: true }); setSelection(null); }}
       onPointerCancel={() => setSelection(null)}
     >{weeks.map((week, index) => {
-      const placements = monthPlacements(calendar.events, week, calendar.zone);
+      const placements = weekPlacements[index]!;
       return <div className="calendar-month-week" key={week[0]} style={{ "--calendar-columns": week.length } as CSSProperties}>
         <div className="calendar-month-cells">{week.map(date => {
           const more = placements.filter(value => value.row >= rowLimit && value.start <= week.indexOf(date) && value.end > week.indexOf(date)).length;
@@ -101,7 +102,9 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
 export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) {
   const calendar = useCalendar(), locale = calendar.data?.preferences.locale ?? "en", today = todayIn(calendar.zone);
   const showWeekends = calendar.data?.preferences.display_options.show_weekends !== false;
-  const days = calendar.range.days.filter(date => calendar.view === "day" || showWeekends || civilDate(date).dayOfWeek < 6);
+  const days = useMemo(() => calendar.range.days.filter(date => calendar.view === "day" || showWeekends || civilDate(date).dayOfWeek < 6), [calendar.range.days, calendar.view, showWeekends]);
+  const dayPlacements = useMemo(() => new Map(days.map(day => [day, timedPlacements(calendar.events, day, calendar.zone)])), [calendar.events, days, calendar.zone]);
+  const allPlacements = useMemo(() => monthPlacements(calendar.events.filter(event => !!event.start.date), days, calendar.zone), [calendar.events, days, calendar.zone]);
   const scroller = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ event: CalendarEvent; offset: number } | null>(null);
   const [selection, setSelection] = useState<{ day: string; start: number; end: number; fromY: number; moved: boolean } | null>(null);
@@ -116,7 +119,6 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
   const pointerMinute = (event: { clientY: number }, element: HTMLElement) => Math.max(0, Math.min(1440, Math.round((event.clientY - element.getBoundingClientRect().top) / HOUR_HEIGHT * 60 / 15) * 15));
   const canCreate = calendar.can("events.create") && !!calendar.data?.calendars.some(cal => calendarWritable(cal));
   const nowLocal = endpointLocal({ date_time: new Date(now).toISOString(), time_zone: calendar.zone }, calendar.zone);
-  const allDay = calendar.events.filter(event => !!event.start.date), allPlacements = monthPlacements(allDay, days, calendar.zone);
   const allRows = Math.max(1, ...allPlacements.map(value => value.row + 1)), visibleAllRows = allDayExpanded ? allRows : Math.min(3, allRows);
   const focusDay = days.includes(focusedSlot.day) ? focusedSlot.day : days.includes(calendar.date) ? calendar.date : days[0]!;
   return <div className="calendar-time-scroller" ref={scroller}>
@@ -155,7 +157,7 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
             setFocusedSlot({ day: nextDay, slot: nextSlot }); scroller.current?.querySelector<HTMLButtonElement>(`.calendar-time-slot[data-day="${nextDay}"][data-slot="${nextSlot}"]`)?.focus();
           }} style={{ top: slot * HOUR_HEIGHT / 2, height: HOUR_HEIGHT / 2 }} aria-label={`Create event, ${dateLabel(day, { weekday: "long", month: "short", day: "numeric" }, locale)}, ${timeLabel(slot * 30, locale)}`} disabled={!canCreate} onClick={event => { if (!event.detail) calendar.setCreate({ date: day, minute: slot * 30 }); }} />)}
           {selection?.day === day && <div className="calendar-time-selection" style={{ top: Math.min(selection.start, selection.end - 15) / 60 * HOUR_HEIGHT, height: Math.abs(Math.max(selection.start + 15, selection.end) - Math.min(selection.start, selection.end - 15)) / 60 * HOUR_HEIGHT }}>{timeLabel(Math.min(selection.start, selection.end - 15), locale)} – {timeLabel(Math.max(selection.start + 15, selection.end), locale)}</div>}
-          {timedPlacements(calendar.events, day, calendar.zone).map(({ event, start, end, column, columns, span }) => {
+          {dayPlacements.get(day)!.map(({ event, start, end, column, columns, span }) => {
             const canEdit = !event.invitation_id && !event.is_redacted && calendar.can("events.update") && calendarWritable(calendar.data?.calendars.find(cal => cal.id === event.calendar_id));
             const last = endpointLocal(event.end, calendar.zone).date === day;
             return <div className="calendar-timed-placement" key={eventKey(event)} style={{ top: start / 60 * HOUR_HEIGHT, height: ((resizing?.event === event ? resizing.end : end) - start) / 60 * HOUR_HEIGHT, left: `${column / columns * 100}%`, width: `calc(${span / columns * 100}% - 4px)` }}>

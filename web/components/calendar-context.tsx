@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useAccess } from "./console-access";
 import { useNotifications } from "./ui";
 import { calendarApi, calendarFailure, loadCalendarEvents, calendarRank, type CalendarBootstrap, type CalendarEvent, type CalendarView } from "../lib/calendar";
 import { dateInstant, navigateDate, todayIn, validDate, viewRange } from "../lib/calendar-date";
+import { CalendarResourceCache } from "../lib/calendar-resource-cache";
 
 export interface CalendarCreateRequest { date: string; minute?: number; endDate?: string; endMinute?: number; allDay?: boolean; }
 interface CalendarContextValue {
@@ -21,6 +22,15 @@ interface CalendarContextValue {
   can: (permission: string) => boolean;
 }
 const CalendarContext = createContext<CalendarContextValue | null>(null);
+const noEvents: CalendarEvent[] = [];
+function useCachedCalendar<T>(cache: CalendarResourceCache<T>, key: string | null, enabled: boolean) {
+  const snapshot = useSyncExternalStore(
+    useCallback(listener => cache.subscribe(key, listener), [cache, key]),
+    useCallback(() => cache.snapshot(key), [cache, key]),
+  );
+  useEffect(() => { if (key && enabled) void cache.load(key); }, [cache, key, enabled]);
+  return snapshot;
+}
 export function useCalendar() {
   const context = useContext(CalendarContext);
   if (!context) throw new Error("CalendarProvider is required");
@@ -30,26 +40,41 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const location = useLocation(), access = useAccess(), notify = useNotifications(), routeNavigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const enabled = location.pathname.startsWith("/calendar") && !location.pathname.startsWith("/calendar/invitations/") && access.permissions.includes("calendar.access");
-  const [data, setBootstrap] = useState<CalendarBootstrap | null>(null), [loading, setLoading] = useState(false), [error, setError] = useState("");
-  const [revision, setRevision] = useState(0), [metadataRevision, setMetadataRevision] = useState(0);
-  const [eventState, setEventState] = useState<{ key: string; events: CalendarEvent[]; loading: boolean; error: string }>({ key: "", events: [], loading: true, error: "" });
+  const permissions = [...access.permissions].sort().join("\n");
+  // WorkspaceLayout remounts this provider on session changes. Permission changes
+  // create new caches, while ordinary permission refreshes keep existing data.
+  const bootstrapCache = useMemo(() => {
+    const cache = new CalendarResourceCache<CalendarBootstrap>((path, signal) => {
+      const request = new URL(path, "https://calendar.local");
+      // Only the initial load needs a combined page; foreground metadata refreshes
+      // must not repeat the event request already owned by the visible range.
+      if (cache.snapshot(path).data) request.searchParams.delete("include_events");
+      return calendarApi(request.pathname + request.search, { signal });
+    });
+    return cache;
+  }, [permissions]);
+  const initialParams = useRef(params); initialParams.current = params;
+  const bootstrapPath = useMemo(() => "/bootstrap?" + new URLSearchParams({ include_events: "true", ...Object.fromEntries(["date", "view", "q"].flatMap(key => initialParams.current.get(key) ? [[key, initialParams.current.get(key)!]] : [])) }), [bootstrapCache, enabled]);
+  const bootstrap = useCachedCalendar(bootstrapCache, bootstrapPath, enabled), data = bootstrap.data;
+  const eventScope = JSON.stringify([data?.calendars.map(cal => [cal.id, cal.version, cal.effective_role]), data?.preferences.invitation_policy, data?.preferences.display_options.show_declined]);
+  const eventCache = useMemo(() => {
+    let initial = data?.initial_events;
+    return new CalendarResourceCache<CalendarEvent[]>((query, signal, progress) => {
+      const seed = initial?.query === query ? initial : undefined;
+      if (seed) initial = undefined;
+      return loadCalendarEvents(new URLSearchParams(query), signal, progress, seed);
+    });
+  }, [bootstrapCache, eventScope]);
+  useEffect(() => () => bootstrapCache.clear(), [bootstrapCache]);
+  useEffect(() => () => eventCache.clear(), [eventCache]);
+  const [revision, setRevision] = useState(0);
   const [create, setCreate] = useState<CalendarCreateRequest | null>(null), [settings, setSettings] = useState<string | null>(null), [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const selecting = useRef(new Set<string>());
   const can = useCallback((permission: string) => access.permissions.includes(`calendar.${permission}`), [access.permissions]);
-  const refresh = useCallback((metadata = false) => { setRevision(old => old + 1); if (metadata) setMetadataRevision(old => old + 1); }, []);
+  const refresh = useCallback((metadata = false) => { eventCache.invalidate(); if (metadata) bootstrapCache.invalidate(); setRevision(old => old + 1); }, [eventCache, bootstrapCache]);
   useEffect(() => {
-    if (access.status === "ready" && !access.permissions.includes("calendar.access")) { setBootstrap(null); setCreate(null); setSettings(null); }
+    if (access.status === "ready" && !access.permissions.includes("calendar.access")) { setCreate(null); setSettings(null); }
   }, [access.status, access.permissions]);
-  useEffect(() => {
-    if (!enabled) return;
-    const controller = new AbortController();
-    setLoading(true); setError("");
-    void calendarApi<CalendarBootstrap>("/bootstrap", { signal: controller.signal }).then(value => {
-      if (!controller.signal.aborted) setBootstrap(value);
-    }).catch(failure => { if (!controller.signal.aborted) setError(calendarFailure(failure)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [enabled, metadataRevision, access.permissions]);
   const zone = data?.preferences.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const date = validDate(params.get("date")) ?? todayIn(zone);
   const requestedView = params.get("view");
@@ -58,23 +83,20 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const range = useMemo(() => viewRange(date, query ? "agenda" : view, data?.preferences.week_start ?? 1), [date, view, query, data?.preferences.week_start]);
   const selectedIds = useMemo(() => data?.calendars.filter(cal => data.subscriptions.some(sub => sub.calendar_id === cal.id && sub.selected && !sub.hidden)).map(cal => cal.id) ?? [], [data]);
   const eventQuery = new URLSearchParams({ time_min: dateInstant(range.start, zone), time_max: dateInstant(range.end, zone), expand_recurring: "true", calendar_ids: selectedIds.join(","), ...(query ? { q: query } : {}) }).toString();
-  useEffect(() => {
-    if (!enabled || !data) return;
-    const controller = new AbortController();
-    if (!selectedIds.length) { setEventState({ key: eventQuery, events: [], loading: false, error: "" }); return; }
-    setEventState(old => ({ key: eventQuery, events: old.key === eventQuery ? old.events : [], loading: true, error: "" }));
-    void loadCalendarEvents(new URLSearchParams(eventQuery), controller.signal).then(events => {
-      if (!controller.signal.aborted) setEventState({ key: eventQuery, events, loading: false, error: "" });
-    }).catch(failure => { if (!controller.signal.aborted) setEventState({ key: eventQuery, events: [], loading: false, error: calendarFailure(failure) }); });
-    return () => controller.abort();
-  }, [enabled, eventQuery, revision, !!data, selectedIds.length]);
+  const activeQuery = enabled && location.pathname === "/calendar" && data && selectedIds.length ? eventQuery : null;
+  const eventState = useCachedCalendar(eventCache, activeQuery, !!activeQuery);
   useEffect(() => {
     if (!enabled) return;
-    const foreground = () => { if (document.visibilityState === "visible") refresh(true); };
-    const interval = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60_000);
+    const foreground = () => {
+      if (document.visibilityState !== "visible") return;
+      void bootstrapCache.load(bootstrapPath);
+      if (activeQuery) void eventCache.load(activeQuery);
+    };
+    const interval = window.setInterval(foreground, 60_000);
     window.addEventListener("focus", foreground);
-    return () => { window.clearInterval(interval); window.removeEventListener("focus", foreground); };
-  }, [enabled, refresh]);
+    document.addEventListener("visibilitychange", foreground);
+    return () => { window.clearInterval(interval); window.removeEventListener("focus", foreground); document.removeEventListener("visibilitychange", foreground); };
+  }, [enabled, activeQuery, bootstrapPath, bootstrapCache, eventCache]);
   const navigate = (next: string, nextView?: CalendarView) => {
     if (!validDate(next)) return;
     const value = new URLSearchParams(params); value.set("date", next); if (nextView) value.set("view", nextView);
@@ -82,7 +104,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     else setParams(value);
   };
   const search = (value: string) => setParams(old => { const next = new URLSearchParams(old); if (value.trim()) next.set("q", value.trim()); else next.delete("q"); return next; });
-  const setData = (update: (old: CalendarBootstrap) => CalendarBootstrap) => setBootstrap(old => old ? update(old) : old);
+  const setData = (update: (old: CalendarBootstrap) => CalendarBootstrap) => bootstrapCache.update(bootstrapPath, update);
   const toggleCalendar = async (id: string, selected: boolean) => {
     if (!data || selecting.current.has(id)) return;
     if (selected && !selectedIds.includes(id) && selectedIds.length >= 50) { notify.info("You can display up to 50 calendars at once."); return; }
@@ -96,8 +118,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     } catch (failure) { notify.error(calendarFailure(failure)); refresh(true); }
     finally { selecting.current.delete(id); }
   };
-  return <CalendarContext value={{ data, loading, error, events: eventState.key === eventQuery ? eventState.events : [],
-    eventsLoading: !!data && (eventState.key !== eventQuery || eventState.loading), eventsError: eventState.key === eventQuery ? eventState.error : "",
+  return <CalendarContext value={{ data, loading: bootstrap.loading, error: bootstrap.error ? calendarFailure(bootstrap.error) : "", events: eventState.data ?? noEvents,
+    eventsLoading: eventState.loading, eventsError: eventState.error ? calendarFailure(eventState.error) : "",
     revision, date, view, zone, query, range, selectedIds, create, setCreate, settings, setSettings, sidebarCollapsed, setSidebarCollapsed,
     navigate, step: direction => navigate(navigateDate(date, view, direction)), search, refresh, toggleCalendar, setData, can,
   }}>{children}</CalendarContext>;

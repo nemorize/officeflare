@@ -168,13 +168,21 @@ export async function attendeeStates(
   events: string[],
   user: string,
 ) {
-  const attendees = await rows<Attendee>(
+  const lookup = await attendeeStatesForUsers(c, events, [user]);
+  return (event: string, key: string) => lookup(user, event, key);
+}
+export async function attendeeStatesForUsers(
+  c: CalendarContext,
+  events: string[],
+  users: string[],
+) {
+  const [attendees, excluded] = await Promise.all([rows<Attendee>(
       c.env,
-      "SELECT a.*,s.event_id,s.occurrence_key FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id IN(SELECT value FROM json_each(?)) AND a.user_id=? AND a.removed_at IS NULL",
+      "SELECT a.*,s.event_id,s.occurrence_key FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id IN(SELECT value FROM json_each(?)) AND a.user_id IN(SELECT value FROM json_each(?)) AND a.removed_at IS NULL",
       JSON.stringify(events),
-      user,
+      JSON.stringify(users),
     ),
-    excluded = await rows<{
+    rows<{
       event_id: string;
       occurrence_key: string;
       email_key: string;
@@ -182,8 +190,8 @@ export async function attendeeStates(
       c.env,
       "SELECT * FROM calendar_attendee_exclusions WHERE event_id IN(SELECT value FROM json_each(?))",
       JSON.stringify(events),
-    ),
-    responses = await rows<{
+    )]);
+  const responses = await rows<{
       attendee_id: string;
       occurrence_key: string;
       response_status: Attendee["response_status"];
@@ -195,7 +203,7 @@ export async function attendeeStates(
     );
   const members = new Map(
       attendees.map((value) => [
-        `${value.event_id}:${value.occurrence_key}`,
+        `${value.user_id}:${value.event_id}:${value.occurrence_key}`,
         value,
       ]),
     ),
@@ -211,8 +219,8 @@ export async function attendeeStates(
         value,
       ]),
     );
-  return (event: string, key: string) => {
-    const value = members.get(`${event}:${key}`) ?? members.get(`${event}:`);
+  return (user: string, event: string, key: string) => {
+    const value = members.get(`${user}:${event}:${key}`) ?? members.get(`${user}:${event}:`);
     if (!value || blocks.has(`${event}:${key}:${value.email_key}`)) return null;
     const response = answers.get(`${value.id}:${key}`);
     return response

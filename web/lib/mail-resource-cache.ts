@@ -34,6 +34,7 @@ const empty: ResourceSnapshot = { data: null, loading: false, error: null };
 /** Owned by one session/permission scope; never shares private data across accounts. */
 export class MailResourceCache {
   private entries = new Map<string, Entry>();
+  private parents = new Map<string, string>();
   private versions = new Map<string, number>();
   private writes = 0;
   private generation = 0;
@@ -73,7 +74,13 @@ export class MailResourceCache {
     entry.snapshot = snapshot;
     entry.listeners.forEach(listener => listener());
   }
+  hydrateFrom(parent: string, child: string, data: unknown) {
+    this.parents.set(child, parent); this.replace(child, data);
+  }
   async load(path: string, force = false): Promise<void> {
+    const parent = this.parents.get(path), owner = parent ? this.entries.get(parent) : undefined;
+    // Revalidation of an active aggregate owns its child reads, including stale revisits.
+    if (!force && parent && owner?.listeners.size) await this.load(parent);
     const entry = this.entry(path);
     if (entry.request) return entry.request;
     if (!force && entry.updated && this.now() - entry.updated < this.ttl) return;
@@ -175,6 +182,7 @@ export class MailResourceCache {
     }
   }
   clear() {
+    this.parents.clear();
     this.generation++; this.writes = 0; for (const resolve of this.settled) resolve(); this.settled.clear();
     this.versions.clear();
     for (const entry of this.entries.values()) {

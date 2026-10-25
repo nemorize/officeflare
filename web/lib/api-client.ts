@@ -22,7 +22,9 @@ export function createApiClient(deps: {
     const binaryBody = options.body instanceof Blob;
     const send = (token: string) => deps.fetch(path, {
       method: options.method ?? "GET", credentials: "omit", cache: "no-store",
-      signal: options.signal ?? AbortSignal.timeout(15_000),
+      signal: options.signal && (!options.method || options.method === "GET")
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
+        : options.signal ?? AbortSignal.timeout(15_000),
       headers: { ...(options.body ? { "Content-Type": binaryBody ? (options.body as Blob).type || "application/octet-stream" : "application/json" } : {}), ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) => name.toLowerCase() !== "authorization")), Authorization: `Bearer ${token}` },
       body: binaryBody ? options.body as Blob : options.body ? JSON.stringify(options.body) : undefined,
     });

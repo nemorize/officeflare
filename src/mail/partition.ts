@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import schema from "./partition.sql";
 import unifiedSend from "./partition-v2.sql";
 import uiCommands from "./partition-v3.sql";
+import readModels from "./partition-v4.sql";
+import { rebuildReadModels, rebuildDirtyThreads } from "./read-models";
 import { migrate } from "./migrations";
 import { compileSearch } from "./search";
 import {
@@ -26,7 +28,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, unifiedSend, uiCommands]);
+      migrate(ctx.storage, [schema, unifiedSend, uiCommands, readModels]);
     });
   }
   initialize(mailboxId: string, partitionId: string) {
@@ -334,6 +336,9 @@ export class MailPartitionDO extends DurableObject<Env> {
       submissions: rows<Submission>(this.sql, "SELECT * FROM submissions WHERE message_id=? ORDER BY created_at DESC LIMIT 20", messageId).map(publicSubmission),
     };
   }
+  headers(ids: string[], actorId: string): MessageRow[] {
+    return rows<MessageRow>(this.sql, "SELECT * FROM messages WHERE id IN (SELECT value FROM json_each(?)) AND (draft_owner_id IS NULL OR draft_owner_id=?)", JSON.stringify(ids), actorId);
+  }
   private queryPlan(query: MessageQuery) {
     const filters = ["(m.draft_owner_id IS NULL OR m.draft_owner_id=?)"],
       bindings: (string | number)[] = [query.actor_id];
@@ -386,7 +391,23 @@ export class MailPartitionDO extends DurableObject<Env> {
     return rows<MessageRow & { recipient_summary: string }>(this.sql,
       "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" + submission + " FROM messages m WHERE " + filters.join(" AND ") + " ORDER BY m.received_at DESC,m.id DESC LIMIT ?", ...bindings, query.limit);
   }
+  rebuildSummaries() { this.ctx.storage.transactionSync(() => rebuildReadModels(this.sql)); }
+  private summaryThreads(query: MessageQuery, ids?: string[]): ThreadRow[] {
+    const filters = ["1"], args: (string | number)[] = [];
+    if (query.folder_id) { filters.push("t.folder_id=?"); args.push(query.folder_id); }
+    if (!query.include_snoozed && !query.snoozed_only) { filters.push("t.snoozed_until<=?"); args.push(epoch()); }
+    if (query.snoozed_only) { filters.push("t.snoozed_until>?"); args.push(epoch()); }
+    if (query.thread_id) { filters.push("t.thread_id=?"); args.push(query.thread_id); }
+    for (const selected of [query.thread_ids, ids]) if (selected) { filters.push("t.thread_id IN (SELECT value FROM json_each(?))"); args.push(JSON.stringify(selected)); }
+    if (query.view === "all") filters.push("t.folder_id NOT IN ('trash','spam','drafts')");
+    const before = !ids && query.before ? " AND (r.received_at<? OR (r.received_at=? AND r.representative_id<?))" : "";
+    return rows<ThreadRow>(this.sql,
+      "WITH matched AS (SELECT t.* FROM thread_summaries t WHERE " + filters.join(" AND ") + "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,representative_id DESC) rn FROM matched), totals AS (SELECT thread_id,sum(message_count) message_count,sum(unread_count) unread_count,sum(starred_count) starred_count,max(has_attachments) thread_attachments,group_concat(participants) participants FROM matched GROUP BY thread_id) SELECT m.*,totals.message_count,totals.unread_count,totals.starred_count,totals.thread_attachments,totals.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary FROM ranked r JOIN totals USING(thread_id) JOIN messages m ON m.id=r.representative_id WHERE r.rn=1" + before + " ORDER BY r.received_at DESC,r.representative_id DESC" + (ids ? "" : " LIMIT ?"),
+      ...args, ...(!ids && query.before ? [query.before.received_at,query.before.received_at,query.before.id] : []), ...(!ids ? [query.limit] : [])
+    ).map(({ thread_attachments, ...entry }: ThreadRow & { thread_attachments?: number }) => ({ ...entry, has_attachments: thread_attachments ?? entry.has_attachments, participants: [...new Set((entry.participants ?? "").split(",").filter(Boolean))].join(",") }));
+  }
   threadPage(query: MessageQuery, ids?: string[]): ThreadRow[] {
+    if (query.exclude_drafts && !query.search && !query.editable_drafts && !["scheduled", "outbox"].includes(query.view ?? "")) return this.summaryThreads(query, ids);
     const { filters, bindings } = this.queryPlan({ ...query, before: undefined });
     if (query.thread_ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(query.thread_ids)); }
     if (ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(ids)); }
@@ -396,9 +417,9 @@ export class MailPartitionDO extends DurableObject<Env> {
     ).map(({ rn: _rank, thread_attachments, ...entry }: ThreadRow & { rn?: number; thread_attachments?: number }) => ({ ...entry, has_attachments: thread_attachments ?? entry.has_attachments }));
   }
   summary(actorId: string) {
-    const folders = rows<{folder_id:string;total:number;unread:number}>(this.sql,"SELECT folder_id,count(*) total,sum(1-is_read) unread FROM messages WHERE (draft_owner_id IS NULL OR draft_owner_id=?) AND (snoozed_until IS NULL OR snoozed_until<=?) GROUP BY folder_id",actorId,epoch());
+    const folders = rows<{folder_id:string;total:number;unread:number}>(this.sql,"SELECT folder_id,sum(total) total,sum(unread) unread FROM mailbox_counts WHERE (owner_id='' OR owner_id=?) AND snoozed_until<=? GROUP BY folder_id",actorId,epoch());
     const counts = row<{ starred: number; snoozed: number; scheduled: number; outbox: number }>(this.sql,
-      "SELECT coalesce(sum(is_starred),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN 1 ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','processing','retry_wait','unknown') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) outbox FROM messages WHERE draft_owner_id IS NULL OR draft_owner_id=?",epoch(),actorId,actorId,actorId)!;
+      "SELECT coalesce(sum(is_starred*total),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN total ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','processing','retry_wait','unknown') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) outbox FROM mailbox_counts WHERE owner_id='' OR owner_id=?",epoch(),actorId,actorId,actorId)!;
     const drafts = row<{ n: number }>(this.sql,"SELECT count(*) n FROM drafts d JOIN messages m ON m.id=d.message_id WHERE d.state='editable' AND m.draft_owner_id=?",actorId)!.n;
     return { folders: folders.map((folder) => folder.folder_id === "drafts" ? { ...folder, total: drafts, unread: 0 } : folder), ...counts };
   }
@@ -459,7 +480,9 @@ export class MailPartitionDO extends DurableObject<Env> {
   /** Each item commits its receipt and outbox record with the CAS update. */
   patchMany(actorId: string, operation: string, requestHash: string, items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
     this.sql.exec("DELETE FROM ui_command_receipts WHERE expires_at<?", epoch());
-    return items.map(item => {
+    return this.ctx.storage.transactionSync(() => {
+      this.sql.exec("UPDATE read_model_state SET defer_threads=1 WHERE id=1");
+      const results = items.map(item => {
       const operationId = actorId + ":" + operation + ":" + item.id;
       const previous = row<{ request_hash: string; result_json: string }>(this.sql, "SELECT * FROM ui_command_receipts WHERE operation_id=?", operationId);
       if (previous) {
@@ -478,6 +501,10 @@ export class MailPartitionDO extends DurableObject<Env> {
       } catch (error) {
         return { id: item.id, thread_id: threadId, success: false as const, error: error instanceof Error ? error.message.replace(/^MAIL:\d{3}:/, "") : "Operation failed" };
       }
+      });
+      rebuildDirtyThreads(this.sql);
+      this.sql.exec("UPDATE read_model_state SET defer_threads=0 WHERE id=1");
+      return results;
     });
   }
   editDraft(
@@ -1013,6 +1040,9 @@ export class MailPartitionDO extends DurableObject<Env> {
       epoch(),
       outboxId,
     );
+  }
+  markDispatchedMany(ids: string[]) {
+    this.sql.exec("UPDATE outbox SET dispatched_at=? WHERE id IN (SELECT value FROM json_each(?))", epoch(), JSON.stringify(ids));
   }
   async maintenance(retentionDays: number | null) {
     for (const stale of rows<{ id: string }>(

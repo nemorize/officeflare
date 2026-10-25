@@ -81,3 +81,14 @@ test("a read receipt during image loading preserves the binary asset and its ren
   const manifest = { html: "<p>Body</p>", assets: [{ source: key }] };
   assert.equal(applyMailHeaders(manifest, headers), manifest);
 });
+
+test("expired bootstrap revalidation owns its six child resources on revisit", async () => {
+  let now = 1, calls = [];
+  const path = "/api/mail/ui/bootstrap?section=inbox", view = "/api/mail/mailboxes/b/ui/view?folder_id=inbox";
+  const response = { mailboxes:[{id:"b"}],mailbox_id:"b",preferences:{},capabilities:{},folders:[],summary:{folders:{}},cursor:0,page:{messages:[],next_cursor:null},view_path:view };
+  const cache = new MailResourceCache(async key => { calls.push(key); await wait(5); hydrateMailResources(cache,key,response); return response; }, () => now);
+  const release = cache.subscribe(path,()=>{});
+  await cache.load(path); calls=[]; now=30_002;
+  await Promise.all([path,"/api/mail/mailboxes","/api/mail/preferences","/api/mail/capabilities","/api/mail/mailboxes/b/folders","/api/mail/mailboxes/b/summary",view].map(key=>cache.load(key)));
+  assert.deepEqual(calls,[path]); release();
+});

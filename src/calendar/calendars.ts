@@ -207,7 +207,7 @@ export async function ensurePrimary(c: CalendarContext) {
   }
 }
 export async function preferences(c: CalendarContext) {
-  const value = await first<
+  let value = await first<
     typeof prefDefaults & {
       user_id: string;
       created_at: number;
@@ -218,6 +218,10 @@ export async function preferences(c: CalendarContext) {
     "SELECT * FROM calendar_preferences WHERE user_id=?",
     c.get("identity").user.id,
   );
+  if (!value) {
+    await ensurePrimary(c);
+    value = await first<typeof prefDefaults & { user_id: string; created_at: number; updated_at: number }>(c.env, "SELECT * FROM calendar_preferences WHERE user_id=?", c.get("identity").user.id);
+  }
   if (!value)
     fail(404, "PREFERENCES_NOT_FOUND", "Calendar preferences not found");
   const { default_reminders_json, display_options_json, ...rest } = value;
@@ -227,8 +231,8 @@ export async function preferences(c: CalendarContext) {
     display_options: JSON.parse(display_options_json),
   };
 }
-export async function subscriptions(c: CalendarContext) {
-  const available = await calendars(c),
+export async function subscriptions(c: CalendarContext, known?: Calendar[]) {
+  const available = known ?? await calendars(c),
     values = await rows<Record<string, unknown>>(
       c.env,
       "SELECT * FROM calendar_subscriptions WHERE user_id=? ORDER BY sort_order,calendar_id",

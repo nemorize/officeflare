@@ -10,12 +10,17 @@ import { MAX_FILE_BYTES, PART_BYTES, type Condition, type DriveContext, type Dri
 import { settings, uploadPolicy } from "./policy";
 
 export async function account(c: DriveContext, owner = c.get("identity").user.id) {
+  type Account = { user_id: string; quota_bytes: number; used_bytes: number; reserved_bytes: number; status: string; version: number; quota_override_bytes: number | null };
+  const query = "SELECT user_id,quota_bytes,used_bytes,reserved_bytes,status,version,quota_override_bytes FROM drive_accounts WHERE user_id=?";
+  const existing = await first<Account>(c.env, query, owner);
+  if (existing) return existing;
   const check = identity(c);
   await statement(c.env, `INSERT OR IGNORE INTO drive_accounts(user_id,quota_bytes,updated_at) SELECT ?,default_quota_bytes,unixepoch() FROM drive_settings WHERE id=1 AND ${check.sql}`, owner, ...check.args).run();
-  const result = await first<{ user_id: string; quota_bytes: number; used_bytes: number; reserved_bytes: number; status: string; version: number; quota_override_bytes: number | null }>(c.env, "SELECT user_id,quota_bytes,used_bytes,reserved_bytes,status,version,quota_override_bytes FROM drive_accounts WHERE user_id=?", owner);
+  const result = await first<Account>(c.env, query, owner);
   if (!result) unauthorized();
   return result;
 }
+
 export async function destination(c: DriveContext, parent: unknown) {
   if (parent === undefined || parent === null || parent === "root") return { parent_id: null, owner_user_id: c.get("identity").user.id,
     check: condition("1") };

@@ -1,7 +1,9 @@
+import { createDriveCache, useSharedDriveCache } from "./drive-resource-context";
 import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -37,45 +39,19 @@ export const driveFailure = (failure: unknown) =>
       ? failure.message
       : errorMessage(failure);
 export function useDriveResource<T>(path: string | null, revision = 0) {
-  const [retry, setRetry] = useState(0),
-    [state, setState] = useState<{
-      path: string | null;
-      data: T | null;
-      loading: boolean;
-      error: string;
-    }>({ path: null, data: null, loading: false, error: "" });
-  const reload = useCallback(() => setRetry((value) => value + 1), []);
+  const shared = useSharedDriveCache(), local = useMemo(createDriveCache, []), cache = shared ?? local;
+  useEffect(() => () => local.clear(), [local]);
+  const state = useSyncExternalStore(useCallback(listener => cache.subscribe(path, listener), [cache, path]), useCallback(() => cache.snapshot(path), [cache, path]));
+  const previous = useRef({ cache, revision });
   useEffect(() => {
-    const controller = new AbortController();
-    setState((old) => ({
-      path,
-      data: old.path === path ? old.data : null,
-      loading: !!path,
-      error: "",
-    }));
-    if (path)
-      void api<T>(path, { signal: controller.signal })
-        .then((data) => {
-          if (!controller.signal.aborted)
-            setState({ path, data, loading: false, error: "" });
-        })
-        .catch((failure) => {
-          if (!controller.signal.aborted)
-            setState({
-              path,
-              data: null,
-              loading: false,
-              error: driveFailure(failure),
-            });
-        });
-    return () => controller.abort();
-  }, [path, revision, retry]);
-  return {
-    ...(state.path === path
-      ? state
-      : { path, data: null, loading: !!path, error: "" }),
-    reload,
-  };
+    if (path) {
+      if (previous.current.cache === cache && previous.current.revision !== revision && !cache.snapshot(path).loading) cache.invalidate(path);
+      else void cache.load(path);
+    }
+    previous.current = { cache, revision };
+  }, [cache, path, revision]);
+  const reload = useCallback(() => { if (path) cache.invalidate(path); }, [cache, path]);
+  return { path, data: state.data as T | null, loading: state.loading, error: state.error ? driveFailure(state.error) : "", reload };
 }
 export function useDriveAction() {
   const running = useRef(false),
@@ -244,6 +220,9 @@ export function useDriveCollection<T>(
   revision = 0,
   cursorParam = "cursor",
 ) {
+  const shared = useSharedDriveCache(), local = useMemo(createDriveCache, []), cache = shared ?? local;
+  useEffect(() => () => local.clear(), [local]);
+  const previous = useRef({ cache, revision, retry: 0 });
   const [retry, setRetry] = useState(0),
     [state, setState] = useState<{
       path: string | null;
@@ -276,8 +255,13 @@ export function useDriveCollection<T>(
       error: "",
     });
     if (path)
-      void api<Record<string, unknown>>(path, { signal: controller.signal })
-        .then((data) => {
+      void (async () => {
+        if (previous.current.cache === cache && (previous.current.revision !== revision || previous.current.retry !== retry) && !cache.snapshot(path).loading) cache.invalidate(path);
+        await cache.load(path);
+        const snapshot = cache.snapshot(path);
+        if (snapshot.error) throw snapshot.error;
+        return snapshot.data as Record<string, unknown>;
+      })().then((data) => {
           if (generation.current === generationId && !controller.signal.aborted)
             setState({
               path,
@@ -299,8 +283,9 @@ export function useDriveCollection<T>(
               error: driveFailure(failure),
             });
         });
+    previous.current = { cache, revision, retry };
     return () => controller.abort();
-  }, [path, key, revision, retry]);
+  }, [cache, path, key, revision, retry]);
   const loadMore = async () => {
     if (!path || !state.next || state.more || state.loading) return;
     const generationId = generation.current;

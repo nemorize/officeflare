@@ -98,13 +98,17 @@ export async function calendars(
   const user = c.get("identity").user.id,
     access = calendarAccess(user, "cal", 1, includeTrash),
     role = roleRank(user, "cal");
-  const values = await rows<Calendar & { access_rank: number }>(
+  const load = () => rows<Calendar & { access_rank: number }>(
     c.env,
     `SELECT cal.*,(${role.sql}) access_rank,EXISTS(SELECT 1 FROM calendar_primary_calendars p WHERE p.calendar_id=cal.id AND p.user_id=?) is_primary FROM calendars cal WHERE ${access.sql} ORDER BY cal.created_at,cal.id`,
     ...role.args,
     user,
     ...access.args,
   );
+  let values = await load();
+  if (!values.some(cal => cal.is_primary) && c.get("initializeCalendar")) {
+    await c.get("initializeCalendar")!(); values = await load();
+  }
   return values.map(({ access_rank, ...value }) => ({
     ...value,
     effective_role: (Object.keys(rank) as Role[]).find(
@@ -114,17 +118,16 @@ export async function calendars(
 }
 export async function resolveCalendar(c: CalendarContext, id: string) {
   if (id !== "primary") return id;
-  const value = await first<{ calendar_id: string }>(
+  let value = await first<{ calendar_id: string }>(
     c.env,
     "SELECT calendar_id FROM calendar_primary_calendars WHERE user_id=?",
     c.get("identity").user.id,
   );
-  if (!value)
-    fail(
-      404,
-      "CALENDAR_NOT_FOUND",
-      "Initialize Calendar with /bootstrap first",
-    );
+  if (!value) {
+    await c.get("initializeCalendar")?.();
+    value = await first<{ calendar_id: string }>(c.env, "SELECT calendar_id FROM calendar_primary_calendars WHERE user_id=?", c.get("identity").user.id);
+  }
+  if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
   return value.calendar_id;
 }
 export async function requireCalendar(

@@ -17,6 +17,7 @@ import {
   useNotifications,
 } from "./ui";
 import { api, ApiError } from "../lib/api";
+import { useSharedDriveCache } from "./drive-resource-context";
 import { useAccess } from "./console-access";
 import {
   useDriveAction,
@@ -95,15 +96,13 @@ export function DriveProvider({ children }: { children: ReactNode }) {
       parent: null as string | null,
       writable: true,
     });
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const cache = useSharedDriveCache();
+  const refresh = useCallback(() => { cache?.invalidate(); setRevision((value) => value + 1); }, [cache]);
   const active =
     location.pathname.startsWith("/drive") &&
     access.permissions.includes("drive.access");
-  const quota = useDriveResource<DriveQuota>(
-    active ? "/api/drive/quota" : null,
-    revision,
-  );
-  const capabilities = useDriveResource<DriveCapabilities>(active ? "/api/drive/capabilities" : null, revision);
+  const bootstrap = useDriveResource<{ quota: DriveQuota; capabilities: DriveCapabilities }>(active ? "/api/drive/bootstrap" : null, revision);
+  const quota = { data: bootstrap.data?.quota ?? null }, capabilities = { data: bootstrap.data?.capabilities ?? null };
   const can: DriveContextValue["can"] = (action) => {
     const value = capabilities.data;
     if (!value || value.account_status === "suspended") return false;

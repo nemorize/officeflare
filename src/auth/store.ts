@@ -9,25 +9,26 @@ import { insertWhen } from "../db/conditional-insert";
 import { authRateLimits, users, userAuthChallenges, userMfaMethods, userRefreshTokens, userSessions } from "../db/schema";
 import { ACCESS_TTL, CHALLENGE_TTL, SESSION_TTL, now, uuid, type AppEnv, type AuthContext, type Challenge, type Session, type User } from "./types";
 import { prepareNotification } from "../notifications/service";
+import { measured } from "../observability/performance";
 import { recoverNotifications } from "../notifications/jobs";
 
 export const requireAccess = createMiddleware<AppEnv>(async (c, next) => {
   const token = bearer(c);
   if (token.startsWith("ofc_") || token.startsWith("ofr_")) unauthorized();
-  const claims = await verifyAccess(c.env, token), db = c.get("db"), timestamp = now();
-  const row = await db.select({ user: users, session: userSessions }).from(userSessions)
+  const claims = await measured(c, "jwt", () => verifyAccess(c.env, token)), db = c.get("db"), timestamp = now();
+  const row = await measured(c, "auth", async () => db.select({ user: users, session: userSessions }).from(userSessions)
     .innerJoin(users, eq(users.id, userSessions.user_id)).where(and(
       eq(userSessions.id, claims.sessionId), eq(users.id, claims.userId), eq(userSessions.auth_version, claims.version),
       eq(users.auth_version, userSessions.auth_version), isNull(userSessions.revoked_at), gt(userSessions.expires_at, timestamp),
       eq(users.password_reset_required, 0), eligibleUser(),
       or(not(activeMfa(db, users.id)), isNotNull(userSessions.mfa_authenticated_at)),
-    )).get();
+    )).get());
   if (!row) unauthorized();
   c.set("identity", row);
   if (row.session.last_used_at <= timestamp - 60) {
-    await db.update(userSessions).set({ last_used_at: timestamp }).where(and(
-      eq(userSessions.id, row.session.id), isNull(userSessions.revoked_at), eq(userSessions.auth_version, row.session.auth_version),
-    ));
+    c.executionCtx.waitUntil(db.update(userSessions).set({ last_used_at: timestamp }).where(and(
+      eq(userSessions.id, row.session.id), isNull(userSessions.revoked_at), eq(userSessions.auth_version, row.session.auth_version), lte(userSessions.last_used_at, timestamp - 60),
+    )).execute().catch(() => { console.warn("Session activity update failed"); }));
   }
   await next();
 });
