@@ -1,3 +1,4 @@
+import { inboxExcludedFolders } from "./ui-query";
 import { DurableObject } from "cloudflare:workers";
 import schema from "./partition.sql";
 import unifiedSend from "./partition-v2.sql";
@@ -375,6 +376,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         bindings.push(term.startsWith("-") ? term.slice(1) : term);
       }
     }
+    if (query.view === "inbox") { filters.push("m.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")"); bindings.push(...inboxExcludedFolders); }
     if (query.view === "all") filters.push("m.folder_id NOT IN ('trash','spam','drafts')");
     if (query.exclude_drafts) filters.push("m.draft_owner_id IS NULL");
     if (query.editable_drafts) filters.push("EXISTS(SELECT 1 FROM drafts d WHERE d.message_id=m.id AND d.state='editable')");
@@ -399,6 +401,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (query.snoozed_only) { filters.push("t.snoozed_until>?"); args.push(epoch()); }
     if (query.thread_id) { filters.push("t.thread_id=?"); args.push(query.thread_id); }
     for (const selected of [query.thread_ids, ids]) if (selected) { filters.push("t.thread_id IN (SELECT value FROM json_each(?))"); args.push(JSON.stringify(selected)); }
+    if (query.view === "inbox") { filters.push("t.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")"); args.push(...inboxExcludedFolders); }
     if (query.view === "all") filters.push("t.folder_id NOT IN ('trash','spam','drafts')");
     const before = !ids && query.before ? " AND (r.received_at<? OR (r.received_at=? AND r.representative_id<?))" : "";
     return rows<ThreadRow>(this.sql,

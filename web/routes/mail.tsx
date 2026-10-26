@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
-import { mailViewOptions, mailGrouped } from "../../src/mail/ui-query";
+import { mailViewOptions, mailGrouped, folderMoveLeavesMailView } from "../../src/mail/ui-query";
 import { type MailCommandResult } from "../lib/mail-ui";
 import { useMailCache } from "../components/mail-resource-context";
 import { MailOperation } from "../lib/mail";
@@ -261,7 +261,7 @@ function MailList({
   async function mutate(rows: Message[], changes: Record<string, string | boolean | number | null>) {
     const finishMutation = cache.beginMutation();
     const originals = new Map(rows.map(row => [row.id, row]));
-    const removed = "folder_id" in changes || ("snoozed_until" in changes && section !== "snoozed");
+    const removed = ("folder_id" in changes && folderMoveLeavesMailView(section, query, String(changes.folder_id))) || ("snoozed_until" in changes && section !== "snoozed");
     // React paints the optimistic change before any conversation expansion or HTTP work.
     setMessages(current => current.flatMap(row => !originals.has(row.id) ? [row] : removed ? [] : [{ ...row, ...Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, typeof value === "boolean" ? Number(value) : value])) }]));
     const restore = (failed: Set<string>) => setMessages(current => {

@@ -1018,12 +1018,12 @@ function pageQuery(c: Parameters<typeof authenticateMail>[0], options: URLSearch
     search: options.get("q") ?? undefined,
     folder_id: options.get("folder_id") ?? undefined,
     thread_id: c.req.param("thread") ? strictId(c.req.param("thread")) : options.get("thread_id") ?? undefined,
-    view: (options.get("view") ?? undefined) as "all" | "scheduled" | "outbox" | undefined,
+    view: (options.get("view") ?? undefined) as "inbox" | "all" | "scheduled" | "outbox" | undefined,
     editable_drafts: options.get("folder_id") === "drafts",
     include_snoozed: options.get("include_snoozed") === "true" || !!c.req.param("thread") && options.get("include_snoozed") !== "false",
     snoozed_only: options.get("snoozed_only") === "true",
   };
-  if (query.view && !["all", "scheduled", "outbox"].includes(query.view)) fail(400, "Invalid view");
+  if (query.view && !["inbox", "all", "scheduled", "outbox"].includes(query.view)) fail(400, "Invalid view");
   return query;
 }
 async function messagePage(c: Parameters<typeof authenticateMail>[0], mailboxId = resource(c), options = new URLSearchParams(c.req.query()), grouped = c.req.path.endsWith("/threads")) {

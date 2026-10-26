@@ -1,3 +1,4 @@
+import { inboxUnread } from "../../src/mail/ui-query";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { api, ApiError } from "../lib/api";
@@ -169,7 +170,7 @@ export function MailSidebar() {
   const [more, setMore] = useState(extraActive);
   useEffect(() => { if (extraActive) setMore(true); }, [extraActive, location.pathname]);
   const primary = links.filter(([path]) => !["/mail/archive","/mail/spam","/mail/trash"].includes(path));
-  const count = (path: string) => path === "/mail/drafts" ? summary?.folders.drafts?.total : path === "/mail/scheduled" ? summary?.outbox : path === "/mail/snoozed" ? summary?.snoozed : summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
+  const count = (path: string) => path === "/mail" ? inboxUnread(summary?.folders ?? {}) : path === "/mail/drafts" ? summary?.folders.drafts?.total : path === "/mail/scheduled" ? summary?.outbox : path === "/mail/snoozed" ? summary?.snoozed : summary?.folders[path === "/mail" ? "inbox" : path.split("/").at(-1)!]?.unread;
   const nav = (items: readonly (readonly [string,string,import("./ui").IconProps["name"]])[]) => items.map(([path,name,icon]) => <NavLink end key={path} to={mail.href(path)} onClick={() => menu.setMobileMenu(false)}><Icon name={icon}/><span>{name}</span>{!!count(path) && <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>{count(path)}</small>}</NavLink>);
   return <div className="mail-sidebar-content">
     <div className="workspace-create-action mail-sidebar-actions">

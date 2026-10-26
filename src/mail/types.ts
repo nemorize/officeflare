@@ -138,7 +138,7 @@ export interface MessageQuery {
   search?: string;
   include_snoozed?: boolean;
   snoozed_only?: boolean;
-  view?: "all" | "scheduled" | "outbox";
+  view?: "inbox" | "all" | "scheduled" | "outbox";
   exclude_drafts?: boolean;
   editable_drafts?: boolean;
 }

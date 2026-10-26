@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { MailResourceCache } from "../web/lib/mail-resource-cache.ts";
 import { hydrateMailResources, mergeMailView, MailChangeScheduler } from "../web/lib/mail-ui.ts";
-import { mailViewOptions, mailGrouped } from "../src/mail/ui-query.ts";
+import { mailViewOptions, mailGrouped, isInboxFolder, inboxUnread, folderMoveLeavesMailView } from "../src/mail/ui-query.ts";
 import { htmlFrame } from "../web/lib/mail-helpers.ts";
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -91,4 +91,18 @@ test("expired bootstrap revalidation owns its six child resources on revisit", a
   await cache.load(path); calls=[]; now=30_002;
   await Promise.all([path,"/api/mail/mailboxes","/api/mail/preferences","/api/mail/capabilities","/api/mail/mailboxes/b/folders","/api/mail/mailboxes/b/summary",view].map(key=>cache.load(key)));
   assert.deepEqual(calls,[path]); release();
+});
+
+test("combined Inbox includes custom folders in its query, unread badge and optimistic moves", () => {
+  const options = mailViewOptions("inbox", undefined, "");
+  assert.equal(options.get("view"), "inbox"); assert.equal(options.has("folder_id"), false);
+  for (const id of ["inbox", "custom-folder"]) assert.equal(isInboxFolder(id), true);
+  for (const id of ["sent", "archive", "spam", "trash", "drafts"]) assert.equal(isInboxFolder(id), false);
+  assert.equal(inboxUnread({inbox:{unread:2},custom:{unread:3},archive:{unread:4},sent:{unread:5},trash:{unread:6},spam:{unread:7},drafts:{unread:8}}),5);
+  assert.equal(folderMoveLeavesMailView("inbox", "", "custom-folder"),false);
+  assert.equal(folderMoveLeavesMailView("inbox", "", "archive"),true);
+  assert.equal(folderMoveLeavesMailView("inbox", "", "trash"),true);
+  assert.equal(folderMoveLeavesMailView("folder", "", "other-folder"),true);
+  assert.equal(mailViewOptions("folder", "custom-folder", "").get("folder_id"),"custom-folder");
+  assert.equal(mailViewOptions("inbox",undefined,"subject:test").get("q"),"subject:test");
 });

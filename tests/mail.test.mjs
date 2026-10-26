@@ -2292,3 +2292,42 @@ test("mail UI aggregates initial reads, applies bounded replay-safe commands and
     await call(base + "/ui/conversation/" + row.id, { token: tokens.outsider, expected: 403 });
   });
 });
+
+test("Inbox combines received and custom-folder mail across list, conversations, paging and actions", async t => {
+  for (const target of ["6000000000", "250000"]) await t.test(target === "250000" ? "multiple partitions" : "single partition", async t => {
+    const {call,base,mf,draft}=await fixture(t,target,true), harness=await mf.getWorker("mail-harness");
+    const custom=(await call(base+"/folders",{method:"POST",data:{name:"Customer mail"},expected:201})).folder;
+    const messages=[];
+    for(let i=0;i<8;i++) {
+      const mime=["From: sender@example.test","To: owner@mail.test",`Subject: Combined inbox ${i}`,`Message-ID: <combined-inbox-${i}@example.test>`,...(i===1?["In-Reply-To: <combined-inbox-0@example.test>","References: <combined-inbox-0@example.test>"]:[]),"Content-Type: text/plain","",`Message ${i}`].join("\r\n");
+      assert.equal((await (await harness.fetch("https://test/email",{method:"POST",body:mime})).json()).rejected,null);
+      const page=await eventually(()=>call(base+"/messages?include_snoozed=true"),page=>page.messages.length===i+1,"Inbox test mail missing");
+      messages.push(page.messages.find(message=>message.subject===`Combined inbox ${i}`));
+    }
+    const destinations=["inbox",custom.id,custom.id,"archive","sent","spam","trash",custom.id];
+    for(let i=1;i<messages.length;i++) messages[i]=(await call(base+"/messages/"+messages[i].id,{method:"PATCH",data:{version:messages[i].version,folder_id:destinations[i],...(i===7?{snoozed_until:Math.floor(Date.now()/1000)+3600}:{})}})).message;
+    await draft({subject:"Private draft excluded from Inbox"});
+    const bootstrap=await call("/ui/bootstrap?section=inbox&mailbox="+base.split("/").at(-1));
+    assert.match(bootstrap.view_path,/view=inbox/);assert.doesNotMatch(bootstrap.view_path,/folder_id=inbox/);
+    assert.equal(bootstrap.page.messages.length,2);
+    assert.equal(bootstrap.page.messages.find(message=>message.thread_id===messages[0].thread_id).message_count,2);
+    const searched=await call(base+"/ui/view?view=inbox&grouped=true&q=Combined&limit=50");
+    assert.equal(searched.messages.length,2);
+    assert.equal(searched.messages.find(message=>message.thread_id===messages[0].thread_id).message_count,2);
+    const first=await call(base+"/ui/view?view=inbox&grouped=false&limit=2");assert.ok(first.next_cursor);
+    const second=await call(base+"/ui/view?view=inbox&grouped=false&limit=2&cursor="+encodeURIComponent(first.next_cursor));
+    assert.deepEqual([...first.messages,...second.messages].map(message=>message.id).sort(),messages.slice(0,3).map(message=>message.id).sort());
+    assert.equal(second.next_cursor,null);
+    assert.deepEqual((await call(base+"/ui/view?folder_id="+custom.id+"&grouped=false")).messages.map(message=>message.id).sort(),messages.slice(1,3).map(message=>message.id).sort());
+    assert.deepEqual((await call(base+"/messages?folder_id=inbox")).messages.map(message=>message.id),[messages[0].id]);
+    const move=await call(base+"/ui/commands",{method:"POST",data:{targets:[{id:messages[0].id,version:messages[0].version,thread:true}],changes:{folder_id:custom.id},scope:"view=inbox"}});
+    assert.equal(move.results.length,2);assert.ok(move.results.every(result=>result.success));
+    const retained=await call(base+"/ui/view?view=inbox&grouped=false");assert.equal(retained.messages.length,3);
+    const delta=await eventually(()=>call(base+"/ui/changes?since="+bootstrap.cursor+"&scope="+encodeURIComponent("view=inbox&grouped=true")),delta=>delta.view?.some(message=>message.thread_id===messages[0].thread_id),"Custom-folder move disappeared from Inbox catch-up");
+    assert.equal(delta.view.find(message=>message.thread_id===messages[0].thread_id).message_count,2);
+    const moved=move.results.find(result=>result.id===messages[0].id).message;
+    const archived=await call(base+"/ui/commands",{method:"POST",data:{targets:[{id:moved.id,version:moved.version,thread:true}],changes:{folder_id:"archive"},scope:"view=inbox"}});
+    assert.equal(archived.results.length,2);
+    assert.deepEqual((await call(base+"/ui/view?view=inbox&grouped=false")).messages.map(message=>message.id),[messages[2].id]);
+  });
+});
