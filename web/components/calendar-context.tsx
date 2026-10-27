@@ -5,6 +5,8 @@ import { useNotifications } from "./ui";
 import { calendarApi, calendarFailure, loadCalendarEvents, calendarRank, type CalendarBootstrap, type CalendarEvent, type CalendarView } from "../lib/calendar";
 import { dateInstant, navigateDate, todayIn, validDate, viewRange } from "../lib/calendar-date";
 import { CalendarResourceCache } from "../lib/calendar-resource-cache";
+import { calendarView, readCalendarView, saveCalendarView } from "../lib/calendar-view";
+import { useSession } from "../lib/session";
 
 export interface CalendarCreateRequest { date: string; minute?: number; endDate?: string; endMinute?: number; allDay?: boolean; }
 interface CalendarContextValue {
@@ -39,6 +41,8 @@ export function useCalendar() {
 export function CalendarProvider({ children }: { children: ReactNode }) {
   const location = useLocation(), access = useAccess(), notify = useNotifications(), routeNavigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const account = useSession().session?.email ?? "";
+  const [savedView, setSavedView] = useState(() => readCalendarView(account));
   const enabled = location.pathname.startsWith("/calendar") && !location.pathname.startsWith("/calendar/invitations/") && access.permissions.includes("calendar.access");
   const permissions = [...access.permissions].sort().join("\n");
   // WorkspaceLayout remounts this provider on session changes. Permission changes
@@ -53,7 +57,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     });
     return cache;
   }, [permissions]);
-  const initialParams = useRef(params); initialParams.current = params;
+  const initialParams = useRef(params);
+  initialParams.current = new URLSearchParams(params);
+  const initialView = calendarView(params.get("view")) ?? savedView;
+  if (initialView) initialParams.current.set("view", initialView);
   const bootstrapPath = useMemo(() => "/bootstrap?" + new URLSearchParams({ include_events: "true", ...Object.fromEntries(["date", "view", "q"].flatMap(key => initialParams.current.get(key) ? [[key, initialParams.current.get(key)!]] : [])) }), [bootstrapCache, enabled]);
   const bootstrap = useCachedCalendar(bootstrapCache, bootstrapPath, enabled), data = bootstrap.data;
   const eventScope = JSON.stringify([data?.calendars.map(cal => [cal.id, cal.version, cal.effective_role]), data?.preferences.invitation_policy, data?.preferences.display_options.show_declined]);
@@ -77,8 +84,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, [access.status, access.permissions]);
   const zone = data?.preferences.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const date = validDate(params.get("date")) ?? todayIn(zone);
-  const requestedView = params.get("view");
-  const view: CalendarView = ["day", "week", "month", "agenda"].includes(requestedView ?? "") ? requestedView as CalendarView : data?.preferences.default_view ?? "week";
+  const view: CalendarView = calendarView(params.get("view")) ?? savedView ?? data?.preferences.default_view ?? "week";
   const query = params.get("q") ?? "";
   const range = useMemo(() => viewRange(date, query ? "agenda" : view, data?.preferences.week_start ?? 1), [date, view, query, data?.preferences.week_start]);
   const selectedIds = useMemo(() => data?.calendars.filter(cal => data.subscriptions.some(sub => sub.calendar_id === cal.id && sub.selected && !sub.hidden)).map(cal => cal.id) ?? [], [data]);
@@ -99,6 +105,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, [enabled, activeQuery, bootstrapPath, bootstrapCache, eventCache]);
   const navigate = (next: string, nextView?: CalendarView) => {
     if (!validDate(next)) return;
+    if (nextView) { saveCalendarView(account, nextView); setSavedView(nextView); }
     const value = new URLSearchParams(params); value.set("date", next); if (nextView) value.set("view", nextView);
     if (location.pathname !== "/calendar") routeNavigate(`/calendar?${value}`);
     else setParams(value);
