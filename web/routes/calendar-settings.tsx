@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { Button, CheckboxControl, Icon, SelectControl, Textarea, useNotifications } from "../components/ui";
 import { CalendarField, CalendarNotice } from "../components/calendar-controls";
@@ -11,6 +11,7 @@ import { CalendarWorkingHoursSettings } from "../components/calendar-working-hou
 import { SettingsSection } from "../components/settings-layout";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { calendarApi, calendarColors, calendarRank, calendarViews, calendarWritable, type CalendarPreferences, type CalendarRecord } from "../lib/calendar";
+import { calendarRegionalFormatOptions } from "../lib/calendar-settings";
 import "./calendar-settings.css";
 
 export function CalendarSettingsPage() {
@@ -28,6 +29,7 @@ export function CalendarSettingsPage() {
 const generalValues = (prefs: CalendarPreferences) => ({ version: prefs.version, time_zone: prefs.time_zone, locale: prefs.locale, week_start: prefs.week_start, default_view: prefs.default_view, remember_view: prefs.remember_view, show_weekends: prefs.display_options.show_weekends !== false });
 function GeneralPreferences() {
   const calendar = useCalendar(), notify = useNotifications(), prefs = calendar.data!.preferences;
+  const formats = useMemo(() => calendarRegionalFormatOptions(prefs.locale), [prefs.locale]);
   const draft = useCalendarSettingsDraft(generalValues(prefs)), { value, setValue } = draft;
   const update = <K extends keyof typeof value>(key: K, next: typeof value[K]) => setValue(old => ({ ...old, [key]: next }));
   return <CalendarSettingsForm dirty={draft.dirty} onReset={draft.reset} onSave={async () => {
@@ -37,10 +39,9 @@ function GeneralPreferences() {
   }}>
     <SettingsSection title="Language & region" description="These preferences apply to your account on every device. Date and time labels follow the selected regional format.">
       <div className="settings-form-grid"><CalendarTimeZoneField value={value.time_zone} onChange={next => update("time_zone", next)} />
-        <CalendarField label="Regional format"><SelectControl aria-label="Regional format" value={value.locale} onValueChange={next => update("locale", next)} options={[
-          { value: "en-US", label: "English (United States)" }, { value: "en-GB", label: "English (United Kingdom)" }, { value: "ko-KR", label: "한국어 (대한민국)" }, { value: "ja-JP", label: "日本語 (日本)" },
-          ...(!["en-US", "en-GB", "ko-KR", "ja-JP"].includes(value.locale) ? [{ value: value.locale, label: value.locale === "en" ? "English" : value.locale }] : []),
-        ]} /></CalendarField>
+        <CalendarField label="Regional format"><SelectControl aria-label="Regional format" value={value.locale} onValueChange={next => {
+          if (formats.some(format => format.value === next)) update("locale", next);
+        }} options={formats} /></CalendarField>
       </div>
     </SettingsSection>
     <SettingsSection title="Calendar display" description="Keep using your last view, or choose a view to use whenever you open Calendar.">
