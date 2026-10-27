@@ -199,6 +199,8 @@
 .calendar-editor-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--ui-border); margin-top: 20px; }
 .calendar-editor-tabs > button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 12px 0; background: transparent; color: var(--ui-muted); font-size: 12px; cursor: pointer; }
 .calendar-editor-tabs > button[aria-selected=true] { border-bottom-color: var(--ui-primary); color: var(--ui-text); font-weight: 500; }
+.calendar-event-editor-tabs[data-ui=tabs-list] { width: 100%; margin-top: 20px; }
+.calendar-editor-sections > [data-ui=tabs-panel] { padding-block: 0; }
 .calendar-editor-fields { display: flex; flex-direction: column; gap: 22px; margin-top: 24px; }
 .calendar-editor-row { display: flex; gap: 19px; align-items: flex-start; }
 .calendar-editor-row > svg { margin-top: 10px; color: var(--ui-muted); }
