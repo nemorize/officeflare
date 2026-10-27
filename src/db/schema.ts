@@ -500,6 +500,7 @@ export const calendarPreferences = sqliteTable("calendar_preferences", {
   week_start: integer().notNull().default(1), default_view: text().notNull().default("week"), default_duration_minutes: integer().notNull().default(30),
   invitation_policy: text().notNull().default("all"), display_options_json: text().notNull().default("{}"), default_reminders_json: text().notNull().default("[]"),
   version: integer().notNull().default(1), created_at: timestamp("created_at"), updated_at: timestamp("updated_at"),
+  remember_view: integer().notNull().default(1), last_view: text(), default_calendar_id: text().references(() => calendars.id, { onDelete: "set null" }),
 });
 export const calendarLabels = sqliteTable("calendar_labels", {
   id: text().primaryKey().notNull(), calendar_id: text().notNull().references(() => calendars.id), name: text().notNull(), color: text().notNull(), sort_order: integer().notNull().default(0),

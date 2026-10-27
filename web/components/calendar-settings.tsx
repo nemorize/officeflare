@@ -7,14 +7,14 @@ import { CalendarFeedDialog } from "./calendar-feed";
 import { CalendarShareLinks } from "./calendar-collaboration";
 import { CalendarTimeZoneField } from "./calendar-editor";
 import { useCalendar } from "./calendar-context";
-import { calendarApi, calendarColors, calendarRank, calendarViews, type CalendarRecord } from "../lib/calendar";
+import { calendarApi, calendarColors, calendarRank, type CalendarRecord } from "../lib/calendar";
 import { MailOperation } from "../lib/mail-helpers";
 import { ApiError } from "../lib/api";
 
 const sharingRoles = [{ value: "free_busy", label: "See only free/busy" }, { value: "reader", label: "See event details" }, { value: "writer_without_private", label: "Edit public event details" }, { value: "writer", label: "Make changes to events" }, { value: "manager", label: "Make changes and manage sharing" }];
 interface Grant { display_name?: string | null; email_address?: string | null; id: string; scope_type: string; scope_key: string; role: string; version: number; }
 interface Person { id: string; display_name: string | null; email_address: string; }
-function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
+export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
   const calendar = useCalendar(), action = useCalendarAction(), notify = useNotifications();
   const [revision, setRevision] = useState(0), [query, setQuery] = useState(""), [search, setSearch] = useState(""), [person, setPerson] = useState<Person | null>(null), [role, setRole] = useState("reader");
   const grants = useCalendarResource<{ acl: Grant[] }>(`/calendars/${cal.id}/acl`, revision);
@@ -36,15 +36,6 @@ function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
     {calendar.can("sharing.external") && <section className="calendar-access-links"><h3>Share with a link</h3><CalendarShareLinks calendarId={cal.id} /></section>}
   </div>;
 }
-function CalendarGeneralPreferences({ onClose }: { onClose: () => void }) {
-  const calendar = useCalendar(), [prefs] = useState(calendar.data!.preferences), action = useCalendarAction(), notify = useNotifications();
-  const [zone, setZone] = useState(prefs.time_zone), [week, setWeek] = useState(String(prefs.week_start)), [view, setView] = useState(prefs.default_view), [duration, setDuration] = useState(String(prefs.default_duration_minutes));
-  const [weekends, setWeekends] = useState(prefs.display_options.show_weekends !== false), [declined, setDeclined] = useState(!!prefs.display_options.show_declined), [invitations, setInvitations] = useState(prefs.invitation_policy);
-  return <CalendarModal title="Calendar settings" description="Choose how your calendar looks and works." onClose={onClose} busy={action.busy} className="calendar-settings-modal"><form onSubmit={event => { event.preventDefault(); void action.run(async () => {
-    await calendarApi("/preferences", { method: "PATCH", body: { version: prefs.version, time_zone: zone, week_start: Number(week), default_view: view, default_duration_minutes: Number(duration), invitation_policy: invitations, display_options: { ...prefs.display_options, show_weekends: weekends, show_declined: declined } } });
-    calendar.refresh(true); notify.success("Calendar settings saved."); onClose();
-  }); }}><div className="calendar-settings-fields"><CalendarTimeZoneField value={zone} onChange={setZone} /><div className="calendar-two-fields"><CalendarField label="Start week on"><SelectControl aria-label="Start week on" value={week} onValueChange={setWeek} options={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, value) => ({ value: String(value), label }))} /></CalendarField><CalendarField label="Default view"><SelectControl aria-label="Default view" value={view} onValueChange={value => setView(value as typeof view)} options={calendarViews} /></CalendarField></div><div className="calendar-two-fields"><CalendarField label="Default event duration"><SelectControl aria-label="Default event duration" value={duration} onValueChange={setDuration} options={[...new Set([15, 30, 45, 60, 90, 120, prefs.default_duration_minutes])].sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} minutes` }))} /></CalendarField><CalendarField label="Add invitations"><SelectControl aria-label="Add invitations" value={invitations} onValueChange={setInvitations} options={[{ value: "all", label: "Automatically" }, { value: "on_response", label: "After I respond" }, ...(prefs.invitation_policy === "known_senders" ? [{ value: "known_senders", label: "From known senders" }] : [])]} /></CalendarField></div><label className="calendar-check-label"><CheckboxControl checked={weekends} onCheckedChange={setWeekends} />Show weekends</label><label className="calendar-check-label"><CheckboxControl checked={declined} onCheckedChange={setDeclined} />Show declined events</label></div><CalendarNotice error={action.error} /><div className="calendar-dialog-actions"><Button variant="ghost" disabled={action.busy} onClick={onClose}>Cancel</Button><Button variant="primary" type="submit" disabled={action.busy}>{action.busy ? "Saving…" : "Save"}</Button></div></form></CalendarModal>;
-}
 export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const calendar = useCalendar(), action = useCalendarAction(), notify = useNotifications(), operation = useRef(new MailOperation());
   const [cal, setCal] = useState(calendar.data?.calendars.find(value => value.id === id)), [sub] = useState(calendar.data?.subscriptions.find(value => value.calendar_id === id));
@@ -55,7 +46,6 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
   if (cal?.kind === "external" && calendarRank(cal) >= 6) return <CalendarFeedDialog cal={cal} onClose={onClose} />;
   if (id === "import") return <CalendarImportDialog onClose={onClose} />;
   if (id === "working-hours") return <CalendarWorkingHours onClose={onClose} />;
-  if (id === "preferences") return <CalendarGeneralPreferences onClose={onClose} />;
   if (id === "shortcuts") return <CalendarModal title="Keyboard shortcuts" onClose={onClose}><div className="calendar-shortcuts">{[["C", "Create event"], ["T", "Go to today"], ["J / K", "Next / previous period"], ["D / W / M / A", "Day / week / month / schedule"], ["Esc", "Close an open dialog"]].map(([key, label]) => <p key={key}><span>{label}</span><kbd>{key}</kbd></p>)}</div></CalendarModal>;
   return <CalendarModal title={id === "new" ? "Create a calendar" : cal?.name ?? "Calendar"} description={id === "new" ? "Keep a project, team or part of your day in its own calendar." : "Calendar details, appearance and sharing."} onClose={onClose} busy={action.busy} className="calendar-settings-modal">
     {cal && calendarRank(cal) >= 5 && <div className="calendar-editor-tabs" role="tablist" aria-label="Calendar settings sections"><button role="tab" aria-selected={tab === "general"} onClick={() => setTab("general")}>General</button><button role="tab" aria-selected={tab === "sharing"} onClick={() => setTab("sharing")}>Sharing & access</button></div>}

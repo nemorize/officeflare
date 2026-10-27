@@ -14,7 +14,7 @@ import { DriveResourceProvider } from "../components/drive-resource-context";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
-import { CalendarSidebar, CalendarTopbar } from "../components/calendar-chrome";
+import { CalendarSettingsButton, CalendarSidebar, CalendarTopbar } from "../components/calendar-chrome";
 import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "../components/workspace-navigation";
 import { NotificationBell } from "../components/notification-center";
 import { NotificationCenterProvider } from "../components/notification-center-context";
@@ -76,7 +76,7 @@ function WorkspaceChrome() {
   const sidebarName = isNotifications ? "Notifications" : isConsole ? "System settings" : isAccount ? "Account" : (activeApp?.name ?? "Account");
   const sidebarMenu = isNotifications ? notificationMenu : isConsole ? systemMenu : isAccount ? account : (activeApp?.menu ?? account);
   const current = sidebarMenu.find((item) => item.path === pathname || isConsole && pathname.startsWith(`${item.path}/`));
-  const title = pathname.startsWith("/calendar/invitations/") ? "Calendar invitation" : isCalendar ? "Calendar" : current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
+  const title = pathname.startsWith("/calendar/invitations/") ? "Calendar invitation" : isCalendar ? pathname.startsWith("/calendar/settings") ? "Calendar settings" : "Calendar" : current?.name ?? (isDrive ? "Folder" : isMail ? pathname.includes("/folders/") ? "Folder" : "Mail" : "Page not found");
   useEffect(() => { document.title = `${title} · Officeflare`; }, [title]);
   useEffect(() => { content.current?.scrollTo(0, 0); setMobileMenu(false); }, [pathname]);
 
@@ -102,7 +102,7 @@ function WorkspaceChrome() {
     </aside>
     <div className="workspace-frame">
       <aside className="workspace-sidebar">
-        <div className="workspace-sidebar-header"><span>{sidebarName}</span>{isMail && activeApp && <MailSettingsButton />}</div>
+        <div className="workspace-sidebar-header"><span>{sidebarName}</span>{isMail && activeApp && <MailSettingsButton />}{isCalendar && activeApp && <CalendarSettingsButton />}</div>
         {access.status === "loading" ? <LoadingSkeleton label="Loading navigation…" /> : isCalendar && activeApp ? <CalendarSidebar /> : isDrive && activeApp ? <DriveSidebar /> : isMail && activeApp ? <MailSidebar /> : <nav aria-label={`${sidebarName} navigation`} className="workspace-nav">
           <h2>{isConsole ? "Administration" : isAccount ? "Settings" : activeApp?.menuTitle ?? "Settings"}</h2>
           {sidebarMenu.map((item) => <NavLink key={item.path} to={item.path} end={!isConsole}><Icon name={item.icon} /><span>{item.name}</span></NavLink>)}

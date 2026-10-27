@@ -54,7 +54,7 @@ export function CalendarEventEditor({ event, request, onClose, onSaved }: { even
       const source = event ? { ...(instance.data?.event ?? master.data!.event), recurrence: master.data!.event.recurrence, version: master.data!.event.version }
         : initialNewEvent(request?.date ?? calendar.date, calendar.zone, calendar.data.preferences.default_duration_minutes, request?.minute, request?.allDay, request?.endDate, request?.endMinute);
       const value = draftForEvent(source, calendar.zone);
-      value.calendarId = event?.calendar_id ?? calendar.data.calendars.find(cal => cal.id === calendar.data!.primary_calendar_id && calendarWritable(cal))?.id ?? calendar.data.calendars.find(cal => calendarWritable(cal))?.id ?? "";
+      value.calendarId = event?.calendar_id ?? calendar.data.calendars.find(cal => cal.id === calendar.data!.preferences.default_calendar_id && calendarWritable(cal))?.id ?? calendar.data.calendars.find(cal => cal.id === calendar.data!.primary_calendar_id && calendarWritable(cal))?.id ?? calendar.data.calendars.find(cal => calendarWritable(cal))?.id ?? "";
       setDraft(value); setInitial(value); initialized.current = true;
     } catch (error) { action.setError(error instanceof Error ? error.message : "Unable to open this event."); }
   }, [master.data, instance.data, calendar.data, event, request]);

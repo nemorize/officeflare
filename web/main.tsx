@@ -34,6 +34,7 @@ const MailConsolePage = lazy(() => import("./routes/console-mail").then((module)
 const SharedMailboxEditorPage = lazy(() => import("./routes/console-shared-mailboxes").then((module) => ({ default: module.SharedMailboxEditorPage })));
 const MailDomainEditorPage = lazy(() => import("./routes/console-mail").then((module) => ({ default: module.MailDomainEditorPage })));
 const CalendarPage = lazy(() => import("./routes/calendar").then(module => ({ default: module.CalendarPage })));
+const CalendarSettingsPage = lazy(() => import("./routes/calendar-settings").then(module => ({ default: module.CalendarSettingsPage })));
 const CalendarInvitationPage = lazy(() => import('./routes/calendar-invitation').then(module => ({ default: module.CalendarInvitationPage })));
 
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
@@ -58,6 +59,7 @@ const router = createBrowserRouter(createRoutesFromElements(<>
             <Route path="/profile/sessions" element={<SessionsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             {["/calendar", "/calendar/shared", "/calendar/trash"].map(path => <Route key={path} path={path} element={<ServiceGate permission="calendar.access"><CalendarPage /></ServiceGate>} />)}
+            {["/calendar/settings", "/calendar/settings/events", "/calendar/settings/calendars", "/calendar/settings/calendars/:calendarId", "/calendar/settings/working-hours", "/calendar/settings/data"].map(path => <Route key={path} path={path} element={<ServiceGate permission="calendar.access"><CalendarSettingsPage key={path} /></ServiceGate>} />)}
             <Route path="/calendar/invitations/:attendeeId" element={<CalendarInvitationPage />} />
             <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
             <Route path="/console" element={<ConsoleGate />}>

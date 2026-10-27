@@ -1,8 +1,7 @@
 import type { CalendarView } from "./calendar";
-
-export function calendarView(value: string | null | undefined): CalendarView | null {
-  return value === "day" || value === "week" || value === "month" || value === "agenda" ? value : null;
-}
+export { calendarStartView } from "../../src/calendar/view-preferences.ts";
+export { validCalendarView as calendarView } from "../../src/calendar/view-preferences.ts";
+import { validCalendarView as calendarView } from "../../src/calendar/view-preferences.ts";
 
 const storageKey = (account: string) => `officeflare.calendar.view:${account.trim().toLowerCase()}`;
 

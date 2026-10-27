@@ -122,6 +122,9 @@ const prefDefaults = {
   invitation_policy: "all",
   display_options_json: "{}",
   default_reminders_json: "[]",
+  remember_view: 1,
+  last_view: null as string | null,
+  default_calendar_id: null as string | null,
   version: 1,
 };
 export async function ensurePrimary(c: CalendarContext) {
@@ -227,6 +230,7 @@ export async function preferences(c: CalendarContext) {
   const { default_reminders_json, display_options_json, ...rest } = value;
   return {
     ...rest,
+    remember_view: !!value.remember_view,
     default_reminders: JSON.parse(default_reminders_json),
     display_options: JSON.parse(display_options_json),
   };
@@ -270,6 +274,8 @@ routes.patch("/preferences", async (c) => {
     "locale",
     "week_start",
     "default_view",
+    "remember_view",
+    "default_calendar_id",
     "default_duration_minutes",
     "invitation_policy",
     "display_options",
@@ -295,6 +301,10 @@ routes.patch("/preferences", async (c) => {
   }
   if ("week_start" in data)
     values.week_start = integer(data.week_start, "week_start", 0, 6);
+  if ("remember_view" in data) values.remember_view = flag(data.remember_view, "remember_view");
+  const destination = data.default_calendar_id === undefined || data.default_calendar_id === null ? null
+    : await requireCalendar(c, identifier(data.default_calendar_id, "default_calendar_id"), 3);
+  if ("default_calendar_id" in data) values.default_calendar_id = destination?.id ?? null;
   if ("default_view" in data)
     values.default_view = choice(data.default_view, "default_view", [
       "day",
@@ -326,6 +336,7 @@ routes.patch("/preferences", async (c) => {
     request: data,
     result: null,
     checks: [
+      ...(destination ? [calendarCondition(c, destination, 3)] : []),
       condition(
         "EXISTS(SELECT 1 FROM calendar_preferences WHERE user_id=? AND version=?)",
         user,
@@ -339,6 +350,16 @@ routes.patch("/preferences", async (c) => {
   });
   c.header("ETag", `"v${version + 1}"`);
   return c.json(await preferences(c));
+});
+// View navigation must not invalidate a settings form's optimistic version.
+routes.put("/preferences/view", async c => {
+  const data = await body(c, ["view"]), view = choice(data.view, "view", ["day", "week", "month", "agenda"]);
+  const prefs = await preferences(c), user = c.get("identity").user.id;
+  if (prefs.last_view !== view) await mutate(c, {
+    operation: "preferences.view", request: data, result: null,
+    build: proof => [update(c, "calendar_preferences", { last_view: view }, "user_id=?", [user], proof)],
+  });
+  return c.json({ last_view: view });
 });
 routes.get("/calendars", async (c) => {
   const limit = integer(Number(c.req.query("limit") ?? 100), "limit", 1, 500),

@@ -11,6 +11,7 @@ import calendarRoutes, {
 } from "../calendar/calendars";
 import { Temporal } from "@js-temporal/polyfill";
 import { viewRange } from "../calendar/view-range";
+import { calendarStartView, validCalendarView } from "../calendar/view-preferences";
 import { listEvents } from "../calendar/events";
 import eventRoutes from "../calendar/events";
 import importRoutes from "../calendar/imports";
@@ -130,7 +131,7 @@ calendar.get("/bootstrap", async (c) => {
     let date = Temporal.Now.plainDateISO(prefs.time_zone).toString();
     try { const requested = c.req.query("date"); if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)) { const parsed = Temporal.PlainDate.from(requested); if (parsed.year >= 1970 && parsed.year <= 2100) date = parsed.toString(); } } catch { /* Match the UI fallback for invalid dates. */ }
     const requestedView = c.req.query("view"), search = c.req.query("q") ?? "";
-    const view = ["day", "week", "month", "agenda"].includes(requestedView ?? "") ? requestedView as "day" | "week" | "month" | "agenda" : prefs.default_view as "day" | "week" | "month" | "agenda";
+    const view = calendarStartView(requestedView, prefs, validCalendarView(c.req.query("cached_view")));
     const range = viewRange(date, search ? "agenda" : view, prefs.week_start);
     const selected = list.filter(cal => subs.some(sub => sub.calendar_id === cal.id && sub.selected && !sub.hidden));
     const query = new URLSearchParams({ time_min: Temporal.PlainDate.from(range.start).toZonedDateTime(prefs.time_zone).toInstant().toString(), time_max: Temporal.PlainDate.from(range.end).toZonedDateTime(prefs.time_zone).toInstant().toString(), expand_recurring: "true", calendar_ids: selected.map(cal => cal.id).join(","), ...(search ? { q: search } : {}) });

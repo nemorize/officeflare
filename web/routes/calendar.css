@@ -1,6 +1,7 @@
 .workspace-calendar .workspace-content { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .workspace-calendar .workspace-main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-calendar .workspace-sidebar { display: flex; flex-direction: column; }
+.workspace-calendar .workspace-sidebar-header { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 @media (min-width: 761px) {
   .workspace-calendar.calendar-sidebar-collapsed .workspace-frame { grid-template-columns: 0 minmax(0, 1fr); }
   .workspace-calendar.calendar-sidebar-collapsed .workspace-sidebar { visibility: hidden; overflow: hidden; }
@@ -32,10 +33,6 @@
 .calendar-list-item > [data-ui-button] { width: 26px; min-height: 26px; height: 26px; opacity: 0; }
 .calendar-list-item:hover > [data-ui-button], .calendar-list-item:focus-within > [data-ui-button] { opacity: 1; }
 .calendar-sidebar-empty { font-size: 11px; color: var(--ui-muted); padding: 3px; line-height: 1.7; }
-.calendar-sidebar-links.workspace-nav { padding: 7px 12px 14px; border-top: 1px solid var(--ui-border); }
-.calendar-sidebar-links a[aria-current=page] { background: var(--ui-surface); color: var(--ui-text); }
-.calendar-zone-button { margin-top: auto; padding: 17px 18px; display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-top: 1px solid var(--ui-border); background: transparent; color: var(--ui-muted); text-align: left; font-size: 10px; cursor: pointer; }
-.calendar-zone-button span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-topbar.calendar-topbar { justify-content: flex-start; gap: 12px; padding: 0 20px 0 14px; flex-shrink: 0; }
 .calendar-topbar > [data-ui-button] { flex-shrink: 0; }
 .calendar-period-navigation { display: flex; gap: 0; }

@@ -13,10 +13,12 @@ export interface CalendarRecord {
 export interface CalendarSubscription {
   calendar_id: string; selected: boolean; hidden: boolean; color: string | null;
   name_override: string | null; version: number;
+  sort_order: number;
 }
 export interface CalendarPreferences {
   time_zone: string; locale: string; week_start: number; default_view: CalendarView;
   default_duration_minutes: number; invitation_policy: string; version: number;
+  remember_view: boolean; last_view: CalendarView | null; default_calendar_id: string | null;
   display_options: { show_weekends?: boolean; show_declined?: boolean; show_week_numbers?: boolean };
 }
 export type CalendarEndpoint = { date: string; date_time?: never; time_zone?: never } | { date?: never; date_time: string; time_zone: string };
