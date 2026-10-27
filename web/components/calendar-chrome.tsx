@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
-import { Button, CheckboxControl, Icon, Input, Menu, MenuPopup, SearchField, SelectControl } from "./ui";
+import { Button, CheckboxControl, Icon, Input, SearchField, SelectControl } from "./ui";
 import { CalendarIconButton } from "./calendar-controls";
 import { useCalendar } from "./calendar-context";
 import { useAccount } from "./account-context";
@@ -57,7 +57,7 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
   </div>;
 }
 export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
-  const calendar = useCalendar(), mobile = useWorkspaceMobile(), location = useLocation(), navigate = useNavigate();
+  const calendar = useCalendar(), mobile = useWorkspaceMobile(), location = useLocation();
   const [menu, setMenu] = useState(false), [searchOpen, setSearchOpen] = useState(false), [query, setQuery] = useState(calendar.query);
   const searchInput = useRef<HTMLInputElement>(null);
   const locale = calendar.data?.preferences.locale ?? "en", active = location.pathname === "/calendar";
@@ -79,16 +79,6 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
     {active && searchOpen && <SearchField className="calendar-search" onSubmit={event => { event.preventDefault(); calendar.search(query); setSearchOpen(false); }}><Icon name="search" /><Input ref={searchInput} variant="integrated" aria-label="Search events" placeholder="Search events" value={query} maxLength={255} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") setSearchOpen(false); }} /><CalendarIconButton icon="close" label="Close search" onClick={() => setSearchOpen(false)} /></SearchField>}
     <div className="calendar-topbar-actions">
       {active && !searchOpen && <CalendarIconButton icon="search" label="Search events" onClick={() => setSearchOpen(true)} />}
-      <Menu.Root><Menu.Trigger render={<Button variant="ghost" size="icon" aria-label="Calendar tools" />}><Icon name="more" /></Menu.Trigger><MenuPopup data-ui-theme="neutral" positionerProps={{ align: "end" }}>
-        <Menu.Item onClick={() => { calendar.navigate(todayIn(calendar.zone)); }}>Today</Menu.Item>
-        {active && <Menu.Item onClick={() => setSearchOpen(true)}><Icon name="search" />Search events</Menu.Item>}
-        {calendar.can("events.create") && <Menu.Item onClick={() => calendar.setSettings("import")}><Icon name="upload" />Import events (.ics)</Menu.Item>}
-        {calendar.can("calendars.create") && <Menu.Item onClick={() => calendar.setSettings("subscribe")}><Icon name="link" />Subscribe by URL</Menu.Item>}
-        <Menu.Item onClick={() => navigate("/calendar/settings/working-hours")}><Icon name="clock" />Working hours</Menu.Item>
-        <Menu.Item onClick={() => calendar.refresh(true)}><Icon name="refresh" />Refresh</Menu.Item>
-        <Menu.Item onClick={() => calendar.setSettings("shortcuts")}><Icon name="code" />Keyboard shortcuts</Menu.Item>
-        <Menu.Separator /><Menu.Item onClick={() => navigate("/calendar/trash")}><Icon name="trash" />Trash</Menu.Item>
-      </MenuPopup></Menu.Root>
       {active && <SelectControl className="calendar-view-select" variant="outline" aria-label="Calendar view" value={calendar.view} onValueChange={view => calendar.navigate(calendar.date, view as CalendarView)} options={calendarViews} />}
     </div>
   </header>;
