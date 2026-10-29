@@ -39,19 +39,11 @@ export function webUrl(value: unknown) {
   } catch {
     fail(400, "INVALID_URL", "Invalid attachment URL");
   }
-  if (
-    !["https:", "http:"].includes(url.protocol) ||
-    url.username ||
-    url.password
-  )
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password)
     fail(400, "INVALID_URL", "Attachment URLs must use HTTP or HTTPS");
   return url.href;
 }
-export async function attachmentRows(
-  c: CalendarContext,
-  event: Event,
-  key = "",
-) {
+export async function attachmentRows(c: CalendarContext, event: Event, key = "") {
   return rows<Attachment>(
     c.env,
     "SELECT a.* FROM calendar_event_attachments a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id=? AND s.occurrence_key IN('',?) AND a.removed_at IS NULL ORDER BY a.id",
@@ -59,11 +51,7 @@ export async function attachmentRows(
     key,
   );
 }
-export async function readableAttachments(
-  c: CalendarContext,
-  event: Event,
-  key = "",
-) {
+export async function readableAttachments(c: CalendarContext, event: Event, key = "") {
   const values = await attachmentRows(c, event, key),
     result = [];
   for (const value of values) {
@@ -108,30 +96,16 @@ export async function readableAttachments(
 const routes = new Hono<AppEnv>();
 const root = "/calendars/:calendarId/events/:eventId";
 async function target(c: CalendarContext, edit = false) {
-  const cal = await requireCalendar(
-      c,
-      identifier(c.req.param("calendarId")),
-      edit ? 3 : 1,
-    ),
-    event = await requireEvent(
-      c,
-      cal,
-      identifier(c.req.param("eventId")),
-      edit,
-    );
-  if (!canSeeDetails(event, cal))
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+  const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), edit ? 3 : 1),
+    event = await requireEvent(c, cal, identifier(c.req.param("eventId")), edit);
+  if (!canSeeDetails(event, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
   return { cal, event };
 }
 routes.get(root + "/attachments", async (c) => {
   const { event, cal } = await target(c);
   await attendanceDetails(c, cal, event, c.req.query("occurrence_key") ?? "");
   return c.json({
-    attachments: await readableAttachments(
-      c,
-      event,
-      c.req.query("occurrence_key") ?? "",
-    ),
+    attachments: await readableAttachments(c, event, c.req.query("occurrence_key") ?? ""),
   });
 });
 routes.post(root + "/attachments", async (c) => {
@@ -145,10 +119,7 @@ routes.post(root + "/attachments", async (c) => {
     ]),
     { cal, event } = await target(c, true),
     version = expectedVersion(c, data),
-    key =
-      data.occurrence_key === undefined
-        ? ""
-        : text(data.occurrence_key, "occurrence_key", 64),
+    key = data.occurrence_key === undefined ? "" : text(data.occurrence_key, "occurrence_key", 64),
     selected = await scope(c, event, key),
     id = uuid();
   await attendanceDetails(c, cal, event, key);
@@ -157,12 +128,8 @@ routes.post(root + "/attachments", async (c) => {
   const item =
     data.drive_item_id === undefined
       ? null
-      : await requireItem(
-          c as unknown as DriveContext,
-          identifier(data.drive_item_id),
-        );
-  if (item && item.kind !== "file")
-    fail(400, "INVALID_ATTACHMENT", "Only files can be attached");
+      : await requireItem(c as unknown as DriveContext, identifier(data.drive_item_id));
+  if (item && item.kind !== "file") fail(400, "INVALID_ATTACHMENT", "Only files can be attached");
   if ((await attachmentRows(c, event, key)).length >= 20)
     fail(422, "TOO_MANY_ATTACHMENTS", "At most 20 attachments are allowed");
   const value = {
@@ -171,9 +138,7 @@ routes.post(root + "/attachments", async (c) => {
       drive_item_id: item?.id ?? null,
       url: item ? null : webUrl(data.url),
       title:
-        data.title === undefined
-          ? (item?.name ?? "Attachment")
-          : text(data.title, "title", 255),
+        data.title === undefined ? (item?.name ?? "Attachment") : text(data.title, "title", 255),
       mime_type:
         data.mime_type === undefined
           ? "application/octet-stream"
@@ -186,13 +151,7 @@ routes.post(root + "/attachments", async (c) => {
       sequence: event.sequence + 1,
       updated_at: now(),
     },
-    notices = await prepareDeliveries(
-      c,
-      cal,
-      updated,
-      await allAttendees(c, event.id),
-      "update",
-    );
+    notices = await prepareDeliveries(c, cal, updated, await allAttendees(c, event.id), "update");
   const result = await mutate(c, {
     action: "calendar.events.update",
     operation: `attachment.add:${event.id}:${key}`,
@@ -206,12 +165,7 @@ routes.post(root + "/attachments", async (c) => {
       ...(item
         ? [
             driveIdentity(c as unknown as DriveContext),
-            driveCondition(
-              c as unknown as DriveContext,
-              item.id,
-              item.version,
-              "read",
-            ),
+            driveCondition(c as unknown as DriveContext, item.id, item.version, "read"),
           ]
         : []),
     ],
@@ -241,9 +195,9 @@ routes.delete(root + "/attachments/:attachmentId", async (c) => {
   const { cal, event } = await target(c, true),
     id = identifier(c.req.param("attachmentId")),
     version = expectedVersion(c),
-    value = (
-      await attachmentRows(c, event, c.req.query("occurrence_key") ?? "")
-    ).find((value) => value.id === id);
+    value = (await attachmentRows(c, event, c.req.query("occurrence_key") ?? "")).find(
+      (value) => value.id === id,
+    );
   if (!value) fail(404, "ATTACHMENT_NOT_FOUND", "Attachment not found");
   await attendanceDetails(c, cal, event, c.req.query("occurrence_key") ?? "");
   const notices = await prepareDeliveries(

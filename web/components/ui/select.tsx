@@ -12,7 +12,13 @@ export interface SelectPopupProps extends ComponentPropsWithRef<typeof Select.Po
 export function SelectPopup({ portalProps, positionerProps, ...props }: SelectPopupProps) {
   return (
     <Select.Portal {...portalProps}>
-      <Select.Positioner data-ui="popup-positioner" align="start" alignItemWithTrigger={false} sideOffset={6} {...positionerProps}>
+      <Select.Positioner
+        data-ui="popup-positioner"
+        align="start"
+        alignItemWithTrigger={false}
+        sideOffset={6}
+        {...positionerProps}
+      >
         <Select.Popup data-ui="select-popup" {...props} />
       </Select.Positioner>
     </Select.Portal>
@@ -27,7 +33,12 @@ export interface ComboboxPopupProps extends ComponentPropsWithRef<typeof Combobo
 export function ComboboxPopup({ portalProps, positionerProps, ...props }: ComboboxPopupProps) {
   return (
     <Combobox.Portal {...portalProps}>
-      <Combobox.Positioner data-ui="popup-positioner" align="start" sideOffset={6} {...positionerProps}>
+      <Combobox.Positioner
+        data-ui="popup-positioner"
+        align="start"
+        sideOffset={6}
+        {...positionerProps}
+      >
         <Combobox.Popup data-ui="combobox-popup" {...props} />
       </Combobox.Positioner>
     </Combobox.Portal>

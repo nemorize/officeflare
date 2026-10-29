@@ -11,7 +11,10 @@ export type AuthEnv = Env & {
 export type User = typeof users.$inferSelect;
 export type Session = typeof userSessions.$inferSelect;
 export type Challenge = typeof userAuthChallenges.$inferSelect;
-export interface Identity { user: User; session: Session }
+export interface Identity {
+  user: User;
+  session: Session;
+}
 export type AppEnv = {
   Bindings: AuthEnv;
   Variables: {

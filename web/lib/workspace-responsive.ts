@@ -7,5 +7,9 @@ function subscribe(listener: () => void) {
   return () => query.removeEventListener("change", listener);
 }
 export function useWorkspaceMobile() {
-  return useSyncExternalStore(subscribe, () => window.matchMedia(workspaceMobileQuery).matches, () => false);
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(workspaceMobileQuery).matches,
+    () => false,
+  );
 }

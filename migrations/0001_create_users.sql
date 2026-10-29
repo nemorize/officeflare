@@ -15,6 +15,5 @@ CREATE TABLE users (
 );
 
 -- Email lookups must include deleted_at IS NULL to select the active account.
-CREATE UNIQUE INDEX users_active_email_address_unique
-  ON users(email_address COLLATE NOCASE)
-  WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX users_active_email_address_unique ON users (email_address COLLATE NOCASE)
+WHERE deleted_at IS NULL;

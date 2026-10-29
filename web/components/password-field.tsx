@@ -10,18 +10,37 @@ interface PasswordFieldProps {
   describedBy?: string;
 }
 
-export function PasswordField({ id, label, value, onChange, autoComplete, describedBy }: PasswordFieldProps) {
+export function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  describedBy,
+}: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
     <Field.Root name={id}>
       <Field.Label htmlFor={id}>{label}</Field.Label>
       <div className="password-control">
-        <Input id={id} type={visible ? "text" : "password"} required
-          autoComplete={autoComplete} value={value} onValueChange={onChange}
-          aria-describedby={describedBy} />
-        <Button type="button" variant="ghost" size="icon" aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
-          aria-pressed={visible} onClick={() => setVisible(!visible)}>
+        <Input
+          id={id}
+          type={visible ? "text" : "password"}
+          required
+          autoComplete={autoComplete}
+          value={value}
+          onValueChange={onChange}
+          aria-describedby={describedBy}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
+          aria-pressed={visible}
+          onClick={() => setVisible(!visible)}
+        >
           <Icon name={visible ? "eyeOff" : "eye"} />
         </Button>
       </div>

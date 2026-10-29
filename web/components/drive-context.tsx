@@ -8,14 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
-import {
-  Button,
-  Icon,
-  Menu,
-  MenuPopup,
-  Progress,
-  useNotifications,
-} from "./ui";
+import { Button, Icon, Menu, MenuPopup, Progress, useNotifications } from "./ui";
 import { api, ApiError } from "../lib/api";
 import { useSharedDriveCache } from "./drive-resource-context";
 import { useAccess } from "./console-access";
@@ -43,7 +36,10 @@ interface DriveContextValue {
   refresh: () => void;
   quota: DriveQuota | null;
   capabilities: DriveCapabilities | null;
-  can: (action: "create" | "update" | "delete" | "download" | "comment" | "internal_share" | "public_share") => boolean;
+  can: (
+    action:
+      "create" | "update" | "delete" | "download" | "comment" | "internal_share" | "public_share",
+  ) => boolean;
   target: { parent: string | null; writable: boolean };
   setTarget: (target: { parent: string | null; writable: boolean }) => void;
   chooseFiles: (folder?: boolean, item?: DriveItem) => void;
@@ -61,7 +57,13 @@ export function DriveNewMenu() {
   return (
     <Menu.Root>
       <Menu.Trigger
-        render={<Button variant="primary" size="lg" className="workspace-create-button drive-new-button" />}
+        render={
+          <Button
+            variant="primary"
+            size="lg"
+            className="workspace-create-button drive-new-button"
+          />
+        }
         disabled={!drive.target.writable}
       >
         <Icon name="plus" width="18" height="18" />
@@ -97,17 +99,36 @@ export function DriveProvider({ children }: { children: ReactNode }) {
       writable: true,
     });
   const cache = useSharedDriveCache();
-  const refresh = useCallback(() => { cache?.invalidate(); setRevision((value) => value + 1); }, [cache]);
+  const refresh = useCallback(() => {
+    cache?.invalidate();
+    setRevision((value) => value + 1);
+  }, [cache]);
   const active =
-    location.pathname.startsWith("/drive") &&
-    access.permissions.includes("drive.access");
-  const bootstrap = useDriveResource<{ quota: DriveQuota; capabilities: DriveCapabilities }>(active ? "/api/drive/bootstrap" : null, revision);
-  const quota = { data: bootstrap.data?.quota ?? null }, capabilities = { data: bootstrap.data?.capabilities ?? null };
+    location.pathname.startsWith("/drive") && access.permissions.includes("drive.access");
+  const bootstrap = useDriveResource<{ quota: DriveQuota; capabilities: DriveCapabilities }>(
+    active ? "/api/drive/bootstrap" : null,
+    revision,
+  );
+  const quota = { data: bootstrap.data?.quota ?? null },
+    capabilities = { data: bootstrap.data?.capabilities ?? null };
   const can: DriveContextValue["can"] = (action) => {
     const value = capabilities.data;
     if (!value || value.account_status === "suspended") return false;
-    const keys = { create: "drive.files.create", update: "drive.files.update", delete: "drive.files.delete", download: "drive.files.download", comment: "drive.comments.create", internal_share: "drive.sharing.internal", public_share: "drive.sharing.public" };
-    return value.permissions.includes(keys[action]) && (action === "download" || value.account_status === "active" && !value.write_locked) && (action !== "internal_share" || value.internal_sharing_enabled) && (action !== "public_share" || value.public_sharing_enabled);
+    const keys = {
+      create: "drive.files.create",
+      update: "drive.files.update",
+      delete: "drive.files.delete",
+      download: "drive.files.download",
+      comment: "drive.comments.create",
+      internal_share: "drive.sharing.internal",
+      public_share: "drive.sharing.public",
+    };
+    return (
+      value.permissions.includes(keys[action]) &&
+      (action === "download" || (value.account_status === "active" && !value.write_locked)) &&
+      (action !== "internal_share" || value.internal_sharing_enabled) &&
+      (action !== "public_share" || value.public_sharing_enabled)
+    );
   };
   const filesInput = useRef<HTMLInputElement>(null),
     folderInput = useRef<HTMLInputElement>(null),
@@ -123,9 +144,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const update = useCallback((id: string, patch: Partial<UploadEntry>) => {
     if (live.current)
-      setEntries((old) =>
-        old.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
-      );
+      setEntries((old) => old.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   }, []);
   useEffect(() => {
     live.current = true;
@@ -163,16 +182,12 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                   method: "DELETE",
                 });
               } catch (cleanupFailure) {
-                if (
-                  !(
-                    cleanupFailure instanceof ApiError &&
-                    [404, 410].includes(cleanupFailure.status)
-                  )
-                ) {
+                if (!(
+                  cleanupFailure instanceof ApiError && [404, 410].includes(cleanupFailure.status)
+                )) {
                   update(entry.id, {
                     state: "error",
-                    error:
-                      "Upload could not be cancelled. Retry to check its status.",
+                    error: "Upload could not be cancelled. Retry to check its status.",
                   });
                   return;
                 }
@@ -196,7 +211,10 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     }
   }, [entries, refresh, update]);
   const enqueue = (files: File[], parent: string | null, item?: DriveItem) => {
-    if (!can(item ? "update" : "create")) { notify.error("Your role or Drive policy does not allow this upload."); return; }
+    if (!can(item ? "update" : "create")) {
+      notify.error("Your role or Drive policy does not allow this upload.");
+      return;
+    }
     const maximum = capabilities.data?.max_file_bytes ?? 0;
     const accepted = files.filter((file) => file.size <= maximum);
     if (accepted.length !== files.length)
@@ -244,10 +262,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         ...files.map((file) => ({
           id: crypto.randomUUID(),
           file,
-          parent:
-            folders.get(
-              file.webkitRelativePath.split("/").slice(0, -1).join("/"),
-            ) ?? parent,
+          parent: folders.get(file.webkitRelativePath.split("/").slice(0, -1).join("/")) ?? parent,
           state: "queued" as const,
           sent: 0,
         })),
@@ -301,11 +316,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         multiple
         hidden
         onChange={(event) => {
-          enqueue(
-            Array.from(event.target.files ?? []),
-            inputParent.current,
-            replacement.current,
-          );
+          enqueue(Array.from(event.target.files ?? []), inputParent.current, replacement.current);
           event.target.value = "";
         }}
       />
@@ -352,10 +363,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
             />
             <DriveNotice error={folderAction.error} />
             <div className="drive-modal-actions">
-              <Button
-                disabled={folderAction.busy}
-                onClick={() => setFolderOpen(false)}
-              >
+              <Button disabled={folderAction.busy} onClick={() => setFolderOpen(false)}>
                 Cancel
               </Button>
               <Button
@@ -370,7 +378,8 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         </DriveModal>
       )}
       {!!entries.length && (
-        <section data-ui-theme="neutral"
+        <section
+          data-ui-theme="neutral"
           className={`drive-upload-tray${collapsed ? " is-collapsed" : ""}`}
           aria-label="Uploads"
         >
@@ -415,11 +424,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                     </span>
                     {entry.state === "uploading" && (
                       <Progress.Root
-                        value={
-                          entry.file.size
-                            ? (entry.sent / entry.file.size) * 100
-                            : 100
-                        }
+                        value={entry.file.size ? (entry.sent / entry.file.size) * 100 : 100}
                         aria-label={`Uploading ${entry.file.name}`}
                       >
                         <Progress.Track>
@@ -449,11 +454,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
           )}
           {!running && entries.some((entry) => entry.state === "done") && (
             <footer>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/drive/recent")}
-              >
+              <Button variant="ghost" size="sm" onClick={() => navigate("/drive/recent")}>
                 View recent files
                 <Icon name="arrow" />
               </Button>

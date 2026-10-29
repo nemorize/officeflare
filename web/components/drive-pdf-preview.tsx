@@ -12,13 +12,7 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-export default function DrivePdfPreview({
-  url,
-  name,
-}: {
-  url: string;
-  name: string;
-}) {
+export default function DrivePdfPreview({ url, name }: { url: string; name: string }) {
   const canvas = useRef<HTMLCanvasElement>(null),
     pageArea = useRef<HTMLDivElement>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null),
@@ -110,18 +104,11 @@ export default function DrivePdfPreview({
         if (!active) return;
         setBusy(false);
         const content = await pdfPage.getTextContent();
-        if (active)
-          setText(
-            content.items
-              .map((item) => ("str" in item ? item.str : ""))
-              .join(" "),
-          );
+        if (active) setText(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
       })
       .catch((failure: Error) => {
         if (active && failure.name !== "RenderingCancelledException") {
-          setError(
-            "This PDF page could not be previewed. You can still download the file.",
-          );
+          setError("This PDF page could not be previewed. You can still download the file.");
           setBusy(false);
         }
       });
@@ -131,10 +118,7 @@ export default function DrivePdfPreview({
     };
   }, [document, page, width]);
   return (
-    <section
-      className="drive-pdf-preview"
-      aria-label={`PDF preview of ${name}`}
-    >
+    <section className="drive-pdf-preview" aria-label={`PDF preview of ${name}`}>
       <div className="drive-pdf-controls" role="group" aria-label="PDF pages">
         <Button
           size="sm"

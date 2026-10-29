@@ -18,14 +18,19 @@ export async function body(c: AuthContext, allowed: readonly string[]) {
     throw new HTTPException(415, { message: "Expected application/json" });
   }
   let value: unknown;
-  try { value = await c.req.json(); } catch { invalid("Invalid JSON"); }
+  try {
+    value = await c.req.json();
+  } catch {
+    invalid("Invalid JSON");
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
   const data = value as Record<string, unknown>;
   if (Object.keys(data).some((key) => !allowed.includes(key))) invalid("Unknown field");
   return data;
 }
 export function string(value: unknown, key: string, max = 512): string {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) invalid(`Invalid ${key}`);
+  if (typeof value !== "string" || value.length === 0 || value.length > max)
+    invalid(`Invalid ${key}`);
   return value;
 }
 export function password(value: unknown, fresh = false): string {

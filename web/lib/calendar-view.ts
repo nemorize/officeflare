@@ -7,12 +7,18 @@ const storageKey = (account: string) => `officeflare.calendar.view:${account.tri
 
 export function readCalendarView(account: string): CalendarView | null {
   if (!account) return null;
-  try { return calendarView(localStorage.getItem(storageKey(account))); }
-  catch { return null; }
+  try {
+    return calendarView(localStorage.getItem(storageKey(account)));
+  } catch {
+    return null;
+  }
 }
 
 export function saveCalendarView(account: string, view: CalendarView) {
   if (!account) return;
-  try { localStorage.setItem(storageKey(account), view); }
-  catch { /* View navigation still works when browser storage is unavailable. */ }
+  try {
+    localStorage.setItem(storageKey(account), view);
+  } catch {
+    /* View navigation still works when browser storage is unavailable. */
+  }
 }

@@ -32,7 +32,12 @@ export class AuthError extends Error {
   }
 }
 
-async function request<T>(path: string, data?: object, token?: string, method = "POST"): Promise<T> {
+async function request<T>(
+  path: string,
+  data?: object,
+  token?: string,
+  method = "POST",
+): Promise<T> {
   const response = await fetch(path, {
     method,
     credentials: "omit",
@@ -44,8 +49,12 @@ async function request<T>(path: string, data?: object, token?: string, method = 
     },
     body: data ? JSON.stringify(data) : undefined,
   });
-  if (!response.ok) throw new AuthError(response.status, Math.max(0, Number(response.headers.get("Retry-After")) || 0) * 1000);
-  return response.status === 204 ? undefined as T : response.json();
+  if (!response.ok)
+    throw new AuthError(
+      response.status,
+      Math.max(0, Number(response.headers.get("Retry-After")) || 0) * 1000,
+    );
+  return response.status === 204 ? (undefined as T) : response.json();
 }
 
 export const login = (email: string, password: string) =>

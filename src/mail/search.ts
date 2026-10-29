@@ -8,10 +8,7 @@ export function compileSearch(query: string): SearchPlan {
   if (query.length > 1000) fail(400, "Search query is too long");
   const plan: SearchPlan = { terms: [], filters: [], bindings: [] };
   const tokens = query.match(/-?(?:[a-z]+:)?"[^"]*"|-?[^\s"]+/g) ?? [];
-  if (
-    tokens.length > 30 ||
-    tokens.join(" ").replace(/\s/g, "") !== query.trim().replace(/\s/g, "")
-  )
+  if (tokens.length > 30 || tokens.join(" ").replace(/\s/g, "") !== query.trim().replace(/\s/g, ""))
     fail(400, "Invalid search syntax");
   for (let token of tokens) {
     const excluded = token.startsWith("-");
@@ -40,9 +37,7 @@ export function compileSearch(query: string): SearchPlan {
         new Date(value).toISOString().slice(0, 10) !== value
       )
         fail(400, "Invalid search date");
-      plan.filters.push(
-        negative + "(m.received_at" + (key === "after" ? ">=" : "<") + "?)",
-      );
+      plan.filters.push(negative + "(m.received_at" + (key === "after" ? ">=" : "<") + "?)");
       plan.bindings.push(Date.parse(value) / 1000);
     } else {
       const field = key
@@ -51,13 +46,13 @@ export function compileSearch(query: string): SearchPlan {
       if (key && !field) fail(400, "Unsupported search field");
       const phrase = value.startsWith('"');
       const prefix = !phrase && value.endsWith("*");
-      const term = (
-        phrase ? value.slice(1, -1) : prefix ? value.slice(0, -1) : value
-      ).replaceAll('"', '""');
+      const term = (phrase ? value.slice(1, -1) : prefix ? value.slice(0, -1) : value).replaceAll(
+        '"',
+        '""',
+      );
       if (!term) fail(400, "Empty search term");
       // Each term is evaluated at message scope, so AND also matches terms in different body chunks.
-      const expression =
-        (field ? field + ":" : "") + '"' + term + '"' + (prefix ? "*" : "");
+      const expression = (field ? field + ":" : "") + '"' + term + '"' + (prefix ? "*" : "");
       plan.terms.push((excluded ? "-" : "") + expression);
     }
   }

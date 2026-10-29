@@ -16,14 +16,17 @@ export { NotificationHubDO } from "./notifications/hub";
 const app = new Hono<AppEnv>();
 
 app.route("/api", api);
-app.all("/.well-known/jmap",(c)=>{
-  const url=new URL(c.req.url);url.pathname="/api/mail/jmap/session";
-  return app.fetch(new Request(url,c.req.raw),c.env,c.executionCtx);
+app.all("/.well-known/jmap", (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = "/api/mail/jmap/session";
+  return app.fetch(new Request(url, c.req.raw), c.env, c.executionCtx);
 });
-for(const path of ["/jmap","/jmap/*","/mcp"])app.all(path,(c)=>{
-  const url=new URL(c.req.url);url.pathname="/api/mail"+url.pathname;
-  return app.fetch(new Request(url,c.req.raw),c.env,c.executionCtx);
-});
+for (const path of ["/jmap", "/jmap/*", "/mcp"])
+  app.all(path, (c) => {
+    const url = new URL(c.req.url);
+    url.pathname = "/api/mail" + url.pathname;
+    return app.fetch(new Request(url, c.req.raw), c.env, c.executionCtx);
+  });
 
 app.notFound((c) => c.html(renderPage("Page not found"), 404));
 
@@ -42,8 +45,14 @@ app.onError((error, c) => {
 
   if (c.req.path === "/api" || c.req.path.startsWith("/api/")) {
     // Preserve structured domain errors and the headers set by API middleware.
-    if (error instanceof HTTPException && error.getResponse().headers.get("content-type")?.startsWith("application/json")) {
-      return c.newResponse(error.getResponse().body, { status, headers: error.getResponse().headers });
+    if (
+      error instanceof HTTPException &&
+      error.getResponse().headers.get("content-type")?.startsWith("application/json")
+    ) {
+      return c.newResponse(error.getResponse().body, {
+        status,
+        headers: error.getResponse().headers,
+      });
     }
     return c.json({ error: message }, { status, headers });
   }
@@ -56,21 +65,46 @@ export default {
   fetch: app.fetch,
   email: receive,
   queue: async (batch, env) => {
-    if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications")) await consumeNotifications(batch, env);
+    if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications"))
+      await consumeNotifications(batch, env);
     else {
-      const calendarMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind === 'calendar.delivery');
-      const feedMessages = batch.messages.filter(message => (message.body as { kind?: string })?.kind === 'calendar.feed');
-      const mailMessages = batch.messages.filter(message => !['calendar.delivery', 'calendar.feed'].includes((message.body as { kind?: string })?.kind ?? ''));
+      const calendarMessages = batch.messages.filter(
+        (message) => (message.body as { kind?: string })?.kind === "calendar.delivery",
+      );
+      const feedMessages = batch.messages.filter(
+        (message) => (message.body as { kind?: string })?.kind === "calendar.feed",
+      );
+      const mailMessages = batch.messages.filter(
+        (message) =>
+          !["calendar.delivery", "calendar.feed"].includes(
+            (message.body as { kind?: string })?.kind ?? "",
+          ),
+      );
       for (const message of feedMessages) {
         const id = (message.body as { id?: unknown }).id;
-        if (typeof id === 'string') { try { await syncCalendarFeed(env, id); message.ack(); } catch { message.retry(); } }
-        else message.ack();
+        if (typeof id === "string") {
+          try {
+            await syncCalendarFeed(env, id);
+            message.ack();
+          } catch {
+            message.retry();
+          }
+        } else message.ack();
       }
-      if (calendarMessages.length) await consumeCalendar({ ...batch, messages: calendarMessages }, env);
+      if (calendarMessages.length)
+        await consumeCalendar({ ...batch, messages: calendarMessages }, env);
       if (mailMessages.length) await consume({ ...batch, messages: mailMessages }, env);
     }
   },
   scheduled: async (_event, env, ctx) => {
-    ctx.waitUntil(Promise.all([recover(env), recoverNotifications(env), recoverDrive(env), recoverCalendar(env), recoverCalendarFeeds(env)]));
+    ctx.waitUntil(
+      Promise.all([
+        recover(env),
+        recoverNotifications(env),
+        recoverDrive(env),
+        recoverCalendar(env),
+        recoverCalendarFeeds(env),
+      ]),
+    );
   },
 } satisfies ExportedHandler<AppEnv["Bindings"]>;

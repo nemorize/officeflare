@@ -47,15 +47,19 @@ const paths = {
   check: "m5 12 4 4L19 6",
   plus: "M12 5v14 M5 12h14",
   user: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2",
-  settings: "M9.93 4.79 10.61 2.1h2.78l.68 2.69 1.57.65 2.38-1.43 1.97 1.97-1.43 2.38.65 1.57 2.69.68v2.78l-2.69.68-.65 1.57 1.43 2.38-1.97 1.97-2.38-1.43-1.57.65-.68 2.69h-2.78l-.68-2.69-1.57-.65-2.38 1.43-1.97-1.97 1.43-2.38-.65-1.57-2.69-.68v-2.78l2.69-.68.65-1.57-1.43-2.38 1.97-1.97 2.38 1.43Z M15.25 12a3.25 3.25 0 1 1-6.5 0 3.25 3.25 0 0 1 6.5 0Z",
+  settings:
+    "M9.93 4.79 10.61 2.1h2.78l.68 2.69 1.57.65 2.38-1.43 1.97 1.97-1.43 2.38.65 1.57 2.69.68v2.78l-2.69.68-.65 1.57 1.43 2.38-1.97 1.97-2.38-1.43-1.57.65-.68 2.69h-2.78l-.68-2.69-1.57-.65-2.38 1.43-1.97-1.97 1.43-2.38-.65-1.57-2.69-.68v-2.78l2.69-.68.65-1.57-1.43-2.38 1.97-1.97 2.38 1.43Z M15.25 12a3.25 3.25 0 1 1-6.5 0 3.25 3.25 0 0 1 6.5 0Z",
   eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
-  eyeOff: "m3 3 18 18 M10 5a12 12 0 0 1 12 7s-1 2-3 4 M14 19C7 21 2 12 2 12s1-2 4-5 M10 10a3 3 0 0 0 4 4",
+  eyeOff:
+    "m3 3 18 18 M10 5a12 12 0 0 1 12 7s-1 2-3 4 M14 19C7 21 2 12 2 12s1-2 4-5 M10 10a3 3 0 0 0 4 4",
   info: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 11v6 M12 7h.01",
   shield: "m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z m-3 9 2 2 4-4",
   code: "m8 7-5 5 5 5 M16 7l5 5-5 5 m-3-13-2 16",
-  console: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z m3 5 3 3-3 3 M13 15h4",
+  console:
+    "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z m3 5 3 3-3 3 M13 15h4",
   mail: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z m-1 1 9 7 9-7",
-  calendar: "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M16 3v4 M8 3v4 M3 11h18 M8 15h2 M14 15h2",
+  calendar:
+    "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M16 3v4 M8 3v4 M3 11h18 M8 15h2 M14 15h2",
   drive: "m9 3 6 0 7 12-3 5H5l-3-5L9 3Z M9 3l7 12 M2 15h20 M5 20l7-12",
   logout: "M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4 M10 12h11 m-4-4 4 4-4 4",
   laptop: "M5 4h14a1 1 0 0 1 1 1v11H4V5a1 1 0 0 1 1-1Z M2 16h20l-1 4H3l-1-4Z",
@@ -65,21 +69,38 @@ const paths = {
   trash: "M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7",
   folder: "M3 7V4h6l3 3h9v13H3V7Z",
   star: "m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z",
-  users: "M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-2a7 7 0 0 1 14 0v2 M19 4a3 3 0 0 1 0 6 M20 13a5 5 0 0 1 3 5v3",
+  users:
+    "M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-2a7 7 0 0 1 14 0v2 M19 4a3 3 0 0 1 0 6 M20 13a5 5 0 0 1 3 5v3",
 } as const;
 
-export interface IconProps extends SVGProps<SVGSVGElement> { name: keyof typeof paths; }
+export interface IconProps extends SVGProps<SVGSVGElement> {
+  name: keyof typeof paths;
+}
 
 export function Icon({ name, ...props }: IconProps) {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-    <path d={paths[name]} />
-  </svg>;
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d={paths[name]} />
+    </svg>
+  );
 }
 
 export function OfficeflareMark(props: SVGProps<SVGSVGElement>) {
-  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-    <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" />
-    <path d="m13 5-6 9h5l-1 5 6-9h-5l1-5Z" fill="currentColor" />
-  </svg>;
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m13 5-6 9h5l-1 5 6-9h-5l1-5Z" fill="currentColor" />
+    </svg>
+  );
 }

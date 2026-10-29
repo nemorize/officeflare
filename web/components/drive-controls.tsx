@@ -33,25 +33,41 @@ import "../routes/drive.css";
 export const driveFailure = (failure: unknown) =>
   failure instanceof ApiError && failure.status === 409
     ? "This item changed. Refresh and try again."
-    : failure instanceof Error &&
-        !(failure instanceof ApiError) &&
-        failure.name !== "TypeError"
+    : failure instanceof Error && !(failure instanceof ApiError) && failure.name !== "TypeError"
       ? failure.message
       : errorMessage(failure);
 export function useDriveResource<T>(path: string | null, revision = 0) {
-  const shared = useSharedDriveCache(), local = useMemo(createDriveCache, []), cache = shared ?? local;
+  const shared = useSharedDriveCache(),
+    local = useMemo(createDriveCache, []),
+    cache = shared ?? local;
   useEffect(() => () => local.clear(), [local]);
-  const state = useSyncExternalStore(useCallback(listener => cache.subscribe(path, listener), [cache, path]), useCallback(() => cache.snapshot(path), [cache, path]));
+  const state = useSyncExternalStore(
+    useCallback((listener) => cache.subscribe(path, listener), [cache, path]),
+    useCallback(() => cache.snapshot(path), [cache, path]),
+  );
   const previous = useRef({ cache, revision });
   useEffect(() => {
     if (path) {
-      if (previous.current.cache === cache && previous.current.revision !== revision && !cache.snapshot(path).loading) cache.invalidate(path);
+      if (
+        previous.current.cache === cache &&
+        previous.current.revision !== revision &&
+        !cache.snapshot(path).loading
+      )
+        cache.invalidate(path);
       else void cache.load(path);
     }
     previous.current = { cache, revision };
   }, [cache, path, revision]);
-  const reload = useCallback(() => { if (path) cache.invalidate(path); }, [cache, path]);
-  return { path, data: state.data as T | null, loading: state.loading, error: state.error ? driveFailure(state.error) : "", reload };
+  const reload = useCallback(() => {
+    if (path) cache.invalidate(path);
+  }, [cache, path]);
+  return {
+    path,
+    data: state.data as T | null,
+    loading: state.loading,
+    error: state.error ? driveFailure(state.error) : "",
+    reload,
+  };
 }
 export function useDriveAction() {
   const running = useRef(false),
@@ -95,13 +111,7 @@ export function DriveIconButton({
     </Tooltip.Root>
   );
 }
-export function DriveFileIcon({
-  item,
-  large = false,
-}: {
-  item: DriveItem;
-  large?: boolean;
-}) {
+export function DriveFileIcon({ item, large = false }: { item: DriveItem; large?: boolean }) {
   const kind = fileKind(item);
   return (
     <span
@@ -124,7 +134,17 @@ export function DriveSelect({
   label: string;
   disabled?: boolean;
 }) {
-  return <SelectControl theme="neutral" value={value} onValueChange={onChange} options={options} aria-label={label} disabled={disabled} className="drive-select" />;
+  return (
+    <SelectControl
+      theme="neutral"
+      value={value}
+      onValueChange={onChange}
+      options={options}
+      aria-label={label}
+      disabled={disabled}
+      className="drive-select"
+    />
+  );
 }
 export function DriveField({
   label,
@@ -169,12 +189,7 @@ export function DriveModal({
       >
         <div className="drive-modal-heading">
           <Dialog.Title>{title}</Dialog.Title>
-          <DriveIconButton
-            icon="close"
-            label="Close dialog"
-            onClick={onClose}
-            disabled={busy}
-          />
+          <DriveIconButton icon="close" label="Close dialog" onClick={onClose} disabled={busy} />
         </div>
         <Dialog.Description>{description ?? ""}</Dialog.Description>
         {children}
@@ -209,9 +224,13 @@ export function DriveState({
       {retry && <Button onClick={retry}>Try again</Button>}
     </div>
   ) : loading ? (
-    layout ? <div className={`drive-files-scroll drive-files-skeleton drive-layout-${layout}`}>
-      <LoadingSkeleton kind="list" label="Loading your files…" rows={8} />
-    </div> : <LoadingSkeleton label="Loading files…" />
+    layout ? (
+      <div className={`drive-files-scroll drive-files-skeleton drive-layout-${layout}`}>
+        <LoadingSkeleton kind="list" label="Loading your files…" rows={8} />
+      </div>
+    ) : (
+      <LoadingSkeleton label="Loading files…" />
+    )
   ) : null;
 }
 export function useDriveCollection<T>(
@@ -220,7 +239,9 @@ export function useDriveCollection<T>(
   revision = 0,
   cursorParam = "cursor",
 ) {
-  const shared = useSharedDriveCache(), local = useMemo(createDriveCache, []), cache = shared ?? local;
+  const shared = useSharedDriveCache(),
+    local = useMemo(createDriveCache, []),
+    cache = shared ?? local;
   useEffect(() => () => local.clear(), [local]);
   const previous = useRef({ cache, revision, retry: 0 });
   const [retry, setRetry] = useState(0),
@@ -256,12 +277,18 @@ export function useDriveCollection<T>(
     });
     if (path)
       void (async () => {
-        if (previous.current.cache === cache && (previous.current.revision !== revision || previous.current.retry !== retry) && !cache.snapshot(path).loading) cache.invalidate(path);
+        if (
+          previous.current.cache === cache &&
+          (previous.current.revision !== revision || previous.current.retry !== retry) &&
+          !cache.snapshot(path).loading
+        )
+          cache.invalidate(path);
         await cache.load(path);
         const snapshot = cache.snapshot(path);
         if (snapshot.error) throw snapshot.error;
         return snapshot.data as Record<string, unknown>;
-      })().then((data) => {
+      })()
+        .then((data) => {
           if (generation.current === generationId && !controller.signal.aborted)
             setState({
               path,
@@ -303,10 +330,7 @@ export function useDriveCollection<T>(
           more: false,
         }));
     } catch (failure) {
-      if (
-        generation.current === generationId &&
-        !controllerRef.current?.signal.aborted
-      )
+      if (generation.current === generationId && !controllerRef.current?.signal.aborted)
         setState((old) => ({
           ...old,
           more: false,

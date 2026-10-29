@@ -8,10 +8,7 @@ import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { getTableColumns } from "drizzle-orm";
 import * as schema from "../src/db/schema.ts";
 import { hashPassword } from "../src/auth/password.ts";
-import {
-  calendarUserPermissions,
-  defaultEligible,
-} from "../src/authorization/permissions.ts";
+import { calendarUserPermissions, defaultEligible } from "../src/authorization/permissions.ts";
 import { workerModules } from "./worker-modules.mjs";
 const password = "a long password for calendar integration tests";
 const harness = await build({
@@ -50,8 +47,23 @@ export async function fixture(t, { assets = false } = {}) {
     convertV4MiniflareOptions({
       log: new Log(LogLevel.ERROR),
       workers: [
-        { ...common, name: "officeflare", modules: workerModules,
-          ...(assets ? { durableObjects: { NOTIFICATION_HUB: { className: "NotificationHubDO", useSQLite: true } }, assets: { directory: "dist/client", run_worker_first: ["/api", "/api/*"], routerConfig: { has_user_worker: true }, assetConfig: { not_found_handling: "single-page-application" } } } : {}),
+        {
+          ...common,
+          name: "officeflare",
+          modules: workerModules,
+          ...(assets
+            ? {
+                durableObjects: {
+                  NOTIFICATION_HUB: { className: "NotificationHubDO", useSQLite: true },
+                },
+                assets: {
+                  directory: "dist/client",
+                  run_worker_first: ["/api", "/api/*"],
+                  routerConfig: { has_user_worker: true },
+                  assetConfig: { not_found_handling: "single-page-application" },
+                },
+              }
+            : {}),
         },
         {
           ...common,
@@ -74,9 +86,7 @@ export async function fixture(t, { assets = false } = {}) {
   for (const file of (await readdir("migrations")).sort()) {
     let statement = "",
       trigger = false;
-    for (const line of (await readFile(`migrations/${file}`, "utf8")).split(
-      "\n",
-    )) {
+    for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {
       if (!line.trim() || line.trim().startsWith("--")) continue;
       if (line.startsWith("CREATE TRIGGER")) trigger = true;
       statement += line + "\n";
@@ -96,9 +106,7 @@ export async function fixture(t, { assets = false } = {}) {
   await db.batch(
     calendarUserPermissions.map((key) =>
       db
-        .prepare(
-          "INSERT INTO role_permissions(role_id,permission_key) VALUES('calendar-test',?)",
-        )
+        .prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('calendar-test',?)")
         .bind(key),
     ),
   );
@@ -110,9 +118,7 @@ export async function fixture(t, { assets = false } = {}) {
   const hash = await hashPassword(password);
   for (const id of ["alice", "bob", "read-only", "no-calendar", "admin"]) {
     await db
-      .prepare(
-        "INSERT INTO users(id,email_address,password_hash) VALUES(?,?,?)",
-      )
+      .prepare("INSERT INTO users(id,email_address,password_hash) VALUES(?,?,?)")
       .bind(id, `${id}@office.test`, hash)
       .run();
     if (id !== "no-calendar")
@@ -131,20 +137,17 @@ export async function fixture(t, { assets = false } = {}) {
   let operation = 0;
   const tokens = {};
   for (const actor of ["alice", "bob", "read-only", "no-calendar", "admin"]) {
-    const response = await mf.dispatchFetch(
-      "https://office.test/api/auth/login",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-connecting-ip": `192.0.2.${++operation}`,
-        },
-        body: JSON.stringify({
-          email_address: `${actor}@office.test`,
-          password,
-        }),
+    const response = await mf.dispatchFetch("https://office.test/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "cf-connecting-ip": `192.0.2.${++operation}`,
       },
-    );
+      body: JSON.stringify({
+        email_address: `${actor}@office.test`,
+        password,
+      }),
+    });
     assert.equal(response.status, 200, await response.clone().text());
     tokens[actor] = (await response.json()).access_token;
   }
@@ -159,9 +162,7 @@ export async function fixture(t, { assets = false } = {}) {
           "cf-connecting-ip": `192.0.2.${++operation % 250}`,
           ...(actor ? { Authorization: `Bearer ${tokens[actor]}` } : {}),
           ...(data === undefined ? {} : { "Content-Type": "application/json" }),
-          ...(method === "POST"
-            ? { "Idempotency-Key": `calendar-test-${operation}` }
-            : {}),
+          ...(method === "POST" ? { "Idempotency-Key": `calendar-test-${operation}` } : {}),
           ...headers,
         },
         body: data === undefined ? undefined : JSON.stringify(data),
@@ -180,8 +181,7 @@ export async function fixture(t, { assets = false } = {}) {
   };
   const create = async (data, cal = "primary") =>
     call(`/calendars/${cal}/events`, { method: "POST", data, expected: 201 });
-  const event = async (id, cal = "primary") =>
-    (await call(`/calendars/${cal}/events/${id}`)).event;
+  const event = async (id, cal = "primary") => (await call(`/calendars/${cal}/events/${id}`)).event;
   const patch = async (id, data, cal = "primary") =>
     call(`/calendars/${cal}/events/${id}`, {
       method: "PATCH",
@@ -202,10 +202,10 @@ export async function fixture(t, { assets = false } = {}) {
   const bucket = await mf.getR2Bucket("MAIL_BUCKET"),
     driveBucket = await mf.getR2Bucket("DRIVE_BUCKET");
   const flush = async (ids) => {
-    const response = await faults.fetch(
-      "https://office.test/test-calendar/flush",
-      { method: "POST", body: JSON.stringify({ ids }) },
-    );
+    const response = await faults.fetch("https://office.test/test-calendar/flush", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
     assert.equal(response.status, 200, await response.clone().text());
     return response.json();
   };

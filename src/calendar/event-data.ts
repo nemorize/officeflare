@@ -1,26 +1,8 @@
 import sanitizeHtml from "sanitize-html";
 import { now, uuid } from "../auth/types";
-import type {
-  Bind,
-  Calendar,
-  CalendarContext,
-  Copy,
-  Event,
-  Occurrence,
-  Override,
-} from "./types";
+import type { Bind, Calendar, CalendarContext, Copy, Event, Occurrence, Override } from "./types";
 import { canSeeDetails, first, rows } from "./access";
-import {
-  choice,
-  color,
-  fail,
-  fields,
-  flag,
-  identifier,
-  jsonObject,
-  object,
-  text,
-} from "./input";
+import { choice, color, fail, fields, flag, identifier, jsonObject, object, text } from "./input";
 import { endpoint, times } from "./time";
 import { validateRecurrence } from "./recurrence";
 import { insert } from "./mutations";
@@ -43,11 +25,7 @@ export const createFields = [
   "copy_preferences",
   "attendees",
 ] as const;
-export function writeEvent(
-  data: Record<string, unknown>,
-  cal: Calendar,
-  existing?: Event,
-): Event {
+export function writeEvent(data: Record<string, unknown>, cal: Calendar, existing?: Event): Event {
   const stamp = now(),
     result: Event = existing
       ? { ...existing }
@@ -94,30 +72,27 @@ export function writeEvent(
     result.description_html =
       data.description_html === null
         ? ""
-        : sanitizeHtml(
-            text(data.description_html, "description_html", 20000, true),
-            {
-              allowedTags: [
-                "p",
-                "br",
-                "b",
-                "strong",
-                "em",
-                "i",
-                "u",
-                "s",
-                "ul",
-                "ol",
-                "li",
-                "a",
-                "blockquote",
-                "code",
-                "pre",
-              ],
-              allowedAttributes: { a: ["href", "title"] },
-              allowedSchemes: ["http", "https", "mailto"],
-            },
-          );
+        : sanitizeHtml(text(data.description_html, "description_html", 20000, true), {
+            allowedTags: [
+              "p",
+              "br",
+              "b",
+              "strong",
+              "em",
+              "i",
+              "u",
+              "s",
+              "ul",
+              "ol",
+              "li",
+              "a",
+              "blockquote",
+              "code",
+              "pre",
+            ],
+            allowedAttributes: { a: ["href", "title"] },
+            allowedSchemes: ["http", "https", "mailto"],
+          });
   if ("location" in data) {
     const value =
       data.location === null
@@ -127,8 +102,7 @@ export function writeEvent(
           : jsonObject(data.location, "location", 4096);
     fields(value, ["label", "address", "url", "latitude", "longitude"]);
     for (const key of ["label", "address", "url"])
-      if (key in value)
-        text((value as Record<string, unknown>)[key], key, 2048, true);
+      if (key in value) text((value as Record<string, unknown>)[key], key, 2048, true);
     for (const [key, min, max] of [
       ["latitude", -90, 90],
       ["longitude", -180, 180],
@@ -146,16 +120,9 @@ export function writeEvent(
     Object.assign(result, times(data.start, data.end, cal.time_zone));
   }
   if ("visibility" in data)
-    result.visibility = choice(data.visibility, "visibility", [
-      "default",
-      "private",
-      "public",
-    ]);
+    result.visibility = choice(data.visibility, "visibility", ["default", "private", "public"]);
   if ("transparency" in data)
-    result.transparency = choice(data.transparency, "transparency", [
-      "busy",
-      "free",
-    ]);
+    result.transparency = choice(data.transparency, "transparency", ["busy", "free"]);
   if ("guest_permissions" in data) {
     const value = object(data.guest_permissions, "guest_permissions");
     fields(value, ["can_modify", "can_invite_others", "can_see_other_guests"]);
@@ -179,24 +146,17 @@ export function writeEvent(
     }
     result.shared_properties_json = JSON.stringify(value);
   }
-  if ("send_updates" in data)
-    choice(data.send_updates, "send_updates", ["external_only", "none"]);
+  if ("send_updates" in data) choice(data.send_updates, "send_updates", ["external_only", "none"]);
   result.recurrence_json = JSON.stringify(
     validateRecurrence(
-      "recurrence" in data
-        ? (data.recurrence ?? [])
-        : JSON.parse(result.recurrence_json),
+      "recurrence" in data ? (data.recurrence ?? []) : JSON.parse(result.recurrence_json),
       result,
     ),
   );
   result.recurrence_until_at = null;
   return result;
 }
-export function overridePatch(
-  data: Record<string, unknown>,
-  effective: Event,
-  cal: Calendar,
-) {
+export function overridePatch(data: Record<string, unknown>, effective: Event, cal: Calendar) {
   if ("recurrence" in data)
     fail(400, "INVALID_INPUT", "A single occurrence cannot change recurrence");
   const parsed = writeEvent(data, cal, effective),
@@ -211,8 +171,7 @@ export function overridePatch(
     shared_properties: "shared_properties_json",
   };
   for (const [key, column] of Object.entries(map))
-    if (key in data)
-      patch[column] = (parsed as unknown as Record<string, Bind>)[column]!;
+    if (key in data) patch[column] = (parsed as unknown as Record<string, Bind>)[column]!;
   if ("start" in data || "end" in data)
     for (const key of [
       "time_kind",
@@ -255,12 +214,7 @@ export function copyDto(value: Copy) {
     private_properties: JSON.parse(private_properties_json),
   };
 }
-export function eventDto(
-  event: Event,
-  cal: Calendar,
-  occurrence?: Occurrence,
-  copy?: Copy,
-) {
+export function eventDto(event: Event, cal: Calendar, occurrence?: Occurrence, copy?: Copy) {
   const details = canSeeDetails(event, cal),
     base = {
       id: event.id,
@@ -318,20 +272,14 @@ export function eventDto(
 }
 export function makeCopy(event: Event, input?: unknown): Copy {
   const value = input === undefined ? {} : object(input, "copy_preferences");
-  fields(value, [
-    "color",
-    "label_id",
-    "private_properties",
-    "use_default_reminders",
-  ]);
+  fields(value, ["color", "label_id", "private_properties", "use_default_reminders"]);
   return {
     id: uuid(),
     event_id: event.id,
     calendar_id: event.organizer_calendar_id,
     copy_kind: "organizer",
     color_override: "color" in value ? color(value.color) : null,
-    label_id:
-      value.label_id == null ? null : identifier(value.label_id, "label_id"),
+    label_id: value.label_id == null ? null : identifier(value.label_id, "label_id"),
     use_default_reminders:
       "use_default_reminders" in value
         ? flag(value.use_default_reminders, "use_default_reminders")
@@ -356,12 +304,7 @@ export function insertEvent(
   baseScopeId: string | null = uuid(),
 ) {
   return [
-    insert(
-      c,
-      "calendar_events",
-      event as unknown as Record<string, Bind>,
-      proof,
-    ),
+    insert(c, "calendar_events", event as unknown as Record<string, Bind>, proof),
     ...(baseScopeId
       ? [
           insert(
@@ -372,11 +315,6 @@ export function insertEvent(
           ),
         ]
       : []),
-    insert(
-      c,
-      "calendar_event_copies",
-      copy as unknown as Record<string, Bind>,
-      proof,
-    ),
+    insert(c, "calendar_event_copies", copy as unknown as Record<string, Bind>, proof),
   ];
 }

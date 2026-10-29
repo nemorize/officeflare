@@ -43,18 +43,10 @@ export const roles = [
 ];
 export async function freshItem(id: string, trash = false) {
   return (
-    await api<{ item: DriveItem }>(
-      `/api/drive/items/${id}${trash ? "?include_trashed=true" : ""}`,
-    )
+    await api<{ item: DriveItem }>(`/api/drive/items/${id}${trash ? "?include_trashed=true" : ""}`)
   ).item;
 }
-export function DriveRenameDialog({
-  item,
-  onClose,
-}: {
-  item: DriveItem;
-  onClose: () => void;
-}) {
+export function DriveRenameDialog({ item, onClose }: { item: DriveItem; onClose: () => void }) {
   const [name, setName] = useState(item.name),
     action = useDriveAction(),
     drive = useDrive(),
@@ -93,11 +85,7 @@ export function DriveRenameDialog({
           <Button onClick={onClose} disabled={action.busy}>
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={action.busy || !name.trim()}
-          >
+          <Button variant="primary" type="submit" disabled={action.busy || !name.trim()}>
             {action.busy ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -129,10 +117,7 @@ export function DriveDestinationDialog({
       order: "asc",
       parent_id: parent?.id ?? (view === "shared" ? "all" : "root"),
     });
-  const folders = useDriveResource<DrivePage>(
-      `/api/drive/items?${query}`,
-      drive.revision,
-    ),
+  const folders = useDriveResource<DrivePage>(`/api/drive/items?${query}`, drive.revision),
     [more, setMore] = useState<DriveItem[]>([]),
     [cursor, setCursor] = useState<string | null>(null);
   useEffect(() => {
@@ -144,8 +129,7 @@ export function DriveDestinationDialog({
     !items.some((item) => item.id === folder.id) &&
     (copy || folder.owner_user_id === items[0]?.owner_user_id);
   const rootAllowed =
-    view === "my" &&
-    (copy || items.every((item) => item.effective_role === "owner"));
+    view === "my" && (copy || items.every((item) => item.effective_role === "owner"));
   const allowed = parent ? eligible(parent) : rootAllowed;
   const submit = () =>
     void action.run(async () => {
@@ -161,17 +145,14 @@ export function DriveDestinationDialog({
               parent_id: parent?.id ?? null,
               ...(copy
                 ? {
-                    name:
-                      items.length === 1 ? name.trim() : `Copy of ${item.name}`,
+                    name: items.length === 1 ? name.trim() : `Copy of ${item.name}`,
                   }
                 : {}),
             },
           });
           succeeded++;
         } catch (failure) {
-          failures.push(
-            `${item.name}: ${failure instanceof Error ? failure.message : "Failed"}`,
-          );
+          failures.push(`${item.name}: ${failure instanceof Error ? failure.message : "Failed"}`);
         }
       drive.refresh();
       if (succeeded)
@@ -209,39 +190,28 @@ export function DriveDestinationDialog({
               onClick={() => setTrail((old) => old.slice(0, -1))}
             />
             <Icon name="folder" />
-            <strong>
-              {parent?.name ?? (view === "my" ? "My drive" : "Shared with me")}
-            </strong>
+            <strong>{parent?.name ?? (view === "my" ? "My drive" : "Shared with me")}</strong>
           </div>
           <div className="drive-folder-picker">
-            <DriveState
-              loading={folders.loading}
-              error={folders.error}
-              retry={folders.reload}
-            />
+            <DriveState loading={folders.loading} error={folders.error} retry={folders.reload} />
             {!folders.loading &&
               !folders.error &&
-              [...(folders.data?.items ?? []), ...more]
-                .filter(eligible)
-                .map((folder) => (
-                  <Button
-                    key={folder.id}
-                    variant="ghost"
-                    className="drive-picker-folder"
-                    onClick={() => setTrail((old) => [...old, folder])}
-                  >
-                    <Icon name="folder" />
-                    <span>{folder.name}</span>
-                    <Icon name="chevron" />
-                  </Button>
-                ))}
+              [...(folders.data?.items ?? []), ...more].filter(eligible).map((folder) => (
+                <Button
+                  key={folder.id}
+                  variant="ghost"
+                  className="drive-picker-folder"
+                  onClick={() => setTrail((old) => [...old, folder])}
+                >
+                  <Icon name="folder" />
+                  <span>{folder.name}</span>
+                  <Icon name="chevron" />
+                </Button>
+              ))}
             {!folders.loading &&
               !folders.error &&
-              ![...(folders.data?.items ?? []), ...more].filter(eligible)
-                .length && (
-                <p className="drive-muted">
-                  No available subfolders. You can use this location.
-                </p>
+              ![...(folders.data?.items ?? []), ...more].filter(eligible).length && (
+                <p className="drive-muted">No available subfolders. You can use this location.</p>
               )}
             {cursor && (
               <Button
@@ -315,7 +285,8 @@ export function DriveConfirmDialog({
         if (!open && !action.busy) onClose();
       }}
     >
-      <AlertDialogPopup data-ui-theme="neutral"
+      <AlertDialogPopup
+        data-ui-theme="neutral"
         className="drive-modal"
         viewportProps={{ className: "drive-modal-viewport" }}
       >
@@ -357,18 +328,14 @@ function DrivePeoplePicker({
     return () => clearTimeout(timer);
   }, [query]);
   const result = useDriveResource<{ people: DrivePerson[] }>(
-    search.length >= 2
-      ? `/api/drive/people?q=${encodeURIComponent(search)}`
-      : null,
+    search.length >= 2 ? `/api/drive/people?q=${encodeURIComponent(search)}` : null,
   );
   return (
     <div className="drive-people-picker">
       {selected ? (
         <div className="drive-person-chip">
           <span className="drive-person-avatar">
-            {(selected.display_name || selected.email_address)
-              .slice(0, 1)
-              .toUpperCase()}
+            {(selected.display_name || selected.email_address).slice(0, 1).toUpperCase()}
           </span>
           <div>
             <strong>{selected.display_name || selected.email_address}</strong>
@@ -407,14 +374,10 @@ function DrivePeoplePicker({
                   }}
                 >
                   <span className="drive-person-avatar">
-                    {(person.display_name || person.email_address)
-                      .slice(0, 1)
-                      .toUpperCase()}
+                    {(person.display_name || person.email_address).slice(0, 1).toUpperCase()}
                   </span>
                   <span>
-                    <strong>
-                      {person.display_name || person.email_address}
-                    </strong>
+                    <strong>{person.display_name || person.email_address}</strong>
                     <small>{person.email_address}</small>
                   </span>
                   <Icon name="plus" />
@@ -427,13 +390,7 @@ function DrivePeoplePicker({
     </div>
   );
 }
-export function DriveShareDialog({
-  item,
-  onClose,
-}: {
-  item: DriveItem;
-  onClose: () => void;
-}) {
+export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: () => void }) {
   const drive = useDrive(),
     account = useAccount(),
     notify = useNotifications(),
@@ -469,468 +426,463 @@ export function DriveShareDialog({
   }>(`/api/drive/items/${item.id}/access-requests`, drive.revision);
   const expiration = (value: string) =>
     value ? Math.floor(new Date(value).getTime() / 1000) : null;
-  const mutate = (
-    callback: (current: DriveItem) => Promise<unknown>,
-    message: string,
-  ) =>
+  const mutate = (callback: (current: DriveItem) => Promise<unknown>, message: string) =>
     void action.run(async () => {
       await callback(await freshItem(item.id));
       drive.refresh();
       notify.success(message);
     });
-  const storageKey = (id: string) =>
-    `officeflare.drive.link.${account.user?.id}.${id}`;
+  const storageKey = (id: string) => `officeflare.drive.link.${account.user?.id}.${id}`;
   const copyUrl = async (url: string) => {
     await navigator.clipboard.writeText(url);
     notify.success("Link copied.");
   };
-  const owner = item.owner?.id === account.user?.id ? account.user ?? item.owner : item.owner;
+  const owner = item.owner?.id === account.user?.id ? (account.user ?? item.owner) : item.owner;
   return (
-    <DriveOwnerPhotosProvider><DriveModal
-      wide
-      title={`Share “${item.name}”`}
-      description={
-        item.kind === "folder"
-          ? "Folder access also applies to files and subfolders inside it."
-          : "Choose who can access this file."
-      }
-      onClose={onClose}
-      busy={action.busy}
-    >
-      <Tabs.Root
-        value={tab}
-        onValueChange={(value) => {
-          setTab(String(value));
-          action.setError("");
-        }}
+    <DriveOwnerPhotosProvider>
+      <DriveModal
+        wide
+        title={`Share “${item.name}”`}
+        description={
+          item.kind === "folder"
+            ? "Folder access also applies to files and subfolders inside it."
+            : "Choose who can access this file."
+        }
+        onClose={onClose}
+        busy={action.busy}
       >
-        <Tabs.List className="drive-share-tabs" aria-label="Sharing options">
-          <Tabs.Tab value="people">People with access</Tabs.Tab>
-          <Tabs.Tab value="links">Public links</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="people">
-          {item.actions?.internal_share !== false && <DrivePeoplePicker selected={person} onSelect={setPerson} />}
-          {item.actions?.internal_share === false && <p className="drive-muted">Adding or changing internal access is restricted by your role or workspace policy. You can still remove direct grants.</p>}
-          {person && (
-            <div className="drive-invite-options">
-              <DriveSelect
-                label="Access role"
-                value={role}
-                options={roles}
-                onChange={setRole}
-              />
-              <DriveField
-                label="Access expires"
-                type="datetime-local"
-                value={expiry}
-                onChange={(event) => setExpiry(event.target.value)}
-              />
-              <Button
-                variant="primary"
-                disabled={action.busy || item.actions?.internal_share === false}
-                onClick={() =>
-                  mutate(
-                    (current) =>
-                      api(
-                        `/api/drive/items/${item.id}/permissions/${person.id}`,
-                        {
+        <Tabs.Root
+          value={tab}
+          onValueChange={(value) => {
+            setTab(String(value));
+            action.setError("");
+          }}
+        >
+          <Tabs.List className="drive-share-tabs" aria-label="Sharing options">
+            <Tabs.Tab value="people">People with access</Tabs.Tab>
+            <Tabs.Tab value="links">Public links</Tabs.Tab>
+          </Tabs.List>
+          <Tabs.Panel value="people">
+            {item.actions?.internal_share !== false && (
+              <DrivePeoplePicker selected={person} onSelect={setPerson} />
+            )}
+            {item.actions?.internal_share === false && (
+              <p className="drive-muted">
+                Adding or changing internal access is restricted by your role or workspace policy.
+                You can still remove direct grants.
+              </p>
+            )}
+            {person && (
+              <div className="drive-invite-options">
+                <DriveSelect label="Access role" value={role} options={roles} onChange={setRole} />
+                <DriveField
+                  label="Access expires"
+                  type="datetime-local"
+                  value={expiry}
+                  onChange={(event) => setExpiry(event.target.value)}
+                />
+                <Button
+                  variant="primary"
+                  disabled={action.busy || item.actions?.internal_share === false}
+                  onClick={() =>
+                    mutate(
+                      (current) =>
+                        api(`/api/drive/items/${item.id}/permissions/${person.id}`, {
                           method: "PUT",
                           body: {
                             version: current.version,
                             role,
                             expires_at: expiration(expiry),
                           },
-                        },
-                      ).then(() => {
-                        setPerson(null);
-                        setExpiry("");
-                      }),
-                    "Access granted.",
-                  )
-                }
-              >
-                Share
-              </Button>
-            </div>
-          )}
-          <h3 className="drive-section-label">People with access</h3>
-          <div className="drive-access-person">
-            <DrivePersonAvatar person={owner} />
-            <div>
-              <strong>
-                {owner?.display_name || owner?.email_address || "Owner"}
-                {owner?.id === account.user?.id && " (you)"}
-              </strong>
-              <span>{owner?.email_address}</span>
-            </div>
-            <span className="drive-muted">Owner</span>
-          </div>
-          <DriveState
-            loading={permissions.loading && !permissions.data}
-            error={permissions.error}
-            retry={permissions.reload}
-          />
-          {permissions.data?.permissions.map((grant) => (
-            <div
-              className="drive-access-person"
-              key={`${grant.item_id}:${grant.user_id}`}
-            >
-              <DrivePersonAvatar person={{ id: grant.user_id, display_name: grant.display_name, email_address: grant.email_address, has_profile_image: grant.has_profile_image, profile_image_version: grant.profile_image_version }} />
-              <div>
-                <strong>{grant.display_name || grant.email_address}</strong>
-                <span>{grant.email_address}</span>
-                {!!grant.inherited && (
-                  <small>Inherited from {grant.source_name}</small>
-                )}
-                {grant.expires_at && (
-                  <small>Expires {driveDate(grant.expires_at, true)}</small>
-                )}
+                        }).then(() => {
+                          setPerson(null);
+                          setExpiry("");
+                        }),
+                      "Access granted.",
+                    )
+                  }
+                >
+                  Share
+                </Button>
               </div>
-              {grant.inherited ? (
-                <span className="drive-role-label">{grant.role}</span>
-              ) : (
-                <>
-                  <DriveSelect
-                    label={`Role for ${grant.display_name || grant.email_address}`}
-                    value={grant.role}
-                    options={roles}
-                    disabled={action.busy || item.actions?.internal_share === false}
-                    onChange={(next) =>
-                      mutate(
-                        (current) =>
-                          api(
-                            `/api/drive/items/${item.id}/permissions/${grant.user_id}`,
-                            {
+            )}
+            <h3 className="drive-section-label">People with access</h3>
+            <div className="drive-access-person">
+              <DrivePersonAvatar person={owner} />
+              <div>
+                <strong>
+                  {owner?.display_name || owner?.email_address || "Owner"}
+                  {owner?.id === account.user?.id && " (you)"}
+                </strong>
+                <span>{owner?.email_address}</span>
+              </div>
+              <span className="drive-muted">Owner</span>
+            </div>
+            <DriveState
+              loading={permissions.loading && !permissions.data}
+              error={permissions.error}
+              retry={permissions.reload}
+            />
+            {permissions.data?.permissions.map((grant) => (
+              <div className="drive-access-person" key={`${grant.item_id}:${grant.user_id}`}>
+                <DrivePersonAvatar
+                  person={{
+                    id: grant.user_id,
+                    display_name: grant.display_name,
+                    email_address: grant.email_address,
+                    has_profile_image: grant.has_profile_image,
+                    profile_image_version: grant.profile_image_version,
+                  }}
+                />
+                <div>
+                  <strong>{grant.display_name || grant.email_address}</strong>
+                  <span>{grant.email_address}</span>
+                  {!!grant.inherited && <small>Inherited from {grant.source_name}</small>}
+                  {grant.expires_at && <small>Expires {driveDate(grant.expires_at, true)}</small>}
+                </div>
+                {grant.inherited ? (
+                  <span className="drive-role-label">{grant.role}</span>
+                ) : (
+                  <>
+                    <DriveSelect
+                      label={`Role for ${grant.display_name || grant.email_address}`}
+                      value={grant.role}
+                      options={roles}
+                      disabled={action.busy || item.actions?.internal_share === false}
+                      onChange={(next) =>
+                        mutate(
+                          (current) =>
+                            api(`/api/drive/items/${item.id}/permissions/${grant.user_id}`, {
                               method: "PUT",
                               body: {
                                 version: current.version,
                                 role: next,
                                 expires_at: grant.expires_at,
                               },
-                            },
-                          ),
-                        "Access updated.",
-                      )
-                    }
-                  />
-                  <MenuForPerson
-                    canTransfer={item.actions?.internal_share !== false}
-                    grant={grant}
-                    disabled={action.busy}
-                    onRemove={() =>
-                      mutate(
-                        (current) =>
-                          api(
-                            `/api/drive/items/${item.id}/permissions/${grant.user_id}?version=${current.version}`,
-                            { method: "DELETE" },
-                          ),
-                        "Access removed.",
-                      )
-                    }
-                    onTransfer={() =>
-                      setTransfer({
-                        id: grant.user_id,
-                        display_name: grant.display_name,
-                        email_address: grant.email_address,
-                      })
-                    }
-                  />
-                </>
-              )}
-            </div>
-          ))}
-          {!!requests.data?.requests.length && (
-            <>
-              <h3 className="drive-section-label">Access requests</h3>
-              {requests.data.requests.map((request) => (
-                <div className="drive-request" key={request.id}>
-                  <strong>
-                    {request.display_name || request.email_address}
-                  </strong>
-                  <span>
-                    {request.email_address} · {request.role}
-                  </span>
-                  {request.message && <p>{request.message}</p>}
-                  <div>
-                    <Button
-                      size="sm"
-                      disabled={action.busy || item.actions?.internal_share === false}
-                      onClick={() =>
+                            }),
+                          "Access updated.",
+                        )
+                      }
+                    />
+                    <MenuForPerson
+                      canTransfer={item.actions?.internal_share !== false}
+                      grant={grant}
+                      disabled={action.busy}
+                      onRemove={() =>
                         mutate(
                           (current) =>
                             api(
-                              `/api/drive/items/${item.id}/access-requests/${request.id}`,
-                              {
+                              `/api/drive/items/${item.id}/permissions/${grant.user_id}?version=${current.version}`,
+                              { method: "DELETE" },
+                            ),
+                          "Access removed.",
+                        )
+                      }
+                      onTransfer={() =>
+                        setTransfer({
+                          id: grant.user_id,
+                          display_name: grant.display_name,
+                          email_address: grant.email_address,
+                        })
+                      }
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+            {!!requests.data?.requests.length && (
+              <>
+                <h3 className="drive-section-label">Access requests</h3>
+                {requests.data.requests.map((request) => (
+                  <div className="drive-request" key={request.id}>
+                    <strong>{request.display_name || request.email_address}</strong>
+                    <span>
+                      {request.email_address} · {request.role}
+                    </span>
+                    {request.message && <p>{request.message}</p>}
+                    <div>
+                      <Button
+                        size="sm"
+                        disabled={action.busy || item.actions?.internal_share === false}
+                        onClick={() =>
+                          mutate(
+                            (current) =>
+                              api(`/api/drive/items/${item.id}/access-requests/${request.id}`, {
                                 method: "PATCH",
                                 body: {
                                   version: current.version,
                                   approved: false,
                                 },
-                              },
-                            ),
-                          "Request declined.",
-                        )
-                      }
-                    >
-                      Decline
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      disabled={action.busy || item.actions?.internal_share === false}
-                      onClick={() =>
-                        mutate(
-                          (current) =>
-                            api(
-                              `/api/drive/items/${item.id}/access-requests/${request.id}`,
-                              {
+                              }),
+                            "Request declined.",
+                          )
+                        }
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={action.busy || item.actions?.internal_share === false}
+                        onClick={() =>
+                          mutate(
+                            (current) =>
+                              api(`/api/drive/items/${item.id}/access-requests/${request.id}`, {
                                 method: "PATCH",
                                 body: {
                                   version: current.version,
                                   approved: true,
                                   role: request.role,
                                 },
-                              },
-                            ),
-                          "Request approved.",
-                        )
-                      }
-                    >
-                      Approve
-                    </Button>
+                              }),
+                            "Request approved.",
+                          )
+                        }
+                      >
+                        Approve
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </>
-          )}
-          <div className="drive-share-note">
-            <Icon name="shield" />
-            <span>
-              Access is restricted to these accounts. Public links are managed
-              separately.
-            </span>
-          </div>
-        </Tabs.Panel>
-        <Tabs.Panel value="links">
-          <div className="drive-link-intro">
-            <span className="drive-link-symbol">
-              <Icon name="link" width="24" height="24" />
-            </span>
-            <div>
-              <h3>Share outside your workspace</h3>
-              <p>
-                Anyone with an active link can view{" "}
-                {item.kind === "folder"
-                  ? "this folder and its contents"
-                  : "this file"}
-                . Public access is read only.
-              </p>
+                ))}
+              </>
+            )}
+            <div className="drive-share-note">
+              <Icon name="shield" />
+              <span>
+                Access is restricted to these accounts. Public links are managed separately.
+              </span>
             </div>
-          </div>
-          {item.actions?.public_share === false && <p className="drive-muted">Creating or changing public links is restricted by your role or workspace policy. Existing links can still be revoked.</p>}
-          {drive.capabilities?.public_link_max_days ? <p className="drive-muted">Links must expire within {drive.capabilities.public_link_max_days} days of creation.</p> : null}
-          <div className="drive-link-fields">
-            <DriveField
-              label={drive.capabilities?.public_link_password_required ? "Link password (required)" : "Link password (optional)"}
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={8}
-              maxLength={128}
-              hint="Use at least 8 characters."
-            />
-            <DriveField
-              label={drive.capabilities?.public_link_max_days ? "Link expires (required)" : "Link expires (optional)"}
-              type="datetime-local"
-              value={linkExpiry}
-              onChange={(event) => setLinkExpiry(event.target.value)}
-            />
-          </div>
-          <CheckboxLabel className="drive-check-label">
-            <DriveCheckbox
-              checked={allowDownload}
-              onCheckedChange={(value) => setAllowDownload(!!value)}
-            />
-            Allow file preview and download
-          </CheckboxLabel>
-          <div className="drive-modal-actions drive-link-create-actions">
-            <Button
-              variant="primary"
-              disabled={action.busy || item.actions?.public_share === false || (!!password && password.length < 8) || (!!drive.capabilities?.public_link_password_required && password.length < 8) || (!!drive.capabilities?.public_link_max_days && !linkExpiry)}
-              onClick={() =>
-                mutate(async (current) => {
-                  const result = await api<{
-                    link: DriveLink & { token: string };
-                  }>(`/api/drive/items/${item.id}/links`, {
-                    method: "POST",
-                    body: {
-                      version: current.version,
-                      password: password || null,
-                      expires_at: expiration(linkExpiry),
-                      allow_download: allowDownload,
-                    },
-                  });
-                  const url = publicShareUrl(
-                    result.link.token,
-                    window.location.origin,
-                  );
-                  try {
-                    sessionStorage.setItem(storageKey(result.link.id), url);
-                  } catch {
-                    /* Copyable URL remains in the dialog. */
-                  }
-                  setCreatedUrl(url);
-                  setCreatedLinkId(result.link.id);
-                  setPassword("");
-                }, "Public link created.")
-              }
-            >
-              <Icon name="plus" />
-              Create public link
-            </Button>
-          </div>
-          {createdUrl && (
-            <div className="drive-created-link">
+          </Tabs.Panel>
+          <Tabs.Panel value="links">
+            <div className="drive-link-intro">
+              <span className="drive-link-symbol">
+                <Icon name="link" width="24" height="24" />
+              </span>
+              <div>
+                <h3>Share outside your workspace</h3>
+                <p>
+                  Anyone with an active link can view{" "}
+                  {item.kind === "folder" ? "this folder and its contents" : "this file"}. Public
+                  access is read only.
+                </p>
+              </div>
+            </div>
+            {item.actions?.public_share === false && (
+              <p className="drive-muted">
+                Creating or changing public links is restricted by your role or workspace policy.
+                Existing links can still be revoked.
+              </p>
+            )}
+            {drive.capabilities?.public_link_max_days ? (
+              <p className="drive-muted">
+                Links must expire within {drive.capabilities.public_link_max_days} days of creation.
+              </p>
+            ) : null}
+            <div className="drive-link-fields">
               <DriveField
-                label="New share link"
-                value={createdUrl}
-                readOnly
-                onFocus={(event) => event.target.select()}
+                label={
+                  drive.capabilities?.public_link_password_required
+                    ? "Link password (required)"
+                    : "Link password (optional)"
+                }
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={8}
+                maxLength={128}
+                hint="Use at least 8 characters."
               />
+              <DriveField
+                label={
+                  drive.capabilities?.public_link_max_days
+                    ? "Link expires (required)"
+                    : "Link expires (optional)"
+                }
+                type="datetime-local"
+                value={linkExpiry}
+                onChange={(event) => setLinkExpiry(event.target.value)}
+              />
+            </div>
+            <CheckboxLabel className="drive-check-label">
+              <DriveCheckbox
+                checked={allowDownload}
+                onCheckedChange={(value) => setAllowDownload(!!value)}
+              />
+              Allow file preview and download
+            </CheckboxLabel>
+            <div className="drive-modal-actions drive-link-create-actions">
               <Button
-                onClick={() => void action.run(() => copyUrl(createdUrl))}
+                variant="primary"
+                disabled={
+                  action.busy ||
+                  item.actions?.public_share === false ||
+                  (!!password && password.length < 8) ||
+                  (!!drive.capabilities?.public_link_password_required && password.length < 8) ||
+                  (!!drive.capabilities?.public_link_max_days && !linkExpiry)
+                }
+                onClick={() =>
+                  mutate(async (current) => {
+                    const result = await api<{
+                      link: DriveLink & { token: string };
+                    }>(`/api/drive/items/${item.id}/links`, {
+                      method: "POST",
+                      body: {
+                        version: current.version,
+                        password: password || null,
+                        expires_at: expiration(linkExpiry),
+                        allow_download: allowDownload,
+                      },
+                    });
+                    const url = publicShareUrl(result.link.token, window.location.origin);
+                    try {
+                      sessionStorage.setItem(storageKey(result.link.id), url);
+                    } catch {
+                      /* Copyable URL remains in the dialog. */
+                    }
+                    setCreatedUrl(url);
+                    setCreatedLinkId(result.link.id);
+                    setPassword("");
+                  }, "Public link created.")
+                }
               >
-                <Icon name="copy" />
-                Copy link
+                <Icon name="plus" />
+                Create public link
               </Button>
             </div>
-          )}
-          <h3 className="drive-section-label">Existing links</h3>
-          <DriveState
-            loading={links.loading && !links.data}
-            error={links.error}
-            retry={links.reload}
-          />
-          {links.data &&
-            !links.data.links.filter((link) => !link.revoked_at).length && (
+            {createdUrl && (
+              <div className="drive-created-link">
+                <DriveField
+                  label="New share link"
+                  value={createdUrl}
+                  readOnly
+                  onFocus={(event) => event.target.select()}
+                />
+                <Button onClick={() => void action.run(() => copyUrl(createdUrl))}>
+                  <Icon name="copy" />
+                  Copy link
+                </Button>
+              </div>
+            )}
+            <h3 className="drive-section-label">Existing links</h3>
+            <DriveState
+              loading={links.loading && !links.data}
+              error={links.error}
+              retry={links.reload}
+            />
+            {links.data && !links.data.links.filter((link) => !link.revoked_at).length && (
               <p className="drive-muted">No active public links.</p>
             )}
-          {links.data?.links
-            .filter((link) => !link.revoked_at)
-            .map((link) => {
-              let url = "";
+            {links.data?.links
+              .filter((link) => !link.revoked_at)
+              .map((link) => {
+                let url = "";
+                try {
+                  url = sessionStorage.getItem(storageKey(link.id)) ?? "";
+                } catch {
+                  /* Storage unavailable. */
+                }
+                const expired = !!link.expires_at && link.expires_at * 1000 <= Date.now();
+                return (
+                  <div className="drive-link-row" key={link.id}>
+                    <Icon name={link.password_protected ? "shield" : "link"} />
+                    <div>
+                      <strong>
+                        {expired
+                          ? "Expired link"
+                          : link.password_protected
+                            ? "Password protected link"
+                            : "Anyone with the link"}
+                      </strong>
+                      <span>
+                        {link.expires_at
+                          ? `Expires ${driveDate(link.expires_at, true)}`
+                          : "No expiration"}{" "}
+                        · {link.allow_download ? "Downloads allowed" : "Metadata only"}
+                      </span>
+                      {!url && (
+                        <small>
+                          The URL is available only when a link is created. Create a new link to
+                          share again.
+                        </small>
+                      )}
+                    </div>
+                    {url && !expired && (
+                      <DriveIconButton
+                        icon="copy"
+                        label="Copy public link"
+                        onClick={() => void action.run(() => copyUrl(url))}
+                      />
+                    )}
+                    <DriveIconButton
+                      icon="close"
+                      label="Revoke public link"
+                      onClick={() => setRevoke(link)}
+                    />
+                  </div>
+                );
+              })}
+          </Tabs.Panel>
+        </Tabs.Root>
+        <DriveNotice error={action.error} />
+        <div className="drive-modal-actions drive-share-footer">
+          <Button
+            disabled={action.busy}
+            onClick={() =>
+              void action.run(() => copyUrl(`${window.location.origin}/drive/items/${item.id}`))
+            }
+          >
+            <Icon name="link" />
+            Copy workspace link
+          </Button>
+          <Button variant="primary" disabled={action.busy} onClick={onClose}>
+            Done
+          </Button>
+        </div>
+        {revoke && (
+          <DriveConfirmDialog
+            title="Revoke this public link?"
+            description="Anyone using this link will lose access immediately."
+            confirm="Revoke link"
+            destructive
+            onClose={() => setRevoke(null)}
+            action={async () => {
+              const current = await freshItem(item.id);
+              await api(`/api/drive/items/${item.id}/links/${revoke.id}`, {
+                method: "PATCH",
+                body: { version: current.version, revoked: true },
+              });
+              if (revoke.id === createdLinkId) setCreatedUrl("");
               try {
-                url = sessionStorage.getItem(storageKey(link.id)) ?? "";
+                sessionStorage.removeItem(storageKey(revoke.id));
               } catch {
                 /* Storage unavailable. */
               }
-              const expired =
-                !!link.expires_at && link.expires_at * 1000 <= Date.now();
-              return (
-                <div className="drive-link-row" key={link.id}>
-                  <Icon name={link.password_protected ? "shield" : "link"} />
-                  <div>
-                    <strong>
-                      {expired
-                        ? "Expired link"
-                        : link.password_protected
-                          ? "Password protected link"
-                          : "Anyone with the link"}
-                    </strong>
-                    <span>
-                      {link.expires_at
-                        ? `Expires ${driveDate(link.expires_at, true)}`
-                        : "No expiration"}{" "}
-                      ·{" "}
-                      {link.allow_download
-                        ? "Downloads allowed"
-                        : "Metadata only"}
-                    </span>
-                    {!url && (
-                      <small>
-                        The URL is available only when a link is created. Create
-                        a new link to share again.
-                      </small>
-                    )}
-                  </div>
-                  {url && !expired && (
-                    <DriveIconButton
-                      icon="copy"
-                      label="Copy public link"
-                      onClick={() => void action.run(() => copyUrl(url))}
-                    />
-                  )}
-                  <DriveIconButton
-                    icon="close"
-                    label="Revoke public link"
-                    onClick={() => setRevoke(link)}
-                  />
-                </div>
-              );
-            })}
-        </Tabs.Panel>
-      </Tabs.Root>
-      <DriveNotice error={action.error} />
-      <div className="drive-modal-actions drive-share-footer">
-        <Button
-          disabled={action.busy}
-          onClick={() =>
-            void action.run(() =>
-              copyUrl(`${window.location.origin}/drive/items/${item.id}`),
-            )
-          }
-        >
-          <Icon name="link" />
-          Copy workspace link
-        </Button>
-        <Button variant="primary" disabled={action.busy} onClick={onClose}>
-          Done
-        </Button>
-      </div>
-      {revoke && (
-        <DriveConfirmDialog
-          title="Revoke this public link?"
-          description="Anyone using this link will lose access immediately."
-          confirm="Revoke link"
-          destructive
-          onClose={() => setRevoke(null)}
-          action={async () => {
-            const current = await freshItem(item.id);
-            await api(`/api/drive/items/${item.id}/links/${revoke.id}`, {
-              method: "PATCH",
-              body: { version: current.version, revoked: true },
-            });
-            if (revoke.id === createdLinkId) setCreatedUrl("");
-            try {
-              sessionStorage.removeItem(storageKey(revoke.id));
-            } catch {
-              /* Storage unavailable. */
-            }
-            drive.refresh();
-            notify.success("Public link revoked.");
-          }}
-        />
-      )}
-      {transfer && (
-        <DriveConfirmDialog
-          title="Transfer ownership?"
-          description={`“${item.name}” and its contents will belong to ${transfer.display_name || transfer.email_address}. You will become an editor. Existing public links will be revoked.`}
-          confirm="Transfer ownership"
-          onClose={() => setTransfer(null)}
-          action={async () => {
-            const current = await freshItem(item.id);
-            await api(`/api/drive/items/${item.id}/transfer`, {
-              method: "POST",
-              body: { version: current.version, user_id: transfer.id },
-            });
-            drive.refresh();
-            notify.success("Ownership transferred.");
-            onClose();
-          }}
-        />
-      )}
-    </DriveModal></DriveOwnerPhotosProvider>
+              drive.refresh();
+              notify.success("Public link revoked.");
+            }}
+          />
+        )}
+        {transfer && (
+          <DriveConfirmDialog
+            title="Transfer ownership?"
+            description={`“${item.name}” and its contents will belong to ${transfer.display_name || transfer.email_address}. You will become an editor. Existing public links will be revoked.`}
+            confirm="Transfer ownership"
+            onClose={() => setTransfer(null)}
+            action={async () => {
+              const current = await freshItem(item.id);
+              await api(`/api/drive/items/${item.id}/transfer`, {
+                method: "POST",
+                body: { version: current.version, user_id: transfer.id },
+              });
+              drive.refresh();
+              notify.success("Ownership transferred.");
+              onClose();
+            }}
+          />
+        )}
+      </DriveModal>
+    </DriveOwnerPhotosProvider>
   );
 }
 import { Menu, MenuPopup } from "./ui";

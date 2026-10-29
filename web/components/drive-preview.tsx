@@ -1,26 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Button, Dialog, DialogPopup, Icon, useNotifications } from "./ui";
 import { api } from "../lib/api";
-import {
-  driveSize,
-  fileKind,
-  formatBytes,
-  previewKind,
-  type DriveItem,
-} from "../lib/drive";
-import {
-  DriveFileIcon,
-  DriveIconButton,
-  DriveNotice,
-  driveFailure,
-} from "./drive-controls";
+import { driveSize, fileKind, formatBytes, previewKind, type DriveItem } from "../lib/drive";
+import { DriveFileIcon, DriveIconButton, DriveNotice, driveFailure } from "./drive-controls";
 
 const DrivePdfPreview = lazy(() => import("./drive-pdf-preview"));
 
-export type DriveContentLoader = (
-  path: string,
-  signal: AbortSignal,
-) => Promise<Response>;
+export type DriveContentLoader = (path: string, signal: AbortSignal) => Promise<Response>;
 export const privateDriveContent: DriveContentLoader = (path, signal) =>
   api<Response>(path, { response: "response", signal });
 export async function downloadDriveItem(
@@ -32,8 +18,7 @@ export async function downloadDriveItem(
   type SavePicker = (options: {
     suggestedName: string;
   }) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }>;
-  const picker = (window as unknown as { showSaveFilePicker?: SavePicker })
-    .showSaveFilePicker;
+  const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
   let writable: WritableStream<Uint8Array> | null = null;
   try {
     // Open the picker before awaiting network I/O, while the click still has user activation.
@@ -58,8 +43,7 @@ export async function downloadDriveItem(
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (failure) {
     if (writable) await writable.abort().catch(() => {});
-    if (failure instanceof DOMException && failure.name === "AbortError")
-      return;
+    if (failure instanceof DOMException && failure.name === "AbortError") return;
     throw failure;
   }
 }
@@ -121,7 +105,9 @@ export function DrivePreview({
   }, [item.id, basePath, kind, canPreview, loader]);
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup padding="none" data-ui-theme="neutral"
+      <DialogPopup
+        padding="none"
+        data-ui-theme="neutral"
         className="drive-preview"
         viewportProps={{ className: "drive-preview-viewport" }}
       >
@@ -143,7 +129,9 @@ export function DrivePreview({
               </Button>
             )}
             {canDownload && (
-              <Button mobileIcon aria-label="Download"
+              <Button
+                mobileIcon
+                aria-label="Download"
                 disabled={downloading}
                 onClick={() => {
                   setDownloading(true);
@@ -156,11 +144,7 @@ export function DrivePreview({
                 <span>{downloading ? "Downloading…" : "Download"}</span>
               </Button>
             )}
-            <DriveIconButton
-              icon="close"
-              label="Close preview"
-              onClick={onClose}
-            />
+            <DriveIconButton icon="close" label="Close preview" onClick={onClose} />
           </div>
         </header>
         <div
@@ -190,11 +174,7 @@ export function DrivePreview({
           ) : (
             <div className="drive-state">
               <DriveFileIcon item={item} large />
-              <h2>
-                {canDownload
-                  ? "No preview available"
-                  : "Preview and downloads disabled"}
-              </h2>
+              <h2>{canDownload ? "No preview available" : "Preview and downloads disabled"}</h2>
               <p>
                 {!canDownload
                   ? "The owner has shared file information only."

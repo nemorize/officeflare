@@ -3,16 +3,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import type { Options } from "rrule";
 import type { Event, EventTimes, Occurrence, Override } from "./types";
 import { fail, text } from "./input";
-import {
-  date,
-  endpoint,
-  floating,
-  instant,
-  interval,
-  localAt,
-  times,
-  zone,
-} from "./time";
+import { date, endpoint, floating, instant, interval, localAt, times, zone } from "./time";
 export const MAX_OCCURRENCES = 5000,
   MAX_COUNT = 1000;
 const allowed = [
@@ -31,16 +22,13 @@ export const keyOf = (value: EventTimes) =>
   value.time_kind === "all_day"
     ? `d:${value.start_date}`
     : `t:${new Date(value.start_at! * 1000).toISOString().replace(".000Z", "Z")}`;
-const compact = (value: string) =>
-  value.replaceAll("-", "").replaceAll(":", "");
+const compact = (value: string) => value.replaceAll("-", "").replaceAll(":", "");
 const fromCompact = (value: string) =>
   value.length === 8
     ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
     : `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}${value.endsWith("Z") ? "Z" : ""}`;
 const startFloat = (event: EventTimes) =>
-  floating(
-    event.time_kind === "all_day" ? event.start_date! : event.start_local!,
-  );
+  floating(event.time_kind === "all_day" ? event.start_date! : event.start_local!);
 export function occurrenceTimes(
   event: EventTimes,
   candidate: Date,
@@ -63,19 +51,12 @@ export function occurrenceTimes(
   const start =
     fixedAt === undefined
       ? plain.toZonedDateTime(timeZone, { disambiguation: "earlier" })
-      : Temporal.Instant.fromEpochMilliseconds(
-          fixedAt * 1000,
-        ).toZonedDateTimeISO(timeZone);
+      : Temporal.Instant.fromEpochMilliseconds(fixedAt * 1000).toZonedDateTimeISO(timeZone);
   // Nonexistent DST wall times are excluded; overlaps use the first offset.
   if (!plain.equals(start.toPlainDateTime())) return null;
-  const duration =
-    floating(event.end_local!).getTime() - startFloat(event).getTime();
+  const duration = floating(event.end_local!).getTime() - startFloat(event).getTime();
   if (duration <= 0)
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "Recurring events must have a positive local duration",
-    );
+    fail(400, "INVALID_RECURRENCE", "Recurring events must have a positive local duration");
   if (fixedAt === event.start_at) return { ...event };
   const endPlain = plain.add({ seconds: duration / 1000 });
   let end = endPlain.toZonedDateTime(timeZone, {
@@ -102,21 +83,14 @@ function parts(line: string, event: EventTimes): Record<string, string> {
     result[key] = value;
   }
   if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(result.FREQ ?? ""))
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "Supported frequencies are DAILY, WEEKLY, MONTHLY, YEARLY",
-    );
+    fail(400, "INVALID_RECURRENCE", "Supported frequencies are DAILY, WEEKLY, MONTHLY, YEARLY");
   if (result.COUNT && result.UNTIL)
     fail(400, "INVALID_RECURRENCE", "COUNT and UNTIL are mutually exclusive");
   for (const [key, max] of [
     ["INTERVAL", 1000],
     ["COUNT", MAX_COUNT],
   ] as const)
-    if (
-      result[key] &&
-      (!/^[1-9]\d*$/.test(result[key]!) || Number(result[key]) > max)
-    )
+    if (result[key] && (!/^[1-9]\d*$/.test(result[key]!) || Number(result[key]) > max))
       fail(400, "INVALID_RECURRENCE", `Invalid ${key}`);
   for (const [key, min, max, zero] of [
     ["BYMONTH", 1, 12, false],
@@ -142,8 +116,7 @@ function parts(line: string, event: EventTimes): Record<string, string> {
       return (
         !match ||
         (match[1] &&
-          (Math.abs(Number(match[1])) > 53 ||
-            ["DAILY", "WEEKLY"].includes(result.FREQ!)))
+          (Math.abs(Number(match[1])) > 53 || ["DAILY", "WEEKLY"].includes(result.FREQ!)))
       );
     })
   )
@@ -158,50 +131,30 @@ function parts(line: string, event: EventTimes): Record<string, string> {
         ? /^\d{8}$/.test(result.UNTIL)
         : /^\d{8}T\d{6}Z$/.test(result.UNTIL);
     if (!correct)
-      fail(
-        400,
-        "INVALID_RECURRENCE",
-        "UNTIL must match the event type (UTC for timed events)",
-      );
+      fail(400, "INVALID_RECURRENCE", "UNTIL must match the event type (UTC for timed events)");
     const until = fromCompact(result.UNTIL),
       end =
         event.time_kind === "all_day"
           ? date(until).toString()
           : instant(until).epochMilliseconds / 1000;
-    if (
-      typeof end === "string" ? end < event.start_date! : end < event.start_at!
-    )
+    if (typeof end === "string" ? end < event.start_date! : end < event.start_at!)
       fail(400, "INVALID_RECURRENCE", "UNTIL precedes DTSTART");
   }
   return result;
 }
-function extraDates(
-  line: string,
-  event: EventTimes,
-): { float: Date; at?: number; key: string }[] {
-  const match = line.match(
-    /^(RDATE|EXDATE)(?:;(VALUE=DATE|TZID=([^:;]+)))?:(.+)$/,
-  );
+function extraDates(line: string, event: EventTimes): { float: Date; at?: number; key: string }[] {
+  const match = line.match(/^(RDATE|EXDATE)(?:;(VALUE=DATE|TZID=([^:;]+)))?:(.+)$/);
   if (!match) fail(400, "INVALID_RECURRENCE", "Invalid RDATE or EXDATE");
   const tz = match[3] ? zone(match[3]) : event.start_time_zone;
-  if (
-    match[3] &&
-    (event.time_kind === "all_day" || tz !== event.start_time_zone)
-  )
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "RDATE/EXDATE TZID must match the series time zone",
-    );
+  if (match[3] && (event.time_kind === "all_day" || tz !== event.start_time_zone))
+    fail(400, "INVALID_RECURRENCE", "RDATE/EXDATE TZID must match the series time zone");
   if (match[2] === "VALUE=DATE" && event.time_kind !== "all_day")
     fail(400, "INVALID_RECURRENCE", "DATE exclusions require an all-day event");
   const items = match[4]!.split(",");
-  if (items.length > MAX_COUNT)
-    fail(400, "INVALID_RECURRENCE", "Too many recurrence dates");
+  if (items.length > MAX_COUNT) fail(400, "INVALID_RECURRENCE", "Too many recurrence dates");
   return items.map((raw) => {
     if (event.time_kind === "all_day") {
-      if (!/^\d{8}$/.test(raw))
-        fail(400, "INVALID_RECURRENCE", "Invalid recurrence DATE");
+      if (!/^\d{8}$/.test(raw)) fail(400, "INVALID_RECURRENCE", "Invalid recurrence DATE");
       const parsed = date(fromCompact(raw)).toString();
       return { float: floating(parsed), key: `d:${parsed}` };
     }
@@ -240,10 +193,7 @@ function ruleFor(line: string, event: EventTimes) {
   // During a fall overlap, local ordering can differ from instant ordering.
   if (values.UNTIL && event.time_kind === "timed")
     options.until = floating(
-      localAt(
-        instant(fromCompact(values.UNTIL)).epochMilliseconds / 1000,
-        event.start_time_zone!,
-      )
+      localAt(instant(fromCompact(values.UNTIL)).epochMilliseconds / 1000, event.start_time_zone!)
         .add({ days: 2 })
         .toString({ fractionalSecondDigits: 0 }),
     );
@@ -265,11 +215,7 @@ function ruleFor(line: string, event: EventTimes) {
     return dates.length < requestedCount;
   });
   if (dates.length < requestedCount)
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "COUNT extends beyond the supported calendar range",
-    );
+    fail(400, "INVALID_RECURRENCE", "COUNT extends beyond the supported calendar range");
   return { rule: new RRule(options, false), dates, values };
 }
 interface RecurrenceSet {
@@ -279,10 +225,7 @@ interface RecurrenceSet {
   extras: { float: Date; at?: number; key: string }[];
   excluded: Set<string>;
 }
-const setCache = new WeakMap<
-  Event,
-  { signature: string; value: RecurrenceSet }
->();
+const setCache = new WeakMap<Event, { signature: string; value: RecurrenceSet }>();
 function buildSet(event: Event): RecurrenceSet {
   const signature = JSON.stringify([
     event.recurrence_json,
@@ -303,16 +246,14 @@ function buildSet(event: Event): RecurrenceSet {
     excluded = new Set<string>();
   let until: number | null = null;
   set.rdate(startFloat(event));
-  if (event.time_kind === "timed")
-    fixed.set(startFloat(event).getTime(), event.start_at!);
+  if (event.time_kind === "timed") fixed.set(startFloat(event).getTime(), event.start_at!);
   for (const line of lines) {
     if (line.startsWith("RRULE:")) {
       const value = ruleFor(line, event);
       if (value.dates) value.dates.forEach((item) => set.rdate(item));
       else set.rrule(value.rule);
       if (value.values.UNTIL && event.time_kind === "timed")
-        until =
-          instant(fromCompact(value.values.UNTIL)).epochMilliseconds / 1000;
+        until = instant(fromCompact(value.values.UNTIL)).epochMilliseconds / 1000;
     } else
       for (const item of extraDates(line, event)) {
         if (line.startsWith("RDATE")) {
@@ -328,20 +269,9 @@ function buildSet(event: Event): RecurrenceSet {
   setCache.set(event, { signature, value });
   return value;
 }
-export function validateRecurrence(
-  value: unknown,
-  event: EventTimes,
-): string[] {
-  if (
-    !Array.isArray(value) ||
-    value.length > 128 ||
-    value.some((item) => typeof item !== "string")
-  )
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "recurrence must be an array of RRULE/RDATE/EXDATE strings",
-    );
+export function validateRecurrence(value: unknown, event: EventTimes): string[] {
+  if (!Array.isArray(value) || value.length > 128 || value.some((item) => typeof item !== "string"))
+    fail(400, "INVALID_RECURRENCE", "recurrence must be an array of RRULE/RDATE/EXDATE strings");
   const lines = value.map((item) => text(item, "recurrence", 8192));
   if (
     lines.filter((item) => item.startsWith("RRULE:")).length > 1 ||
@@ -349,33 +279,20 @@ export function validateRecurrence(
   )
     fail(400, "INVALID_RECURRENCE", "At most one RRULE is supported");
   if (!lines.length) return [];
+  if (event.time_kind === "timed" && event.start_time_zone !== event.end_time_zone)
+    fail(400, "INVALID_RECURRENCE", "Recurring endpoints must share a time zone");
   if (
     event.time_kind === "timed" &&
-    event.start_time_zone !== event.end_time_zone
+    floating(event.end_local!).getTime() <= floating(event.start_local!).getTime()
   )
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "Recurring endpoints must share a time zone",
-    );
-  if (
-    event.time_kind === "timed" &&
-    floating(event.end_local!).getTime() <=
-      floating(event.start_local!).getTime()
-  )
-    fail(
-      400,
-      "INVALID_RECURRENCE",
-      "Recurring events must have a positive local duration",
-    );
+    fail(400, "INVALID_RECURRENCE", "Recurring events must have a positive local duration");
   const dummy = { ...event, recurrence_json: JSON.stringify(lines) } as Event;
   buildSet(dummy);
   return lines;
 }
 export function originalOccurrence(event: Event, key: string): EventTimes {
   if (event.recurrence_json === "[]") {
-    if (key !== keyOf(event))
-      fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
+    if (key !== keyOf(event)) fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
     return event;
   }
   let candidate: Date;
@@ -397,8 +314,7 @@ export function originalOccurrence(event: Event, key: string): EventTimes {
   if (!Number.isFinite(candidate.getTime()))
     fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
   const data = buildSet(event);
-  if (data.excluded.has(key))
-    fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
+  if (data.excluded.has(key)) fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
   const extra = data.extras.find((value) => value.key === key);
   if (extra) {
     const result = occurrenceTimes(event, extra.float, extra.at);
@@ -408,19 +324,11 @@ export function originalOccurrence(event: Event, key: string): EventTimes {
     result = values[0]
       ? occurrenceTimes(event, values[0], data.fixed.get(values[0].getTime()))
       : null;
-  if (
-    !result ||
-    keyOf(result) !== key ||
-    (data.until !== null && result.start_at! > data.until)
-  )
+  if (!result || keyOf(result) !== key || (data.until !== null && result.start_at! > data.until))
     fail(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
   return result;
 }
-export function applyOverride(
-  event: Event,
-  original: EventTimes,
-  override?: Override,
-): Event {
+export function applyOverride(event: Event, original: EventTimes, override?: Override): Event {
   const result = { ...event, ...original, recurrence_json: "[]" };
   if (!override) return result;
   Object.assign(result, JSON.parse(override.patch_json));
@@ -442,18 +350,10 @@ export function expand(
       override = byKey.get(key),
       effective = applyOverride(event, original, override),
       range = interval(effective, calendarZone);
-    if (
-      range.min < max &&
-      range.max > min &&
-      (showDeleted || effective.status !== "cancelled")
-    )
+    if (range.min < max && range.max > min && (showDeleted || effective.status !== "cancelled"))
       output.set(key, { key, original, event: effective, override });
     if (output.size > MAX_OCCURRENCES)
-      fail(
-        422,
-        "TOO_MANY_OCCURRENCES",
-        "Too many occurrences; narrow the time range",
-      );
+      fail(422, "TOO_MANY_OCCURRENCES", "Too many occurrences; narrow the time range");
   };
   if (event.recurrence_json === "[]") {
     add(event);
@@ -463,33 +363,19 @@ export function expand(
     timeZone = event.start_time_zone ?? calendarZone;
   const duration =
     event.time_kind === "all_day"
-      ? (floating(event.end_date!).getTime() -
-          floating(event.start_date!).getTime()) /
-        1000
-      : (floating(event.end_local!).getTime() -
-          floating(event.start_local!).getTime()) /
-        1000;
+      ? (floating(event.end_date!).getTime() - floating(event.start_date!).getTime()) / 1000
+      : (floating(event.end_local!).getTime() - floating(event.start_local!).getTime()) / 1000;
   const from = floating(
       localAt(min - duration - 172800, timeZone).toString({
         fractionalSecondDigits: 0,
       }),
     ),
-    to = floating(
-      localAt(max + 172800, timeZone).toString({ fractionalSecondDigits: 0 }),
-    );
+    to = floating(localAt(max + 172800, timeZone).toString({ fractionalSecondDigits: 0 }));
   let examined = 0;
   data.set.between(from, to, true, (candidate) => {
     if (++examined > MAX_OCCURRENCES * 2)
-      fail(
-        422,
-        "TOO_MANY_OCCURRENCES",
-        "Too many occurrences; narrow the time range",
-      );
-    const original = occurrenceTimes(
-      event,
-      candidate,
-      data.fixed.get(candidate.getTime()),
-    );
+      fail(422, "TOO_MANY_OCCURRENCES", "Too many occurrences; narrow the time range");
+    const original = occurrenceTimes(event, candidate, data.fixed.get(candidate.getTime()));
     if (
       original &&
       !data.excluded.has(keyOf(original)) &&
@@ -508,16 +394,13 @@ export function expand(
       try {
         add(originalOccurrence(event, override.occurrence_key));
       } catch (error) {
-        if (
-          !(error instanceof Error && "status" in error && error.status === 404)
-        )
-          throw error;
+        if (!(error instanceof Error && "status" in error && error.status === 404)) throw error;
       }
     }
   return [...output.values()].sort(
     (a, b) =>
-      interval(a.event, calendarZone).min -
-        interval(b.event, calendarZone).min || a.key.localeCompare(b.key),
+      interval(a.event, calendarZone).min - interval(b.event, calendarZone).min ||
+      a.key.localeCompare(b.key),
   );
 }
 export function splitRecurrence(
@@ -535,22 +418,13 @@ export function splitRecurrence(
         old = { ...values };
       const cutoff =
         event.time_kind === "all_day"
-          ? compact(
-              Temporal.PlainDate.from(boundary.start_date!)
-                .subtract({ days: 1 })
-                .toString(),
-            )
-          : compact(
-              new Date((boundary.start_at! - 1) * 1000)
-                .toISOString()
-                .replace(".000Z", "Z"),
-            );
+          ? compact(Temporal.PlainDate.from(boundary.start_date!).subtract({ days: 1 }).toString())
+          : compact(new Date((boundary.start_at! - 1) * 1000).toISOString().replace(".000Z", "Z"));
       // Never extend a finite rule when splitting at an RDATE after its end.
       if (old.UNTIL === undefined || old.UNTIL > cutoff) old.UNTIL = cutoff;
       if (values.COUNT) {
         const used = (
-          parsed.dates ??
-          parsed.rule.between(startFloat(event), boundaryFloat, true)
+          parsed.dates ?? parsed.rule.between(startFloat(event), boundaryFloat, true)
         ).filter((value) => {
           const original = occurrenceTimes(
             event,
@@ -583,11 +457,7 @@ export function splitRecurrence(
         const boundaryEnd =
           event.time_kind === "all_day"
             ? compact(boundary.start_date!)
-            : compact(
-                new Date(boundary.start_at! * 1000)
-                  .toISOString()
-                  .replace(".000Z", "Z"),
-              );
+            : compact(new Date(boundary.start_at! * 1000).toISOString().replace(".000Z", "Z"));
         if (values.UNTIL && values.UNTIL < boundaryEnd) continue;
       }
       after.push(
@@ -621,9 +491,7 @@ export function ruleContains(event: Event, boundary: EventTimes) {
     const original = occurrenceTimes(
       event,
       value,
-      value.getTime() === startFloat(event).getTime()
-        ? (event.start_at ?? undefined)
-        : undefined,
+      value.getTime() === startFloat(event).getTime() ? (event.start_at ?? undefined) : undefined,
     );
     return original !== null && keyOf(original) === keyOf(boundary);
   });

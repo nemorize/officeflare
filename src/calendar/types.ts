@@ -24,12 +24,7 @@ export interface Calendar {
   is_primary: number;
 }
 export type Role =
-  | "free_busy"
-  | "reader"
-  | "writer_without_private"
-  | "writer"
-  | "manager"
-  | "data_owner";
+  "free_busy" | "reader" | "writer_without_private" | "writer" | "manager" | "data_owner";
 export interface Event {
   id: string;
   organizer_calendar_id: string;

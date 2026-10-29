@@ -12,12 +12,8 @@ const day = (date = "2026-12-10") => ({
 });
 test("Calendar collaboration: grants, invitation delivery and verified registrations", async (t) => {
   const f = await fixture(t),
-    { db, call, create, event, patch, bucket, flush, raw, mf, tokens, counts } =
-      f;
-  const api = async (
-    path,
-    { actor = "alice", method = "GET", data, expected = 200 } = {},
-  ) => {
+    { db, call, create, event, patch, bucket, flush, raw, mf, tokens, counts } = f;
+  const api = async (path, { actor = "alice", method = "GET", data, expected = 200 } = {}) => {
     const response = await mf.dispatchFetch("https://office.test/api" + path, {
       method,
       headers: {
@@ -32,25 +28,18 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
   };
   const sent = async () => {
     const files = await bucket.list({ prefix: "test-sent/" });
-    return Promise.all(
-      files.objects.map(async (file) => (await bucket.get(file.key)).json()),
-    );
+    return Promise.all(files.objects.map(async (file) => (await bucket.get(file.key)).json()));
   };
   const deliveries = async (id) =>
-    (await call(`/calendars/primary/events/${id}/invitation-deliveries`))
-      .deliveries;
+    (await call(`/calendars/primary/events/${id}/invitation-deliveries`)).deliveries;
   const flushAfterSnapshot = async (id, query) => {
-    const response = await f.faults.fetch(
-      "https://office.test/test-calendar/flush",
-      {
-        method: "POST",
-        body: JSON.stringify({ ids: [id], after_snapshot: query }),
-      },
-    );
+    const response = await f.faults.fetch("https://office.test/test-calendar/flush", {
+      method: "POST",
+      body: JSON.stringify({ ids: [id], after_snapshot: query }),
+    });
     assert.equal(response.status, 200, await response.text());
   };
-  const publicCall = (path, options = {}) =>
-    call(path, { actor: null, ...options });
+  const publicCall = (path, options = {}) => call(path, { actor: null, ...options });
   const createLink = async (id, extra = {}) =>
     (
       await call(`/calendars/primary/events/${id}/share-links`, {
@@ -75,17 +64,15 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     });
     await flush();
     const message = (await sent())
-      .filter(
-        (value) =>
-          value.to.includes(address) && value.subject.includes("Verify"),
-      )
+      .filter((value) => value.to.includes(address) && value.subject.includes("Verify"))
       .at(-1);
     assert.ok(message);
     const code = message.text.match(/\b\d{6}\b/)[0];
-    await publicCall(
-      `${base}/email-challenges/${verification.challenge_id}/verify`,
-      { method: "POST", data: { code }, headers },
-    );
+    await publicCall(`${base}/email-challenges/${verification.challenge_id}/verify`, {
+      method: "POST",
+      data: { code },
+      headers,
+    });
     return { base, headers, session };
   };
   let primary, meeting, externalToken, capacityEvent, join, firstReg, secondReg;
@@ -112,10 +99,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       "calendar_event_attachments",
       "calendar_time_proposals",
     ]) {
-      const model =
-          schema[
-            name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-          ],
+      const model = schema[name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())],
         columns = await db.prepare(`PRAGMA table_info(${name})`).all();
       assert.deepEqual(
         columns.results.map((value) => value.name).sort(),
@@ -184,10 +168,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ],
       });
       const rows = await deliveries(meeting.event.id);
-      assert.equal(
-        rows.filter((value) => value.channel === "notification_center").length,
-        1,
-      );
+      assert.equal(rows.filter((value) => value.channel === "notification_center").length, 1);
       assert.equal(rows.filter((value) => value.channel === "email").length, 2);
       assert.equal(
         rows.find((value) => value.recipient_user_id === "no-calendar").status,
@@ -232,14 +213,8 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       await flush();
       const messages = await sent();
       assert.equal(messages.length, 2);
-      assert.ok(
-        messages.every(
-          (value) => !value.to.includes("no-calendar@office.test"),
-        ),
-      );
-      const message = messages.find((value) =>
-        value.to.includes("external@example.test"),
-      );
+      assert.ok(messages.every((value) => !value.to.includes("no-calendar@office.test")));
+      const message = messages.find((value) => value.to.includes("external@example.test"));
       assert.equal(message.from, "alice@calendar.test");
       assert.deepEqual(message.cc, []);
       assert.equal(message.attachments.length, 1);
@@ -255,14 +230,9 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       );
       assert.match(ics, /DTSTART;VALUE=DATE:20261210/);
       assert.match(ics, /DTEND;VALUE=DATE:20261211/);
-      assert.match(
-        ics.replace(/\r\n /g, ""),
-        /ATTENDEE.*external@example.test/,
-      );
+      assert.match(ics.replace(/\r\n /g, ""), /ATTENDEE.*external@example.test/);
       assert.doesNotMatch(ics, /other@example.test|no-calendar@office.test/);
-      assert.ok(
-        ics.split("\r\n").every((line) => Buffer.byteLength(line) <= 75),
-      );
+      assert.ok(ics.split("\r\n").every((line) => Buffer.byteLength(line) <= 75));
       assert.ok(ics.endsWith("\r\n"));
       externalToken = message.text.match(/ofci_[A-Za-z0-9_-]{43}/)[0];
       const external = await publicCall(`/invitations/${externalToken}`);
@@ -305,10 +275,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         (value) => value.attachments?.[0]?.filename === "update.ics",
       );
       assert.equal(updates.length, 2);
-      const ics = Buffer.from(
-        updates[0].attachments[0].content,
-        "base64",
-      ).toString();
+      const ics = Buffer.from(updates[0].attachments[0].content, "base64").toString();
       assert.match(ics, new RegExp(`UID:${uid}`));
       assert.match(ics, /SEQUENCE:1/);
       await call(
@@ -320,10 +287,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         (value) => value.attachments?.[0]?.filename === "cancel.ics",
       );
       assert.equal(cancelled.length, 2);
-      const cancel = Buffer.from(
-        cancelled[0].attachments[0].content,
-        "base64",
-      ).toString();
+      const cancel = Buffer.from(cancelled[0].attachments[0].content, "base64").toString();
       assert.match(cancel, /METHOD:CANCEL/);
       assert.match(cancel, /STATUS:CANCELLED/);
       assert.match(cancel, new RegExp(`UID:${uid}`));
@@ -333,25 +297,19 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       assert.equal(Object.hasOwn(own.event, "description_html"), false);
     },
   );
-  await t.test(
-    "send_updates none suppresses only external invitations",
-    async () => {
-      const value = await create({
-        ...day("2027-01-01"),
-        send_updates: "none",
-        attendees: [{ user_id: "bob" }, { email_address: "none@example.test" }],
-      });
-      const list = await deliveries(value.event.id);
-      assert.equal(
-        list.find((value) => value.channel === "email").status,
-        "suppressed",
-      );
-      assert.equal(
-        list.find((value) => value.channel === "notification_center").status,
-        "inbox_committed",
-      );
-    },
-  );
+  await t.test("send_updates none suppresses only external invitations", async () => {
+    const value = await create({
+      ...day("2027-01-01"),
+      send_updates: "none",
+      attendees: [{ user_id: "bob" }, { email_address: "none@example.test" }],
+    });
+    const list = await deliveries(value.event.id);
+    assert.equal(list.find((value) => value.channel === "email").status, "suppressed");
+    assert.equal(
+      list.find((value) => value.channel === "notification_center").status,
+      "inbox_committed",
+    );
+  });
   await t.test(
     "scope claims prevent invitation, audit and inbox writes on stale edits or SQL failure",
     async () => {
@@ -380,45 +338,41 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       );
     },
   );
-  await t.test(
-    "group grants follow membership while invitations expand a snapshot",
-    async () => {
-      await call("/bootstrap", { actor: "bob" });
-      const group = (
-        await call("/groups", {
-          method: "POST",
-          data: { name: "Team", member_ids: ["bob"] },
-          expected: 201,
-        })
-      ).group;
-      const cal = (
-        await call("/calendars", {
-          method: "POST",
-          data: { name: "Shared group" },
-          expected: 201,
-        })
-      ).calendar;
-      await call(`/calendars/${cal.id}/acl`, {
+  await t.test("group grants follow membership while invitations expand a snapshot", async () => {
+    await call("/bootstrap", { actor: "bob" });
+    const group = (
+      await call("/groups", {
         method: "POST",
-        data: { scope_type: "group", scope_key: group.id, role: "reader" },
+        data: { name: "Team", member_ids: ["bob"] },
         expected: 201,
-      });
-      await call(`/calendars/${cal.id}`, { actor: "bob" });
-      const groupEvent = await create({
-        ...day("2027-01-03"),
-        attendees: [{ group_id: group.id }],
-      });
-      await call(`/groups/${group.id}`, {
-        method: "PUT",
-        data: { version: 1, name: "Team", member_ids: [] },
-      });
-      await call(`/calendars/${cal.id}`, { actor: "bob", expected: 404 });
-      const invited = (
-        await call(`/calendars/primary/events/${groupEvent.event.id}/attendees`)
-      ).attendees;
-      assert.equal(invited[0].user_id, "bob");
-    },
-  );
+      })
+    ).group;
+    const cal = (
+      await call("/calendars", {
+        method: "POST",
+        data: { name: "Shared group" },
+        expected: 201,
+      })
+    ).calendar;
+    await call(`/calendars/${cal.id}/acl`, {
+      method: "POST",
+      data: { scope_type: "group", scope_key: group.id, role: "reader" },
+      expected: 201,
+    });
+    await call(`/calendars/${cal.id}`, { actor: "bob" });
+    const groupEvent = await create({
+      ...day("2027-01-03"),
+      attendees: [{ group_id: group.id }],
+    });
+    await call(`/groups/${group.id}`, {
+      method: "PUT",
+      data: { version: 1, name: "Team", member_ids: [] },
+    });
+    await call(`/calendars/${cal.id}`, { actor: "bob", expected: 404 });
+    const invited = (await call(`/calendars/primary/events/${groupEvent.event.id}/attendees`))
+      .attendees;
+    assert.equal(invited[0].user_id, "bob");
+  });
   await t.test(
     "calendar links hide private details; explicit event links reveal only selected fields",
     async () => {
@@ -438,9 +392,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       const visible = await publicCall(
         `/public/share-links/${calendarLink.token}/events?time_min=2027-01-04T00%3A00%3A00Z&time_max=2027-01-07T00%3A00%3A00Z`,
       );
-      const redacted = visible.events.find(
-        (value) => value.id === privateEvent.event.id,
-      );
+      const redacted = visible.events.find((value) => value.id === privateEvent.event.id);
       assert.equal(redacted.title, "Busy");
       assert.equal(Object.hasOwn(redacted, "description_html"), false);
       const link = await createLink(privateEvent.event.id, { mode: "view" }),
@@ -454,110 +406,98 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       });
     },
   );
-  await t.test(
-    "password sessions expire on policy change, rotation and revocation",
-    async () => {
-      const value = await create(day("2027-01-06")),
-        link = await createLink(value.event.id, {
-          mode: "view",
-          password: "password for link",
-        }),
-        base = `/public/share-links/${link.token}`;
-      assert.equal((await publicCall(base)).locked, true);
-      await publicCall(base + "/sessions", {
+  await t.test("password sessions expire on policy change, rotation and revocation", async () => {
+    const value = await create(day("2027-01-06")),
+      link = await createLink(value.event.id, {
+        mode: "view",
+        password: "password for link",
+      }),
+      base = `/public/share-links/${link.token}`;
+    assert.equal((await publicCall(base)).locked, true);
+    await publicCall(base + "/sessions", {
+      method: "POST",
+      data: { password: "wrong password" },
+      expected: 403,
+    });
+    const session = await publicCall(base + "/sessions", {
         method: "POST",
-        data: { password: "wrong password" },
-        expected: 403,
-      });
-      const session = await publicCall(base + "/sessions", {
-          method: "POST",
-          data: { password: "password for link" },
-          expected: 201,
-        }),
-        headers = { "X-Calendar-Link-Session": session.session_token };
-      await publicCall(base, { headers });
-      const changed = await call(`/share-links/${link.id}`, {
-        method: "PATCH",
-        data: { version: 1, shared_fields: ["title", "location"] },
-      });
-      await publicCall(base, { headers, expected: 403 });
-      const rotated = await call(`/share-links/${link.id}/rotate`, {
-        method: "POST",
-        data: { version: changed.link.version },
-      });
-      await publicCall(base, { expected: 404 });
-      await call(`/share-links/${link.id}?version=${rotated.link.version}`, {
-        method: "DELETE",
-        expected: 204,
-      });
-      await publicCall(`/public/share-links/${rotated.link.token}`, {
-        expected: 404,
-      });
-    },
-  );
-  await t.test(
-    "public email challenge is session-bound, single-use and capped",
-    async () => {
-      capacityEvent = await create(day("2027-02-01"));
-      await call(
-        `/calendars/primary/events/${capacityEvent.event.id}/registration-policy`,
-        {
-          method: "PUT",
-          data: { version: 0, capacity: 1, waitlist_enabled: true },
-        },
-      );
-      join = await createLink(capacityEvent.event.id);
-      const base = `/public/share-links/${join.token}`,
-        session = await publicCall(base + "/sessions", {
-          method: "POST",
-          data: {},
-          expected: 201,
-        }),
-        headers = { "X-Calendar-Link-Session": session.session_token };
-      const result = await publicCall(base + "/email-challenges", {
-        method: "POST",
-        data: { email_address: "verified@example.test" },
-        headers,
+        data: { password: "password for link" },
         expected: 201,
-      });
-      await publicCall(base + "/registrations", {
-        method: "POST",
-        data: { display_name: "Guest" },
-        headers,
-        expected: 403,
-      });
-      const second = await publicCall(base + "/sessions", {
+      }),
+      headers = { "X-Calendar-Link-Session": session.session_token };
+    await publicCall(base, { headers });
+    const changed = await call(`/share-links/${link.id}`, {
+      method: "PATCH",
+      data: { version: 1, shared_fields: ["title", "location"] },
+    });
+    await publicCall(base, { headers, expected: 403 });
+    const rotated = await call(`/share-links/${link.id}/rotate`, {
+      method: "POST",
+      data: { version: changed.link.version },
+    });
+    await publicCall(base, { expected: 404 });
+    await call(`/share-links/${link.id}?version=${rotated.link.version}`, {
+      method: "DELETE",
+      expected: 204,
+    });
+    await publicCall(`/public/share-links/${rotated.link.token}`, {
+      expected: 404,
+    });
+  });
+  await t.test("public email challenge is session-bound, single-use and capped", async () => {
+    capacityEvent = await create(day("2027-02-01"));
+    await call(`/calendars/primary/events/${capacityEvent.event.id}/registration-policy`, {
+      method: "PUT",
+      data: { version: 0, capacity: 1, waitlist_enabled: true },
+    });
+    join = await createLink(capacityEvent.event.id);
+    const base = `/public/share-links/${join.token}`,
+      session = await publicCall(base + "/sessions", {
         method: "POST",
         data: {},
         expected: 201,
+      }),
+      headers = { "X-Calendar-Link-Session": session.session_token };
+    const result = await publicCall(base + "/email-challenges", {
+      method: "POST",
+      data: { email_address: "verified@example.test" },
+      headers,
+      expected: 201,
+    });
+    await publicCall(base + "/registrations", {
+      method: "POST",
+      data: { display_name: "Guest" },
+      headers,
+      expected: 403,
+    });
+    const second = await publicCall(base + "/sessions", {
+      method: "POST",
+      data: {},
+      expected: 201,
+    });
+    await publicCall(`${base}/email-challenges/${result.challenge_id}/verify`, {
+      method: "POST",
+      data: { code: "123456" },
+      headers: { "X-Calendar-Link-Session": second.session_token },
+      expected: 400,
+    });
+    for (let i = 0; i < 5; i++)
+      await publicCall(`${base}/email-challenges/${result.challenge_id}/verify`, {
+        method: "POST",
+        data: { code: "000000" },
+        headers,
+        expected: 400,
       });
-      await publicCall(
-        `${base}/email-challenges/${result.challenge_id}/verify`,
-        {
-          method: "POST",
-          data: { code: "123456" },
-          headers: { "X-Calendar-Link-Session": second.session_token },
-          expected: 400,
-        },
-      );
-      for (let i = 0; i < 5; i++)
-        await publicCall(
-          `${base}/email-challenges/${result.challenge_id}/verify`,
-          { method: "POST", data: { code: "000000" }, headers, expected: 400 },
-        );
-      assert.equal(
-        (
-          await db
-            .prepare(
-              "SELECT attempts FROM calendar_external_email_challenges WHERE id=?",
-            )
-            .bind(result.challenge_id)
-            .first()
-        ).attempts,
-        5,
-      );
-    },
-  );
+    assert.equal(
+      (
+        await db
+          .prepare("SELECT attempts FROM calendar_external_email_challenges WHERE id=?")
+          .bind(result.challenge_id)
+          .first()
+      ).attempts,
+      5,
+    );
+  });
   await t.test(
     "automatic confirmation and waitlist share capacity with invited attendees",
     async () => {
@@ -578,17 +518,12 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       assert.equal(firstReg.registration.status, "confirmed");
       assert.equal(secondReg.registration.status, "waitlisted");
       assert.equal(secondReg.registration.attendee_id, null);
-      const detail = await publicCall(
-        `/public/registrations/${secondReg.manage_token}`,
-      );
+      const detail = await publicCall(`/public/registrations/${secondReg.manage_token}`);
       assert.equal(detail.invitation, null);
-      await publicCall(
-        `/public/registrations/${secondReg.manage_token}/event.ics`,
-        { expected: 403 },
-      );
-      const list = await call(
-        `/calendars/primary/events/${capacityEvent.event.id}/attendees`,
-      );
+      await publicCall(`/public/registrations/${secondReg.manage_token}/event.ics`, {
+        expected: 403,
+      });
+      const list = await call(`/calendars/primary/events/${capacityEvent.event.id}/attendees`);
       assert.equal(list.attendees.length, 1);
     },
   );
@@ -601,19 +536,16 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       });
       await publicCall(`/public/share-links/${join.token}`, { expected: 404 });
       await publicCall(`/public/registrations/${firstReg.manage_token}`);
-      await publicCall(
-        `/public/registrations/${firstReg.manage_token}/cancel`,
-        { method: "POST", data: { version: firstReg.registration.version } },
-      );
-      const promoted = await publicCall(
-        `/public/registrations/${secondReg.manage_token}`,
-      );
+      await publicCall(`/public/registrations/${firstReg.manage_token}/cancel`, {
+        method: "POST",
+        data: { version: firstReg.registration.version },
+      });
+      const promoted = await publicCall(`/public/registrations/${secondReg.manage_token}`);
       assert.equal(promoted.registration.status, "confirmed");
       assert.ok(promoted.invitation.event.title);
-      const download = await raw(
-        `/public/registrations/${secondReg.manage_token}/event.ics`,
-        { actor: null },
-      );
+      const download = await raw(`/public/registrations/${secondReg.manage_token}/event.ics`, {
+        actor: null,
+      });
       assert.equal(download.status, 200);
       assert.match(await download.text(), /METHOD:REQUEST/);
     },
@@ -625,20 +557,15 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ...day("2027-03-01"),
         description_html: "Private room link",
       });
-      await call(
-        `/calendars/primary/events/${value.event.id}/registration-policy`,
-        {
-          method: "PUT",
-          data: {
-            version: 0,
-            approval_mode: "manual",
-            capacity: 2,
-            form_schema: [
-              { key: "reason", label: "Reason", type: "text", required: true },
-            ],
-          },
+      await call(`/calendars/primary/events/${value.event.id}/registration-policy`, {
+        method: "PUT",
+        data: {
+          version: 0,
+          approval_mode: "manual",
+          capacity: 2,
+          form_schema: [{ key: "reason", label: "Reason", type: "text", required: true }],
         },
-      );
+      });
       const link = await createLink(value.event.id),
         session = await registerSession(link, "manual@example.test");
       await publicCall(session.base + "/registrations", {
@@ -664,8 +591,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         { method: "POST", data: { version: 1, decision: "approve" } },
       );
       assert.equal(
-        (await publicCall(`/public/registrations/${reg.manage_token}`))
-          .registration.status,
+        (await publicCall(`/public/registrations/${reg.manage_token}`)).registration.status,
         "confirmed",
       );
     },
@@ -707,49 +633,41 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       const before = (await sent()).length;
       await flush([pending.id]);
       assert.equal((await sent()).length, before);
-      await call(
-        `/calendars/primary/events/${value.event.id}/invitations/resend`,
-        {
-          method: "POST",
-          data: { version: (await event(value.event.id)).version },
-          expected: 409,
-        },
-      );
-    },
-  );
-  await t.test(
-    "concurrent RSVP claims allocate the last seat once",
-    async () => {
-      const value = await create({
-        ...day("2027-05-01"),
-        attendees: [{ user_id: "bob" }, { user_id: "no-calendar" }],
+      await call(`/calendars/primary/events/${value.event.id}/invitations/resend`, {
+        method: "POST",
+        data: { version: (await event(value.event.id)).version },
+        expected: 409,
       });
-      await call(
-        `/calendars/primary/events/${value.event.id}/registration-policy`,
-        { method: "PUT", data: { version: 0, capacity: 1 } },
-      );
-      const attendees = (
-        await call(`/calendars/primary/events/${value.event.id}/attendees`)
-      ).attendees;
-      const results = await Promise.all(
-        attendees.map((attendee) =>
-          raw(`/inbox-invitations/${attendee.id}/rsvp`, {
-            actor: attendee.user_id,
-            method: "POST",
-            data: { version: 1, response_status: "accepted" },
-          }),
-        ),
-      );
-      assert.deepEqual(results.map((value) => value.status).sort(), [200, 409]);
-      assert.equal(
-        (
-          await call(`/calendars/primary/events/${value.event.id}/attendees`)
-        ).attendees.filter((value) => value.response_status === "accepted")
-          .length,
-        1,
-      );
     },
   );
+  await t.test("concurrent RSVP claims allocate the last seat once", async () => {
+    const value = await create({
+      ...day("2027-05-01"),
+      attendees: [{ user_id: "bob" }, { user_id: "no-calendar" }],
+    });
+    await call(`/calendars/primary/events/${value.event.id}/registration-policy`, {
+      method: "PUT",
+      data: { version: 0, capacity: 1 },
+    });
+    const attendees = (await call(`/calendars/primary/events/${value.event.id}/attendees`))
+      .attendees;
+    const results = await Promise.all(
+      attendees.map((attendee) =>
+        raw(`/inbox-invitations/${attendee.id}/rsvp`, {
+          actor: attendee.user_id,
+          method: "POST",
+          data: { version: 1, response_status: "accepted" },
+        }),
+      ),
+    );
+    assert.deepEqual(results.map((value) => value.status).sort(), [200, 409]);
+    assert.equal(
+      (await call(`/calendars/primary/events/${value.event.id}/attendees`)).attendees.filter(
+        (value) => value.response_status === "accepted",
+      ).length,
+      1,
+    );
+  });
   await t.test(
     "concurrent verified registrations become confirmed and waitlisted without overbooking",
     async () => {
@@ -757,10 +675,10 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ...day("2027-05-05"),
         recurrence: ["RRULE:FREQ=DAILY;COUNT=3"],
       });
-      await call(
-        `/calendars/primary/events/${value.event.id}/registration-policy`,
-        { method: "PUT", data: { version: 0, capacity: 1 } },
-      );
+      await call(`/calendars/primary/events/${value.event.id}/registration-policy`, {
+        method: "PUT",
+        data: { version: 0, capacity: 1 },
+      });
       const link = await createLink(value.event.id),
         sessions = await Promise.all(
           ["race-a@example.test", "race-b@example.test"].map((address) =>
@@ -780,10 +698,10 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
           }),
         ),
       );
-      assert.deepEqual(
-        results.map((value) => value.registration.status).sort(),
-        ["confirmed", "waitlisted"],
-      );
+      assert.deepEqual(results.map((value) => value.registration.status).sort(), [
+        "confirmed",
+        "waitlisted",
+      ]);
       const confirmed = await db
         .prepare(
           "SELECT COUNT(*) n FROM calendar_event_registrations WHERE event_id=? AND status='confirmed'",
@@ -806,35 +724,20 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       ]);
       const value = await create({
         ...day("2027-05-10"),
-        attendees: [
-          { email_address: "colleague@calendar.test" },
-          { user_id: "no-calendar" },
-        ],
+        attendees: [{ email_address: "colleague@calendar.test" }, { user_id: "no-calendar" }],
       });
       const rows = await deliveries(value.event.id);
       assert.equal(rows.length, 1);
       assert.equal(rows[0].channel, "notification_center");
       assert.equal(rows[0].recipient_user_id, "no-calendar");
-      await db
-        .prepare(
-          "UPDATE users SET disabled_at=unixepoch() WHERE id='no-calendar'",
-        )
-        .run();
+      await db.prepare("UPDATE users SET disabled_at=unixepoch() WHERE id='no-calendar'").run();
       const disabled = await create({
         ...day("2027-05-11"),
         attendees: [{ email_address: "colleague@calendar.test" }],
       });
-      assert.equal(
-        (await deliveries(disabled.event.id))[0].status,
-        "suppressed",
-      );
-      assert.equal(
-        (await deliveries(disabled.event.id))[0].channel,
-        "notification_center",
-      );
-      await db
-        .prepare("UPDATE users SET disabled_at=NULL WHERE id='no-calendar'")
-        .run();
+      assert.equal((await deliveries(disabled.event.id))[0].status, "suppressed");
+      assert.equal((await deliveries(disabled.event.id))[0].channel, "notification_center");
+      await db.prepare("UPDATE users SET disabled_at=NULL WHERE id='no-calendar'").run();
     },
   );
   await t.test(
@@ -867,19 +770,15 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         },
       });
       await flush((await deliveries(value.event.id)).map((value) => value.id));
-      const messages = (await sent()).filter((value) =>
-          value.to.includes("dst@example.test"),
-        ),
+      const messages = (await sent()).filter((value) => value.to.includes("dst@example.test")),
         initial = Buffer.from(
-          messages.find(
-            (value) => value.attachments[0].filename === "invite.ics",
-          ).attachments[0].content,
+          messages.find((value) => value.attachments[0].filename === "invite.ics").attachments[0]
+            .content,
           "base64",
         ).toString(),
         changed = Buffer.from(
-          messages.find(
-            (value) => value.attachments[0].filename === "update.ics",
-          ).attachments[0].content,
+          messages.find((value) => value.attachments[0].filename === "update.ics").attachments[0]
+            .content,
           "base64",
         ).toString();
       assert.match(initial, /BEGIN:VTIMEZONE/);
@@ -889,50 +788,43 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       assert.match(changed, /DTSTART:20260308T150000Z/);
     },
   );
-  await t.test(
-    "series splits preserve attendees and future occurrence responses",
-    async () => {
-      const value = await create({
-          ...day("2027-06-01"),
-          recurrence: ["RRULE:FREQ=DAILY;COUNT=4"],
-          attendees: [{ user_id: "bob" }],
-        }),
-        attendee = (
-          await call(`/calendars/primary/events/${value.event.id}/attendees`)
-        ).attendees[0];
-      await call(`/inbox-invitations/${attendee.id}/rsvp`, {
-        actor: "bob",
-        method: "POST",
-        data: { version: 1, response_status: "accepted" },
-      });
-      await call(`/inbox-invitations/${attendee.id}/rsvp`, {
-        actor: "bob",
-        method: "POST",
-        data: {
-          version: 2,
-          response_status: "declined",
-          scope: "single",
-          occurrence_key: "d:2027-06-04",
-        },
-      });
-      const split = await patch(value.event.id, {
-          scope: "following",
-          occurrence_key: "d:2027-06-03",
-          title: "Future series",
-        }),
-        list = (
-          await call(`/calendars/primary/events/${split.event.id}/attendees`)
-        ).attendees;
-      assert.equal(list.length, 1);
-      assert.equal(list[0].response_status, "accepted");
-      const future = (
-        await call(
-          `/calendars/primary/events/${split.event.id}/attendees?occurrence_key=d%3A2027-06-04`,
-        )
-      ).attendees;
-      assert.equal(future[0].response_status, "declined");
-    },
-  );
+  await t.test("series splits preserve attendees and future occurrence responses", async () => {
+    const value = await create({
+        ...day("2027-06-01"),
+        recurrence: ["RRULE:FREQ=DAILY;COUNT=4"],
+        attendees: [{ user_id: "bob" }],
+      }),
+      attendee = (await call(`/calendars/primary/events/${value.event.id}/attendees`)).attendees[0];
+    await call(`/inbox-invitations/${attendee.id}/rsvp`, {
+      actor: "bob",
+      method: "POST",
+      data: { version: 1, response_status: "accepted" },
+    });
+    await call(`/inbox-invitations/${attendee.id}/rsvp`, {
+      actor: "bob",
+      method: "POST",
+      data: {
+        version: 2,
+        response_status: "declined",
+        scope: "single",
+        occurrence_key: "d:2027-06-04",
+      },
+    });
+    const split = await patch(value.event.id, {
+        scope: "following",
+        occurrence_key: "d:2027-06-03",
+        title: "Future series",
+      }),
+      list = (await call(`/calendars/primary/events/${split.event.id}/attendees`)).attendees;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].response_status, "accepted");
+    const future = (
+      await call(
+        `/calendars/primary/events/${split.event.id}/attendees?occurrence_key=d%3A2027-06-04`,
+      )
+    ).attendees;
+    assert.equal(future[0].response_status, "declined");
+  });
   await t.test(
     "a registered occurrence detached from its rule retains its private management token",
     async () => {
@@ -941,10 +833,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
           recurrence: ["RRULE:FREQ=DAILY;COUNT=3"],
         }),
         link = await createLink(value.event.id),
-        session = await registerSession(
-          link,
-          "detach-registration@example.test",
-        ),
+        session = await registerSession(link, "detach-registration@example.test"),
         reg = await publicCall(session.base + "/registrations", {
           method: "POST",
           headers: session.headers,
@@ -955,9 +844,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         recurrence: ["RRULE:FREQ=WEEKLY;COUNT=2"],
       });
       assert.equal(changed.detached_event_ids.length, 1);
-      const moved = await publicCall(
-        `/public/registrations/${reg.manage_token}`,
-      );
+      const moved = await publicCall(`/public/registrations/${reg.manage_token}`);
       assert.equal(moved.registration.event_id, changed.detached_event_ids[0]);
       assert.equal(moved.registration.occurrence_key, "");
       assert.equal(moved.invitation.event.start.date, "2027-07-02");
@@ -983,9 +870,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         expected: 204,
       });
       assert.ok(
-        !(await call(period, { actor: "bob" })).events.some(
-          (item) => item.id === value.event.id,
-        ),
+        !(await call(period, { actor: "bob" })).events.some((item) => item.id === value.event.id),
       );
       const busy = await call("/freebusy/query", {
         actor: "bob",
@@ -1050,50 +935,45 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       });
     },
   );
-  await t.test(
-    "restricted writers cannot invite themselves into private occurrences",
-    async () => {
-      const value = await create({
-        ...day("2027-09-01"),
-        visibility: "public",
-        recurrence: ["RRULE:FREQ=DAILY;COUNT=3"],
-      });
-      await patch(value.event.id, {
-        scope: "single",
-        occurrence_key: "d:2027-09-02",
-        visibility: "private",
-        title: "Secret",
-      });
-      await call(`/calendars/${primary}/acl`, {
+  await t.test("restricted writers cannot invite themselves into private occurrences", async () => {
+    const value = await create({
+      ...day("2027-09-01"),
+      visibility: "public",
+      recurrence: ["RRULE:FREQ=DAILY;COUNT=3"],
+    });
+    await patch(value.event.id, {
+      scope: "single",
+      occurrence_key: "d:2027-09-02",
+      visibility: "private",
+      title: "Secret",
+    });
+    await call(`/calendars/${primary}/acl`, {
+      method: "POST",
+      data: {
+        scope_type: "user",
+        scope_key: "bob",
+        role: "writer_without_private",
+      },
+      expected: 201,
+    });
+    const version = (await event(value.event.id)).version;
+    for (const scope of [undefined, "d:2027-09-02"])
+      await call(`/calendars/${primary}/events/${value.event.id}/attendees`, {
+        actor: "bob",
         method: "POST",
         data: {
-          scope_type: "user",
-          scope_key: "bob",
-          role: "writer_without_private",
+          version,
+          attendees: [{ user_id: "bob" }],
+          ...(scope ? { occurrence_key: scope } : {}),
         },
-        expected: 201,
+        expected: 404,
       });
-      const version = (await event(value.event.id)).version;
-      for (const scope of [undefined, "d:2027-09-02"])
-        await call(`/calendars/${primary}/events/${value.event.id}/attendees`, {
-          actor: "bob",
-          method: "POST",
-          data: {
-            version,
-            attendees: [{ user_id: "bob" }],
-            ...(scope ? { occurrence_key: scope } : {}),
-          },
-          expected: 404,
-        });
-    },
-  );
+  });
   await t.test(
     "unknown delivery acceptance can be resolved with an audited provider receipt",
     async () => {
       const row = await db
-        .prepare(
-          "SELECT id FROM calendar_invitation_deliveries WHERE status='unknown' LIMIT 1",
-        )
+        .prepare("SELECT id FROM calendar_invitation_deliveries WHERE status='unknown' LIMIT 1")
         .first();
       assert.ok(row);
       await call(`/admin/invitation-deliveries/${row.id}/resolve`, {
@@ -1114,9 +994,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       assert.equal(
         (
           await db
-            .prepare(
-              "SELECT status FROM calendar_invitation_deliveries WHERE id=?",
-            )
+            .prepare("SELECT status FROM calendar_invitation_deliveries WHERE id=?")
             .bind(row.id)
             .first()
         ).status,
@@ -1124,39 +1002,31 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       );
     },
   );
-  await t.test(
-    "emails open response pages and no public GET changes attendance",
-    async () => {
-      const value = await create({
-        ...day("2027-10-01"),
-        attendees: [{ email_address: "page@example.test" }],
+  await t.test("emails open response pages and no public GET changes attendance", async () => {
+    const value = await create({
+      ...day("2027-10-01"),
+      attendees: [{ email_address: "page@example.test" }],
+    });
+    await flush((await deliveries(value.event.id)).map((value) => value.id));
+    const message = (await sent()).find((value) => value.to.includes("page@example.test")),
+      token = message.text.match(/ofci_[A-Za-z0-9_-]{43}/)[0],
+      before = await counts(),
+      response = await raw(`/invitations/${token}`, {
+        actor: null,
+        headers: { Accept: "text/html" },
       });
-      await flush((await deliveries(value.event.id)).map((value) => value.id));
-      const message = (await sent()).find((value) =>
-          value.to.includes("page@example.test"),
-        ),
-        token = message.text.match(/ofci_[A-Za-z0-9_-]{43}/)[0],
-        before = await counts(),
-        response = await raw(`/invitations/${token}`, {
-          actor: null,
-          headers: { Accept: "text/html" },
-        });
-      assert.equal(response.status, 200);
-      assert.match(
-        response.headers.get("content-security-policy"),
-        /script-src 'nonce-/,
-      );
-      assert.equal(response.headers.get("referrer-policy"), "no-referrer");
-      assert.match(await response.text(), /data-response="accepted"/);
-      assert.deepEqual(await counts(), before);
-      const link = await createLink(value.event.id),
-        page = await raw(`/public/share-links/${link.token}`, {
-          actor: null,
-          headers: { Accept: "text/html" },
-        });
-      assert.match(await page.text(), /Send verification code/);
-    },
-  );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-security-policy"), /script-src 'nonce-/);
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.match(await response.text(), /data-response="accepted"/);
+    assert.deepEqual(await counts(), before);
+    const link = await createLink(value.event.id),
+      page = await raw(`/public/share-links/${link.token}`, {
+        actor: null,
+        headers: { Accept: "text/html" },
+      });
+    assert.match(await page.text(), /Send verification code/);
+  });
   await t.test(
     "proposed times require an organizer transaction before changing an event",
     async () => {
@@ -1164,22 +1034,18 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
           ...day("2027-10-05"),
           attendees: [{ user_id: "bob" }],
         }),
-        attendee = (
-          await call(`/calendars/primary/events/${value.event.id}/attendees`)
-        ).attendees[0],
-        proposal = await call(
-          `/inbox-invitations/${attendee.id}/time-proposals`,
-          {
-            actor: "bob",
-            method: "POST",
-            data: {
-              start: { date: "2027-10-06" },
-              end: { date: "2027-10-07" },
-              comment: "Can we move it?",
-            },
-            expected: 201,
+        attendee = (await call(`/calendars/primary/events/${value.event.id}/attendees`))
+          .attendees[0],
+        proposal = await call(`/inbox-invitations/${attendee.id}/time-proposals`, {
+          actor: "bob",
+          method: "POST",
+          data: {
+            start: { date: "2027-10-06" },
+            end: { date: "2027-10-07" },
+            comment: "Can we move it?",
           },
-        );
+          expected: 201,
+        });
       assert.equal((await event(value.event.id)).start.date, "2027-10-05");
       await call(
         `/calendars/primary/events/${value.event.id}/time-proposals/${proposal.proposal.id}/resolve`,
@@ -1222,13 +1088,9 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       ).acl;
       const path = `/public/calendars/${primary}`;
       const list = await publicCall(
-        path +
-          "/events?time_min=2027-10-31T15%3A00%3A00Z&time_max=2027-11-01T15%3A00%3A00Z",
+        path + "/events?time_min=2027-10-31T15%3A00%3A00Z&time_max=2027-11-01T15%3A00%3A00Z",
       );
-      assert.equal(
-        list.events.find((item) => item.id === visible.event.id).title,
-        "Public title",
-      );
+      assert.equal(list.events.find((item) => item.id === visible.event.id).title, "Public title");
       const secret = list.events.find((item) => item.id === hidden.event.id);
       assert.equal(secret.title, "Busy");
       assert.equal(Object.hasOwn(secret, "description_html"), false);
@@ -1257,8 +1119,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         expected: 404,
       });
       assert.equal(
-        (await publicCall(base + "?occurrence_key=d%3A2027-11-11")).event.start
-          .date,
+        (await publicCall(base + "?occurrence_key=d%3A2027-11-11")).event.start.date,
         "2027-11-11",
       );
       await call(`/calendars/primary/events/${value.event.id}/share-links`, {
@@ -1292,18 +1153,9 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         headers: { "Idempotency-Key": crypto.randomUUID() },
       };
       const response = await publicCall(ownPath + "/rsvp", responseRequest);
-      assert.equal(
-        response.registration_version,
-        registration.registration.version + 1,
-      );
-      assert.equal(
-        (await publicCall(ownPath)).registration.version,
-        response.registration_version,
-      );
-      assert.deepEqual(
-        await publicCall(ownPath + "/rsvp", responseRequest),
-        response,
-      );
+      assert.equal(response.registration_version, registration.registration.version + 1);
+      assert.equal((await publicCall(ownPath)).registration.version, response.registration_version);
+      assert.deepEqual(await publicCall(ownPath + "/rsvp", responseRequest), response);
       await publicCall(ownPath + "/rsvp", {
         method: "POST",
         data: responseRequest.data,
@@ -1317,10 +1169,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         },
       });
       const declined = await publicCall(ownPath);
-      assert.equal(
-        declined.registration.version,
-        response.registration_version + 1,
-      );
+      assert.equal(declined.registration.version, response.registration_version + 1);
       assert.equal(declined.invitation.attendee.response_status, "declined");
       const fixed = await createLink(value.event.id, {
         ...bounds,
@@ -1346,10 +1195,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         attendees: [{ user_id: "bob" }],
       });
       const path = `/calendars/primary/events/${value.event.id}/attachments`;
-      for (const url of [
-        "javascript:alert(1)",
-        "https://user:password@example.test/secret",
-      ])
+      for (const url of ["javascript:alert(1)", "https://user:password@example.test/secret"])
         await call(path, {
           method: "POST",
           data: { version: (await event(value.event.id)).version, url },
@@ -1390,9 +1236,9 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         await call(`/calendars/primary/events/${value.event.id}/attendees`)
       ).attendees.find((item) => item.user_id === "bob");
       const detail = async () =>
-        (
-          await call(`/inbox-invitations/${own.id}`, { actor: "bob" })
-        ).attachments.find((item) => item.id === attachment.id);
+        (await call(`/inbox-invitations/${own.id}`, { actor: "bob" })).attachments.find(
+          (item) => item.id === attachment.id,
+        );
       assert.equal((await detail()).unavailable, true);
       assert.equal(Object.hasOwn(await detail(), "title"), false);
       await db
@@ -1403,9 +1249,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         .run();
       assert.equal((await detail()).title, "Private file");
       await db
-        .prepare(
-          "DELETE FROM drive_permissions WHERE item_id=? AND user_id='bob'",
-        )
+        .prepare("DELETE FROM drive_permissions WHERE item_id=? AND user_id='bob'")
         .bind(file)
         .run();
       assert.equal((await detail()).unavailable, true);
@@ -1429,10 +1273,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       const value = await create(
         {
           ...day("2028-01-01"),
-          attendees: [
-            { user_id: "bob" },
-            { email_address: "calendar-lifecycle@example.test" },
-          ],
+          attendees: [{ user_id: "bob" }, { email_address: "calendar-lifecycle@example.test" }],
         },
         cal.id,
       );
@@ -1458,9 +1299,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         data: { version: cal.version + 1 },
       });
       await flush(
-        (await rows())
-          .filter((value) => value.action === "update")
-          .map((value) => value.id),
+        (await rows()).filter((value) => value.action === "update").map((value) => value.id),
       );
       const messages = (await sent()).filter((value) =>
         value.to.includes("calendar-lifecycle@example.test"),
@@ -1469,26 +1308,15 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
       const content = messages.map((value) =>
         Buffer.from(value.attachments[0].content, "base64").toString(),
       );
-      assert.ok(
-        content.some(
-          (value) => /METHOD:CANCEL/.test(value) && /SEQUENCE:1/.test(value),
-        ),
-      );
-      assert.ok(
-        content.some(
-          (value) => /METHOD:REQUEST/.test(value) && /SEQUENCE:2/.test(value),
-        ),
-      );
-      assert.ok(
-        content.every((item) => item.includes(`UID:${value.event.i_cal_uid}`)),
-      );
+      assert.ok(content.some((value) => /METHOD:CANCEL/.test(value) && /SEQUENCE:1/.test(value)));
+      assert.ok(content.some((value) => /METHOD:REQUEST/.test(value) && /SEQUENCE:2/.test(value)));
+      assert.ok(content.every((item) => item.includes(`UID:${value.event.i_cal_uid}`)));
     },
   );
   await t.test(
     "moving into an invitee calendar merges the existing copy without losing RSVP",
     async () => {
-      const target = (await call("/bootstrap", { actor: "bob" }))
-        .primary_calendar_id;
+      const target = (await call("/bootstrap", { actor: "bob" })).primary_calendar_id;
       await call(`/calendars/${target}/acl`, {
         actor: "bob",
         method: "POST",
@@ -1499,28 +1327,24 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ...day("2028-02-01"),
         attendees: [{ user_id: "bob" }],
       });
-      const attendee = (
-        await call(`/calendars/primary/events/${value.event.id}/attendees`)
-      ).attendees[0];
+      const attendee = (await call(`/calendars/primary/events/${value.event.id}/attendees`))
+        .attendees[0];
       await call(`/inbox-invitations/${attendee.id}/rsvp`, {
         actor: "bob",
         method: "POST",
         data: { version: attendee.version, response_status: "accepted" },
       });
-      const moved = await call(
-        `/calendars/primary/events/${value.event.id}/move`,
-        {
-          method: "POST",
-          data: {
-            version: (await event(value.event.id)).version,
-            target_calendar_id: target,
-          },
+      const moved = await call(`/calendars/primary/events/${value.event.id}/move`, {
+        method: "POST",
+        data: {
+          version: (await event(value.event.id)).version,
+          target_calendar_id: target,
         },
-      );
+      });
       assert.equal(moved.event.calendar_id, target);
       assert.equal(
-        (await call(`/inbox-invitations/${attendee.id}`, { actor: "bob" }))
-          .attendee.response_status,
+        (await call(`/inbox-invitations/${attendee.id}`, { actor: "bob" })).attendee
+          .response_status,
         "accepted",
       );
       const copies = (
@@ -1540,10 +1364,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     async () => {
       const value = await create({ ...day("2028-03-01") });
       const link = await createLink(value.event.id);
-      const session = await registerSession(
-        link,
-        "revoked-registration@example.test",
-      );
+      const session = await registerSession(link, "revoked-registration@example.test");
       const reg = await publicCall(session.base + "/registrations", {
         method: "POST",
         data: { display_name: "Registered guest" },
@@ -1610,9 +1431,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         });
         await flush((await deliveries(value.event.id)).map((item) => item.id));
         assert.equal(
-          (await sent()).find((item) =>
-            item.to.includes("personal-primary@example.test"),
-          ).from,
+          (await sent()).find((item) => item.to.includes("personal-primary@example.test")).from,
           "alice@calendar.test",
         );
         assert.equal(
@@ -1627,9 +1446,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
           )
           .run();
         await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
-          )
+          .prepare("UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'")
           .run();
         const alias = await create({
           ...day("2028-04-02"),
@@ -1637,20 +1454,14 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         });
         await flush((await deliveries(alias.event.id)).map((item) => item.id));
         assert.equal(
-          (await sent()).find((item) =>
-            item.to.includes("personal-alias@example.test"),
-          ).from,
+          (await sent()).find((item) => item.to.includes("personal-alias@example.test")).from,
           "alice-alias@calendar.test",
         );
       } finally {
         await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
-          )
+          .prepare("UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'")
           .run();
-        await db
-          .prepare("DELETE FROM mail_addresses WHERE id='alice-calendar-alias'")
-          .run();
+        await db.prepare("DELETE FROM mail_addresses WHERE id='alice-calendar-alias'").run();
         await db
           .prepare(
             "UPDATE calendar_workspace_settings SET system_address_id='system-calendar-address' WHERE id='workspace'",
@@ -1715,9 +1526,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         await db.prepare(disable).run();
         try {
           await flush([external.id]);
-          const result = (await deliveries(value.event.id)).find(
-            (item) => item.id === external.id,
-          );
+          const result = (await deliveries(value.event.id)).find((item) => item.id === external.id);
           assert.equal(result.status, "suppressed", label);
           assert.equal(result.error_code, "personal_sender_unavailable", label);
           assert.equal((await sent()).length, before, label);
@@ -1738,106 +1547,81 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ...day("2028-04-04"),
         attendees: [{ email_address: "sender-race@example.test" }],
       });
-      const pending = (await deliveries(value.event.id)).find(
-          (item) => item.channel === "email",
-        ),
+      const pending = (await deliveries(value.event.id)).find((item) => item.channel === "email"),
         before = (await sent()).length;
       try {
         await flushAfterSnapshot(
           pending.id,
           "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
         );
-        assert.equal(
-          (await deliveries(value.event.id))[0].status,
-          "retry_wait",
-        );
+        assert.equal((await deliveries(value.event.id))[0].status, "retry_wait");
         assert.equal((await sent()).length, before);
         const key = `calendar/deliveries/${pending.id}/invite.ics`,
           original = await (await bucket.get(key)).text();
         await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
-          )
+          .prepare("UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'")
           .run();
-        await db
-          .prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?")
-          .bind(pending.id)
-          .run();
+        await db.prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?").bind(pending.id).run();
         await flush([pending.id]);
         assert.equal((await deliveries(value.event.id))[0].status, "accepted");
         assert.equal(await (await bucket.get(key)).text(), original);
         assert.equal(
-          (await sent()).find((item) =>
-            item.to.includes("sender-race@example.test"),
-          ).from,
+          (await sent()).find((item) => item.to.includes("sender-race@example.test")).from,
           "alice@calendar.test",
         );
       } finally {
         await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
-          )
+          .prepare("UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'")
           .run();
       }
     },
   );
-  await t.test(
-    "a saved invitation cannot switch provider connections on retry",
-    async () => {
-      const value = await create({
-        ...day("2028-04-05"),
-        attendees: [{ email_address: "sender-binding@example.test" }],
-      });
-      const pending = (await deliveries(value.event.id))[0],
-        before = (await sent()).length;
+  await t.test("a saved invitation cannot switch provider connections on retry", async () => {
+    const value = await create({
+      ...day("2028-04-05"),
+      attendees: [{ email_address: "sender-binding@example.test" }],
+    });
+    const pending = (await deliveries(value.event.id))[0],
+      before = (await sent()).length;
+    await db
+      .prepare(
+        "INSERT INTO mail_provider_connections(id,provider,name) VALUES('calendar-replacement-provider','cloudflare','Replacement')",
+      )
+      .run();
+    try {
+      await flushAfterSnapshot(
+        pending.id,
+        "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
+      );
+      await db
+        .prepare("UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'")
+        .run();
       await db
         .prepare(
-          "INSERT INTO mail_provider_connections(id,provider,name) VALUES('calendar-replacement-provider','cloudflare','Replacement')",
+          "UPDATE mail_domains SET outbound_connection_id='calendar-replacement-provider' WHERE id='calendar-domain'",
         )
         .run();
-      try {
-        await flushAfterSnapshot(
-          pending.id,
-          "UPDATE mail_addresses SET send_enabled=0 WHERE id='alice-calendar-address'",
-        );
-        await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
-          )
-          .run();
-        await db
-          .prepare(
-            "UPDATE mail_domains SET outbound_connection_id='calendar-replacement-provider' WHERE id='calendar-domain'",
-          )
-          .run();
-        await db
-          .prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?")
-          .bind(pending.id)
-          .run();
-        await flush([pending.id]);
-        const result = (await deliveries(value.event.id))[0];
-        assert.equal(result.status, "failed");
-        assert.equal(result.error_code, "sender_configuration_changed");
-        assert.equal((await sent()).length, before);
-      } finally {
-        await db
-          .prepare(
-            "UPDATE mail_domains SET outbound_connection_id='cloudflare-bindings' WHERE id='calendar-domain'",
-          )
-          .run();
-        await db
-          .prepare(
-            "UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'",
-          )
-          .run();
-      }
-    },
-  );
+      await db.prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?").bind(pending.id).run();
+      await flush([pending.id]);
+      const result = (await deliveries(value.event.id))[0];
+      assert.equal(result.status, "failed");
+      assert.equal(result.error_code, "sender_configuration_changed");
+      assert.equal((await sent()).length, before);
+    } finally {
+      await db
+        .prepare(
+          "UPDATE mail_domains SET outbound_connection_id='cloudflare-bindings' WHERE id='calendar-domain'",
+        )
+        .run();
+      await db
+        .prepare("UPDATE mail_addresses SET send_enabled=1 WHERE id='alice-calendar-address'")
+        .run();
+    }
+  });
   await t.test(
     "delegated calendar invitations use the calendar organizer's personal mailbox",
     async () => {
-      const target = (await call("/bootstrap", { actor: "bob" }))
-        .primary_calendar_id;
+      const target = (await call("/bootstrap", { actor: "bob" })).primary_calendar_id;
       const value = await create(
         {
           ...day("2028-04-06"),
@@ -1846,16 +1630,13 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         target,
       );
       const rows = (
-        await call(
-          `/calendars/${target}/events/${value.event.id}/invitation-deliveries`,
-          { actor: "bob" },
-        )
+        await call(`/calendars/${target}/events/${value.event.id}/invitation-deliveries`, {
+          actor: "bob",
+        })
       ).deliveries;
       await flush(rows.map((item) => item.id));
       assert.equal(
-        (await sent()).find((item) =>
-          item.to.includes("delegated-organizer@example.test"),
-        ).from,
+        (await sent()).find((item) => item.to.includes("delegated-organizer@example.test")).from,
         "bob@calendar.test",
       );
     },

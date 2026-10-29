@@ -62,10 +62,7 @@ export async function sendSubmission(
       mailboxId,
       job.address_id,
     );
-    if (
-      selected.provider !== job.provider ||
-      selected.connection_id !== job.connection_id
-    )
+    if (selected.provider !== job.provider || selected.connection_id !== job.connection_id)
       fail(409, "Sending provider connection changed");
     providerConnection = selected;
     const object = await env.MAIL_BUCKET.get(job.snapshot_r2_key);
@@ -73,14 +70,18 @@ export async function sendSubmission(
     snapshot = await object.json<SubmissionSnapshot>();
     // Clean up already queued snapshots created before mode-based sending was removed.
     delete snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"];
-    if (snapshot.from !== selected.email_address)
-      fail(409, "Sending address changed");
-    validateMessageSize(snapshot, sendingLimits(selected.provider, selected.max_send_bytes).max_send_bytes);
+    if (snapshot.from !== selected.email_address) fail(409, "Sending address changed");
+    validateMessageSize(
+      snapshot,
+      sendingLimits(selected.provider, selected.max_send_bytes).max_send_bytes,
+    );
   } catch (error) {
     await store.failure(
       submissionId,
       "failed",
-      error instanceof Error && error.message.startsWith("MAIL:413:") ? "message_too_large" : "authorization_or_configuration_changed",
+      error instanceof Error && error.message.startsWith("MAIL:413:")
+        ? "message_too_large"
+        : "authorization_or_configuration_changed",
     );
     await flushOutbox(env, mailboxId, partitionId);
     return;
@@ -93,10 +94,7 @@ export async function sendSubmission(
       error && typeof error === "object" && "code" in error
         ? String(error.code)
         : "acceptance_unknown";
-    const retryable = [
-      "E_RATE_LIMIT_EXCEEDED",
-      "E_DAILY_LIMIT_EXCEEDED",
-    ].includes(code);
+    const retryable = ["E_RATE_LIMIT_EXCEEDED", "E_DAILY_LIMIT_EXCEEDED"].includes(code);
     const known = [
       "LOCAL_ATTACHMENT_MISSING",
       "provider_configuration_missing",
@@ -122,15 +120,10 @@ export async function sendSubmission(
       "E_HEADERS_TOO_LARGE",
       "E_HEADERS_TOO_MANY",
     ].includes(code);
-    const retryAt =
-      epoch() + Math.min(86400, 60 * 2 ** Math.min(job.attempt_count, 10));
+    const retryAt = epoch() + Math.min(86400, 60 * 2 ** Math.min(job.attempt_count, 10));
     await store.failure(
       submissionId,
-      retryable && job.attempt_count < 5
-        ? "retry_wait"
-        : known
-          ? "failed"
-          : "unknown",
+      retryable && job.attempt_count < 5 ? "retry_wait" : known ? "failed" : "unknown",
       code,
       retryAt,
     );
@@ -170,11 +163,7 @@ export async function sendSubmission(
 }
 async function delivery(env: Env, event: DeliveryTask) {
   const receipt = await env.MAIL_BUCKET.get(
-    "delivery-index/" +
-      event.provider +
-      "/" +
-      (await hash(event.provider_message_id)) +
-      ".json",
+    "delivery-index/" + event.provider + "/" + (await hash(event.provider_message_id)) + ".json",
   );
   if (receipt) {
     const target = await receipt.json<{
@@ -230,11 +219,7 @@ async function rememberDelivery(
   submissionId: string,
 ) {
   await env.MAIL_BUCKET.put(
-    "delivery-index/" +
-      provider +
-      "/" +
-      (await hash(providerMessageId)) +
-      ".json",
+    "delivery-index/" + provider + "/" + (await hash(providerMessageId)) + ".json",
     JSON.stringify({
       mailbox_id: mailboxId,
       partition_id: partitionId,
@@ -248,10 +233,7 @@ export function normalizeTask(value: unknown): MailTask {
   if (!value || typeof value !== "object") fail(400, "Invalid mail task");
   const event = value as Record<string, unknown>;
   if (typeof event.kind === "string") return value as MailTask;
-  if (
-    typeof event.type === "string" &&
-    event.type.startsWith("cf.email.sending.message.")
-  ) {
+  if (typeof event.type === "string" && event.type.startsWith("cf.email.sending.message.")) {
     const payload = event.payload as Record<string, unknown>,
       metadata = event.metadata as Record<string, unknown>;
     if (
@@ -264,16 +246,7 @@ export function normalizeTask(value: unknown): MailTask {
     )
       fail(400, "Invalid Cloudflare delivery event");
     const status = event.type.split(".").at(-1)!;
-    if (
-      ![
-        "delivered",
-        "deferred",
-        "bounced",
-        "failed",
-        "rejected",
-        "complained",
-      ].includes(status)
-    )
+    if (!["delivered", "deferred", "bounced", "failed", "rejected", "complained"].includes(status))
       fail(400, "Unsupported delivery event");
     const timestamp = Date.parse(String(metadata.eventTimestamp));
     if (!Number.isFinite(timestamp)) fail(400, "Invalid event timestamp");
@@ -301,12 +274,7 @@ export async function processTask(env: Env, value: unknown) {
       await ingest(env, task);
       break;
     case "send":
-      await sendSubmission(
-        env,
-        task.mailbox_id,
-        task.partition_id,
-        task.reference_id,
-      );
+      await sendSubmission(env, task.mailbox_id, task.partition_id, task.reference_id);
       break;
     case "snooze": {
       const store = partition(env, task.partition_id),
@@ -329,12 +297,7 @@ export async function processTask(env: Env, value: unknown) {
       await delivery(env, task);
       break;
     case "webhook":
-      await deliverWebhook(
-        env,
-        task.mailbox_id,
-        task.partition_id,
-        task.reference_id,
-      );
+      await deliverWebhook(env, task.mailbox_id, task.partition_id, task.reference_id);
       break;
     default:
       fail(400, "Unsupported mail task");
@@ -360,11 +323,8 @@ export async function recover(env: Env) {
   await cleanUploads(env);
   let cursor: string | undefined;
   // Process a bounded page each run, rotate the listing cursor durably to avoid starving later keys.
-  const cursorObject = await env.MAIL_BUCKET.get(
-    "maintenance/pending-cursor.json",
-  );
-  if (cursorObject)
-    cursor = (await cursorObject.json<{ cursor?: string }>()).cursor;
+  const cursorObject = await env.MAIL_BUCKET.get("maintenance/pending-cursor.json");
+  if (cursorObject) cursor = (await cursorObject.json<{ cursor?: string }>()).cursor;
   const page = await env.MAIL_BUCKET.list({
     prefix: "pending/",
     limit: 100,
@@ -393,11 +353,12 @@ export async function queueWebhooks(
   if (payload.private_user_id) return;
   const partitionId = locator(payload.message_id),
     store = partition(env, partitionId);
-  for (const hook of hooks ?? await all<{ id: string; owner_user_id: string }>(
-    env,
-    "SELECT id,owner_user_id FROM mail_webhooks WHERE mailbox_id=? AND enabled=1",
-    mailboxId,
-  )) {
+  for (const hook of hooks ??
+    (await all<{ id: string; owner_user_id: string }>(
+      env,
+      "SELECT id,owner_user_id FROM mail_webhooks WHERE mailbox_id=? AND enabled=1",
+      mailboxId,
+    ))) {
     const deliveryId = await store.registerWebhook(
       hook.id,
       eventId,
@@ -425,12 +386,7 @@ async function deliverWebhook(
 ) {
   const store = partition(env, partitionId),
     job = await store.webhookDelivery(deliveryId);
-  if (
-    !job ||
-    job.status === "delivered" ||
-    job.status === "failed" ||
-    job.attempt_count >= 5
-  )
+  if (!job || job.status === "delivered" || job.status === "failed" || job.attempt_count >= 5)
     return;
   const hook = await first<{
     owner_user_id: string;
@@ -520,9 +476,7 @@ async function deliverWebhook(
 
 export async function cleanUploads(env: Env) {
   const previous = await env.MAIL_BUCKET.get("maintenance/uploads-cursor.json");
-  const cursor = previous
-    ? (await previous.json<{ cursor?: string }>()).cursor
-    : undefined;
+  const cursor = previous ? (await previous.json<{ cursor?: string }>()).cursor : undefined;
   const page = await env.MAIL_BUCKET.list({
     prefix: "uploads/",
     limit: 100,

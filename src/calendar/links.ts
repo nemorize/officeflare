@@ -16,16 +16,7 @@ import {
   requireEvent,
   rows,
 } from "./access";
-import {
-  body,
-  choice,
-  expectedVersion,
-  fail,
-  flag,
-  identifier,
-  integer,
-  text,
-} from "./input";
+import { body, choice, expectedVersion, fail, flag, identifier, integer, text } from "./input";
 import { insert, mutate, update } from "./mutations";
 import { settings } from "./sharing";
 import { occurrence } from "./attendance-store";
@@ -67,24 +58,11 @@ export function inLinkRange(
     (link.time_max === null || value.min < link.time_max)
   );
 }
-export function assertLinkOccurrence(
-  link: ShareLink,
-  event: Event,
-  cal: Calendar,
-) {
+export function assertLinkOccurrence(link: ShareLink, event: Event, cal: Calendar) {
   if (!inLinkRange(link, event, cal))
-    fail(
-      404,
-      "OCCURRENCE_NOT_SHARED",
-      "This occurrence is outside the shared date range",
-    );
+    fail(404, "OCCURRENCE_NOT_SHARED", "This occurrence is outside the shared date range");
 }
-export async function limitPublic(
-  c: CalendarContext,
-  bucket: string,
-  max: number,
-  seconds = 3600,
-) {
+export async function limitPublic(c: CalendarContext, bucket: string, max: number, seconds = 3600) {
   const window = Math.floor(now() / seconds) * seconds,
     hash = await digest(bucket),
     result = await c.env.DB.withSession("first-primary")
@@ -93,8 +71,7 @@ export async function limitPublic(
       )
       .bind(hash, window)
       .first<{ attempts: number }>();
-  if (result!.attempts > max)
-    fail(429, "RATE_LIMITED", "Too many requests. Try again later");
+  if (result!.attempts > max) fail(429, "RATE_LIMITED", "Too many requests. Try again later");
 }
 export function publicHeaders(c: CalendarContext) {
   c.header("Referrer-Policy", "no-referrer");
@@ -119,8 +96,7 @@ export function linkCondition(link: ShareLink) {
 }
 export async function publicLink(c: CalendarContext) {
   const token = text(c.req.param("token"), "token", 100);
-  if (!/^ofcl_[A-Za-z0-9_-]{43}$/.test(token))
-    fail(404, "LINK_NOT_FOUND", "Share link not found");
+  if (!/^ofcl_[A-Za-z0-9_-]{43}$/.test(token)) fail(404, "LINK_NOT_FOUND", "Share link not found");
   const link = await first<ShareLink>(
     c.env,
     "SELECT * FROM calendar_share_links WHERE token_hash=?",
@@ -136,25 +112,13 @@ export async function publicLink(c: CalendarContext) {
     link.calendar_id,
   ))!;
   const event = link.event_id
-    ? (await first<Event>(
-        c.env,
-        "SELECT * FROM calendar_events WHERE id=?",
-        link.event_id,
-      ))!
+    ? (await first<Event>(c.env, "SELECT * FROM calendar_events WHERE id=?", link.event_id))!
     : null;
   if (event && link.occurrence_key)
-    assertLinkOccurrence(
-      link,
-      await occurrence(c, event, link.occurrence_key),
-      cal,
-    );
+    assertLinkOccurrence(link, await occurrence(c, event, link.occurrence_key), cal);
   return { link, cal, event, auth };
 }
-export async function linkSession(
-  c: CalendarContext,
-  link: ShareLink,
-  required = false,
-) {
+export async function linkSession(c: CalendarContext, link: ShareLink, required = false) {
   const token = c.req.header("X-Calendar-Link-Session");
   if (!token) {
     if (required || link.password_hash)
@@ -170,8 +134,7 @@ export async function linkSession(
     link.id,
     link.access_version,
   );
-  if (!value)
-    fail(403, "LINK_SESSION_REQUIRED", "A valid link session is required");
+  if (!value) fail(403, "LINK_SESSION_REQUIRED", "A valid link session is required");
   return value;
 }
 export const sessionCondition = (session: LinkSession) =>
@@ -187,11 +150,7 @@ const paths = [
 ];
 for (const path of paths) {
   routes.get(path, async (c) => {
-    const cal = await requireCalendar(
-        c,
-        identifier(c.req.param("calendarId")),
-        5,
-      ),
+    const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 5),
       id = c.req.param("eventId");
     if (id) await requireEvent(c, cal, identifier(id), true);
     return c.json({
@@ -224,34 +183,21 @@ for (const path of paths) {
     if (!config.external_sharing_enabled)
       fail(403, "SHARING_DISABLED", "External sharing is disabled");
     const mode = choice(data.mode ?? "view", "mode", ["view", "join"]);
-    if (!event && mode === "join")
-      fail(400, "INVALID_LINK", "Calendar links support viewing only");
+    if (!event && mode === "join") fail(400, "INVALID_LINK", "Calendar links support viewing only");
     const key =
-      data.occurrence_key === undefined
-        ? null
-        : text(data.occurrence_key, "occurrence_key", 64);
-    if (key && !event)
-      fail(400, "INVALID_SCOPE", "A calendar link has no occurrence scope");
+      data.occurrence_key === undefined ? null : text(data.occurrence_key, "occurrence_key", 64);
+    if (key && !event) fail(400, "INVALID_SCOPE", "A calendar link has no occurrence scope");
     if (key) await occurrence(c, event!, key);
     const max = now() + config.public_link_max_days * 86400,
       expires =
         data.expires_at === undefined
           ? max
           : integer(data.expires_at, "expires_at", now() + 1, max),
-      password =
-        data.password == null ? null : text(data.password, "password", 128);
+      password = data.password == null ? null : text(data.password, "password", 128);
     if (password && password.length < 8)
-      fail(
-        400,
-        "INVALID_PASSWORD",
-        "Link passwords need at least 8 characters",
-      );
+      fail(400, "INVALID_PASSWORD", "Link passwords need at least 8 characters");
     if (config.public_link_password_required && !password)
-      fail(
-        403,
-        "PASSWORD_REQUIRED",
-        "Workspace policy requires link passwords",
-      );
+      fail(403, "PASSWORD_REQUIRED", "Workspace policy requires link passwords");
     const range =
         data.time_min === undefined && data.time_max === undefined
           ? null
@@ -267,11 +213,8 @@ for (const path of paths) {
         mode,
         token_hash: await digest(token),
         password_hash: password ? await hashPassword(password) : null,
-        shared_fields_json: JSON.stringify(
-          fields(data.shared_fields ?? ["title"]),
-        ),
-        allow_ics:
-          data.allow_ics === undefined ? 0 : flag(data.allow_ics, "allow_ics"),
+        shared_fields_json: JSON.stringify(fields(data.shared_fields ?? ["title"])),
+        allow_ics: data.allow_ics === undefined ? 0 : flag(data.allow_ics, "allow_ics"),
         time_min: range?.min ?? null,
         time_max: range?.max ?? null,
         access_version: 1,
@@ -282,11 +225,7 @@ for (const path of paths) {
         created_at: now(),
       };
     if (event && (key || event.recurrence_json === "[]"))
-      assertLinkOccurrence(
-        value,
-        key ? await occurrence(c, event, key) : event,
-        cal,
-      );
+      assertLinkOccurrence(value, key ? await occurrence(c, event, key) : event, cal);
     const result = await mutate(c, {
       action: "calendar.sharing.external",
       operation: `link.create:${cal.id}:${event?.id ?? ""}`,
@@ -297,8 +236,7 @@ for (const path of paths) {
         link: {
           ...linkDto(value),
           token,
-          url: new URL(`/api/calendar/public/share-links/${token}`, c.req.url)
-            .href,
+          url: new URL(`/api/calendar/public/share-links/${token}`, c.req.url).href,
         },
       },
       calendar: cal.id,
@@ -312,12 +250,7 @@ for (const path of paths) {
         ),
       ],
       build: (proof) => [
-        insert(
-          c,
-          "calendar_share_links",
-          value as unknown as Record<string, Bind>,
-          proof,
-        ),
+        insert(c, "calendar_share_links", value as unknown as Record<string, Bind>, proof),
       ],
     });
     return c.json(result, 201);
@@ -342,13 +275,7 @@ async function managedLink(c: CalendarContext) {
 routes.on(["PATCH", "DELETE"], "/share-links/:linkId", async (c) => {
   const data =
       c.req.method === "PATCH"
-        ? await body(c, [
-            "version",
-            "password",
-            "shared_fields",
-            "expires_at",
-            "allow_ics",
-          ])
+        ? await body(c, ["version", "password", "shared_fields", "expires_at", "allow_ics"])
         : {},
     version = expectedVersion(c, data),
     { link, cal } = await managedLink(c),
@@ -369,20 +296,11 @@ routes.on(["PATCH", "DELETE"], "/share-links/:linkId", async (c) => {
       now() + cfg.public_link_max_days * 86400,
     );
   if ("password" in data) {
-    const password =
-      data.password === null ? null : text(data.password, "password", 128);
+    const password = data.password === null ? null : text(data.password, "password", 128);
     if (password && password.length < 8)
-      fail(
-        400,
-        "INVALID_PASSWORD",
-        "Link passwords need at least 8 characters",
-      );
+      fail(400, "INVALID_PASSWORD", "Link passwords need at least 8 characters");
     if (cfg.public_link_password_required && !password)
-      fail(
-        403,
-        "PASSWORD_REQUIRED",
-        "Workspace policy requires link passwords",
-      );
+      fail(403, "PASSWORD_REQUIRED", "Workspace policy requires link passwords");
     values.password_hash = password ? await hashPassword(password) : null;
   }
   await mutate(c, {
@@ -399,9 +317,7 @@ routes.on(["PATCH", "DELETE"], "/share-links/:linkId", async (c) => {
         version,
       ),
     ],
-    build: (proof) => [
-      update(c, "calendar_share_links", values, "id=?", [link.id], proof),
-    ],
+    build: (proof) => [update(c, "calendar_share_links", values, "id=?", [link.id], proof)],
   });
   return c.req.method === "DELETE"
     ? c.body(null, 204)
@@ -425,8 +341,7 @@ routes.post("/share-links/:linkId/rotate", async (c) => {
           version: version + 1,
           access_version: link.access_version + 1,
           token,
-          url: new URL(`/api/calendar/public/share-links/${token}`, c.req.url)
-            .href,
+          url: new URL(`/api/calendar/public/share-links/${token}`, c.req.url).href,
         },
       },
       checks: [
@@ -466,10 +381,7 @@ linkSessions.post("/public/share-links/:token/sessions", async (c) => {
   );
   if (
     link.password_hash &&
-    !(await verifyPassword(
-      text(data.password, "password", 128),
-      link.password_hash,
-    ))
+    !(await verifyPassword(text(data.password, "password", 128), link.password_hash))
   )
     fail(403, "INVALID_PASSWORD", "Invalid link password");
   const id = uuid(),

@@ -1,57 +1,311 @@
-.mail-badge, .settings-badge { display: inline-block; border-radius: 5px; padding: 3px 7px; background: var(--ui-surface); color: var(--ui-muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
-.mail-hint, .settings-hint { font-size: 12px; color: var(--ui-muted); line-height: 1.7; overflow-wrap: anywhere; }
-.mail-actions, .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.account-page.mail-manage-page, .account-page.settings-page { width: 100%; max-width: 1100px; }
-.mail-section, .settings-section { padding: 28px 0; border-top: 1px solid var(--ui-border); margin-block: 0; }
-.mail-section > header, .settings-section > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
-.mail-section > header h2, .settings-section > header h2 { font-size: 15px; font-weight: 500; }
-.mail-section > header p, .settings-section > header p { font-size: 12px; color: var(--ui-muted); line-height: 1.8; margin-top: 8px; max-width: 650px; }
-.mail-section > header [data-ui="button"], .settings-section > header [data-ui="button"] { flex-shrink: 0; }
-.mail-record-list, .settings-record-list { display: grid; }
-.mail-record, .settings-record { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--ui-border); font-size: 12px; }
-.mail-record:last-child, .settings-record:last-child { border-bottom: 0; }
-.mail-record > div:first-child, .settings-record > div:first-child { min-width: 0; }
-.mail-record strong, .settings-record strong { font-weight: 500; overflow-wrap: anywhere; }
-.mail-record p, .settings-record p { color: var(--ui-muted); font-size: 12px; margin-top: 6px; line-height: 1.7; }
-.mail-record small, .settings-record small { color: var(--ui-subtle); font-size: 12px; }
-.mail-table-wrap, .settings-table-wrap { overflow-x: auto; }
-.mail-table, .settings-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
-.mail-table th, .settings-table th { color: var(--ui-muted); font-size: 12px; font-weight: 500; padding: 12px 14px; white-space: nowrap; border-bottom: 1px solid var(--ui-border); }
-.mail-table td, .settings-table td { padding: 18px 14px; border-bottom: 1px solid var(--ui-border); vertical-align: top; overflow-wrap: anywhere; }
-.mail-table td small, .settings-table td small { display: block; color: var(--ui-subtle); font-size: 12px; margin-top: 6px; }
-.mail-table td strong, .settings-table td strong { font-size: 12px; font-weight: 500; }
-.mail-table code, .settings-table code { font-size: 12px; }
-.mail-data-options, .settings-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.mail-data-options h3, .settings-options h3 { font-size: 13px; font-weight: 500; }
-.mail-data-options p, .settings-options p { font-size: 12px; color: var(--ui-muted); line-height: 1.8; margin: 10px 0 18px; }
-.mail-storage-overview, .settings-storage-overview { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
-.mail-storage-overview strong, .settings-storage-overview strong { font-size: 26px; font-weight: 500; }
-.mail-storage-overview span, .settings-storage-overview span { color: var(--ui-muted); font-size: 12px; }
-.mail-data-options > article, .settings-options > article { display: flex; flex-direction: column; align-items: flex-start; }
-.mail-data-options > article > p, .settings-options > article > p { flex: 1; margin: 8px 0 16px; }
-.mail-settings-nav, .settings-nav { overflow-x: auto; margin-block-end: 24px; }
-.mail-settings-nav > [data-ui="tabs-list"], .settings-nav > [data-ui="tabs-list"] { width: max-content; min-width: 100%; }
-.settings-field { gap: 8px; min-width: 0; }
-.settings-field [data-ui="select-trigger"] { width: 100%; min-width: 0; justify-content: space-between; }
-.settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.settings-notice { color: var(--ui-danger); background: var(--ui-danger-surface); border-radius: 7px; padding: 12px 16px; margin: 12px 0; font-size: 12px; overflow-wrap: anywhere; }
+.mail-badge,
+.settings-badge {
+  display: inline-block;
+  border-radius: 5px;
+  padding: 3px 7px;
+  background: var(--ui-surface);
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.mail-hint,
+.settings-hint {
+  font-size: 12px;
+  color: var(--ui-muted);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.mail-actions,
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.account-page.mail-manage-page,
+.account-page.settings-page {
+  width: 100%;
+  max-width: 1100px;
+}
+.mail-section,
+.settings-section {
+  padding: 28px 0;
+  border-top: 1px solid var(--ui-border);
+  margin-block: 0;
+}
+.mail-section > header,
+.settings-section > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.mail-section > header h2,
+.settings-section > header h2 {
+  font-size: 15px;
+  font-weight: 500;
+}
+.mail-section > header p,
+.settings-section > header p {
+  font-size: 12px;
+  color: var(--ui-muted);
+  line-height: 1.8;
+  margin-top: 8px;
+  max-width: 650px;
+}
+.mail-section > header [data-ui="button"],
+.settings-section > header [data-ui="button"] {
+  flex-shrink: 0;
+}
+.mail-record-list,
+.settings-record-list {
+  display: grid;
+}
+.mail-record,
+.settings-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ui-border);
+  font-size: 12px;
+}
+.mail-record:last-child,
+.settings-record:last-child {
+  border-bottom: 0;
+}
+.mail-record > div:first-child,
+.settings-record > div:first-child {
+  min-width: 0;
+}
+.mail-record strong,
+.settings-record strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.mail-record p,
+.settings-record p {
+  color: var(--ui-muted);
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.7;
+}
+.mail-record small,
+.settings-record small {
+  color: var(--ui-subtle);
+  font-size: 12px;
+}
+.mail-table-wrap,
+.settings-table-wrap {
+  overflow-x: auto;
+}
+.mail-table,
+.settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+.mail-table th,
+.settings-table th {
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 12px 14px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ui-border);
+}
+.mail-table td,
+.settings-table td {
+  padding: 18px 14px;
+  border-bottom: 1px solid var(--ui-border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.mail-table td small,
+.settings-table td small {
+  display: block;
+  color: var(--ui-subtle);
+  font-size: 12px;
+  margin-top: 6px;
+}
+.mail-table td strong,
+.settings-table td strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.mail-table code,
+.settings-table code {
+  font-size: 12px;
+}
+.mail-data-options,
+.settings-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.mail-data-options h3,
+.settings-options h3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+.mail-data-options p,
+.settings-options p {
+  font-size: 12px;
+  color: var(--ui-muted);
+  line-height: 1.8;
+  margin: 10px 0 18px;
+}
+.mail-storage-overview,
+.settings-storage-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.mail-storage-overview strong,
+.settings-storage-overview strong {
+  font-size: 26px;
+  font-weight: 500;
+}
+.mail-storage-overview span,
+.settings-storage-overview span {
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.mail-data-options > article,
+.settings-options > article {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.mail-data-options > article > p,
+.settings-options > article > p {
+  flex: 1;
+  margin: 8px 0 16px;
+}
+.mail-settings-nav,
+.settings-nav {
+  overflow-x: auto;
+  margin-block-end: 24px;
+}
+.mail-settings-nav > [data-ui="tabs-list"],
+.settings-nav > [data-ui="tabs-list"] {
+  width: max-content;
+  min-width: 100%;
+}
+.settings-field {
+  gap: 8px;
+  min-width: 0;
+}
+.settings-field [data-ui="select-trigger"] {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+}
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.settings-notice {
+  color: var(--ui-danger);
+  background: var(--ui-danger-surface);
+  border-radius: 7px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 1120px) {
-  .settings-record, .mail-record { flex-wrap: wrap; }
+  .settings-record,
+  .mail-record {
+    flex-wrap: wrap;
+  }
 }
 @media (max-width: 760px) {
-  .settings-nav, .mail-settings-nav { gap: 4px; }
-  .settings-nav [data-ui="tabs-tab"], .mail-settings-nav [data-ui="tabs-tab"] { min-height: 44px; }
-  .settings-section, .mail-section { padding: 24px 0; }
-  .settings-section > header, .mail-section > header { flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
-  .settings-options, .settings-form-grid, .mail-data-options { grid-template-columns: minmax(0, 1fr); }
-  .settings-table-wrap, .mail-table-wrap { overflow: visible; }
-  .settings-table, .settings-table tbody, .mail-table, .mail-table tbody { display: block; }
-  .settings-table thead, .mail-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .settings-table tr, .mail-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 16px 0; border-bottom: 1px solid var(--ui-border); gap: 12px; }
-  .settings-table td, .mail-table td { display: block; border: 0; padding: 0; min-width: 0; }
-  .settings-table td::before, .mail-table td::before { display: block; content: attr(data-label); color: var(--ui-muted); font-size: 12px; margin-bottom: 4px; }
-  .settings-table td:last-child, .mail-table td:last-child { grid-column: 1 / -1; }
-  .settings-table td:has(code), .mail-table td:has(code) { grid-column: 1 / -1; }
-  .settings-table td .settings-actions, .mail-table td .mail-actions { gap: 8px; }
-  .settings-table td .settings-actions button, .mail-table td .mail-actions button { min-height: 44px; }
+  .settings-nav,
+  .mail-settings-nav {
+    gap: 4px;
+  }
+  .settings-nav [data-ui="tabs-tab"],
+  .mail-settings-nav [data-ui="tabs-tab"] {
+    min-height: 44px;
+  }
+  .settings-section,
+  .mail-section {
+    padding: 24px 0;
+  }
+  .settings-section > header,
+  .mail-section > header {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .settings-options,
+  .settings-form-grid,
+  .mail-data-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-table-wrap,
+  .mail-table-wrap {
+    overflow: visible;
+  }
+  .settings-table,
+  .settings-table tbody,
+  .mail-table,
+  .mail-table tbody {
+    display: block;
+  }
+  .settings-table thead,
+  .mail-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .settings-table tr,
+  .mail-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 16px 0;
+    border-bottom: 1px solid var(--ui-border);
+    gap: 12px;
+  }
+  .settings-table td,
+  .mail-table td {
+    display: block;
+    border: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .settings-table td::before,
+  .mail-table td::before {
+    display: block;
+    content: attr(data-label);
+    color: var(--ui-muted);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .settings-table td:last-child,
+  .mail-table td:last-child {
+    grid-column: 1 / -1;
+  }
+  .settings-table td:has(code),
+  .mail-table td:has(code) {
+    grid-column: 1 / -1;
+  }
+  .settings-table td .settings-actions,
+  .mail-table td .mail-actions {
+    gap: 8px;
+  }
+  .settings-table td .settings-actions button,
+  .mail-table td .mail-actions button {
+    min-height: 44px;
+  }
 }

@@ -17,22 +17,14 @@ async function encryptionKey(env: CalendarEnv, version?: number) {
     throw new Error("Invalid calendar encryption key");
   return {
     version: selected,
-    key: await crypto.subtle.importKey(
-      "raw",
-      Buffer.from(value, "base64url"),
-      "AES-GCM",
-      false,
-      ["encrypt", "decrypt"],
-    ),
+    key: await crypto.subtle.importKey("raw", Buffer.from(value, "base64url"), "AES-GCM", false, [
+      "encrypt",
+      "decrypt",
+    ]),
   };
 }
-const aad = (purpose: string) =>
-  new TextEncoder().encode(`officeflare:calendar:${purpose}`);
-export async function seal(
-  env: CalendarEnv,
-  purpose: string,
-  value: unknown,
-): Promise<Envelope> {
+const aad = (purpose: string) => new TextEncoder().encode(`officeflare:calendar:${purpose}`);
+export async function seal(env: CalendarEnv, purpose: string, value: unknown): Promise<Envelope> {
   const { key, version } = await encryptionKey(env),
     nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -47,11 +39,7 @@ export async function seal(
     ciphertext: Buffer.from(ciphertext).toString("base64url"),
   };
 }
-export async function unseal<T>(
-  env: CalendarEnv,
-  purpose: string,
-  value: Envelope,
-): Promise<T> {
+export async function unseal<T>(env: CalendarEnv, purpose: string, value: Envelope): Promise<T> {
   const { key } = await encryptionKey(env, value.version);
   const bytes = await crypto.subtle.decrypt(
     {
@@ -64,13 +52,7 @@ export async function unseal<T>(
   );
   return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
-export async function receipt<T>(
-  env: CalendarEnv,
-  purpose: string,
-  json: string,
-): Promise<T> {
+export async function receipt<T>(env: CalendarEnv, purpose: string, json: string): Promise<T> {
   const value = JSON.parse(json);
-  return value?.calendar_secret === 1
-    ? unseal<T>(env, purpose, value)
-    : (value as T);
+  return value?.calendar_secret === 1 ? unseal<T>(env, purpose, value) : (value as T);
 }

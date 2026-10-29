@@ -1,21 +1,87 @@
-.calendar-settings-scroll { width: 100%; min-width: 0; overflow-y: auto; }
-.calendar-settings-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-.calendar-settings-save { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 16px 0; border-top: 1px solid var(--ui-border); background: var(--ui-background); z-index: 2; }
-.calendar-settings-save > span { flex: 1; font-size: 12px; color: var(--ui-muted); }
-.calendar-settings-scroll .calendar-field { min-width: 0; }
-.calendar-settings-scroll .calendar-field [data-ui="select-trigger"] { width: 100%; justify-content: space-between; }
-.calendar-settings-scroll .calendar-check-label + .calendar-check-label { margin-top: 16px; }
-.calendar-settings-back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 12px; }
-.calendar-settings-scroll .calendar-sharing-settings { margin-top: 24px; }
-.calendar-settings-scroll .calendar-working-day { gap: 16px; }
-.calendar-settings-exception { border-top: 1px solid var(--ui-border); padding-block: 16px; }
-.calendar-settings-exception-heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.calendar-settings-exception-heading strong { font-size: 13px; }
-.calendar-settings-add-date { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
-.calendar-settings-add-date input { width: auto; }
+.calendar-settings-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-y: auto;
+}
+.calendar-settings-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.calendar-settings-save {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-background);
+  z-index: 2;
+}
+.calendar-settings-save > span {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.calendar-settings-scroll .calendar-field {
+  min-width: 0;
+}
+.calendar-settings-scroll .calendar-field [data-ui="select-trigger"] {
+  width: 100%;
+  justify-content: space-between;
+}
+.calendar-settings-scroll .calendar-check-label + .calendar-check-label {
+  margin-top: 16px;
+}
+.calendar-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.calendar-settings-scroll .calendar-sharing-settings {
+  margin-top: 24px;
+}
+.calendar-settings-scroll .calendar-working-day {
+  gap: 16px;
+}
+.calendar-settings-exception {
+  border-top: 1px solid var(--ui-border);
+  padding-block: 16px;
+}
+.calendar-settings-exception-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.calendar-settings-exception-heading strong {
+  font-size: 13px;
+}
+.calendar-settings-add-date {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.calendar-settings-add-date input {
+  width: auto;
+}
 @media (max-width: 760px) {
-  .calendar-settings-save { flex-wrap: wrap; }
-  .calendar-settings-save > span { flex-basis: 100%; }
-  .calendar-settings-save button { flex: 1; }
-  .calendar-settings-scroll .calendar-working-day { grid-template-columns: minmax(0, 1fr); }
+  .calendar-settings-save {
+    flex-wrap: wrap;
+  }
+  .calendar-settings-save > span {
+    flex-basis: 100%;
+  }
+  .calendar-settings-save button {
+    flex: 1;
+  }
+  .calendar-settings-scroll .calendar-working-day {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

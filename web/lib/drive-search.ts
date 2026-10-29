@@ -28,7 +28,7 @@ export function readDriveSearch(params: URLSearchParams): DriveSearchFields {
     q: params.get("q") ?? "",
     type: params.get("content_type") || params.get("kind") || "",
     owner: params.get("owner") ?? "",
-    scope: driveSearchScopes.some(option => option.value === scope) ? scope : "all",
+    scope: driveSearchScopes.some((option) => option.value === scope) ? scope : "all",
     after: params.get("after") ?? "",
     before: params.get("before") ?? "",
   };
@@ -48,5 +48,7 @@ export function driveSearchParams(fields: DriveSearchFields) {
   return params;
 }
 export function isDriveSearch(params: URLSearchParams) {
-  return ["q", "scope", "content_type", "owner", "after", "before"].some(key => !!params.get(key));
+  return ["q", "scope", "content_type", "owner", "after", "before"].some(
+    (key) => !!params.get(key),
+  );
 }

@@ -8,10 +8,7 @@ const dateFormattingScript = String.raw`
 `;
 // The page holds no embedded recipient data and writes only after an explicit click.
 // Fetch JSON from the same capability URL; no session cookies authenticate external POSTs.
-export function invitationPage(
-  c: CalendarContext,
-  mode: "invitation" | "registration",
-) {
+export function invitationPage(c: CalendarContext, mode: "invitation" | "registration") {
   const nonce = random(),
     html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Officeflare Calendar</title><style nonce="${nonce}">${pageStyles}</style></head><body><main><div class="brand">Officeflare · Calendar</div><h1 id="title">Calendar invitation</h1><p id="time"></p><p id="description"></p><p id="location"></p><p id="organizer"></p><p id="status" role="status">Loading…</p><div id="actions" hidden><button data-response="accepted">Attend</button><button data-response="tentative">Maybe</button><button data-response="declined">Decline</button><p><a id="download">Download calendar file</a></p></div></main><script nonce="${nonce}">
  ${dateFormattingScript}

@@ -1,25 +1,15 @@
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
-import {
-  fail,
-  type MailActor,
-  type MessageQuery,
-  type ThreadRow,
-} from "./types";
+import { fail, type MailActor, type MessageQuery, type ThreadRow } from "./types";
 
 const newer = (
   a: Pick<ThreadRow, "received_at" | "id">,
   b: Pick<ThreadRow, "received_at" | "id">,
 ) => a.received_at - b.received_at || a.id.localeCompare(b.id);
-async function mapPartitions<T, R>(
-  entries: T[],
-  task: (entry: T) => Promise<R>,
-): Promise<R[]> {
+async function mapPartitions<T, R>(entries: T[], task: (entry: T) => Promise<R>): Promise<R[]> {
   const results: R[] = [];
   for (let start = 0; start < entries.length; start += 4)
-    results.push(
-      ...(await Promise.all(entries.slice(start, start + 4).map(task))),
-    );
+    results.push(...(await Promise.all(entries.slice(start, start + 4).map(task))));
   return results;
 }
 export async function queryThreads(
@@ -31,18 +21,26 @@ export async function queryThreads(
 ) {
   await authorize(env, actor, mailboxId, "read");
   const entries = await mailbox(env, mailboxId).partitions();
-  const targets = selected
-    ? entries.filter((p) => selected.includes(p.id))
-    : entries;
-  if (selected && targets.length !== selected.length)
-    fail(400, "Invalid cursor partitions");
+  const targets = selected ? entries.filter((p) => selected.includes(p.id)) : entries;
+  if (selected && targets.length !== selected.length) fail(400, "Invalid cursor partitions");
   // A single partition already has complete conversation totals.
-  if (targets.length === 1) return { messages: (await partition(env, targets[0]!.id).threadPage({ ...query, actor_id: actor.user_id, exclude_drafts: true })).map(entry => ({ ...entry, is_read: Number(entry.unread_count === 0), is_starred: Number(entry.starred_count > 0) })), partitions: [targets[0]!.id] };
+  if (targets.length === 1)
+    return {
+      messages: (
+        await partition(env, targets[0]!.id).threadPage({
+          ...query,
+          actor_id: actor.user_id,
+          exclude_drafts: true,
+        })
+      ).map((entry) => ({
+        ...entry,
+        is_read: Number(entry.unread_count === 0),
+        is_starred: Number(entry.starred_count > 0),
+      })),
+      partitions: [targets[0]!.id],
+    };
   const base = { ...query, actor_id: actor.user_id, exclude_drafts: true };
-  const frontiers = new Map<
-    string,
-    { received_at: number; id: string } | undefined
-  >();
+  const frontiers = new Map<string, { received_at: number; id: string } | undefined>();
   const exhausted = new Set<string>(),
     candidates = new Set<string>();
   let merged: ThreadRow[] = [];
@@ -51,9 +49,7 @@ export async function queryThreads(
     const pending = targets.filter(
       (entry) =>
         !exhausted.has(entry.id) &&
-        (!tail ||
-          !frontiers.get(entry.id) ||
-          newer(frontiers.get(entry.id)!, tail) >= 0),
+        (!tail || !frontiers.get(entry.id) || newer(frontiers.get(entry.id)!, tail) >= 0),
     );
     if (!pending.length) break;
     const pages = await mapPartitions(pending, async (entry) => ({
@@ -78,10 +74,7 @@ export async function queryThreads(
     for (let start = 0; start < added.length; start += 100) {
       const chunk = added.slice(start, start + 100);
       const groups = await mapPartitions(targets, (entry) =>
-        partition(env, entry.id).threadPage(
-          { ...base, before: undefined },
-          chunk,
-        ),
+        partition(env, entry.id).threadPage({ ...base, before: undefined }, chunk),
       );
       for (const group of groups)
         for (const entry of group) {
@@ -93,10 +86,7 @@ export async function queryThreads(
               message_count: old.message_count + entry.message_count,
               unread_count: old.unread_count + entry.unread_count,
               starred_count: old.starred_count + entry.starred_count,
-              has_attachments: Math.max(
-                old.has_attachments,
-                entry.has_attachments,
-              ),
+              has_attachments: Math.max(old.has_attachments, entry.has_attachments),
               participants: [
                 ...new Set(
                   [old.participants, entry.participants]
@@ -112,21 +102,15 @@ export async function queryThreads(
       .sort((a, b) => newer(b, a));
   }
   return {
-    messages: merged
-      .slice(0, query.limit)
-      .map((entry) => ({
-        ...entry,
-        is_read: Number(entry.unread_count === 0),
-        is_starred: Number(entry.starred_count > 0),
-      })),
+    messages: merged.slice(0, query.limit).map((entry) => ({
+      ...entry,
+      is_read: Number(entry.unread_count === 0),
+      is_starred: Number(entry.starred_count > 0),
+    })),
     partitions: targets.map((entry) => entry.id),
   };
 }
-export async function mailboxSummary(
-  env: Env,
-  actor: MailActor,
-  mailboxId: string,
-) {
+export async function mailboxSummary(env: Env, actor: MailActor, mailboxId: string) {
   await authorize(env, actor, mailboxId, "read");
   const parts = await mailbox(env, mailboxId).partitions();
   const summaries = await mapPartitions(parts, (entry) =>

@@ -1,0 +1,13 @@
+# Dependencies and generated files
+node_modules/
+.husky/_/
+.wrangler/
+.officeflare-deploy-*.jsonc
+dist/
+coverage/
+worker-configuration.d.ts
+package-lock.json
+
+# Local archives and audit evidence
+.attic/
+audits/

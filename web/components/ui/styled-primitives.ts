@@ -198,13 +198,15 @@ export declare namespace Fieldset {
 
 export const Form = /* @__PURE__ */ styledPart(BaseForm, "form");
 export declare namespace Form {
-  type Props<FormValues extends Record<string, any> = Record<string, any>> = BaseForm.Props<FormValues>;
+  type Props<FormValues extends Record<string, any> = Record<string, any>> =
+    BaseForm.Props<FormValues>;
   type State = BaseForm.State;
   type Actions = BaseForm.Actions;
   type ValidationMode = BaseForm.ValidationMode;
   type SubmitEventReason = BaseForm.SubmitEventReason;
   type SubmitEventDetails = BaseForm.SubmitEventDetails;
-  type Values<FormValues extends Record<string, any> = Record<string, any>> = BaseForm.Values<FormValues>;
+  type Values<FormValues extends Record<string, any> = Record<string, any>> =
+    BaseForm.Values<FormValues>;
 }
 
 export const Menubar = /* @__PURE__ */ styledPart(BaseMenubar, "menubar");
@@ -420,7 +422,8 @@ export const Slider = /* @__PURE__ */ styledParts(BaseSlider, {
 export declare namespace Slider {
   namespace Root {
     type State = BaseSlider.Root.State;
-    type Props<Value extends number | readonly number[] = number | readonly number[]> = BaseSlider.Root.Props<Value>;
+    type Props<Value extends number | readonly number[] = number | readonly number[]> =
+      BaseSlider.Root.Props<Value>;
     type ChangeEventReason = BaseSlider.Root.ChangeEventReason;
     type ChangeEventDetails = BaseSlider.Root.ChangeEventDetails;
     type CommitEventReason = BaseSlider.Root.CommitEventReason;
@@ -917,7 +920,10 @@ export const Select = /* @__PURE__ */ styledParts(BaseSelect, {
 });
 export declare namespace Select {
   namespace Root {
-    type Props<Value, Multiple extends boolean | undefined = false> = BaseSelect.Root.Props<Value, Multiple>;
+    type Props<Value, Multiple extends boolean | undefined = false> = BaseSelect.Root.Props<
+      Value,
+      Multiple
+    >;
     type State = BaseSelect.Root.State;
     type Actions = BaseSelect.Root.Actions;
     type ChangeEventReason = BaseSelect.Root.ChangeEventReason;
@@ -1025,7 +1031,11 @@ export const Combobox = /* @__PURE__ */ styledParts(BaseCombobox, {
 });
 export declare namespace Combobox {
   namespace Root {
-    type Props<Value, Multiple extends boolean | undefined = false, Item = Value> = BaseCombobox.Root.Props<Value, Multiple, Item>;
+    type Props<
+      Value,
+      Multiple extends boolean | undefined = false,
+      Item = Value,
+    > = BaseCombobox.Root.Props<Value, Multiple, Item>;
     type State = BaseCombobox.Root.State;
     type Actions = BaseCombobox.Root.Actions;
     type ChangeEventReason = BaseCombobox.Root.ChangeEventReason;

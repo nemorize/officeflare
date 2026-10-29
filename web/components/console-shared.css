@@ -1,11 +1,37 @@
-.console-page-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.console-page-header > button, .console-page-header > a { flex-shrink: 0; }
-@media (max-width: 640px) {
-  .console-page-header { align-items: flex-start; }
-  .account-page-header.console-page-header h1 { font-size: 24px; }
-  :is(.account-page-header, .account-panel-header).console-page-header p { font-size: 12px; }
+.console-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
 }
-.console-check { align-items: flex-start; }
-.console-check [data-ui="checkbox-root"] { margin-block-start: 1px; }
-.console-check strong { display: block; font-weight: 500; }
-.console-check small { display: block; color: var(--ui-muted); font-size: 11px; margin-block-start: 4px; }
+.console-page-header > button,
+.console-page-header > a {
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .console-page-header {
+    align-items: flex-start;
+  }
+  .account-page-header.console-page-header h1 {
+    font-size: 24px;
+  }
+  :is(.account-page-header, .account-panel-header).console-page-header p {
+    font-size: 12px;
+  }
+}
+.console-check {
+  align-items: flex-start;
+}
+.console-check [data-ui="checkbox-root"] {
+  margin-block-start: 1px;
+}
+.console-check strong {
+  display: block;
+  font-weight: 500;
+}
+.console-check small {
+  display: block;
+  color: var(--ui-muted);
+  font-size: 11px;
+  margin-block-start: 4px;
+}

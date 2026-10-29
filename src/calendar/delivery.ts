@@ -54,10 +54,7 @@ export function notificationStatements(
     return c.env.DB.prepare(compiled.sql).bind(...compiled.params);
   });
 }
-type DeliveryBuild = (
-  proof: string,
-  operation: string,
-) => D1PreparedStatement[];
+type DeliveryBuild = (proof: string, operation: string) => D1PreparedStatement[];
 export async function prepareDeliveries(
   c: CalendarContext,
   cal: Calendar,
@@ -75,11 +72,7 @@ export async function prepareDeliveries(
   if (options.sendUpdates !== undefined)
     choice(options.sendUpdates, "send_updates", ["external_only", "none"]);
   if (attendees.length > 100)
-    fail(
-      422,
-      "TOO_MANY_ATTENDEES",
-      "Synchronous invitation delivery is limited to 100 attendees",
-    );
+    fail(422, "TOO_MANY_ATTENDEES", "Synchronous invitation delivery is limited to 100 attendees");
   if (!occurrenceKey && attendees.some((value) => value.occurrence_key)) {
     const builds = [
       await prepareDeliveries(
@@ -93,15 +86,13 @@ export async function prepareDeliveries(
       ),
     ];
     for (const key of new Set(
-      attendees
-        .filter((value) => value.occurrence_key)
-        .map((value) => value.occurrence_key),
+      attendees.filter((value) => value.occurrence_key).map((value) => value.occurrence_key),
     )) {
       try {
         const original = originalOccurrence(event, key),
-          override = (
-            options.overrides ?? (await loadOverrides(c, [event.id]))
-          ).find((value) => value.occurrence_key === key),
+          override = (options.overrides ?? (await loadOverrides(c, [event.id]))).find(
+            (value) => value.occurrence_key === key,
+          ),
           effective = applyOverride(event, original, override);
         builds.push(
           await prepareDeliveries(
@@ -115,14 +106,10 @@ export async function prepareDeliveries(
           ),
         );
       } catch (error) {
-        if (
-          !(error instanceof Error && "status" in error && error.status === 404)
-        )
-          throw error;
+        if (!(error instanceof Error && "status" in error && error.status === 404)) throw error;
       }
     }
-    return (proof: string, operation: string) =>
-      builds.flatMap((build) => build(proof, operation));
+    return (proof: string, operation: string) => builds.flatMap((build) => build(proof, operation));
   }
   const overrides =
     occurrenceKey || event.recurrence_json === "[]"
@@ -133,11 +120,7 @@ export async function prepareDeliveries(
       return [
         {
           original_key: override.occurrence_key,
-          event: applyOverride(
-            event,
-            originalOccurrence(event, override.occurrence_key),
-            override,
-          ),
+          event: applyOverride(event, originalOccurrence(event, override.occurrence_key), override),
         },
       ];
     } catch {
@@ -157,12 +140,9 @@ export async function prepareDeliveries(
   for (const attendee of attendees) {
     if (attendee.user_id === cal.data_owner_user_id) continue;
     const id = uuid(),
-      recipient = attendee.user_id
-        ? `user:${attendee.user_id}`
-        : `email:${attendee.email_key}`;
+      recipient = attendee.user_id ? `user:${attendee.user_id}` : `email:${attendee.email_key}`;
     const key = `${event.i_cal_uid}:${event.sequence}:${occurrenceKey}:${action}:${recipient}${options.resend ? `:${uuid()}` : ""}`;
-    const token =
-        attendee.user_id || action === "cancel" ? null : `ofci_${random()}`,
+    const token = attendee.user_id || action === "cancel" ? null : `ofci_${random()}`,
       tokenId = uuid();
     const excluded = !occurrenceKey
       ? await rows<{ occurrence_key: string }>(
@@ -199,12 +179,9 @@ export async function prepareDeliveries(
       action,
       occurrence_key: occurrenceKey,
       overrides: snapshots.filter(
-        (value) =>
-          !excluded.some((item) => item.occurrence_key === value.original_key),
+        (value) => !excluded.some((item) => item.occurrence_key === value.original_key),
       ),
-      url: token
-        ? new URL(`/api/calendar/invitations/${token}`, c.req.url).href
-        : undefined,
+      url: token ? new URL(`/api/calendar/invitations/${token}`, c.req.url).href : undefined,
     };
     prepared.push({
       attendee,
@@ -257,11 +234,7 @@ export async function prepareDeliveries(
             recipient_email: internal ? null : item.attendee.email_address,
             recipient_key: item.recipient,
             channel: internal ? "notification_center" : "email",
-            status: allowed
-              ? internal
-                ? "inbox_committed"
-                : "queued"
-              : "suppressed",
+            status: allowed ? (internal ? "inbox_committed" : "queued") : "suppressed",
             dedup_key: item.key,
             message_id: `<calendar-${item.id}@officeflare>`,
           },
@@ -327,11 +300,6 @@ export async function prepareMessage(
       },
       proof,
     ),
-    insert(
-      c,
-      "calendar_outbox",
-      { id, payload_json: encrypted, run_at: now() },
-      proof,
-    ),
+    insert(c, "calendar_outbox", { id, payload_json: encrypted, run_at: now() }, proof),
   ];
 }

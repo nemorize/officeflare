@@ -1,11 +1,4 @@
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type DragEvent,
-  type MouseEvent,
-} from "react";
+import { Fragment, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
   Button,
@@ -44,7 +37,12 @@ import { DriveDetails } from "../components/drive-details";
 import { DrivePreview, downloadDriveItem } from "../components/drive-preview";
 import { api } from "../lib/api";
 import { useWorkspaceMobile } from "../lib/workspace-responsive";
-import { driveSearchScopes, driveSearchTypes, isDriveSearch, readDriveSearch } from "../lib/drive-search";
+import {
+  driveSearchScopes,
+  driveSearchTypes,
+  isDriveSearch,
+  readDriveSearch,
+} from "../lib/drive-search";
 import {
   canEdit,
   driveDate,
@@ -88,9 +86,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     order = params.get("order") ?? (view === "recent" ? "desc" : "asc");
   const [layout, setLayout] = useState<"list" | "grid">(() => {
     try {
-      return localStorage.getItem("officeflare.drive.layout") === "grid"
-        ? "grid"
-        : "list";
+      return localStorage.getItem("officeflare.drive.layout") === "grid" ? "grid" : "list";
     } catch {
       return "list";
     }
@@ -106,7 +102,11 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     ...(folder ? { parent_id: folder } : searching ? { parent_id: "all" } : {}),
     ...(query ? { q: query } : {}),
     ...(kind ? { kind } : {}),
-    ...Object.fromEntries(["content_type", "owner", "after", "before"].flatMap(key => params.get(key) ? [[key, params.get(key)!]] : [])),
+    ...Object.fromEntries(
+      ["content_type", "owner", "after", "before"].flatMap((key) =>
+        params.get(key) ? [[key, params.get(key)!]] : [],
+      ),
+    ),
   });
   const collection = useDriveCollection<DriveItem>(
     `/api/drive/items?${listQuery}`,
@@ -147,9 +147,12 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
   const [breadcrumbs, setBreadcrumbs] = useState<DriveItem[]>([]),
     [dragging, setDragging] = useState(false),
     dragDepth = useRef(0);
-  const writable = drive.can("create") && (folder
-    ? !!folderResource.data && (folderResource.data.item.actions?.create ?? canEdit(folderResource.data.item))
-    : view === "my" && !searching);
+  const writable =
+    drive.can("create") &&
+    (folder
+      ? !!folderResource.data &&
+        (folderResource.data.item.actions?.create ?? canEdit(folderResource.data.item))
+      : view === "my" && !searching);
   const title = searching
     ? "Search results"
     : (folderResource.data?.item.name ??
@@ -182,12 +185,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
   useEffect(() => {
     if (!collection.loading)
       setSelection(
-        (old) =>
-          new Set(
-            [...old].filter((id) =>
-              collection.items.some((item) => item.id === id),
-            ),
-          ),
+        (old) => new Set([...old].filter((id) => collection.items.some((item) => item.id === id))),
       );
   }, [collection.items, collection.loading]);
   useEffect(() => {
@@ -201,10 +199,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         let parent = currentFolder.parent_id;
         while (parent && trail.length < 100 && !visited.has(parent)) {
           try {
-            const { item } = await api<{ item: DriveItem }>(
-              `/api/drive/items/${parent}`,
-              { signal: controller.signal },
-            );
+            const { item } = await api<{ item: DriveItem }>(`/api/drive/items/${parent}`, {
+              signal: controller.signal,
+            });
             visited.add(item.id);
             trail.unshift(item);
             parent = item.parent_id;
@@ -264,9 +261,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     else {
       setPreview(item);
       void freshItem(item.id)
-        .then((current) =>
-          setPreview((old) => (old?.id === current.id ? current : old)),
-        )
+        .then((current) => setPreview((old) => (old?.id === current.id ? current : old)))
         .catch((failure) => notify.error(driveFailure(failure)));
     }
   };
@@ -288,8 +283,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       const failures: string[] = [];
       for (const item of items)
         try {
-          if (name === "download" && item.kind === "file")
-            await downloadDriveItem(item);
+          if (name === "download" && item.kind === "file") await downloadDriveItem(item);
           else if (name === "star")
             await api(`/api/drive/items/${item.id}/star`, {
               method: "PUT",
@@ -392,16 +386,14 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     if (failures.length) throw new Error(failures.join("\n"));
     setSelection(new Set());
   };
-  const empty =
-    !collection.loading && !collection.error && !collection.items.length;
+  const empty = !collection.loading && !collection.error && !collection.items.length;
   return (
     <section
       className={`drive-page${selecting ? " drive-selection-mode" : ""}`}
       onDragEnter={onDrag}
       onDragLeave={onDrag}
       onDragOver={(event) => {
-        if (Array.from(event.dataTransfer.types).includes("Files"))
-          event.preventDefault();
+        if (Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault();
       }}
       onDrop={drop}
       aria-label={title}
@@ -438,12 +430,17 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <p>
                 {[
                   query && `“${query}”`,
-                  (params.get("content_type") || kind) && (driveSearchTypes.find(option => option.value === searchFields.type)?.label ?? searchFields.type),
-                  searchFields.scope !== "all" && driveSearchScopes.find(option => option.value === searchFields.scope)?.label,
+                  (params.get("content_type") || kind) &&
+                    (driveSearchTypes.find((option) => option.value === searchFields.type)?.label ??
+                      searchFields.type),
+                  searchFields.scope !== "all" &&
+                    driveSearchScopes.find((option) => option.value === searchFields.scope)?.label,
                   searchFields.owner && `Owner: ${searchFields.owner}`,
                   searchFields.after && `From ${searchFields.after}`,
                   searchFields.before && `Through ${searchFields.before}`,
-                ].filter(Boolean).join(" · ") || "All accessible files"}
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "All accessible files"}
               </p>
             )}
           </div>
@@ -453,7 +450,8 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             </div>
             {folder && folderResource.data?.item.effective_role === "owner" && (
               <Button
-                mobileIcon className="drive-folder-share"
+                mobileIcon
+                className="drive-folder-share"
                 aria-label="Share folder"
                 onClick={() => operate("share", [folderResource.data!.item])}
               >
@@ -467,32 +465,39 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               onClick={drive.refresh}
               disabled={collection.loading}
             />
-            {mobile ? <Button
-              ref={selectionButton}
-              variant="ghost"
-              size="touch"
-              aria-label={selecting ? "Exit selection mode" : "Select files"}
-              aria-pressed={selecting}
-              disabled={!collection.items.length && !selecting}
-              onClick={() => {
-                if (selecting) exitSelection();
-                else setSelectionMode(true);
-              }}
-            >{selecting ? "Done" : "Select"}</Button> : <DriveIconButton
-              icon="sidebar"
-              label={
-                detailsOpen ? "Hide file information" : "Show file information"
-              }
-              aria-pressed={detailsOpen}
-              disabled={!selectedId}
-              onClick={() => setDetailsOpen(!detailsOpen)}
-            />}
+            {mobile ? (
+              <Button
+                ref={selectionButton}
+                variant="ghost"
+                size="touch"
+                aria-label={selecting ? "Exit selection mode" : "Select files"}
+                aria-pressed={selecting}
+                disabled={!collection.items.length && !selecting}
+                onClick={() => {
+                  if (selecting) exitSelection();
+                  else setSelectionMode(true);
+                }}
+              >
+                {selecting ? "Done" : "Select"}
+              </Button>
+            ) : (
+              <DriveIconButton
+                icon="sidebar"
+                label={detailsOpen ? "Hide file information" : "Show file information"}
+                aria-pressed={detailsOpen}
+                disabled={!selectedId}
+                onClick={() => setDetailsOpen(!detailsOpen)}
+              />
+            )}
           </div>
         </header>
         {view === "trash" && (
           <div className="drive-trash-notice">
             <Icon name="trash" />
-            <span>Items in trash are automatically deleted after {drive.capabilities?.trash_retention_days ?? "the configured number of"} days.</span>
+            <span>
+              Items in trash are automatically deleted after{" "}
+              {drive.capabilities?.trash_retention_days ?? "the configured number of"} days.
+            </span>
           </div>
         )}
         <div className="drive-toolbar-slot">
@@ -504,9 +509,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <DriveSelect
                 label="Filter by type"
                 value={kind || "all"}
-                onChange={(value) =>
-                  changeFilter("kind", value === "all" ? "" : value)
-                }
+                onChange={(value) => changeFilter("kind", value === "all" ? "" : value)}
                 options={[
                   { value: "all", label: "All types" },
                   { value: "folder", label: "Folders" },
@@ -514,11 +517,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 ]}
               />
               {kind && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => changeFilter("kind", "")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => changeFilter("kind", "")}>
                   Clear
                   <Icon name="close" width="12" height="12" />
                 </Button>
@@ -526,10 +525,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             </div>
             <div className="drive-view-options">
               <Menu.Root>
-                <Menu.Trigger
-                  render={<Button variant="ghost" size="sm" />}
-                  aria-label="Sort files"
-                >
+                <Menu.Trigger render={<Button variant="ghost" size="sm" />} aria-label="Sort files">
                   <Icon name="sort" />
                   <span>
                     {sort === "name"
@@ -566,9 +562,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     }}
                   >
                     <Icon name="sort" />
-                    {order === "asc"
-                      ? "Switch to descending"
-                      : "Switch to ascending"}
+                    {order === "asc" ? "Switch to descending" : "Switch to ascending"}
                   </Menu.Item>
                 </MenuPopup>
               </Menu.Root>
@@ -578,14 +572,10 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 className="drive-layout-toggle"
                 aria-label="File view"
               >
-                <Toggle value="list" data-size="icon"
-                  aria-label="List view"
-                >
+                <Toggle value="list" data-size="icon" aria-label="List view">
                   <Icon name="list" />
                 </Toggle>
-                <Toggle value="grid" data-size="icon"
-                  aria-label="Grid view"
-                >
+                <Toggle value="grid" data-size="icon" aria-label="Grid view">
                   <Icon name="grid" />
                 </Toggle>
               </ToggleGroup>
@@ -606,19 +596,21 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 }}
               />
               <strong>{selection.size} selected</strong>
-              {mobile && selectedId && <DriveIconButton
-                icon="sidebar"
-                label={detailsOpen ? "Hide file information" : "Show file information"}
-                aria-pressed={detailsOpen}
-                onClick={() => setDetailsOpen(!detailsOpen)}
-              />}
+              {mobile && selectedId && (
+                <DriveIconButton
+                  icon="sidebar"
+                  label={detailsOpen ? "Hide file information" : "Show file information"}
+                  aria-pressed={detailsOpen}
+                  onClick={() => setDetailsOpen(!detailsOpen)}
+                />
+              )}
               {view === "trash" ? (
                 <>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => operate("restore", selected)}
-                    disabled={!selected.every(item => item.actions?.update !== false)}
+                    disabled={!selected.every((item) => item.actions?.update !== false)}
                   >
                     <Icon name="undo" />
                     Restore
@@ -627,7 +619,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     variant="danger"
                     size="sm"
                     onClick={() => operate("delete", selected)}
-                    disabled={!selected.every(item => item.actions?.delete !== false)}
+                    disabled={!selected.every((item) => item.actions?.delete !== false)}
                   >
                     <Icon name="trash" />
                     Delete forever
@@ -635,14 +627,13 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 </>
               ) : (
                 <>
-                  {selected.length === 1 &&
-                    selected[0]!.effective_role === "owner" && (
-                      <DriveIconButton
-                        icon="users"
-                        label="Share selected item"
-                        onClick={() => operate("share", selected)}
-                      />
-                    )}
+                  {selected.length === 1 && selected[0]!.effective_role === "owner" && (
+                    <DriveIconButton
+                      icon="users"
+                      label="Share selected item"
+                      onClick={() => operate("share", selected)}
+                    />
+                  )}
                   <DriveIconButton
                     icon="star"
                     label="Toggle starred"
@@ -659,7 +650,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   <DriveIconButton
                     icon="copy"
                     label="Copy selected items"
-                    disabled={!selected.every(item => item.actions?.copy !== false)}
+                    disabled={!selected.every((item) => item.actions?.copy !== false)}
                     onClick={() => operate("copy", selected)}
                   />
                   {selected.length === 1 && selected[0]!.kind === "file" && (
@@ -690,13 +681,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         <DriveState
           layout={layout}
           loading={
-            collection.loading ||
-            (!!folder && folderResource.loading && !folderResource.data)
+            collection.loading || (!!folder && folderResource.loading && !folderResource.data)
           }
-          error={
-            folderResource.error ||
-            (collection.items.length ? "" : collection.error)
-          }
+          error={folderResource.error || (collection.items.length ? "" : collection.error)}
           retry={() => {
             collection.reload();
             folderResource.reload();
@@ -761,229 +748,205 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 Upload files
               </Button>
             )}
-            {searching && (
-              <Button onClick={() => navigate("/drive")}>Clear search</Button>
-            )}
+            {searching && <Button onClick={() => navigate("/drive")}>Clear search</Button>}
           </div>
         )}
         {!collection.loading && !!collection.items.length && (
-          <DriveOwnerPhotosProvider><div className={`drive-files-scroll drive-layout-${layout}`}>
-            <div
-              className="drive-file-grid"
-              role="grid"
-              aria-label={`${title} files`}
-              aria-multiselectable="true"
-            >
-              <div className="drive-table-header" role="row">
-                {showCheckboxes && <div role="columnheader">
-                  <DriveCheckbox hitArea
-                    aria-label="Select all loaded items"
-                    checked={
-                      selection.size === collection.items.length &&
-                      !!selection.size
-                    }
-                    indeterminate={
-                      selection.size > 0 &&
-                      selection.size < collection.items.length
-                    }
-                    onCheckedChange={(checked) =>
-                      setSelection(
-                        checked
-                          ? new Set(collection.items.map((item) => item.id))
-                          : new Set(),
-                      )
-                    }
-                  />
-                </div>}
-                <div role="columnheader">Name</div>
-                <div role="columnheader" className="drive-column-owner">Owner</div>
-                <div role="columnheader">
-                  {view === "trash" ? "Date deleted" : "Last modified"}
-                </div>
-                <div role="columnheader" className="drive-column-size">File size</div>
-                <div role="columnheader">
-                  <span className="visually-hidden">Actions</span>
-                </div>
-              </div>
-              {collection.items.map((item, index) => (
-                <Fragment key={item.id}>
-                  {layout === "grid" &&
-                    item.kind === "file" &&
-                    index > 0 &&
-                    collection.items[index - 1]?.kind === "folder" && (
-                      <div
-                        className="drive-grid-section-label"
-                        role="presentation"
-                      >
-                        Files
-                      </div>
-                    )}
-                  <ContextMenu.Root>
-                    <ContextMenu.Trigger
-                      render={
-                        <div
-                          role="row"
-                          tabIndex={0}
-                          className={`drive-file-row${selection.has(item.id) ? " is-selected" : ""}`}
-                          aria-selected={selection.has(item.id)}
-                        />
-                      }
-                      onContextMenu={() => {
-                        if (!selection.has(item.id))
-                          setSelection(new Set([item.id]));
-                      }}
-                      onClick={(event) => {
-                        if (
-                          !(event.target as HTMLElement).closest(
-                            'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
+          <DriveOwnerPhotosProvider>
+            <div className={`drive-files-scroll drive-layout-${layout}`}>
+              <div
+                className="drive-file-grid"
+                role="grid"
+                aria-label={`${title} files`}
+                aria-multiselectable="true"
+              >
+                <div className="drive-table-header" role="row">
+                  {showCheckboxes && (
+                    <div role="columnheader">
+                      <DriveCheckbox
+                        hitArea
+                        aria-label="Select all loaded items"
+                        checked={selection.size === collection.items.length && !!selection.size}
+                        indeterminate={
+                          selection.size > 0 && selection.size < collection.items.length
+                        }
+                        onCheckedChange={(checked) =>
+                          setSelection(
+                            checked ? new Set(collection.items.map((item) => item.id)) : new Set(),
                           )
-                        ) {
-                          if (selecting) toggleSelected(item);
-                          else if (mobile) open(item);
-                          else select(item, event);
                         }
-                      }}
-                      onDoubleClick={(event) => {
-                        if (
-                          !(event.target as HTMLElement).closest(
-                            'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
-                          )
-                        )
-                          if (!selecting) open(item);
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          event.target === event.currentTarget &&
-                          event.key === "Enter"
-                        ) {
-                          event.preventDefault();
-                          if (selecting) toggleSelected(item);
-                          else open(item);
-                        }
-                        if (
-                          event.target === event.currentTarget &&
-                          event.key === " "
-                        ) {
-                          event.preventDefault();
-                          toggleSelected(item);
-                        }
-                      }}
-                    >
-                      {showCheckboxes && <div className="drive-row-select" role="gridcell">
-                        <DriveCheckbox hitArea
-                          aria-label={`Select ${item.name}`}
-                          checked={selection.has(item.id)}
-                          onCheckedChange={(checked) => {
-                            if (mobile) setSelectionMode(true);
-                            setSelection((old) => {
-                              const next = new Set(old);
-                              checked
-                                ? next.add(item.id)
-                                : next.delete(item.id);
-                              return next;
-                            });
-                            anchor.current = item.id;
-                          }}
-                        />
-                      </div>}
-                      <div className="drive-row-name" role="gridcell">
-                        <DriveFileIcon item={item} />
-                        <Button variant="text"
-                          className="drive-name-button"
-                          onClick={(event) => {
-                            if (selecting) toggleSelected(item);
-                            else if (
-                              mobile ||
-                              event.detail === 0
-                            )
-                              open(item);
-                            else select(item, event);
-                          }}
-                          onDoubleClick={() => { if (!selecting) open(item); }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              if (selecting) toggleSelected(item);
-                              else open(item);
-                            }
-                          }}
-                          title={item.name}
-                        >
-                          {item.name}
-                        </Button>
-                        {item.starred && (
-                          <Icon name="star" className="drive-starred-icon" />
-                        )}
-                        {item.owner_user_id !== item.owner?.id
-                          ? null
-                          : item.effective_role !== "owner" && (
-                              <Icon
-                                name="users"
-                                className="drive-shared-icon"
-                              />
-                            )}
-                      </div>
-                      {item.kind === "file" && (
-                        <div className="drive-card-preview" aria-hidden="true">
-                          <DriveFileIcon item={item} large />
-                          <span>{fileKind(item).label}</span>
+                      />
+                    </div>
+                  )}
+                  <div role="columnheader">Name</div>
+                  <div role="columnheader" className="drive-column-owner">
+                    Owner
+                  </div>
+                  <div role="columnheader">
+                    {view === "trash" ? "Date deleted" : "Last modified"}
+                  </div>
+                  <div role="columnheader" className="drive-column-size">
+                    File size
+                  </div>
+                  <div role="columnheader">
+                    <span className="visually-hidden">Actions</span>
+                  </div>
+                </div>
+                {collection.items.map((item, index) => (
+                  <Fragment key={item.id}>
+                    {layout === "grid" &&
+                      item.kind === "file" &&
+                      index > 0 &&
+                      collection.items[index - 1]?.kind === "folder" && (
+                        <div className="drive-grid-section-label" role="presentation">
+                          Files
                         </div>
                       )}
-                      <div className="drive-row-owner" role="gridcell">
-                        <DriveOwner item={item} />
-                      </div>
-                      <div className="drive-row-date" role="gridcell">
-                        {driveDate(
-                          view === "trash" ? item.trashed_at! : item.updated_at,
+                    <ContextMenu.Root>
+                      <ContextMenu.Trigger
+                        render={
+                          <div
+                            role="row"
+                            tabIndex={0}
+                            className={`drive-file-row${selection.has(item.id) ? " is-selected" : ""}`}
+                            aria-selected={selection.has(item.id)}
+                          />
+                        }
+                        onContextMenu={() => {
+                          if (!selection.has(item.id)) setSelection(new Set([item.id]));
+                        }}
+                        onClick={(event) => {
+                          if (
+                            !(event.target as HTMLElement).closest(
+                              'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
+                            )
+                          ) {
+                            if (selecting) toggleSelected(item);
+                            else if (mobile) open(item);
+                            else select(item, event);
+                          }
+                        }}
+                        onDoubleClick={(event) => {
+                          if (
+                            !(event.target as HTMLElement).closest(
+                              'button,input,[role="checkbox"],[data-ui="checkbox-hit-area"],[data-ui="menu-popup"],[data-ui="context-menu-popup"]',
+                            )
+                          )
+                            if (!selecting) open(item);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.target === event.currentTarget && event.key === "Enter") {
+                            event.preventDefault();
+                            if (selecting) toggleSelected(item);
+                            else open(item);
+                          }
+                          if (event.target === event.currentTarget && event.key === " ") {
+                            event.preventDefault();
+                            toggleSelected(item);
+                          }
+                        }}
+                      >
+                        {showCheckboxes && (
+                          <div className="drive-row-select" role="gridcell">
+                            <DriveCheckbox
+                              hitArea
+                              aria-label={`Select ${item.name}`}
+                              checked={selection.has(item.id)}
+                              onCheckedChange={(checked) => {
+                                if (mobile) setSelectionMode(true);
+                                setSelection((old) => {
+                                  const next = new Set(old);
+                                  checked ? next.add(item.id) : next.delete(item.id);
+                                  return next;
+                                });
+                                anchor.current = item.id;
+                              }}
+                            />
+                          </div>
                         )}
-                      </div>
-                      <div className="drive-row-size" role="gridcell">
-                        {item.kind === "folder"
-                          ? "—"
-                          : formatBytes(driveSize(item))}
-                      </div>
-                      <div className="drive-row-menu" role="gridcell">
-                        <DriveItemMenu
+                        <div className="drive-row-name" role="gridcell">
+                          <DriveFileIcon item={item} />
+                          <Button
+                            variant="text"
+                            className="drive-name-button"
+                            onClick={(event) => {
+                              if (selecting) toggleSelected(item);
+                              else if (mobile || event.detail === 0) open(item);
+                              else select(item, event);
+                            }}
+                            onDoubleClick={() => {
+                              if (!selecting) open(item);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                if (selecting) toggleSelected(item);
+                                else open(item);
+                              }
+                            }}
+                            title={item.name}
+                          >
+                            {item.name}
+                          </Button>
+                          {item.starred && <Icon name="star" className="drive-starred-icon" />}
+                          {item.owner_user_id !== item.owner?.id
+                            ? null
+                            : item.effective_role !== "owner" && (
+                                <Icon name="users" className="drive-shared-icon" />
+                              )}
+                        </div>
+                        {item.kind === "file" && (
+                          <div className="drive-card-preview" aria-hidden="true">
+                            <DriveFileIcon item={item} large />
+                            <span>{fileKind(item).label}</span>
+                          </div>
+                        )}
+                        <div className="drive-row-owner" role="gridcell">
+                          <DriveOwner item={item} />
+                        </div>
+                        <div className="drive-row-date" role="gridcell">
+                          {driveDate(view === "trash" ? item.trashed_at! : item.updated_at)}
+                        </div>
+                        <div className="drive-row-size" role="gridcell">
+                          {item.kind === "folder" ? "—" : formatBytes(driveSize(item))}
+                        </div>
+                        <div className="drive-row-menu" role="gridcell">
+                          <DriveItemMenu
+                            item={item}
+                            trash={view === "trash"}
+                            onAction={(name) => operate(name, [item])}
+                          />
+                        </div>
+                      </ContextMenu.Trigger>
+                      <ContextMenuPopup data-ui-theme="neutral">
+                        <DriveMenuItems
                           item={item}
                           trash={view === "trash"}
+                          context
                           onAction={(name) => operate(name, [item])}
                         />
-                      </div>
-                    </ContextMenu.Trigger>
-                    <ContextMenuPopup data-ui-theme="neutral">
-                      <DriveMenuItems
-                        item={item}
-                        trash={view === "trash"}
-                        context
-                        onAction={(name) => operate(name, [item])}
-                      />
-                    </ContextMenuPopup>
-                  </ContextMenu.Root>
-                </Fragment>
-              ))}
-            </div>
-            <footer className="drive-list-footer">
-              <span>
-                {collection.items.length}{" "}
-                {collection.items.length === 1 ? "item" : "items"}
-                {collection.next ? " loaded" : ""}
-              </span>
-              <span>Single click to select · Double click to open</span>
-            </footer>
-            {collection.next && (
-              <div className="drive-load-more">
-                <Button
-                  onClick={() => void collection.loadMore()}
-                  disabled={collection.more}
-                >
-                  {collection.more ? "Loading…" : "Load more files"}
-                </Button>
+                      </ContextMenuPopup>
+                    </ContextMenu.Root>
+                  </Fragment>
+                ))}
               </div>
-            )}
-            <DriveNotice
-              error={collection.items.length ? collection.error : ""}
-            />
-          </div></DriveOwnerPhotosProvider>
+              <footer className="drive-list-footer">
+                <span>
+                  {collection.items.length} {collection.items.length === 1 ? "item" : "items"}
+                  {collection.next ? " loaded" : ""}
+                </span>
+                <span>Single click to select · Double click to open</span>
+              </footer>
+              {collection.next && (
+                <div className="drive-load-more">
+                  <Button onClick={() => void collection.loadMore()} disabled={collection.more}>
+                    {collection.more ? "Loading…" : "Load more files"}
+                  </Button>
+                </div>
+              )}
+              <DriveNotice error={collection.items.length ? collection.error : ""} />
+            </div>
+          </DriveOwnerPhotosProvider>
         )}
       </div>
       {detailsOpen && selectedId && (
@@ -1031,7 +994,18 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         <DrivePreview
           item={preview}
           canDownload={preview.actions?.download !== false}
-          canPreview={preview.actions?.download !== false || ["text/plain", "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"].includes(preview.current_version?.content_type ?? preview.content_type ?? "")}
+          canPreview={
+            preview.actions?.download !== false ||
+            [
+              "text/plain",
+              "application/pdf",
+              "image/jpeg",
+              "image/png",
+              "image/gif",
+              "image/webp",
+              "image/avif",
+            ].includes(preview.current_version?.content_type ?? preview.content_type ?? "")
+          }
           onClose={() => setPreview(null)}
           onShare={
             preview.effective_role === "owner"
@@ -1044,16 +1018,10 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         />
       )}
       {dialog?.type === "rename" && (
-        <DriveRenameDialog
-          item={dialog.items[0]!}
-          onClose={() => setDialog(null)}
-        />
+        <DriveRenameDialog item={dialog.items[0]!} onClose={() => setDialog(null)} />
       )}
       {dialog?.type === "share" && (
-        <DriveShareDialog
-          item={dialog.items[0]!}
-          onClose={() => setDialog(null)}
-        />
+        <DriveShareDialog item={dialog.items[0]!} onClose={() => setDialog(null)} />
       )}
       {(dialog?.type === "move" || dialog?.type === "copy") && (
         <DriveDestinationDialog
@@ -1064,13 +1032,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       )}
       {(dialog?.type === "trash" || dialog?.type === "delete") && (
         <DriveConfirmDialog
-          title={
-            dialog.type === "delete" ? "Delete forever?" : "Move to trash?"
-          }
+          title={dialog.type === "delete" ? "Delete forever?" : "Move to trash?"}
           description={`${dialog.items.length === 1 ? `“${dialog.items[0]!.name}”` : `${dialog.items.length} selected items`}${dialog.items.some((item) => item.kind === "folder") ? " and any folder contents" : ""} ${dialog.type === "delete" ? "will be permanently deleted. This cannot be undone." : "will be moved to trash. You can restore them within 30 days."}`}
-          confirm={
-            dialog.type === "delete" ? "Delete forever" : "Move to trash"
-          }
+          confirm={dialog.type === "delete" ? "Delete forever" : "Move to trash"}
           destructive
           onClose={() => setDialog(null)}
           action={trashOperation}
@@ -1126,7 +1090,11 @@ function DriveMenuItems({
         File information
       </Item>
       <Separator />
-      <Item disabled={item.actions?.delete === false} data-variant="danger" onClick={() => onAction("delete")}>
+      <Item
+        disabled={item.actions?.delete === false}
+        data-variant="danger"
+        onClick={() => onAction("delete")}
+      >
         <Icon name="trash" />
         Delete forever
       </Item>
@@ -1177,7 +1145,11 @@ function DriveMenuItems({
       {item.effective_role === "owner" && (
         <>
           <Separator />
-          <Item disabled={item.actions?.delete === false} data-variant="danger" onClick={() => onAction("trash")}>
+          <Item
+            disabled={item.actions?.delete === false}
+            data-variant="danger"
+            onClick={() => onAction("trash")}
+          >
             <Icon name="trash" />
             Move to trash
           </Item>
@@ -1192,35 +1164,24 @@ export function DriveLinkedItemPage() {
     navigate = useNavigate(),
     drive = useDrive(),
     id = location.pathname.split("/").at(-1)!,
-    resource = useDriveResource<{ item: DriveItem }>(
-      `/api/drive/items/${id}`,
-      drive.revision,
-    ),
+    resource = useDriveResource<{ item: DriveItem }>(`/api/drive/items/${id}`, drive.revision),
     action = useDriveAction();
   const [message, setMessage] = useState(""),
     [role, setRole] = useState("viewer"),
     [sent, setSent] = useState(false);
   useEffect(() => {
-    if (resource.data?.item.kind === "folder")
-      navigate(`/drive/folders/${id}`, { replace: true });
+    if (resource.data?.item.kind === "folder") navigate(`/drive/folders/${id}`, { replace: true });
   }, [resource.data, id, navigate]);
-  if (resource.data?.item.kind === "file")
-    return <DrivePage linkedItem={resource.data.item} />;
+  if (resource.data?.item.kind === "file") return <DrivePage linkedItem={resource.data.item} />;
   return (
     <section className="drive-linked-state">
-      <DriveState
-        loading={resource.loading}
-        error={resource.error}
-        retry={resource.reload}
-      />
+      <DriveState loading={resource.loading} error={resource.error} retry={resource.reload} />
       {resource.error && (
         <div className="drive-access-request-form">
           <h2>Request access</h2>
           <p>The owner can give your account access to this item.</p>
           {sent ? (
-            <p role="status">
-              If this item is available, the owner will receive your request.
-            </p>
+            <p role="status">If this item is available, the owner will receive your request.</p>
           ) : (
             <form
               onSubmit={(event) => {

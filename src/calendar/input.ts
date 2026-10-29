@@ -15,10 +15,7 @@ export function object(value: unknown, name = "body"): Record<string, unknown> {
     fail(400, "INVALID_INPUT", `Invalid ${name}`);
   return value as Record<string, unknown>;
 }
-export function fields(
-  data: Record<string, unknown>,
-  allowed: readonly string[],
-) {
+export function fields(data: Record<string, unknown>, allowed: readonly string[]) {
   const extra = Object.keys(data).find((key) => !allowed.includes(key));
   if (extra) fail(400, "INVALID_INPUT", `Unknown field: ${extra}`);
 }
@@ -33,12 +30,7 @@ export async function body(c: CalendarContext, allowed: readonly string[]) {
   fields(data, allowed);
   return data;
 }
-export function text(
-  value: unknown,
-  name: string,
-  max: number,
-  empty = false,
-): string {
+export function text(value: unknown, name: string, max: number, empty = false): string {
   if (
     typeof value !== "string" ||
     value.length > max ||
@@ -50,8 +42,7 @@ export function text(
 }
 export const identifier = (value: unknown, name = "id") => {
   const result = text(value, name, 255);
-  if (!/^[A-Za-z0-9_-]+$/.test(result))
-    fail(400, "INVALID_INPUT", `Invalid ${name}`);
+  if (!/^[A-Za-z0-9_-]+$/.test(result)) fail(400, "INVALID_INPUT", `Invalid ${name}`);
   return result;
 };
 export function integer(
@@ -60,20 +51,11 @@ export function integer(
   min: number,
   max = Number.MAX_SAFE_INTEGER,
 ): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < min ||
-    value > max
-  )
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max)
     fail(400, "INVALID_INPUT", `Invalid ${name}`);
   return value;
 }
-export function choice<T extends string>(
-  value: unknown,
-  name: string,
-  choices: readonly T[],
-): T {
+export function choice<T extends string>(value: unknown, name: string, choices: readonly T[]): T {
   if (typeof value !== "string" || !choices.includes(value as T))
     fail(400, "INVALID_INPUT", `Invalid ${name}`);
   return value as T;
@@ -90,50 +72,41 @@ export function color(value: unknown): string | null {
 }
 export function jsonObject(value: unknown, name: string, max = 8192) {
   const result = object(value, name);
-  if (JSON.stringify(result).length > max)
-    fail(400, "INVALID_INPUT", `${name} is too large`);
+  if (JSON.stringify(result).length > max) fail(400, "INVALID_INPUT", `${name} is too large`);
   return result;
 }
-export function expectedVersion(
-  c: CalendarContext,
-  data?: Record<string, unknown>,
-) {
-  const raw =
-      data && Object.hasOwn(data, "version")
-        ? data.version
-        : c.req.query("version"),
+export function expectedVersion(c: CalendarContext, data?: Record<string, unknown>) {
+  const raw = data && Object.hasOwn(data, "version") ? data.version : c.req.query("version"),
     header = c.req.header("If-Match");
   const fromBody =
     raw === undefined
       ? undefined
-      : integer(
-          typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : raw,
-          "version",
-          1,
-        );
+      : integer(typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : raw, "version", 1);
   const match = header?.match(/^"v([1-9][0-9]*)"$/);
   if (header && !match) fail(400, "INVALID_INPUT", "Invalid If-Match");
-  const fromHeader = match
-    ? integer(Number(match[1]), "If-Match", 1)
-    : undefined;
-  if (
-    fromBody !== undefined &&
-    fromHeader !== undefined &&
-    fromBody !== fromHeader
-  )
+  const fromHeader = match ? integer(Number(match[1]), "If-Match", 1) : undefined;
+  if (fromBody !== undefined && fromHeader !== undefined && fromBody !== fromHeader)
     fail(400, "INVALID_INPUT", "version and If-Match disagree");
   const version = fromBody ?? fromHeader;
-  if (version === undefined)
-    fail(428, "VERSION_REQUIRED", "A version or If-Match is required");
+  if (version === undefined) fail(428, "VERSION_REQUIRED", "A version or If-Match is required");
   return version;
 }
 export function pageLimit(c: CalendarContext, query?: URLSearchParams) {
-  return integer(Number((query ? query.get("limit") : c.req.query("limit")) ?? 100), "limit", 1, 500);
+  return integer(
+    Number((query ? query.get("limit") : c.req.query("limit")) ?? 100),
+    "limit",
+    1,
+    500,
+  );
 }
-export function queryFlag(c: CalendarContext, name: string, fallback = false, query?: URLSearchParams) {
-  const value = query ? query.get(name) ?? undefined : c.req.query(name);
+export function queryFlag(
+  c: CalendarContext,
+  name: string,
+  fallback = false,
+  query?: URLSearchParams,
+) {
+  const value = query ? (query.get(name) ?? undefined) : c.req.query(name);
   if (value === undefined) return fallback;
-  if (value !== "true" && value !== "false")
-    fail(400, "INVALID_INPUT", `Invalid ${name}`);
+  if (value !== "true" && value !== "false") fail(400, "INVALID_INPUT", `Invalid ${name}`);
   return value === "true";
 }

@@ -16,7 +16,16 @@ export interface DriveItem {
   owner_user_id: string;
   owner?: DrivePerson;
   effective_role?: DriveRole | null;
-  actions?: { create: boolean; update: boolean; delete: boolean; download: boolean; copy: boolean; comment: boolean; internal_share: boolean; public_share: boolean };
+  actions?: {
+    create: boolean;
+    update: boolean;
+    delete: boolean;
+    download: boolean;
+    copy: boolean;
+    comment: boolean;
+    internal_share: boolean;
+    public_share: boolean;
+  };
   description: string;
   version: number;
   current_version_id: string | null;
@@ -45,10 +54,15 @@ export interface DriveQuota {
   status?: "active" | "read_only" | "suspended";
 }
 export interface DriveCapabilities {
-  max_file_bytes: number; trash_retention_days: number; permissions: string[];
-  account_status: "active" | "read_only" | "suspended"; write_locked: boolean;
-  internal_sharing_enabled: boolean; public_sharing_enabled: boolean;
-  public_link_password_required: boolean; public_link_max_days: number;
+  max_file_bytes: number;
+  trash_retention_days: number;
+  permissions: string[];
+  account_status: "active" | "read_only" | "suspended";
+  write_locked: boolean;
+  internal_sharing_enabled: boolean;
+  public_sharing_enabled: boolean;
+  public_link_password_required: boolean;
+  public_link_max_days: number;
 }
 export interface DriveGrant {
   item_id: string;
@@ -96,22 +110,19 @@ export interface DriveActivity {
   created_at: number;
 }
 export type DriveApi = <T>(path: string, options?: ApiOptions) => Promise<T>;
-export const driveSize = (item: DriveItem) =>
-  item.current_version?.size ?? item.size ?? 0;
+export const driveSize = (item: DriveItem) => item.current_version?.size ?? item.size ?? 0;
 export const driveType = (item: DriveItem) =>
-  item.current_version?.content_type ??
-  item.content_type ??
-  "application/octet-stream";
+  item.current_version?.content_type ?? item.content_type ?? "application/octet-stream";
 export const canEdit = (item: DriveItem) =>
   item.actions?.update ?? (item.effective_role === "owner" || item.effective_role === "editor");
 export const canComment = (item: DriveItem) =>
-  item.actions?.comment ?? (item.effective_role === "owner" || item.effective_role === "editor" || item.effective_role === "commenter");
+  item.actions?.comment ??
+  (item.effective_role === "owner" ||
+    item.effective_role === "editor" ||
+    item.effective_role === "commenter");
 export function formatBytes(value: number) {
   if (!value) return "0 B";
-  const unit = Math.min(
-    4,
-    Math.floor(Math.log(Math.max(1, value)) / Math.log(1024)),
-  );
+  const unit = Math.min(4, Math.floor(Math.log(Math.max(1, value)) / Math.log(1024)));
   return `${new Intl.NumberFormat("en", { maximumFractionDigits: unit ? 1 : 0 }).format(value / 1024 ** unit)} ${["B", "KB", "MB", "GB", "TB"][unit]}`;
 }
 export function driveDate(value: number, full = false) {
@@ -124,40 +135,25 @@ export function driveDate(value: number, full = false) {
 }
 export function fileKind(item: DriveItem) {
   const type = driveType(item);
-  if (item.kind === "folder")
-    return { label: "Folder", icon: "folder" as const, tone: "folder" };
-  if (type.startsWith("image/"))
-    return { label: "Image", icon: "image" as const, tone: "image" };
-  if (type === "application/pdf")
-    return { label: "PDF", icon: "file" as const, tone: "pdf" };
+  if (item.kind === "folder") return { label: "Folder", icon: "folder" as const, tone: "folder" };
+  if (type.startsWith("image/")) return { label: "Image", icon: "image" as const, tone: "image" };
+  if (type === "application/pdf") return { label: "PDF", icon: "file" as const, tone: "pdf" };
   if (/spreadsheet|csv|excel/.test(type))
     return { label: "Spreadsheet", icon: "table" as const, tone: "sheet" };
   if (type.startsWith("text/"))
     return { label: "Text document", icon: "file" as const, tone: "text" };
   if (/zip|compressed|archive/.test(type))
     return { label: "Archive", icon: "archive" as const, tone: "archive" };
-  if (type.startsWith("video/"))
-    return { label: "Video", icon: "image" as const, tone: "video" };
+  if (type.startsWith("video/")) return { label: "Video", icon: "image" as const, tone: "video" };
   return { label: "File", icon: "file" as const, tone: "file" };
 }
 export const previewKind = (item: DriveItem) => {
   if (driveSize(item) > 20 * 1024 * 1024) return null;
   const type = driveType(item).split(";")[0]!.toLowerCase();
-  if (
-    [
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-      "image/gif",
-      "image/avif",
-    ].includes(type)
-  )
+  if (["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"].includes(type))
     return "image";
   if (type === "application/pdf") return "pdf";
-  if (
-    type.startsWith("text/") ||
-    ["application/json", "application/xml"].includes(type)
-  )
+  if (type.startsWith("text/") || ["application/json", "application/xml"].includes(type))
     return "text";
   return null;
 };
@@ -173,8 +169,7 @@ export function selectDriveItems(
   if (range && anchor && ids.includes(anchor) && ids.includes(id)) {
     const start = ids.indexOf(anchor),
       end = ids.indexOf(id);
-    for (const key of ids.slice(Math.min(start, end), Math.max(start, end) + 1))
-      next.add(key);
+    for (const key of ids.slice(Math.min(start, end), Math.max(start, end) + 1)) next.add(key);
   } else if (additive && next.has(id)) next.delete(id);
   else next.add(id);
   return next;
@@ -184,16 +179,11 @@ export function driveLocation(path: string) {
   const view = path.split("/")[2] ?? "my";
   return {
     folder: folder ?? null,
-    view: folder
-      ? "all"
-      : ["shared", "recent", "starred", "trash"].includes(view)
-        ? view
-        : "my",
+    view: folder ? "all" : ["shared", "recent", "starred", "trash"].includes(view) ? view : "my",
   };
 }
 export function publicShareUrl(token: string, origin: string) {
-  if (!/^ofd_[A-Za-z0-9_-]{43}$/.test(token))
-    throw new Error("Invalid share token.");
+  if (!/^ofd_[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Invalid share token.");
   return `${origin}/share/drive/${token}`;
 }
 export interface UploadSession {
@@ -258,11 +248,7 @@ export async function uploadDriveFile(
       const completed = new Set(session.parts.map((part) => part.part_number));
       let sent = session.parts.reduce((sum, part) => sum + part.size, 0);
       update({ sent });
-      for (
-        let index = 0;
-        index < Math.ceil(entry.file.size / partBytes);
-        index++
-      ) {
+      for (let index = 0; index < Math.ceil(entry.file.size / partBytes); index++) {
         if (completed.has(index + 1)) continue;
         const chunk = entry.file.slice(
           index * partBytes,
@@ -277,10 +263,10 @@ export async function uploadDriveFile(
       }
     }
   }
-  const result = await request<{ item: DriveItem }>(
-    `/api/drive/uploads/${upload.id}/complete`,
-    { method: "POST", body: {} },
-  );
+  const result = await request<{ item: DriveItem }>(`/api/drive/uploads/${upload.id}/complete`, {
+    method: "POST",
+    body: {},
+  });
   update({ state: "done", sent: entry.file.size });
   return result.item;
 }
@@ -293,7 +279,5 @@ export function folderPaths(files: { webkitRelativePath: string }[]) {
     for (let count = 1; count < segments.length; count++)
       paths.add(segments.slice(0, count).join("/"));
   }
-  return [...paths].sort(
-    (a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b),
-  );
+  return [...paths].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
 }

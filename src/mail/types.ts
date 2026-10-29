@@ -1,10 +1,6 @@
 import type { AppEnv } from "../auth/types";
 
-export type MailAction =
-  | "read"
-  | "write"
-  | "send"
-  | "manage";
+export type MailAction = "read" | "write" | "send" | "manage";
 export interface MailActor {
   user_id: string;
   auth_version: number;
@@ -61,7 +57,14 @@ export interface Attachment {
   r2_key: string;
   disposition: "inline" | "attachment";
 }
-export interface ComposeState { to: string; cc: string; bcc: string; reply_to?: string; address_id?: string; schedule?: string; }
+export interface ComposeState {
+  to: string;
+  cc: string;
+  bcc: string;
+  reply_to?: string;
+  address_id?: string;
+  schedule?: string;
+}
 export interface MailBody {
   compose_state?: ComposeState;
   editor_body?: { text: string; html: string };
@@ -273,4 +276,10 @@ export function publicSubmission<T extends Submission>(value: T) {
   return result;
 }
 
-export interface ThreadRow extends MessageRow { message_count: number; unread_count: number; starred_count: number; participants: string; recipient_summary: string; }
+export interface ThreadRow extends MessageRow {
+  message_count: number;
+  unread_count: number;
+  starred_count: number;
+  participants: string;
+  recipient_summary: string;
+}

@@ -5,19 +5,40 @@ import { runInNewContext } from "node:vm";
 import { createColorThemeStore } from "../web/lib/color-theme.ts";
 
 function fixture({ saved = null, dark = false, blocked = false } = {}) {
-  const systemListeners = new Set(), storageListeners = new Set(), applied = [];
+  const systemListeners = new Set(),
+    storageListeners = new Set(),
+    applied = [];
   const store = createColorThemeStore({
-    read: () => { if (blocked) throw new Error("Storage unavailable"); return saved; },
-    write: value => { if (blocked) throw new Error("Storage unavailable"); saved = value; },
+    read: () => {
+      if (blocked) throw new Error("Storage unavailable");
+      return saved;
+    },
+    write: (value) => {
+      if (blocked) throw new Error("Storage unavailable");
+      saved = value;
+    },
     systemDark: () => dark,
-    apply: scheme => applied.push(scheme),
-    onSystemChange: listener => { systemListeners.add(listener); return () => systemListeners.delete(listener); },
-    onStorageChange: listener => { storageListeners.add(listener); return () => storageListeners.delete(listener); },
+    apply: (scheme) => applied.push(scheme),
+    onSystemChange: (listener) => {
+      systemListeners.add(listener);
+      return () => systemListeners.delete(listener);
+    },
+    onStorageChange: (listener) => {
+      storageListeners.add(listener);
+      return () => storageListeners.delete(listener);
+    },
   });
   return {
-    store, applied,
-    system(value) { dark = value; for (const listener of systemListeners) listener(); },
-    storage(value) { saved = value; for (const listener of storageListeners) listener(); },
+    store,
+    applied,
+    system(value) {
+      dark = value;
+      for (const listener of systemListeners) listener();
+    },
+    storage(value) {
+      saved = value;
+      for (const listener of storageListeners) listener();
+    },
     saved: () => saved,
     listeners: () => systemListeners.size + storageListeners.size,
   };
@@ -88,15 +109,31 @@ test("saved themes are applied before the app loads, including when storage is u
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   for (const [saved, dark, blocked, expected] of [
-    ["dark", false, false, "dark"], ["light", true, false, "light"],
-    [null, true, false, "dark"], ["invalid", true, false, "dark"],
-    [null, true, true, "dark"], [null, false, true, "light"],
+    ["dark", false, false, "dark"],
+    ["light", true, false, "light"],
+    [null, true, false, "dark"],
+    ["invalid", true, false, "dark"],
+    [null, true, true, "dark"],
+    [null, false, true, "light"],
   ]) {
-    const root = { dataset: {}, style: {} }, meta = {};
+    const root = { dataset: {}, style: {} },
+      meta = {};
     runInNewContext(script, {
-      localStorage: { getItem: () => { if (blocked) throw new Error("Blocked"); return saved; } },
+      localStorage: {
+        getItem: () => {
+          if (blocked) throw new Error("Blocked");
+          return saved;
+        },
+      },
       window: { matchMedia: () => ({ matches: dark }) },
-      document: { documentElement: root, querySelector: () => ({ setAttribute: (key, value) => { meta[key] = value; } }) },
+      document: {
+        documentElement: root,
+        querySelector: () => ({
+          setAttribute: (key, value) => {
+            meta[key] = value;
+          },
+        }),
+      },
     });
     assert.equal(root.dataset.colorScheme, expected);
     assert.equal(root.style.colorScheme, `only ${expected}`);

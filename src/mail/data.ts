@@ -76,22 +76,13 @@ export async function startExport(
   });
   return jobId;
 }
-export async function processDataJob(
-  env: Env,
-  mailboxId: string,
-  jobId: string,
-) {
+export async function processDataJob(env: Env, mailboxId: string, jobId: string) {
   const coordinator = mailbox(env, mailboxId),
     job = await coordinator.claimDataJob(jobId);
   if (!job) return;
   const actor = JSON.parse(job.actor_json) as MailActor;
   try {
-    await authorize(
-      env,
-      actor,
-      mailboxId,
-      job.kind.startsWith("import") ? "write" : "read",
-    );
+    await authorize(env, actor, mailboxId, job.kind.startsWith("import") ? "write" : "read");
     await authorize(env, actor, mailboxId, "read");
     if (job.kind === "reindex") await authorize(env, actor, mailboxId, "write");
     if (job.kind === "restore") {
@@ -159,12 +150,7 @@ export async function processDataJob(
     if (cursor.partition_index >= cursor.partitions.length) {
       if (job.kind === "backup")
         await backupManifest(env, mailboxId, job.output_prefix, job.progress);
-      await coordinator.advanceDataJob(
-        jobId,
-        job.progress,
-        job.cursor_json,
-        true,
-      );
+      await coordinator.advanceDataJob(jobId, job.progress, job.cursor_json, true);
       return;
     }
     const partitionId = cursor.partitions[cursor.partition_index]!,
@@ -181,10 +167,7 @@ export async function processDataJob(
       const number = job.progress + ordinal,
         prefix = job.output_prefix + String(number).padStart(12, "0");
       if (job.kind === "reindex") {
-        await store.rebuildIndex(
-          message.id,
-          body.text || body.html.replace(/<[^>]*>/g, " "),
-        );
+        await store.rebuildIndex(message.id, body.text || body.html.replace(/<[^>]*>/g, " "));
       } else if (job.kind === "backup") {
         // Copy all referenced objects into the backup namespace so later deletion does not invalidate it.
         const bodyKey = prefix + ".body.json";
@@ -235,12 +218,7 @@ export async function processDataJob(
     } else cursor.before = { received_at: last!.received_at, id: last!.id };
     const completed = cursor.partition_index >= cursor.partitions.length;
     if (completed && job.kind === "backup")
-      await backupManifest(
-        env,
-        mailboxId,
-        job.output_prefix,
-        job.progress + page.length,
-      );
+      await backupManifest(env, mailboxId, job.output_prefix, job.progress + page.length);
     await coordinator.advanceDataJob(
       jobId,
       job.progress + page.length,
@@ -265,13 +243,18 @@ export async function renderMime(
   env: Env,
   message: MessageRow & {
     recipients: { kind: string; email_address: string }[];
-    attachments: { filename: string; content_type: string; r2_key: string; content_id?: string | null; disposition?: string }[];
+    attachments: {
+      filename: string;
+      content_type: string;
+      r2_key: string;
+      content_id?: string | null;
+      disposition?: string;
+    }[];
   },
   body: { text: string; html: string },
 ) {
   const boundary = "officeflare-" + id(),
-    encode = (value: string) =>
-      "=?UTF-8?B?" + btoa(unescape(encodeURIComponent(value))) + "?=";
+    encode = (value: string) => "=?UTF-8?B?" + btoa(unescape(encodeURIComponent(value))) + "?=";
   const header = (value: string) => value.replace(/[\r\n]/g, " ");
   const base64 = (value: string) =>
     btoa(unescape(encodeURIComponent(value))).replace(/.{76}/g, "$&\r\n");
@@ -295,9 +278,7 @@ export async function renderMime(
         .map((r) => header(r.email_address))
         .join(", "),
     "Subject: " + encode(message.subject),
-    ...(message.rfc_message_id
-      ? ["Message-ID: <" + header(message.rfc_message_id) + ">"]
-      : []),
+    ...(message.rfc_message_id ? ["Message-ID: <" + header(message.rfc_message_id) + ">"] : []),
     "Date: " + new Date(message.received_at * 1000).toUTCString(),
     "MIME-Version: 1.0",
     "X-Officeflare-Export: reconstructed",
@@ -333,7 +314,9 @@ export async function renderMime(
     lines.push(
       "--" + boundary,
       "Content-Type: " + header(file.content_type),
-      'Content-Disposition: ' + (file.disposition === 'inline' ? 'inline' : 'attachment') + '; filename="' +
+      "Content-Disposition: " +
+        (file.disposition === "inline" ? "inline" : "attachment") +
+        '; filename="' +
         header(file.filename).replaceAll('"', "'") +
         '"',
       ...(file.content_id ? ["Content-ID: <" + header(file.content_id) + ">"] : []),
@@ -379,9 +362,7 @@ export async function exportStream(env: Env, prefix: string) {
             limit: 1000,
           });
           started = true;
-          keys = page.objects
-            .filter((o) => o.key.endsWith(".mbox"))
-            .map((o) => o.key);
+          keys = page.objects.filter((o) => o.key.endsWith(".mbox")).map((o) => o.key);
           index = 0;
           cursor = page.truncated ? page.cursor : undefined;
         }
@@ -451,9 +432,7 @@ async function restorePage(
   await authorize(env, actor, cursor.source_mailbox_id, "read");
   await authorize(env, actor, mailboxId, "write");
   if (cursor.restore_settings) await authorize(env, actor, mailboxId, "manage");
-  const manifestObject = await env.MAIL_BUCKET.get(
-    job.source_r2_key! + "manifest.json",
-  );
+  const manifestObject = await env.MAIL_BUCKET.get(job.source_r2_key! + "manifest.json");
   if (!manifestObject) fail(503, "Backup manifest unavailable");
   const manifest = await manifestObject.json<{
     format: string;
@@ -463,34 +442,29 @@ async function restorePage(
     blocked_senders: { email_address: string }[];
     signature_images?: { id: string; key: string }[];
   }>();
-  if (manifest.format !== "officeflare-mail-v1")
-    fail(400, "Unsupported backup format");
+  if (manifest.format !== "officeflare-mail-v1") fail(400, "Unsupported backup format");
   if (!cursor.initialized) {
     cursor.folder_map = {};
     const currentFolders = await coordinator.folders();
     for (const folder of manifest.folders) {
       const existing = currentFolders.find(
-        (value) =>
-          value.id === folder.id ||
-          value.name.toLowerCase() === folder.name.toLowerCase(),
+        (value) => value.id === folder.id || value.name.toLowerCase() === folder.name.toLowerCase(),
       );
       cursor.folder_map[folder.id] = existing?.id ?? folder.id;
-      if (!folder.system_key && !existing)
-        await coordinator.putFolder(folder.id, folder.name);
+      if (!folder.system_key && !existing) await coordinator.putFolder(folder.id, folder.name);
     }
     if (cursor.restore_settings) {
-      const {
-        signature,
-        retention_days,
-        auto_reply_enabled,
-        auto_reply_subject,
-        auto_reply_text,
-      } = manifest.settings;
+      const { signature, retention_days, auto_reply_enabled, auto_reply_subject, auto_reply_text } =
+        manifest.settings;
       for (const image of manifest.signature_images ?? []) {
-        if (!/^[a-f0-9-]{36}$/.test(image.id) || image.key !== `signature-${image.id}.image`) fail(400, "Invalid signature image in backup");
+        if (!/^[a-f0-9-]{36}$/.test(image.id) || image.key !== `signature-${image.id}.image`)
+          fail(400, "Invalid signature image in backup");
         const object = await env.MAIL_BUCKET.get(job.source_r2_key! + image.key);
         if (!object) fail(503, "Backup signature image unavailable");
-        await env.MAIL_BUCKET.put(imageAssetKey(mailboxId, image.id), object.body, { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata });
+        await env.MAIL_BUCKET.put(imageAssetKey(mailboxId, image.id), object.body, {
+          httpMetadata: object.httpMetadata,
+          customMetadata: object.customMetadata,
+        });
       }
       await coordinator.updateSettings({
         signature: signature!,
@@ -518,8 +492,7 @@ async function restorePage(
               ...action,
               ...(action.folder_id
                 ? {
-                    folder_id:
-                      cursor.folder_map?.[action.folder_id] ?? action.folder_id,
+                    folder_id: cursor.folder_map?.[action.folder_id] ?? action.folder_id,
                   }
                 : {}),
             })),
@@ -535,9 +508,7 @@ async function restorePage(
     limit: 50,
   });
   let count = 0;
-  for (const entry of page.objects.filter((o) =>
-    o.key.endsWith(".message.json"),
-  )) {
+  for (const entry of page.objects.filter((o) => o.key.endsWith(".message.json"))) {
     const object = await env.MAIL_BUCKET.get(entry.key);
     if (!object) fail(503, "Backup message unavailable");
     const source = await object.json<
@@ -588,9 +559,7 @@ async function restorePage(
       await env.MAIL_BUCKET.put(original, object.body);
     }
     const recipient = (kind: string) =>
-      source.recipients
-        .filter((r) => r.kind === kind)
-        .map((r) => r.email_address);
+      source.recipients.filter((r) => r.kind === kind).map((r) => r.email_address);
     const input: MessageInput = {
       id: targetId,
       ingest_id: operation,
@@ -646,13 +615,9 @@ async function restorePage(
     });
 }
 
-async function backupManifest(
-  env: Env,
-  mailboxId: string,
-  prefix: string,
-  count: number,
-) {
-  const coordinator = mailbox(env, mailboxId), settings = await coordinator.settings();
+async function backupManifest(env: Env, mailboxId: string, prefix: string, count: number) {
+  const coordinator = mailbox(env, mailboxId),
+    settings = await coordinator.settings();
   const signatureImages: { id: string; key: string }[] = [];
   for (const cid of inlineContentIds(String(settings.signature_html ?? ""))) {
     const imageId = /^([a-f0-9-]{36})@officeflare\.image$/.exec(cid)?.[1];
@@ -660,7 +625,10 @@ async function backupManifest(
     const object = await env.MAIL_BUCKET.get(imageAssetKey(mailboxId, imageId));
     if (!object) fail(503, "Signature image unavailable during backup");
     const key = `signature-${imageId}.image`;
-    await env.MAIL_BUCKET.put(prefix + key, object.body, { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata });
+    await env.MAIL_BUCKET.put(prefix + key, object.body, {
+      httpMetadata: object.httpMetadata,
+      customMetadata: object.customMetadata,
+    });
     signatureImages.push({ id: imageId, key });
   }
   await env.MAIL_BUCKET.put(
@@ -696,7 +664,6 @@ function splitMbox(raw: Uint8Array): Uint8Array[] {
     }
   }
   if (start < raw.length) ranges.push({ start, end: raw.length });
-  if (ranges.length > 10000)
-    fail(413, "Import has too many messages; split the file");
+  if (ranges.length > 10000) fail(413, "Import has too many messages; split the file");
   return ranges.map(({ start, end }) => unquoteMboxMessage(raw.subarray(start, end)));
 }

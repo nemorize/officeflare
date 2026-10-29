@@ -17,6 +17,7 @@ const regionalFormats = [
 export function calendarRegionalFormatOptions(savedLocale: string) {
   // Keep the legacy English value mounted while another format is selected.
   // Removing a selected item during the popup transition clears the Select value.
-  return !savedLocale || regionalFormats.some(format => format.value === savedLocale)
-    ? regionalFormats : [...regionalFormats, { value: savedLocale, label: savedLocale }];
+  return !savedLocale || regionalFormats.some((format) => format.value === savedLocale)
+    ? regionalFormats
+    : [...regionalFormats, { value: savedLocale, label: savedLocale }];
 }

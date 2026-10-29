@@ -15,7 +15,13 @@ export interface MessageSizeInput {
   cc?: string[];
   bcc?: string[];
   headers?: Record<string, string>;
-  attachments: { size_bytes: number; filename: string; content_type: string; content_id?: string | null; disposition?: string }[];
+  attachments: {
+    size_bytes: number;
+    filename: string;
+    content_type: string;
+    content_id?: string | null;
+    disposition?: string;
+  }[];
 }
 export interface MessageSizeBreakdown {
   subject: number;
@@ -27,7 +33,15 @@ export interface MessageSizeBreakdown {
 }
 export function messageSizeBreakdown(message: MessageSizeInput): MessageSizeBreakdown {
   const utf8 = (value: string) => new TextEncoder().encode(value).length;
-  const headers = [message.subject, message.from, message.reply_to, ...(message.to ?? []), ...(message.cc ?? []), ...(message.bcc ?? []), ...Object.entries(message.headers ?? {}).flat()].join("\r\n");
+  const headers = [
+    message.subject,
+    message.from,
+    message.reply_to,
+    ...(message.to ?? []),
+    ...(message.cc ?? []),
+    ...(message.bcc ?? []),
+    ...Object.entries(message.headers ?? {}).flat(),
+  ].join("\r\n");
   const subject = utf8(message.subject ?? "") * 3;
   const size: MessageSizeBreakdown = {
     subject,
@@ -39,7 +53,10 @@ export function messageSizeBreakdown(message: MessageSizeInput): MessageSizeBrea
   };
   for (const file of message.attachments) {
     const key = file.disposition === "inline" || file.content_id ? "images" : "attachments";
-    size[key] += encodedMailBytes(file.size_bytes) + 1024 + utf8(file.filename + file.content_type + (file.content_id ?? "")) * 3;
+    size[key] +=
+      encodedMailBytes(file.size_bytes) +
+      1024 +
+      utf8(file.filename + file.content_type + (file.content_id ?? "")) * 3;
   }
   size.total = size.subject + size.body + size.images + size.attachments + size.headers;
   return size;
@@ -48,10 +65,24 @@ export function estimatedMessageBytes(message: MessageSizeInput) {
   return messageSizeBreakdown(message).total;
 }
 export function maxAttachmentBytes(maxSendBytes: number) {
-  let low = 0, high = maxSendBytes;
+  let low = 0,
+    high = maxSendBytes;
   while (low < high) {
     const candidate = Math.ceil((low + high) / 2);
-    if (estimatedMessageBytes({ text: "", html: "", attachments: [{ size_bytes: candidate, filename: "attachment", content_type: "application/octet-stream" }] }) <= maxSendBytes) low = candidate;
+    if (
+      estimatedMessageBytes({
+        text: "",
+        html: "",
+        attachments: [
+          {
+            size_bytes: candidate,
+            filename: "attachment",
+            content_type: "application/octet-stream",
+          },
+        ],
+      }) <= maxSendBytes
+    )
+      low = candidate;
     else high = candidate - 1;
   }
   return low;

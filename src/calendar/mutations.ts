@@ -108,11 +108,7 @@ export async function replay<T>(
   );
   if (!old) return null;
   if (old.request_hash !== (await digest(stable(request))))
-    fail(
-      409,
-      "IDEMPOTENCY_CONFLICT",
-      "Idempotency-Key was used with another request",
-    );
+    fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
   return {
     result: await receipt<T>(
       c.env,
@@ -121,13 +117,9 @@ export async function replay<T>(
     ),
   };
 }
-export async function mutate<T>(
-  c: CalendarContext,
-  input: Mutation<T>,
-): Promise<T> {
+export async function mutate<T>(c: CalendarContext, input: Mutation<T>): Promise<T> {
   const actor =
-      input.principal?.actor_user_id ??
-      (input.principal ? null : c.get("identity").user.id),
+      input.principal?.actor_user_id ?? (input.principal ? null : c.get("identity").user.id),
     actorKey = input.principal?.actor_key ?? `user:${actor}`,
     auth = input.principal?.auth ?? identity(c, input.action),
     hash = await digest(stable(input.request));
@@ -149,11 +141,7 @@ export async function mutate<T>(
   const previous = await existing();
   if (previous) {
     if (previous.request_hash !== hash)
-      fail(
-        409,
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency-Key was used with another request",
-      );
+      fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
     return receipt<T>(
       c.env,
       `receipt:${actorKey}:${input.operation}:${hash}`,
@@ -185,11 +173,7 @@ export async function mutate<T>(
     request_hash: hash,
     result_json: JSON.stringify(
       input.secretResult
-        ? await seal(
-            c.env,
-            `receipt:${actorKey}:${input.operation}:${hash}`,
-            input.result,
-          )
+        ? await seal(c.env, `receipt:${actorKey}:${input.operation}:${hash}`, input.result)
         : input.result,
     ),
     expires_at: now() + 86400,
@@ -230,22 +214,10 @@ export async function mutate<T>(
     const raced = await existing();
     if (raced) {
       if (raced.request_hash !== hash)
-        fail(
-          409,
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency-Key was used with another request",
-        );
-      return receipt<T>(
-        c.env,
-        `receipt:${actorKey}:${input.operation}:${hash}`,
-        raced.result_json,
-      );
+        fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
+      return receipt<T>(c.env, `receipt:${actorKey}:${input.operation}:${hash}`, raced.result_json);
     }
-    fail(
-      412,
-      "VERSION_CONFLICT",
-      "Calendar resource or permissions changed. Reload and try again",
-    );
+    fail(412, "VERSION_CONFLICT", "Calendar resource or permissions changed. Reload and try again");
   }
   return input.result;
 }

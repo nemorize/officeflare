@@ -18,8 +18,11 @@ export function mboxMessage(raw: Uint8Array, sender: string, receivedAt: number)
   for (let start = 0; start < raw.length; start = nextLine(raw, start))
     if (fromLine(raw, start)) quotes++;
   const envelope = new TextEncoder().encode(
-    "From " + (sender || "officeflare").replace(/[\r\n]/g, " ") + " " +
-    new Date(receivedAt * 1000).toUTCString() + "\n",
+    "From " +
+      (sender || "officeflare").replace(/[\r\n]/g, " ") +
+      " " +
+      new Date(receivedAt * 1000).toUTCString() +
+      "\n",
   );
   const result = new Uint8Array(envelope.length + raw.length + quotes + 2);
   result.set(envelope);

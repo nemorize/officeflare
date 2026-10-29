@@ -8,10 +8,19 @@ export interface AutocompletePopupProps extends ComponentPropsWithRef<typeof Aut
   positionerProps?: Omit<Autocomplete.Positioner.Props, "children">;
 }
 
-export function AutocompletePopup({ portalProps, positionerProps, ...props }: AutocompletePopupProps) {
+export function AutocompletePopup({
+  portalProps,
+  positionerProps,
+  ...props
+}: AutocompletePopupProps) {
   return (
     <Autocomplete.Portal {...portalProps}>
-      <Autocomplete.Positioner data-ui="popup-positioner" align="start" sideOffset={6} {...positionerProps}>
+      <Autocomplete.Positioner
+        data-ui="popup-positioner"
+        align="start"
+        sideOffset={6}
+        {...positionerProps}
+      >
         <Autocomplete.Popup data-ui="autocomplete-popup" {...props} />
       </Autocomplete.Positioner>
     </Autocomplete.Portal>

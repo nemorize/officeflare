@@ -12,7 +12,16 @@ export interface DrawerPopupProps extends ComponentPropsWithRef<typeof Drawer.Po
   contentProps?: Omit<Drawer.Content.Props, "children">;
 }
 
-export function DrawerPopup({ side = "bottom", padding = "normal", portalProps, backdropProps, viewportProps, contentProps, children, ...props }: DrawerPopupProps) {
+export function DrawerPopup({
+  side = "bottom",
+  padding = "normal",
+  portalProps,
+  backdropProps,
+  viewportProps,
+  contentProps,
+  children,
+  ...props
+}: DrawerPopupProps) {
   return (
     <Drawer.Portal {...portalProps}>
       <Drawer.Backdrop data-ui="dialog-backdrop" {...backdropProps} />

@@ -2,8 +2,10 @@ import { Temporal } from "@js-temporal/polyfill";
 type CalendarView = "day" | "week" | "month" | "agenda";
 const civilDate = (date: string) => Temporal.PlainDate.from(date);
 const addDays = (date: string, count: number) => civilDate(date).add({ days: count }).toString();
-const dateDays = (date: string, count: number) => Array.from({ length: count }, (_, index) => addDays(date, index));
-const startOfWeek = (date: string, weekStart: number) => addDays(date, -((civilDate(date).dayOfWeek % 7 - weekStart + 7) % 7));
+const dateDays = (date: string, count: number) =>
+  Array.from({ length: count }, (_, index) => addDays(date, index));
+const startOfWeek = (date: string, weekStart: number) =>
+  addDays(date, -(((civilDate(date).dayOfWeek % 7) - weekStart + 7) % 7));
 export function viewRange(date: string, view: CalendarView, weekStart: number) {
   const current = civilDate(date);
   if (view === "month") {

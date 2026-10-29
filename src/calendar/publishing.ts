@@ -33,9 +33,7 @@ async function published(c: CalendarContext) {
     link: {
       target_type: "calendar",
       shared_fields_json: JSON.stringify(
-        grant.role === "reader"
-          ? ["title", "description_html", "location", "organizer"]
-          : [],
+        grant.role === "reader" ? ["title", "description_html", "location", "organizer"] : [],
       ),
     } as ShareLink,
   };
@@ -48,9 +46,7 @@ publishingRoutes.get("/public/calendars/:calendarId", async (c) => {
       id: cal.id,
       name: cal.name,
       time_zone: cal.time_zone,
-      ...(role === "reader"
-        ? { description: cal.description, location: cal.location }
-        : {}),
+      ...(role === "reader" ? { description: cal.description, location: cal.location } : {}),
     },
   });
 });
@@ -66,8 +62,7 @@ publishingRoutes.get("/public/calendars/:calendarId/events", async (c) => {
       new Date((range.max + 172800) * 1000).toISOString().slice(0, 10),
       new Date((range.min - 172800) * 1000).toISOString().slice(0, 10),
     );
-  if (events.length > 200)
-    fail(422, "TOO_MANY_EVENTS", "Narrow the published calendar scope");
+  if (events.length > 200) fail(422, "TOO_MANY_EVENTS", "Narrow the published calendar scope");
   const overrides = await loadOverrides(
       c,
       events.map((value) => value.id),
@@ -82,11 +77,8 @@ publishingRoutes.get("/public/calendars/:calendarId/events", async (c) => {
           cal.time_zone,
         ),
       )
-      .filter(
-        (value) => role === "reader" || value.event.transparency === "busy",
-      );
-  if (values.length > 500)
-    fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
+      .filter((value) => role === "reader" || value.event.transparency === "busy");
+  if (values.length > 500) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
   return c.json({
     events: values
       .slice(0, pageLimit(c))

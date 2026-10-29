@@ -10,7 +10,10 @@ export function styledPart<T>(component: T, name: string): T {
   return StyledPart as T;
 }
 
-export function styledParts<T extends object>(components: T, names: Partial<Record<keyof T, string>>): T {
+export function styledParts<T extends object>(
+  components: T,
+  names: Partial<Record<keyof T, string>>,
+): T {
   const result = { ...components };
   for (const key of Object.keys(names) as (keyof T)[]) {
     const name = names[key];

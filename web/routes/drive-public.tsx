@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import {
-  Button,
-  Icon,
-  OfficeflareMark,
-  Toggle,
-  ToggleGroup,
-} from "../components/ui";
+import { Button, Icon, OfficeflareMark, Toggle, ToggleGroup } from "../components/ui";
 import {
   DriveField,
   DriveFileIcon,
@@ -110,9 +104,7 @@ export function PublicDrivePage() {
         setLoading(false);
         if (failure instanceof ApiError && failure.status === 403) {
           setNeedsPassword(true);
-          setPasswordError(
-            password ? "That password did not work. Try again." : "",
-          );
+          setPasswordError(password ? "That password did not work. Try again." : "");
         } else {
           setNeedsPassword(false);
           setError(
@@ -135,10 +127,7 @@ export function PublicDrivePage() {
     setItems([]);
     setError("");
     setCursor(null);
-    void loader(
-      `${base}/items?parent_id=${parent.id}&limit=100`,
-      controller.signal,
-    )
+    void loader(`${base}/items?parent_id=${parent.id}&limit=100`, controller.signal)
       .then((response) => response.json() as Promise<DrivePage>)
       .then((data) => {
         if (!controller.signal.aborted) {
@@ -156,16 +145,12 @@ export function PublicDrivePage() {
     return () => controller.abort();
   }, [parent?.id, base, loader]);
   const open = (item: DriveItem) =>
-    item.kind === "folder"
-      ? setTrail((old) => [...old, item])
-      : setPreview(item);
+    item.kind === "folder" ? setTrail((old) => [...old, item]) : setPreview(item);
   const download = (item: DriveItem) => {
     setError("");
-    void downloadDriveItem(
-      item,
-      `${base}/items/${item.id}/content`,
-      loader,
-    ).catch((failure) => setError(driveFailure(failure)));
+    void downloadDriveItem(item, `${base}/items/${item.id}/content`, loader).catch((failure) =>
+      setError(driveFailure(failure)),
+    );
   };
   const loadMore = async () => {
     if (!cursor || !parent) return;
@@ -201,9 +186,7 @@ export function PublicDrivePage() {
               <Icon name="shield" width="26" height="26" />
             </span>
             <h1>This link is protected</h1>
-            <p>
-              Enter the password provided by the owner to view the shared files.
-            </p>
+            <p>Enter the password provided by the owner to view the shared files.</p>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -222,11 +205,7 @@ export function PublicDrivePage() {
                 maxLength={128}
               />
               <DriveNotice error={passwordError} />
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={loading || !draft}
-              >
+              <Button type="submit" variant="primary" disabled={loading || !draft}>
                 {loading ? "Checking…" : "Open shared files"}
                 <Icon name="arrow" />
               </Button>
@@ -239,11 +218,7 @@ export function PublicDrivePage() {
             <p role={error ? "alert" : "status"}>
               {error || "Checking access to this share link."}
             </p>
-            {error && (
-              <Button onClick={() => setAttempt((value) => value + 1)}>
-                Try again
-              </Button>
-            )}
+            {error && <Button onClick={() => setAttempt((value) => value + 1)}>Try again</Button>}
           </div>
         ) : root.kind === "file" ? (
           <div className="drive-public-file">
@@ -271,21 +246,14 @@ export function PublicDrivePage() {
           <div className="drive-content-pane">
             <header className="drive-page-header">
               <div>
-                <nav
-                  className="drive-breadcrumbs"
-                  aria-label="Shared folder path"
-                >
+                <nav className="drive-breadcrumbs" aria-label="Shared folder path">
                   {trail.map((item, index) => (
                     <span key={item.id}>
-                      {index > 0 && (
-                        <Icon name="chevron" width="12" height="12" />
-                      )}
+                      {index > 0 && <Icon name="chevron" width="12" height="12" />}
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
-                          setTrail((old) => old.slice(0, index + 1))
-                        }
+                        onClick={() => setTrail((old) => old.slice(0, index + 1))}
                       >
                         {item.name}
                       </Button>
@@ -302,14 +270,10 @@ export function PublicDrivePage() {
                 className="drive-layout-toggle"
                 aria-label="Shared file view"
               >
-                <Toggle value="list" data-size="icon"
-                  aria-label="List view"
-                >
+                <Toggle value="list" data-size="icon" aria-label="List view">
                   <Icon name="list" />
                 </Toggle>
-                <Toggle value="grid" data-size="icon"
-                  aria-label="Grid view"
-                >
+                <Toggle value="grid" data-size="icon" aria-label="Grid view">
                   <Icon name="grid" />
                 </Toggle>
               </ToggleGroup>
@@ -335,11 +299,7 @@ export function PublicDrivePage() {
                 </div>
               )}
               {!!items.length && (
-                <div
-                  role="grid"
-                  className="drive-file-grid"
-                  aria-label="Shared files"
-                >
+                <div role="grid" className="drive-file-grid" aria-label="Shared files">
                   <div className="drive-table-header" role="row">
                     <div role="columnheader">Name</div>
                     <div role="columnheader">Last modified</div>
@@ -356,16 +316,14 @@ export function PublicDrivePage() {
                       tabIndex={0}
                       onDoubleClick={() => open(item)}
                       onKeyDown={(event) => {
-                        if (
-                          event.target === event.currentTarget &&
-                          event.key === "Enter"
-                        )
+                        if (event.target === event.currentTarget && event.key === "Enter")
                           open(item);
                       }}
                     >
                       <div className="drive-row-name" role="gridcell">
                         <DriveFileIcon item={item} />
-                        <Button variant="text"
+                        <Button
+                          variant="text"
                           className="drive-name-button"
                           title={item.name}
                           onClick={() => open(item)}
@@ -383,9 +341,7 @@ export function PublicDrivePage() {
                         {driveDate(item.updated_at)}
                       </div>
                       <div className="drive-row-size" role="gridcell">
-                        {item.kind === "folder"
-                          ? "—"
-                          : formatBytes(driveSize(item))}
+                        {item.kind === "folder" ? "—" : formatBytes(driveSize(item))}
                       </div>
                       <div className="drive-row-menu" role="gridcell">
                         {allow && item.kind === "file" && (
@@ -411,11 +367,8 @@ export function PublicDrivePage() {
           </div>
         )}
         <footer className="drive-public-footer">
-          <Icon name="shield" width="11" height="11" /> Shared securely with
-          Officeflare
-          {root && root.kind === "file" && expires
-            ? ` · Expires ${driveDate(expires)}`
-            : ""}
+          <Icon name="shield" width="11" height="11" /> Shared securely with Officeflare
+          {root && root.kind === "file" && expires ? ` · Expires ${driveDate(expires)}` : ""}
         </footer>
       </section>
       {preview && (

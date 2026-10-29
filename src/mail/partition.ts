@@ -37,17 +37,9 @@ export class MailPartitionDO extends DurableObject<Env> {
       this.sql,
       "SELECT * FROM partition_identity WHERE id=1",
     );
-    if (
-      existing &&
-      (existing.mailbox_id !== mailboxId ||
-        existing.partition_id !== partitionId)
-    )
+    if (existing && (existing.mailbox_id !== mailboxId || existing.partition_id !== partitionId))
       fail(409, "Partition identity mismatch");
-    this.sql.exec(
-      "INSERT OR IGNORE INTO partition_identity VALUES(1,?,?)",
-      mailboxId,
-      partitionId,
-    );
+    this.sql.exec("INSERT OR IGNORE INTO partition_identity VALUES(1,?,?)", mailboxId, partitionId);
   }
   state() {
     return row<{ n: number }>(
@@ -59,11 +51,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     return this.sql.databaseSize;
   }
   internalMessage(messageId: string) {
-    return row<MessageRow>(
-      this.sql,
-      "SELECT * FROM messages WHERE id=?",
-      messageId,
-    );
+    return row<MessageRow>(this.sql, "SELECT * FROM messages WHERE id=?", messageId);
   }
   folderCounts(actorId: string) {
     return rows<{
@@ -91,7 +79,11 @@ export class MailPartitionDO extends DurableObject<Env> {
     privateUser: string | null = null,
     threadId?: string,
   ) {
-    const current = row<{ thread_id: string; version: number }>(this.sql, "SELECT thread_id,version FROM messages WHERE id=?", messageId);
+    const current = row<{ thread_id: string; version: number }>(
+      this.sql,
+      "SELECT thread_id,version FROM messages WHERE id=?",
+      messageId,
+    );
     this.sql.exec(
       "INSERT INTO change_log(message_id,operation,created_at) VALUES(?,?,?)",
       messageId,
@@ -124,11 +116,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       from_address: string;
       to_addresses: string;
       body: string;
-    }>(
-      this.sql,
-      "SELECT * FROM search_documents WHERE message_id=?",
-      messageId,
-    )) {
+    }>(this.sql, "SELECT * FROM search_documents WHERE message_id=?", messageId)) {
       this.sql.exec(
         "INSERT INTO messages_fts(messages_fts,rowid,subject,from_address,to_addresses,body) VALUES('delete',?,?,?,?,?)",
         document.id,
@@ -140,13 +128,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     }
     this.sql.exec("DELETE FROM search_documents WHERE message_id=?", messageId);
   }
-  private index(
-    messageId: string,
-    subject: string,
-    from: string,
-    to: string[],
-    body: string,
-  ) {
+  private index(messageId: string, subject: string, from: string, to: string[], body: string) {
     this.removeIndex(messageId);
     // Overlap exceeds the supported query length, including phrases spanning a chunk boundary.
     const chunks: string[] = [];
@@ -175,16 +157,8 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   insert(input: MessageInput) {
     const existing = input.ingest_id
-      ? row<{ id: string }>(
-          this.sql,
-          "SELECT id FROM messages WHERE ingest_id=?",
-          input.ingest_id,
-        )
-      : row<{ id: string }>(
-          this.sql,
-          "SELECT id FROM messages WHERE id=?",
-          input.id,
-        );
+      ? row<{ id: string }>(this.sql, "SELECT id FROM messages WHERE ingest_id=?", input.ingest_id)
+      : row<{ id: string }>(this.sql, "SELECT id FROM messages WHERE id=?", input.id);
     if (existing) return existing.id;
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
@@ -215,7 +189,9 @@ export class MailPartitionDO extends DurableObject<Env> {
         input.source ?? "email",
         ["trash", "spam"].includes(input.folder_id) ? epoch() : null,
         input.reply_to_address ?? null,
-        Number.isSafeInteger(input.snoozed_until) && input.snoozed_until! > epoch() ? input.snoozed_until! : null,
+        Number.isSafeInteger(input.snoozed_until) && input.snoozed_until! > epoch()
+          ? input.snoozed_until!
+          : null,
         input.id,
       );
       for (const kind of ["to", "cc", "bcc"] as const)
@@ -229,11 +205,7 @@ export class MailPartitionDO extends DurableObject<Env> {
           ),
         );
       for (const reference of new Set(input.references))
-        this.sql.exec(
-          "INSERT INTO message_references VALUES(?,?)",
-          input.id,
-          reference,
-        );
+        this.sql.exec("INSERT INTO message_references VALUES(?,?)", input.id, reference);
       for (const file of input.attachments)
         this.sql.exec(
           "INSERT INTO attachments VALUES(?,?,?,?,?,?,?,?)",
@@ -334,11 +306,20 @@ export class MailPartitionDO extends DurableObject<Env> {
         "SELECT version,state FROM drafts WHERE message_id=?",
         messageId,
       ),
-      submissions: rows<Submission>(this.sql, "SELECT * FROM submissions WHERE message_id=? ORDER BY created_at DESC LIMIT 20", messageId).map(publicSubmission),
+      submissions: rows<Submission>(
+        this.sql,
+        "SELECT * FROM submissions WHERE message_id=? ORDER BY created_at DESC LIMIT 20",
+        messageId,
+      ).map(publicSubmission),
     };
   }
   headers(ids: string[], actorId: string): MessageRow[] {
-    return rows<MessageRow>(this.sql, "SELECT * FROM messages WHERE id IN (SELECT value FROM json_each(?)) AND (draft_owner_id IS NULL OR draft_owner_id=?)", JSON.stringify(ids), actorId);
+    return rows<MessageRow>(
+      this.sql,
+      "SELECT * FROM messages WHERE id IN (SELECT value FROM json_each(?)) AND (draft_owner_id IS NULL OR draft_owner_id=?)",
+      JSON.stringify(ids),
+      actorId,
+    );
   }
   private queryPlan(query: MessageQuery) {
     const filters = ["(m.draft_owner_id IS NULL OR m.draft_owner_id=?)"],
@@ -347,14 +328,13 @@ export class MailPartitionDO extends DurableObject<Env> {
       filters.push("(m.snoozed_until IS NULL OR m.snoozed_until<=?)");
       bindings.push(epoch());
     }
-    if (query.snoozed_only) { filters.push("m.snoozed_until>?"); bindings.push(epoch()); }
+    if (query.snoozed_only) {
+      filters.push("m.snoozed_until>?");
+      bindings.push(epoch());
+    }
     if (query.before) {
       filters.push("(m.received_at<? OR (m.received_at=? AND m.id<?))");
-      bindings.push(
-        query.before.received_at,
-        query.before.received_at,
-        query.before.id,
-      );
+      bindings.push(query.before.received_at, query.before.received_at, query.before.id);
     }
     if (query.folder_id) {
       filters.push("m.folder_id=?");
@@ -376,55 +356,168 @@ export class MailPartitionDO extends DurableObject<Env> {
         bindings.push(term.startsWith("-") ? term.slice(1) : term);
       }
     }
-    if (query.view === "inbox") { filters.push("m.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")"); bindings.push(...inboxExcludedFolders); }
+    if (query.view === "inbox") {
+      filters.push("m.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")");
+      bindings.push(...inboxExcludedFolders);
+    }
     if (query.view === "all") filters.push("m.folder_id NOT IN ('trash','spam','drafts')");
     if (query.exclude_drafts) filters.push("m.draft_owner_id IS NULL");
-    if (query.editable_drafts) filters.push("EXISTS(SELECT 1 FROM drafts d WHERE d.message_id=m.id AND d.state='editable')");
-    if (query.view === "scheduled") filters.push("EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','retry_wait'))");
-    if (query.view === "outbox") filters.push("EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','processing','retry_wait','unknown'))");
+    if (query.editable_drafts)
+      filters.push("EXISTS(SELECT 1 FROM drafts d WHERE d.message_id=m.id AND d.state='editable')");
+    if (query.view === "scheduled")
+      filters.push(
+        "EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','retry_wait'))",
+      );
+    if (query.view === "outbox")
+      filters.push(
+        "EXISTS(SELECT 1 FROM submissions s WHERE s.message_id=m.id AND s.status IN ('scheduled','queued','processing','retry_wait','unknown'))",
+      );
     return { filters, bindings };
   }
   query(query: MessageQuery) {
     const { filters, bindings } = this.queryPlan(query);
-    if (query.thread_ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(query.thread_ids)); }
-    const submission = query.view === "scheduled" || query.view === "outbox"
-      ? ",(SELECT status FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','processing','retry_wait','unknown') ORDER BY created_at DESC,id DESC LIMIT 1) submission_status,(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at"
-      : "";
-    return rows<MessageRow & { recipient_summary: string }>(this.sql,
-      "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" + submission + " FROM messages m WHERE " + filters.join(" AND ") + " ORDER BY m.received_at DESC,m.id DESC LIMIT ?", ...bindings, query.limit);
+    if (query.thread_ids) {
+      filters.push("m.thread_id IN (SELECT value FROM json_each(?))");
+      bindings.push(JSON.stringify(query.thread_ids));
+    }
+    const submission =
+      query.view === "scheduled" || query.view === "outbox"
+        ? ",(SELECT status FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','processing','retry_wait','unknown') ORDER BY created_at DESC,id DESC LIMIT 1) submission_status,(SELECT min(scheduled_at) FROM submissions WHERE message_id=m.id AND status IN ('scheduled','queued','retry_wait')) scheduled_at"
+        : "";
+    return rows<MessageRow & { recipient_summary: string }>(
+      this.sql,
+      "SELECT m.*,(SELECT state FROM drafts WHERE message_id=m.id) draft_state,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary" +
+        submission +
+        " FROM messages m WHERE " +
+        filters.join(" AND ") +
+        " ORDER BY m.received_at DESC,m.id DESC LIMIT ?",
+      ...bindings,
+      query.limit,
+    );
   }
-  rebuildSummaries() { this.ctx.storage.transactionSync(() => rebuildReadModels(this.sql)); }
+  rebuildSummaries() {
+    this.ctx.storage.transactionSync(() => rebuildReadModels(this.sql));
+  }
   private summaryThreads(query: MessageQuery, ids?: string[]): ThreadRow[] {
-    const filters = ["1"], args: (string | number)[] = [];
-    if (query.folder_id) { filters.push("t.folder_id=?"); args.push(query.folder_id); }
-    if (!query.include_snoozed && !query.snoozed_only) { filters.push("t.snoozed_until<=?"); args.push(epoch()); }
-    if (query.snoozed_only) { filters.push("t.snoozed_until>?"); args.push(epoch()); }
-    if (query.thread_id) { filters.push("t.thread_id=?"); args.push(query.thread_id); }
-    for (const selected of [query.thread_ids, ids]) if (selected) { filters.push("t.thread_id IN (SELECT value FROM json_each(?))"); args.push(JSON.stringify(selected)); }
-    if (query.view === "inbox") { filters.push("t.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")"); args.push(...inboxExcludedFolders); }
+    const filters = ["1"],
+      args: (string | number)[] = [];
+    if (query.folder_id) {
+      filters.push("t.folder_id=?");
+      args.push(query.folder_id);
+    }
+    if (!query.include_snoozed && !query.snoozed_only) {
+      filters.push("t.snoozed_until<=?");
+      args.push(epoch());
+    }
+    if (query.snoozed_only) {
+      filters.push("t.snoozed_until>?");
+      args.push(epoch());
+    }
+    if (query.thread_id) {
+      filters.push("t.thread_id=?");
+      args.push(query.thread_id);
+    }
+    for (const selected of [query.thread_ids, ids])
+      if (selected) {
+        filters.push("t.thread_id IN (SELECT value FROM json_each(?))");
+        args.push(JSON.stringify(selected));
+      }
+    if (query.view === "inbox") {
+      filters.push("t.folder_id NOT IN (" + inboxExcludedFolders.map(() => "?").join(",") + ")");
+      args.push(...inboxExcludedFolders);
+    }
     if (query.view === "all") filters.push("t.folder_id NOT IN ('trash','spam','drafts')");
-    const before = !ids && query.before ? " AND (r.received_at<? OR (r.received_at=? AND r.representative_id<?))" : "";
-    return rows<ThreadRow>(this.sql,
-      "WITH matched AS (SELECT t.* FROM thread_summaries t WHERE " + filters.join(" AND ") + "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,representative_id DESC) rn FROM matched), totals AS (SELECT thread_id,sum(message_count) message_count,sum(unread_count) unread_count,sum(starred_count) starred_count,max(has_attachments) thread_attachments,group_concat(participants) participants FROM matched GROUP BY thread_id) SELECT m.*,totals.message_count,totals.unread_count,totals.starred_count,totals.thread_attachments,totals.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary FROM ranked r JOIN totals USING(thread_id) JOIN messages m ON m.id=r.representative_id WHERE r.rn=1" + before + " ORDER BY r.received_at DESC,r.representative_id DESC" + (ids ? "" : " LIMIT ?"),
-      ...args, ...(!ids && query.before ? [query.before.received_at,query.before.received_at,query.before.id] : []), ...(!ids ? [query.limit] : [])
-    ).map(({ thread_attachments, ...entry }: ThreadRow & { thread_attachments?: number }) => ({ ...entry, has_attachments: thread_attachments ?? entry.has_attachments, participants: [...new Set((entry.participants ?? "").split(",").filter(Boolean))].join(",") }));
+    const before =
+      !ids && query.before
+        ? " AND (r.received_at<? OR (r.received_at=? AND r.representative_id<?))"
+        : "";
+    return rows<ThreadRow>(
+      this.sql,
+      "WITH matched AS (SELECT t.* FROM thread_summaries t WHERE " +
+        filters.join(" AND ") +
+        "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,representative_id DESC) rn FROM matched), totals AS (SELECT thread_id,sum(message_count) message_count,sum(unread_count) unread_count,sum(starred_count) starred_count,max(has_attachments) thread_attachments,group_concat(participants) participants FROM matched GROUP BY thread_id) SELECT m.*,totals.message_count,totals.unread_count,totals.starred_count,totals.thread_attachments,totals.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=m.id AND kind='to') recipient_summary FROM ranked r JOIN totals USING(thread_id) JOIN messages m ON m.id=r.representative_id WHERE r.rn=1" +
+        before +
+        " ORDER BY r.received_at DESC,r.representative_id DESC" +
+        (ids ? "" : " LIMIT ?"),
+      ...args,
+      ...(!ids && query.before
+        ? [query.before.received_at, query.before.received_at, query.before.id]
+        : []),
+      ...(!ids ? [query.limit] : []),
+    ).map(({ thread_attachments, ...entry }: ThreadRow & { thread_attachments?: number }) => ({
+      ...entry,
+      has_attachments: thread_attachments ?? entry.has_attachments,
+      participants: [...new Set((entry.participants ?? "").split(",").filter(Boolean))].join(","),
+    }));
   }
   threadPage(query: MessageQuery, ids?: string[]): ThreadRow[] {
-    if (query.exclude_drafts && !query.search && !query.editable_drafts && !["scheduled", "outbox"].includes(query.view ?? "")) return this.summaryThreads(query, ids);
+    if (
+      query.exclude_drafts &&
+      !query.search &&
+      !query.editable_drafts &&
+      !["scheduled", "outbox"].includes(query.view ?? "")
+    )
+      return this.summaryThreads(query, ids);
     const { filters, bindings } = this.queryPlan({ ...query, before: undefined });
-    if (query.thread_ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(query.thread_ids)); }
-    if (ids) { filters.push("m.thread_id IN (SELECT value FROM json_each(?))"); bindings.push(JSON.stringify(ids)); }
+    if (query.thread_ids) {
+      filters.push("m.thread_id IN (SELECT value FROM json_each(?))");
+      bindings.push(JSON.stringify(query.thread_ids));
+    }
+    if (ids) {
+      filters.push("m.thread_id IN (SELECT value FROM json_each(?))");
+      bindings.push(JSON.stringify(ids));
+    }
     const before = !ids && query.before ? " AND (received_at<? OR (received_at=? AND id<?))" : "";
-    return rows<ThreadRow>(this.sql,
-      "WITH matched AS (SELECT m.* FROM messages m WHERE " + filters.join(" AND ") + "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,id DESC) rn FROM matched), totals AS (SELECT thread_id,count(*) message_count,sum(1-is_read) unread_count,sum(is_starred) starred_count,max(has_attachments) thread_attachments,group_concat(DISTINCT nullif(from_address,'')) participants FROM matched GROUP BY thread_id) SELECT r.*,t.message_count,t.unread_count,t.starred_count,t.thread_attachments,t.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=r.id AND kind='to') recipient_summary FROM ranked r JOIN totals t USING(thread_id) WHERE rn=1" + before + " ORDER BY received_at DESC,id DESC" + (ids ? "" : " LIMIT ?"), ...bindings, ...(!ids && query.before ? [query.before.received_at,query.before.received_at,query.before.id] : []), ...(!ids ? [query.limit] : [])
-    ).map(({ rn: _rank, thread_attachments, ...entry }: ThreadRow & { rn?: number; thread_attachments?: number }) => ({ ...entry, has_attachments: thread_attachments ?? entry.has_attachments }));
+    return rows<ThreadRow>(
+      this.sql,
+      "WITH matched AS (SELECT m.* FROM messages m WHERE " +
+        filters.join(" AND ") +
+        "), ranked AS (SELECT *,row_number() OVER(PARTITION BY thread_id ORDER BY received_at DESC,id DESC) rn FROM matched), totals AS (SELECT thread_id,count(*) message_count,sum(1-is_read) unread_count,sum(is_starred) starred_count,max(has_attachments) thread_attachments,group_concat(DISTINCT nullif(from_address,'')) participants FROM matched GROUP BY thread_id) SELECT r.*,t.message_count,t.unread_count,t.starred_count,t.thread_attachments,t.participants,(SELECT group_concat(email_address, ', ') FROM message_recipients WHERE message_id=r.id AND kind='to') recipient_summary FROM ranked r JOIN totals t USING(thread_id) WHERE rn=1" +
+        before +
+        " ORDER BY received_at DESC,id DESC" +
+        (ids ? "" : " LIMIT ?"),
+      ...bindings,
+      ...(!ids && query.before
+        ? [query.before.received_at, query.before.received_at, query.before.id]
+        : []),
+      ...(!ids ? [query.limit] : []),
+    ).map(
+      ({
+        rn: _rank,
+        thread_attachments,
+        ...entry
+      }: ThreadRow & { rn?: number; thread_attachments?: number }) => ({
+        ...entry,
+        has_attachments: thread_attachments ?? entry.has_attachments,
+      }),
+    );
   }
   summary(actorId: string) {
-    const folders = rows<{folder_id:string;total:number;unread:number}>(this.sql,"SELECT folder_id,sum(total) total,sum(unread) unread FROM mailbox_counts WHERE (owner_id='' OR owner_id=?) AND snoozed_until<=? GROUP BY folder_id",actorId,epoch());
-    const counts = row<{ starred: number; snoozed: number; scheduled: number; outbox: number }>(this.sql,
-      "SELECT coalesce(sum(is_starred*total),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN total ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','processing','retry_wait','unknown') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) outbox FROM mailbox_counts WHERE owner_id='' OR owner_id=?",epoch(),actorId,actorId,actorId)!;
-    const drafts = row<{ n: number }>(this.sql,"SELECT count(*) n FROM drafts d JOIN messages m ON m.id=d.message_id WHERE d.state='editable' AND m.draft_owner_id=?",actorId)!.n;
-    return { folders: folders.map((folder) => folder.folder_id === "drafts" ? { ...folder, total: drafts, unread: 0 } : folder), ...counts };
+    const folders = rows<{ folder_id: string; total: number; unread: number }>(
+      this.sql,
+      "SELECT folder_id,sum(total) total,sum(unread) unread FROM mailbox_counts WHERE (owner_id='' OR owner_id=?) AND snoozed_until<=? GROUP BY folder_id",
+      actorId,
+      epoch(),
+    );
+    const counts = row<{ starred: number; snoozed: number; scheduled: number; outbox: number }>(
+      this.sql,
+      "SELECT coalesce(sum(is_starred*total),0) starred,coalesce(sum(CASE WHEN snoozed_until>? THEN total ELSE 0 END),0) snoozed,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','retry_wait') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) scheduled,(SELECT count(DISTINCT s.message_id) FROM submissions s JOIN messages d ON d.id=s.message_id WHERE s.status IN ('scheduled','queued','processing','retry_wait','unknown') AND (d.draft_owner_id IS NULL OR d.draft_owner_id=?)) outbox FROM mailbox_counts WHERE owner_id='' OR owner_id=?",
+      epoch(),
+      actorId,
+      actorId,
+      actorId,
+    )!;
+    const drafts = row<{ n: number }>(
+      this.sql,
+      "SELECT count(*) n FROM drafts d JOIN messages m ON m.id=d.message_id WHERE d.state='editable' AND m.draft_owner_id=?",
+      actorId,
+    )!.n;
+    return {
+      folders: folders.map((folder) =>
+        folder.folder_id === "drafts" ? { ...folder, total: drafts, unread: 0 } : folder,
+      ),
+      ...counts,
+    };
   }
   findThread(references: string[]) {
     for (const reference of references.slice(-100).reverse()) {
@@ -449,12 +542,8 @@ export class MailPartitionDO extends DurableObject<Env> {
       snoozed_until?: number | null;
     },
   ) {
-    if (changes.folder_id === "spam" && changes.is_spam === undefined)
-      changes.is_spam = 1;
-    if (
-      ["inbox", "archive"].includes(changes.folder_id ?? "") &&
-      changes.is_spam === undefined
-    )
+    if (changes.folder_id === "spam" && changes.is_spam === undefined) changes.is_spam = 1;
+    if (["inbox", "archive"].includes(changes.folder_id ?? "") && changes.is_spam === undefined)
       changes.is_spam = 0;
     const message = this.get(messageId, actorId);
     if (message.version !== version) fail(409, "Message version changed");
@@ -481,29 +570,59 @@ export class MailPartitionDO extends DurableObject<Env> {
     return this.get(messageId, actorId);
   }
   /** Each item commits its receipt and outbox record with the CAS update. */
-  patchMany(actorId: string, operation: string, requestHash: string, items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
+  patchMany(
+    actorId: string,
+    operation: string,
+    requestHash: string,
+    items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[],
+  ) {
     this.sql.exec("DELETE FROM ui_command_receipts WHERE expires_at<?", epoch());
     return this.ctx.storage.transactionSync(() => {
       this.sql.exec("UPDATE read_model_state SET defer_threads=1 WHERE id=1");
-      const results = items.map(item => {
-      const operationId = actorId + ":" + operation + ":" + item.id;
-      const previous = row<{ request_hash: string; result_json: string }>(this.sql, "SELECT * FROM ui_command_receipts WHERE operation_id=?", operationId);
-      if (previous) {
-        if (previous.request_hash !== requestHash) fail(409, "Idempotency key reused with different request");
-        return JSON.parse(previous.result_json) as { id: string; success: true; before: MessageRow; message: MessageRow };
-      }
-      let threadId: string | undefined;
-      try {
-        return this.ctx.storage.transactionSync(() => {
-          const before = this.get(item.id, actorId); threadId = before.thread_id;
-          const message = this.patch(item.id, actorId, item.version, { ...item.changes });
-          const result = { id: item.id, success: true as const, before, message };
-          this.sql.exec("INSERT INTO ui_command_receipts VALUES(?,?,?,?)", operationId, requestHash, JSON.stringify(result), epoch() + 86400);
-          return result;
-        });
-      } catch (error) {
-        return { id: item.id, thread_id: threadId, success: false as const, error: error instanceof Error ? error.message.replace(/^MAIL:\d{3}:/, "") : "Operation failed" };
-      }
+      const results = items.map((item) => {
+        const operationId = actorId + ":" + operation + ":" + item.id;
+        const previous = row<{ request_hash: string; result_json: string }>(
+          this.sql,
+          "SELECT * FROM ui_command_receipts WHERE operation_id=?",
+          operationId,
+        );
+        if (previous) {
+          if (previous.request_hash !== requestHash)
+            fail(409, "Idempotency key reused with different request");
+          return JSON.parse(previous.result_json) as {
+            id: string;
+            success: true;
+            before: MessageRow;
+            message: MessageRow;
+          };
+        }
+        let threadId: string | undefined;
+        try {
+          return this.ctx.storage.transactionSync(() => {
+            const before = this.get(item.id, actorId);
+            threadId = before.thread_id;
+            const message = this.patch(item.id, actorId, item.version, { ...item.changes });
+            const result = { id: item.id, success: true as const, before, message };
+            this.sql.exec(
+              "INSERT INTO ui_command_receipts VALUES(?,?,?,?)",
+              operationId,
+              requestHash,
+              JSON.stringify(result),
+              epoch() + 86400,
+            );
+            return result;
+          });
+        } catch (error) {
+          return {
+            id: item.id,
+            thread_id: threadId,
+            success: false as const,
+            error:
+              error instanceof Error
+                ? error.message.replace(/^MAIL:\d{3}:/, "")
+                : "Operation failed",
+          };
+        }
       });
       rebuildDirtyThreads(this.sql);
       this.sql.exec("UPDATE read_model_state SET defer_threads=0 WHERE id=1");
@@ -527,8 +646,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     },
   ) {
     const message = this.get(messageId, actorId);
-    if (!message.draft || message.draft.state !== "editable")
-      fail(409, "Draft is not editable");
+    if (!message.draft || message.draft.state !== "editable") fail(409, "Draft is not editable");
     if (message.draft.version !== version) fail(409, "Draft version changed");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
@@ -540,10 +658,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         epoch(),
         messageId,
       );
-      this.sql.exec(
-        "UPDATE drafts SET version=version+1 WHERE message_id=?",
-        messageId,
-      );
+      this.sql.exec("UPDATE drafts SET version=version+1 WHERE message_id=?", messageId);
       this.sql.exec(
         "INSERT INTO draft_revisions VALUES(?,?,?,?)",
         messageId,
@@ -551,10 +666,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         input.body_r2_key,
         epoch(),
       );
-      this.sql.exec(
-        "DELETE FROM message_recipients WHERE message_id=?",
-        messageId,
-      );
+      this.sql.exec("DELETE FROM message_recipients WHERE message_id=?", messageId);
       for (const kind of ["to", "cc", "bcc"] as const)
         input[kind].forEach((address, ordinal) =>
           this.sql.exec(
@@ -566,12 +678,33 @@ export class MailPartitionDO extends DurableObject<Env> {
           ),
         );
       if (input.attachments) {
-        for (const removed of message.attachments.filter((file) => !input.attachments!.some((keep) => keep.id === file.id))) {
-          this.sql.exec("INSERT OR IGNORE INTO garbage VALUES(?,?)", removed.r2_key, epoch() + 86400);
+        for (const removed of message.attachments.filter(
+          (file) => !input.attachments!.some((keep) => keep.id === file.id),
+        )) {
+          this.sql.exec(
+            "INSERT OR IGNORE INTO garbage VALUES(?,?)",
+            removed.r2_key,
+            epoch() + 86400,
+          );
         }
         this.sql.exec("DELETE FROM attachments WHERE message_id=?", messageId);
-        for (const file of input.attachments) this.sql.exec("INSERT INTO attachments(id,message_id,filename,content_type,size_bytes,content_id,r2_key,disposition) VALUES(?,?,?,?,?,?,?,?)", file.id, messageId, file.filename, file.content_type, file.size_bytes, file.content_id, file.r2_key, file.disposition);
-        this.sql.exec("UPDATE messages SET has_attachments=? WHERE id=?", Number(input.attachments.length > 0), messageId);
+        for (const file of input.attachments)
+          this.sql.exec(
+            "INSERT INTO attachments(id,message_id,filename,content_type,size_bytes,content_id,r2_key,disposition) VALUES(?,?,?,?,?,?,?,?)",
+            file.id,
+            messageId,
+            file.filename,
+            file.content_type,
+            file.size_bytes,
+            file.content_id,
+            file.r2_key,
+            file.disposition,
+          );
+        this.sql.exec(
+          "UPDATE messages SET has_attachments=? WHERE id=?",
+          Number(input.attachments.length > 0),
+          messageId,
+        );
       }
       this.index(
         messageId,
@@ -585,17 +718,10 @@ export class MailPartitionDO extends DurableObject<Env> {
     return this.get(messageId, actorId);
   }
   submit(
-    value: Omit<
-      Submission,
-      "provider_message_id" | "lease_until" | "attempt_count" | "error_code"
-    >,
+    value: Omit<Submission, "provider_message_id" | "lease_until" | "attempt_count" | "error_code">,
     fromAddress: string,
   ) {
-    const existing = row<Submission>(
-      this.sql,
-      "SELECT * FROM submissions WHERE id=?",
-      value.id,
-    );
+    const existing = row<Submission>(this.sql, "SELECT * FROM submissions WHERE id=?", value.id);
     if (existing) {
       if (existing.request_hash !== value.request_hash)
         fail(409, "Idempotency key reused with different request");
@@ -638,26 +764,15 @@ export class MailPartitionDO extends DurableObject<Env> {
           value.id,
           recipient.email_address,
         );
-      this.sql.exec(
-        "UPDATE drafts SET state='submitted' WHERE message_id=?",
-        value.message_id,
-      );
-      this.sql.exec(
-        "UPDATE messages SET from_address=? WHERE id=?",
-        fromAddress,
-        value.message_id,
-      );
+      this.sql.exec("UPDATE drafts SET state='submitted' WHERE message_id=?", value.message_id);
+      this.sql.exec("UPDATE messages SET from_address=? WHERE id=?", fromAddress, value.message_id);
       for (const document of rows<{
         id: number;
         subject: string;
         from_address: string;
         to_addresses: string;
         body: string;
-      }>(
-        this.sql,
-        "SELECT * FROM search_documents WHERE message_id=?",
-        value.message_id,
-      )) {
+      }>(this.sql, "SELECT * FROM search_documents WHERE message_id=?", value.message_id)) {
         this.sql.exec(
           "INSERT INTO messages_fts(messages_fts,rowid,subject,from_address,to_addresses,body) VALUES('delete',?,?,?,?,?)",
           document.id,
@@ -685,19 +800,12 @@ export class MailPartitionDO extends DurableObject<Env> {
     return this.submission(value.id);
   }
   findSubmission(submissionId: string) {
-    return row<Submission>(
-      this.sql,
-      "SELECT * FROM submissions WHERE id=?",
-      submissionId,
-    );
+    return row<Submission>(this.sql, "SELECT * FROM submissions WHERE id=?", submissionId);
   }
   submission(submissionId: string) {
     return (
-      row<Submission>(
-        this.sql,
-        "SELECT * FROM submissions WHERE id=?",
-        submissionId,
-      ) ?? fail(404, "Submission not found")
+      row<Submission>(this.sql, "SELECT * FROM submissions WHERE id=?", submissionId) ??
+      fail(404, "Submission not found")
     );
   }
   submissionView(submissionId: string, actorId: string) {
@@ -729,10 +837,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       );
       return null;
     }
-    if (
-      !["scheduled", "queued", "retry_wait"].includes(job.status) ||
-      job.scheduled_at > epoch()
-    )
+    if (!["scheduled", "queued", "retry_wait"].includes(job.status) || job.scheduled_at > epoch())
       return null;
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
@@ -758,8 +863,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     // A user may cancel an uncertain send and reopen its draft. A late receipt
     // must not turn that canceled submission back into a sent message.
     if (job.status === "canceled") return false;
-    if (!["processing", "unknown"].includes(job.status))
-      fail(409, "Submission is not processing");
+    if (!["processing", "unknown"].includes(job.status)) fail(409, "Submission is not processing");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE submissions SET status='accepted',provider_message_id=?,lease_until=NULL,error_code=NULL,updated_at=? WHERE id=?",
@@ -815,10 +919,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         submissionId,
       );
       if (status === "failed")
-        this.sql.exec(
-          "UPDATE drafts SET state='editable' WHERE message_id=?",
-          job.message_id,
-        );
+        this.sql.exec("UPDATE drafts SET state='editable' WHERE message_id=?", job.message_id);
       this.change(job.message_id, status, job.actor_id);
     });
   }
@@ -833,10 +934,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         epoch(),
         submissionId,
       );
-      this.sql.exec(
-        "UPDATE drafts SET state='editable' WHERE message_id=?",
-        job.message_id,
-      );
+      this.sql.exec("UPDATE drafts SET state='editable' WHERE message_id=?", job.message_id);
       this.change(job.message_id, "canceled", job.actor_id);
     });
     return this.submission(submissionId);
@@ -845,12 +943,8 @@ export class MailPartitionDO extends DurableObject<Env> {
     this.submissionView(submissionId, actorId);
     const job = this.submission(submissionId),
       message = this.get(job.message_id, actorId);
-    if (job.status !== "failed")
-      fail(409, "Only known failed submissions may be retried");
-    if (
-      message.draft?.version !== job.draft_version ||
-      message.draft.state !== "editable"
-    )
+    if (job.status !== "failed") fail(409, "Only known failed submissions may be retried");
+    if (message.draft?.version !== job.draft_version || message.draft.state !== "editable")
       fail(409, "Draft changed; create a new submission");
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
@@ -859,18 +953,11 @@ export class MailPartitionDO extends DurableObject<Env> {
         epoch(),
         submissionId,
       );
-      this.sql.exec(
-        "UPDATE drafts SET state='submitted' WHERE message_id=?",
-        job.message_id,
-      );
+      this.sql.exec("UPDATE drafts SET state='submitted' WHERE message_id=?", job.message_id);
     });
     return this.submission(submissionId);
   }
-  providerSubmission(
-    provider: string,
-    connectionId: string,
-    providerMessageId: string,
-  ) {
+  providerSubmission(provider: string, connectionId: string, providerMessageId: string) {
     return (
       row<{ id: string }>(
         this.sql,
@@ -924,11 +1011,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     });
   }
   private erase(messageId: string) {
-    const message = row<MessageRow>(
-      this.sql,
-      "SELECT * FROM messages WHERE id=?",
-      messageId,
-    );
+    const message = row<MessageRow>(this.sql, "SELECT * FROM messages WHERE id=?", messageId);
     if (!message) return;
     if (
       row(
@@ -959,12 +1042,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       ).map((f) => f.snapshot_r2_key),
     ];
     for (const key of keys)
-      if (key)
-        this.sql.exec(
-          "INSERT OR IGNORE INTO garbage VALUES(?,?)",
-          key,
-          epoch() + 86400,
-        );
+      if (key) this.sql.exec("INSERT OR IGNORE INTO garbage VALUES(?,?)", key, epoch() + 86400);
     this.sql.exec("DELETE FROM submissions WHERE message_id=?", messageId);
     this.sql.exec("DELETE FROM messages WHERE id=?", messageId);
     this.change(messageId, "deleted", message.draft_owner_id, message.thread_id);
@@ -976,11 +1054,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => this.erase(messageId));
   }
   async rebuildIndex(messageId: string, text: string) {
-    const message = row<MessageRow>(
-      this.sql,
-      "SELECT * FROM messages WHERE id=?",
-      messageId,
-    );
+    const message = row<MessageRow>(this.sql, "SELECT * FROM messages WHERE id=?", messageId);
     if (!message) return;
     const to = rows<{ email_address: string }>(
       this.sql,
@@ -1038,14 +1112,14 @@ export class MailPartitionDO extends DurableObject<Env> {
     );
   }
   markDispatched(outboxId: string) {
-    this.sql.exec(
-      "UPDATE outbox SET dispatched_at=? WHERE id=?",
-      epoch(),
-      outboxId,
-    );
+    this.sql.exec("UPDATE outbox SET dispatched_at=? WHERE id=?", epoch(), outboxId);
   }
   markDispatchedMany(ids: string[]) {
-    this.sql.exec("UPDATE outbox SET dispatched_at=? WHERE id IN (SELECT value FROM json_each(?))", epoch(), JSON.stringify(ids));
+    this.sql.exec(
+      "UPDATE outbox SET dispatched_at=? WHERE id IN (SELECT value FROM json_each(?))",
+      epoch(),
+      JSON.stringify(ids),
+    );
   }
   async maintenance(retentionDays: number | null) {
     for (const stale of rows<{ id: string }>(
@@ -1078,14 +1152,8 @@ export class MailPartitionDO extends DurableObject<Env> {
       await this.env.MAIL_BUCKET.delete(item.r2_key);
       this.sql.exec("DELETE FROM garbage WHERE r2_key=?", item.r2_key);
     }
-    this.sql.exec(
-      "DELETE FROM outbox WHERE dispatched_at<?",
-      epoch() - 7 * 86400,
-    );
-    this.sql.exec(
-      "DELETE FROM change_log WHERE created_at<?",
-      epoch() - 30 * 86400,
-    );
+    this.sql.exec("DELETE FROM outbox WHERE dispatched_at<?", epoch() - 7 * 86400);
+    this.sql.exec("DELETE FROM change_log WHERE created_at<?", epoch() - 30 * 86400);
     const identity = row<{ mailbox_id: string; partition_id: string }>(
       this.sql,
       "SELECT * FROM partition_identity WHERE id=1",
@@ -1114,11 +1182,7 @@ export class MailPartitionDO extends DurableObject<Env> {
           ...identity,
           reference_id: uncertain.id,
         });
-      this.sql.exec(
-        "UPDATE submissions SET reconciled_at=? WHERE id=?",
-        epoch(),
-        uncertain.id,
-      );
+      this.sql.exec("UPDATE submissions SET reconciled_at=? WHERE id=?", epoch(), uncertain.id);
     }
     for (const pending of rows<{ id: string }>(
       this.sql,
@@ -1130,14 +1194,8 @@ export class MailPartitionDO extends DurableObject<Env> {
         ...identity,
         reference_id: pending.id,
       });
-    this.sql.exec(
-      "DELETE FROM processing_receipts WHERE created_at<?",
-      epoch() - 30 * 86400,
-    );
-    this.sql.exec(
-      "DELETE FROM provider_events WHERE created_at<?",
-      epoch() - 90 * 86400,
-    );
+    this.sql.exec("DELETE FROM processing_receipts WHERE created_at<?", epoch() - 30 * 86400);
+    this.sql.exec("DELETE FROM provider_events WHERE created_at<?", epoch() - 90 * 86400);
     this.sql.exec(
       "DELETE FROM webhook_deliveries WHERE status<>'pending' AND updated_at<?",
       epoch() - 30 * 86400,

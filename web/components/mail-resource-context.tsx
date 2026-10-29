@@ -11,7 +11,12 @@ export function MailResourceProvider({ children }: { children: ReactNode }) {
   const permissions = [...useAccess().permissions].sort().join("\n");
   const cache = useMemo(() => {
     const instance = new MailResourceCache(async (path, signal) => {
-      const data = await api(path, { signal: /\/(?:render\/assets|attachments)\//.test(path) ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : signal, ...(/\/(?:render\/assets|attachments)\//.test(path) ? { response: "blob" as const } : {}) });
+      const data = await api(path, {
+        signal: /\/(?:render\/assets|attachments)\//.test(path)
+          ? AbortSignal.any([signal, AbortSignal.timeout(12_000)])
+          : signal,
+        ...(/\/(?:render\/assets|attachments)\//.test(path) ? { response: "blob" as const } : {}),
+      });
       if (!signal.aborted) hydrateMailResources(instance, path, data);
       return data;
     });

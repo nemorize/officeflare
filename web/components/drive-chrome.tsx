@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  NavLink,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
   Button,
   Drawer,
@@ -51,8 +46,7 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
               to={item.path}
               onClick={onNavigate}
               className={
-                item.path === "/drive" &&
-                location.pathname.startsWith("/drive/folders/")
+                item.path === "/drive" && location.pathname.startsWith("/drive/folders/")
                   ? "active"
                   : undefined
               }
@@ -80,13 +74,10 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </Meter.Track>
             </Meter.Root>
             <p>
-              {formatBytes(drive.quota.used_bytes)} of{" "}
-              {formatBytes(drive.quota.quota_bytes)} used
+              {formatBytes(drive.quota.used_bytes)} of {formatBytes(drive.quota.quota_bytes)} used
             </p>
             {!!drive.quota.reserved_bytes && (
-              <p>
-                {formatBytes(drive.quota.reserved_bytes)} reserved for uploads
-              </p>
+              <p>{formatBytes(drive.quota.reserved_bytes)} reserved for uploads</p>
             )}
           </>
         ) : (
@@ -123,9 +114,7 @@ export function DriveTopbar({
   const updateField = (key: keyof DriveSearchFields, value: string) =>
     setFields((old) => ({ ...old, [key]: value }));
   const submit = (advanced = false) => {
-    const next = driveSearchParams(
-      advanced ? fields : { ...readDriveSearch(params), q: query },
-    );
+    const next = driveSearchParams(advanced ? fields : { ...readDriveSearch(params), q: query });
     navigate(next.size ? `/drive?${next}` : "/drive");
     setFilters(false);
   };
@@ -153,9 +142,11 @@ export function DriveTopbar({
               label="Search file type"
               value={fields.type}
               onChange={(value) => updateField("type", value)}
-              options={driveSearchTypes.some((option) => option.value === fields.type)
-                ? driveSearchTypes
-                : [...driveSearchTypes, { value: fields.type, label: fields.type }]}
+              options={
+                driveSearchTypes.some((option) => option.value === fields.type)
+                  ? driveSearchTypes
+                  : [...driveSearchTypes, { value: fields.type, label: fields.type }]
+              }
             />
           </Field.Root>
           <Field.Root className="drive-field">
@@ -196,7 +187,9 @@ export function DriveTopbar({
         <Button variant="ghost" onClick={() => setFields(readDriveSearch(new URLSearchParams()))}>
           Reset filters
         </Button>
-        <Button variant="primary" type="submit">Search</Button>
+        <Button variant="primary" type="submit">
+          Search
+        </Button>
       </div>
     </form>
   );
@@ -207,9 +200,14 @@ export function DriveTopbar({
         label="Toggle Drive navigation"
         aria-expanded={mobile ? menu : !sidebarCollapsed}
         aria-haspopup={mobile ? "dialog" : undefined}
-        onClick={() => mobile ? setMenu(true) : onToggleSidebar()}
+        onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
       />
-      <WorkspaceNavigationDrawer open={menu} onOpenChange={setMenu} title="Drive" account={mobileAccount}>
+      <WorkspaceNavigationDrawer
+        open={menu}
+        onOpenChange={setMenu}
+        title="Drive"
+        account={mobileAccount}
+      >
         <DriveSidebar onNavigate={() => setMenu(false)} />
       </WorkspaceNavigationDrawer>
       <SearchField
@@ -221,7 +219,8 @@ export function DriveTopbar({
         }}
       >
         <Icon name="search" />
-        <Input variant="integrated"
+        <Input
+          variant="integrated"
           ref={input}
           aria-label="Search in Drive"
           placeholder="Search in Drive"
@@ -248,13 +247,27 @@ export function DriveTopbar({
             aria-haspopup="dialog"
             data-active={isDriveSearch(params) || undefined}
             onClick={() => openFilters(true)}
-          ><Icon name="controls" /></Button>
+          >
+            <Icon name="controls" />
+          </Button>
         ) : (
           <Popover.Root open={filters} onOpenChange={openFilters}>
-            <Popover.Trigger render={<Button variant="ghost" size="icon" aria-label="Search filters" data-active={isDriveSearch(params) || undefined} />}>
+            <Popover.Trigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Search filters"
+                  data-active={isDriveSearch(params) || undefined}
+                />
+              }
+            >
               <Icon name="controls" />
             </Popover.Trigger>
-            <PopoverPopup className="drive-filter-popup" positionerProps={{ side: "bottom", align: "end", sideOffset: 12 }}>
+            <PopoverPopup
+              className="drive-filter-popup"
+              positionerProps={{ side: "bottom", align: "end", sideOffset: 12 }}
+            >
               {filterForm}
             </PopoverPopup>
           </Popover.Root>
@@ -265,9 +278,15 @@ export function DriveTopbar({
           <DrawerPopup side="right" padding="none" className="drive-search-drawer">
             <div className="drive-search-drawer-heading">
               <Drawer.Title>Search filters</Drawer.Title>
-              <DriveIconButton icon="close" label="Close search filters" onClick={() => openFilters(false)} />
+              <DriveIconButton
+                icon="close"
+                label="Close search filters"
+                onClick={() => openFilters(false)}
+              />
             </div>
-            <Drawer.Description className="visually-hidden">Find files and folders you can access.</Drawer.Description>
+            <Drawer.Description className="visually-hidden">
+              Find files and folders you can access.
+            </Drawer.Description>
             {filterForm}
           </DrawerPopup>
         </Drawer.Root>

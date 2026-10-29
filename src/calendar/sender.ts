@@ -1,9 +1,5 @@
 import type { AuthEnv } from "../auth/types";
-import {
-  activeAccountSql,
-  mailAccessSql,
-  sender as mailSender,
-} from "../mail/control";
+import { activeAccountSql, mailAccessSql, sender as mailSender } from "../mail/control";
 import { providers } from "../mail/providers";
 import { condition, first } from "./access";
 
@@ -38,11 +34,7 @@ export async function personalInvitationSender(
     userId,
     JSON.stringify(
       providers
-        .filter(
-          (value) =>
-            value.capabilities.send &&
-            (value.id !== "cloudflare" || !!env.EMAIL),
-        )
+        .filter((value) => value.capabilities.send && (value.id !== "cloudflare" || !!env.EMAIL))
         .map((value) => value.id),
     ),
   );
@@ -62,8 +54,7 @@ export async function personalInvitationSender(
   } catch (error) {
     // A concurrent revocation or unsupported provider must not fall back to a
     // different person's address. Database/runtime failures still retry.
-    if (error instanceof Error && /^MAIL:(403|409|422):/.test(error.message))
-      return null;
+    if (error instanceof Error && /^MAIL:(403|409|422):/.test(error.message)) return null;
     throw error;
   }
 }

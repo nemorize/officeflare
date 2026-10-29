@@ -1,45 +1,16 @@
 import { uuid, now } from "../auth/types";
-import type {
-  CalendarContext,
-  Event,
-  Calendar,
-  Bind,
-  Condition,
-} from "./types";
+import type { CalendarContext, Event, Calendar, Bind, Condition } from "./types";
 import type { Attendee, Policy } from "./collaboration-types";
-import {
-  condition,
-  first,
-  rows,
-  calendarCondition,
-  active,
-  identity,
-  combine,
-} from "./access";
-import {
-  choice,
-  fail,
-  flag,
-  identifier,
-  integer,
-  object,
-  fields,
-  text,
-} from "./input";
+import { condition, first, rows, calendarCondition, active, identity, combine } from "./access";
+import { choice, fail, flag, identifier, integer, object, fields, text } from "./input";
 import { insert, update, change } from "./mutations";
 import { applyOverride, originalOccurrence, keyOf } from "./recurrence";
 import { loadOverrides } from "./event-data";
 import { canSeeDetails } from "./access";
 import { recipientUser } from "./recipients";
-export async function attendanceDetails(
-  c: CalendarContext,
-  cal: Calendar,
-  event: Event,
-  key = "",
-) {
+export async function attendanceDetails(c: CalendarContext, cal: Calendar, event: Event, key = "") {
   const effective = await occurrence(c, event, key);
-  if (!canSeeDetails(effective, cal))
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+  if (!canSeeDetails(effective, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
   if (!key)
     for (const value of await loadOverrides(c, [event.id]))
       if (!canSeeDetails({ ...event, ...JSON.parse(value.patch_json) }, cal))
@@ -49,9 +20,7 @@ export async function attendanceDetails(
 export const email = (value: unknown) => {
   const result = text(value, "email_address", 254).trim().toLowerCase();
   if (
-    !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(
-      result,
-    ) ||
+    !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(result) ||
     /[\r\n]/.test(result)
   )
     fail(400, "INVALID_EMAIL", "Invalid email address");
@@ -60,9 +29,7 @@ export const email = (value: unknown) => {
 export async function occurrence(c: CalendarContext, event: Event, key = "") {
   if (!key) return event;
   const original = originalOccurrence(event, key),
-    override = (await loadOverrides(c, [event.id])).find(
-      (value) => value.occurrence_key === key,
-    ),
+    override = (await loadOverrides(c, [event.id])).find((value) => value.occurrence_key === key),
     effective = applyOverride(event, original, override);
   if (effective.status === "cancelled" || event.trashed_at)
     fail(409, "OCCURRENCE_CANCELLED", "Occurrence is cancelled");
@@ -118,11 +85,7 @@ export const allAttendees = (c: CalendarContext, event: string) =>
     "SELECT a.*,s.event_id,s.occurrence_key FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id=? AND a.removed_at IS NULL ORDER BY a.id",
     event,
   );
-export async function effectiveAttendees(
-  c: CalendarContext,
-  event: string,
-  key = "",
-) {
+export async function effectiveAttendees(c: CalendarContext, event: string, key = "") {
   const values = (await allAttendees(c, event)).filter(
     (value) => value.occurrence_key === "" || value.occurrence_key === key,
   );
@@ -150,9 +113,7 @@ export async function effectiveAttendees(
       JSON.stringify([...result.values()].map((value) => value.id)),
     );
     for (const response of responses) {
-      const value = [...result.values()].find(
-        (value) => value.id === response.attendee_id,
-      );
+      const value = [...result.values()].find((value) => value.id === response.attendee_id);
       if (value) {
         value.response_status = response.response_status;
         value.attendance_mode = response.attendance_mode;
@@ -163,11 +124,7 @@ export async function effectiveAttendees(
   }
   return [...result.values()];
 }
-export async function attendeeStates(
-  c: CalendarContext,
-  events: string[],
-  user: string,
-) {
+export async function attendeeStates(c: CalendarContext, events: string[], user: string) {
   const lookup = await attendeeStatesForUsers(c, events, [user]);
   return (event: string, key: string) => lookup(user, event, key);
 }
@@ -176,7 +133,8 @@ export async function attendeeStatesForUsers(
   events: string[],
   users: string[],
 ) {
-  const [attendees, excluded] = await Promise.all([rows<Attendee>(
+  const [attendees, excluded] = await Promise.all([
+    rows<Attendee>(
       c.env,
       "SELECT a.*,s.event_id,s.occurrence_key FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id IN(SELECT value FROM json_each(?)) AND a.user_id IN(SELECT value FROM json_each(?)) AND a.removed_at IS NULL",
       JSON.stringify(events),
@@ -190,17 +148,18 @@ export async function attendeeStatesForUsers(
       c.env,
       "SELECT * FROM calendar_attendee_exclusions WHERE event_id IN(SELECT value FROM json_each(?))",
       JSON.stringify(events),
-    )]);
+    ),
+  ]);
   const responses = await rows<{
-      attendee_id: string;
-      occurrence_key: string;
-      response_status: Attendee["response_status"];
-      attendance_mode: Attendee["attendance_mode"];
-    }>(
-      c.env,
-      "SELECT * FROM calendar_attendee_occurrence_responses WHERE attendee_id IN(SELECT value FROM json_each(?))",
-      JSON.stringify(attendees.map((value) => value.id)),
-    );
+    attendee_id: string;
+    occurrence_key: string;
+    response_status: Attendee["response_status"];
+    attendance_mode: Attendee["attendance_mode"];
+  }>(
+    c.env,
+    "SELECT * FROM calendar_attendee_occurrence_responses WHERE attendee_id IN(SELECT value FROM json_each(?))",
+    JSON.stringify(attendees.map((value) => value.id)),
+  );
   const members = new Map(
       attendees.map((value) => [
         `${value.user_id}:${value.event_id}:${value.occurrence_key}`,
@@ -208,16 +167,10 @@ export async function attendeeStatesForUsers(
       ]),
     ),
     blocks = new Set(
-      excluded.map(
-        (value) =>
-          `${value.event_id}:${value.occurrence_key}:${value.email_key}`,
-      ),
+      excluded.map((value) => `${value.event_id}:${value.occurrence_key}:${value.email_key}`),
     ),
     answers = new Map(
-      responses.map((value) => [
-        `${value.attendee_id}:${value.occurrence_key}`,
-        value,
-      ]),
+      responses.map((value) => [`${value.attendee_id}:${value.occurrence_key}`, value]),
     );
   return (user: string, event: string, key: string) => {
     const value = members.get(`${user}:${event}:${key}`) ?? members.get(`${user}:${event}:`);
@@ -256,15 +209,9 @@ export async function parseAttendee(
   if (data.user_id !== undefined && data.email_address !== undefined)
     fail(400, "INVALID_INPUT", "Use user_id or email_address");
   const resolved =
-    data.user_id === undefined
-      ? await recipientUser(c.env, email(data.email_address))
-      : null;
+    data.user_id === undefined ? await recipientUser(c.env, email(data.email_address)) : null;
   if (resolved?.ambiguous)
-    fail(
-      400,
-      "AMBIGUOUS_ATTENDEE",
-      "Choose the internal user ID for this address",
-    );
+    fail(400, "AMBIGUOUS_ATTENDEE", "Choose the internal user ID for this address");
   const user =
     data.user_id !== undefined
       ? await first<{
@@ -277,12 +224,9 @@ export async function parseAttendee(
           identifier(data.user_id),
         )
       : (resolved?.user ?? null);
-  if (data.user_id !== undefined && !user)
-    fail(400, "INVALID_ATTENDEE", "Unknown internal user");
+  if (data.user_id !== undefined && !user) fail(400, "INVALID_ATTENDEE", "Unknown internal user");
   const address =
-      data.email_address === undefined
-        ? user!.email_address
-        : email(data.email_address),
+      data.email_address === undefined ? user!.email_address : email(data.email_address),
     stamp = now();
   return {
     id: uuid(),
@@ -314,11 +258,7 @@ export async function parseAttendee(
     attendance_mode:
       data.attendance_mode === undefined
         ? "unspecified"
-        : choice(data.attendance_mode, "attendance_mode", [
-            "unspecified",
-            "in_person",
-            "virtual",
-          ]),
+        : choice(data.attendance_mode, "attendance_mode", ["unspecified", "in_person", "virtual"]),
     response_comment: "",
     version: 1,
     created_at: stamp,
@@ -365,24 +305,15 @@ export async function expandAttendeeInputs(
         });
     } else inputs.push(item);
   }
-  if (inputs.length > 100)
-    fail(422, "TOO_MANY_ATTENDEES", "At most 100 attendees are allowed");
+  if (inputs.length > 100) fail(422, "TOO_MANY_ATTENDEES", "At most 100 attendees are allowed");
   const result = new Map<string, Attendee>();
   for (const input of inputs) {
     const value = await parseAttendee(c, input, event, scopeId, key);
-    result.set(
-      value.user_id ? `user:${value.user_id}` : `email:${value.email_key}`,
-      value,
-    );
+    result.set(value.user_id ? `user:${value.user_id}` : `email:${value.email_key}`, value);
   }
   return [...result.values()];
 }
-export const scheduleCondition = (
-  c: CalendarContext,
-  cal: Calendar,
-  event: Event,
-  min = 3,
-) =>
+export const scheduleCondition = (c: CalendarContext, cal: Calendar, event: Event, min = 3) =>
   combine(
     calendarCondition(c, cal, min),
     condition(
@@ -400,26 +331,15 @@ export function eventAvailable(event: string, sequence?: number) {
   );
 }
 export function attendeeDto(value: Attendee, own = false) {
-  const {
-    scope_id,
-    email_key,
-    event_id,
-    occurrence_key,
-    removed_at,
-    response_comment,
-    ...rest
-  } = value;
+  const { scope_id, email_key, event_id, occurrence_key, removed_at, response_comment, ...rest } =
+    value;
   return {
     ...rest,
     optional: !!value.optional,
     ...(own ? { response_comment, event_id, occurrence_key } : {}),
   };
 }
-export async function policy(
-  c: CalendarContext,
-  event: string,
-  key = "",
-): Promise<Policy> {
+export async function policy(c: CalendarContext, event: string, key = ""): Promise<Policy> {
   return (
     (await first<Policy>(
       c.env,
@@ -505,9 +425,7 @@ export async function capacityChecks(
         value = cap.args[current];
       if (current === cap.args.length - 1) return "p.capacity";
       if (value === "__scope_key__") return "k.occurrence_key";
-      return typeof value === "number"
-        ? String(value)
-        : `'${String(value).replaceAll("'", "''")}'`;
+      return typeof value === "number" ? String(value) : `'${String(value).replaceAll("'", "''")}'`;
     });
     return [
       condition(
@@ -536,30 +454,18 @@ export async function capacityChecks(
           ).map((value) => value.occurrence_key),
         ]),
       ];
-  if (keys.length > 500)
-    fail(422, "TOO_MANY_SCOPES", "Respond to individual occurrences instead");
+  if (keys.length > 500) fail(422, "TOO_MANY_SCOPES", "Respond to individual occurrences instead");
   const checks: Condition[] = [];
   for (const item of keys) {
     const p = await policy(c, event.id, item);
     checks.push(
       policyCondition(p),
-      capacityCondition(
-        event.id,
-        item,
-        attendee.email_key,
-        attendee.additional_guests,
-        p.capacity,
-      ),
+      capacityCondition(event.id, item, attendee.email_key, attendee.additional_guests, p.capacity),
     );
   }
   return checks;
 }
-export function bumpAttendance(
-  c: CalendarContext,
-  event: Event,
-  proof: string,
-  key = "",
-) {
+export function bumpAttendance(c: CalendarContext, event: Event, proof: string, key = "") {
   return [
     c.env.DB.prepare(
       `UPDATE calendar_events SET version=version+1,updated_at=? WHERE id=? AND ${proof}`,

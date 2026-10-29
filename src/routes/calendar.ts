@@ -24,16 +24,10 @@ import sharingRoutes, { adminSettings } from "../calendar/sharing";
 import linkRoutes, { linkSessions } from "../calendar/links";
 import { publicRoutes } from "../calendar/public";
 import attendeeRoutes, { ownInvitations } from "../calendar/attendees";
-import {
-  registrationRoutes,
-  publicRegistrations,
-} from "../calendar/registrations";
+import { registrationRoutes, publicRegistrations } from "../calendar/registrations";
 import availabilityRoutes from "../calendar/availability";
 import attachmentRoutes from "../calendar/attachments";
-import proposalRoutes, {
-  ownProposalRoutes,
-  publicProposalRoutes,
-} from "../calendar/proposals";
+import proposalRoutes, { ownProposalRoutes, publicProposalRoutes } from "../calendar/proposals";
 import { publishingRoutes } from "../calendar/publishing";
 const capabilities = {
   phase: 2,
@@ -95,53 +89,87 @@ calendar.use("/inbox-invitations", requireAccess);
 calendar.use("/inbox-invitations/*", requireAccess);
 calendar.route("/", ownInvitations);
 calendar.route("/", ownProposalRoutes);
-calendar.use(
-  "/admin/*",
-  requireAccess,
-  requirePermission("admin.calendar.settings.read"),
-);
+calendar.use("/admin/*", requireAccess, requirePermission("admin.calendar.settings.read"));
 calendar.route("/", adminSettings);
 calendar.use("*", requireAccess, requirePermission("calendar.access"));
-calendar.use("*", async (c, next) => { c.set("initializeCalendar", () => ensurePrimary(c)); await next(); });
+calendar.use("*", async (c, next) => {
+  c.set("initializeCalendar", () => ensurePrimary(c));
+  await next();
+});
 calendar.get("/capabilities", async (c) =>
   c.json({
     ...capabilities,
-    permissions: (
-      await requestPermissions(c)
-    ).filter((key) => key.startsWith("calendar.")),
+    permissions: (await requestPermissions(c)).filter((key) => key.startsWith("calendar.")),
   }),
 );
 calendar.get("/bootstrap", async (c) => {
   await ensurePrimary(c);
   const [list, prefs] = await Promise.all([calendars(c), preferences(c)]),
     primary = list.find((cal) => cal.is_primary)!;
-  const [labels, subs] = await Promise.all([rows(
+  const [labels, subs] = await Promise.all([
+    rows(
       c.env,
       "SELECT * FROM calendar_labels WHERE calendar_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL ORDER BY sort_order,id",
       JSON.stringify(
         list
-          .filter((cal) =>
-            ["writer", "manager", "data_owner"].includes(cal.effective_role),
-          )
+          .filter((cal) => ["writer", "manager", "data_owner"].includes(cal.effective_role))
           .map((cal) => cal.id),
       ),
-    ), subscriptions(c, list)]);
+    ),
+    subscriptions(c, list),
+  ]);
   let initial_events;
   if (c.req.query("include_events") === "true") {
     let date = Temporal.Now.plainDateISO(prefs.time_zone).toString();
-    try { const requested = c.req.query("date"); if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)) { const parsed = Temporal.PlainDate.from(requested); if (parsed.year >= 1970 && parsed.year <= 2100) date = parsed.toString(); } } catch { /* Match the UI fallback for invalid dates. */ }
-    const requestedView = c.req.query("view"), search = c.req.query("q") ?? "";
-    const view = calendarStartView(requestedView, prefs, validCalendarView(c.req.query("cached_view")));
-    const range = viewRange(date, search ? "agenda" : view, prefs.week_start);
-    const selected = list.filter(cal => subs.some(sub => sub.calendar_id === cal.id && sub.selected && !sub.hidden));
-    const query = new URLSearchParams({ time_min: Temporal.PlainDate.from(range.start).toZonedDateTime(prefs.time_zone).toInstant().toString(), time_max: Temporal.PlainDate.from(range.end).toZonedDateTime(prefs.time_zone).toInstant().toString(), expand_recurring: "true", calendar_ids: selected.map(cal => cal.id).join(","), ...(search ? { q: search } : {}) });
-    const key = query.toString(); query.set("limit", "500");
     try {
-      initial_events = { query: key, ...(selected.length ? await listEvents(c, query, list) : { events: [], next_cursor: null }) };
+      const requested = c.req.query("date");
+      if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)) {
+        const parsed = Temporal.PlainDate.from(requested);
+        if (parsed.year >= 1970 && parsed.year <= 2100) date = parsed.toString();
+      }
+    } catch {
+      /* Match the UI fallback for invalid dates. */
+    }
+    const requestedView = c.req.query("view"),
+      search = c.req.query("q") ?? "";
+    const view = calendarStartView(
+      requestedView,
+      prefs,
+      validCalendarView(c.req.query("cached_view")),
+    );
+    const range = viewRange(date, search ? "agenda" : view, prefs.week_start);
+    const selected = list.filter((cal) =>
+      subs.some((sub) => sub.calendar_id === cal.id && sub.selected && !sub.hidden),
+    );
+    const query = new URLSearchParams({
+      time_min: Temporal.PlainDate.from(range.start)
+        .toZonedDateTime(prefs.time_zone)
+        .toInstant()
+        .toString(),
+      time_max: Temporal.PlainDate.from(range.end)
+        .toZonedDateTime(prefs.time_zone)
+        .toInstant()
+        .toString(),
+      expand_recurring: "true",
+      calendar_ids: selected.map((cal) => cal.id).join(","),
+      ...(search ? { q: search } : {}),
+    });
+    const key = query.toString();
+    query.set("limit", "500");
+    try {
+      initial_events = {
+        query: key,
+        ...(selected.length ? await listEvents(c, query, list) : { events: [], next_cursor: null }),
+      };
     } catch (error) {
       // Event query limits must not hide the calendar catalog or preferences.
       if (!(error instanceof HTTPException) || error.status >= 500) throw error;
-      initial_events = { query: key, events: [], next_cursor: null, error: { status: error.status, message: error.message } };
+      initial_events = {
+        query: key,
+        events: [],
+        next_cursor: null,
+        error: { status: error.status, message: error.message },
+      };
     }
   }
   return c.json({
@@ -158,8 +186,13 @@ calendar.get("/people", requirePermission("calendar.sharing.internal"), async (c
   const query = (c.req.query("q") ?? "").trim().toLowerCase();
   if (query.length < 2) return c.json({ people: [] });
   if (query.length > 255) fail(400, "INVALID_INPUT", "Search is too long");
-  return c.json({ people: await rows(c.env,
-    `SELECT u.id,u.display_name,u.email_address FROM users u WHERE ${active("u")} AND instr(lower(COALESCE(u.display_name,'')||' '||u.email_address),?)>0 ORDER BY u.display_name,u.email_address,u.id LIMIT 20`, query) });
+  return c.json({
+    people: await rows(
+      c.env,
+      `SELECT u.id,u.display_name,u.email_address FROM users u WHERE ${active("u")} AND instr(lower(COALESCE(u.display_name,'')||' '||u.email_address),?)>0 ORDER BY u.display_name,u.email_address,u.id LIMIT 20`,
+      query,
+    ),
+  });
 });
 calendar.get("/changes", async (c) => {
   const user = c.get("identity").user,

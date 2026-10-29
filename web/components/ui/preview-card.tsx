@@ -8,7 +8,11 @@ export interface PreviewCardPopupProps extends ComponentPropsWithRef<typeof Prev
   positionerProps?: Omit<PreviewCard.Positioner.Props, "children">;
 }
 
-export function PreviewCardPopup({ portalProps, positionerProps, ...props }: PreviewCardPopupProps) {
+export function PreviewCardPopup({
+  portalProps,
+  positionerProps,
+  ...props
+}: PreviewCardPopupProps) {
   return (
     <PreviewCard.Portal {...portalProps}>
       <PreviewCard.Positioner data-ui="popup-positioner" {...positionerProps}>

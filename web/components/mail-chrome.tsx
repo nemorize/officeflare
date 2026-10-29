@@ -3,7 +3,8 @@ import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router
 import { useMail, useMailMenu, MailSidebar } from "./mail-context";
 import { MailIconButton } from "./mail-controls";
 import { WorkspaceNavigationDrawer } from "./workspace-navigation";
-import { CheckboxLabel,
+import {
+  CheckboxLabel,
   Button,
   Drawer,
   DrawerPopup,
@@ -22,17 +23,15 @@ import {
   useMailMobile,
 } from "./mail-common";
 export function MailSettingsButton() {
-  const menu = useMailMenu(), mail = useMail();
+  const menu = useMailMenu(),
+    mail = useMail();
   return (
     <MailIconButton
       icon="settings"
       label="Mail settings"
       nativeButton={false}
       render={
-        <NavLink
-          to={mail.href("/mail/settings")}
-          onClick={() => menu.setMobileMenu(false)}
-        />
+        <NavLink to={mail.href("/mail/settings")} onClick={() => menu.setMobileMenu(false)} />
       }
     />
   );
@@ -40,7 +39,8 @@ export function MailSettingsButton() {
 
 export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
   const mobile = useMailMobile();
-  const menu = useMailMenu(), mail = useMail(),
+  const menu = useMailMenu(),
+    mail = useMail(),
     navigate = useNavigate(),
     location = useLocation(),
     [params] = useSearchParams(),
@@ -92,8 +92,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         hasAttachment = false;
       for (const token of search.match(/-?(?:[a-z]+:)?"[^"]*"|\S+/g) ?? []) {
         const match = /^(from|to|subject|after|before):(.+)$/.exec(token);
-        if (match && !fields[match[1]!])
-          fields[match[1]!] = match[2]!.replace(/^"|"$/g, "");
+        if (match && !fields[match[1]!]) fields[match[1]!] = match[2]!.replace(/^"|"$/g, "");
         else if (token === "is:unread") onlyUnread = true;
         else if (token === "has:attachment") hasAttachment = true;
         else remaining.push(token);
@@ -144,16 +143,8 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
       {!mobile && <h2>Search filters</h2>}
       <div className="mail-filter-fields">
         <div className="mail-form-grid">
-          <MailInput
-            label="From"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-          <MailInput
-            label="To"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <MailInput label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <MailInput label="To" value={to} onChange={(e) => setTo(e.target.value)} />
           <MailInput
             label="Subject"
             fieldClassName="mail-filter-subject"
@@ -175,17 +166,11 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         </div>
         <div className="mail-filter-checks">
           <CheckboxLabel>
-            <MailCheckbox
-              checked={unread}
-              onCheckedChange={(v) => setUnread(!!v)}
-            />
+            <MailCheckbox checked={unread} onCheckedChange={(v) => setUnread(!!v)} />
             Unread only
           </CheckboxLabel>
           <CheckboxLabel>
-            <MailCheckbox
-              checked={attached}
-              onCheckedChange={(v) => setAttached(!!v)}
-            />
+            <MailCheckbox checked={attached} onCheckedChange={(v) => setAttached(!!v)} />
             Has attachments
           </CheckboxLabel>
         </div>
@@ -203,8 +188,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         icon="menu"
         label="Toggle mail navigation"
         onClick={() => {
-          if (window.matchMedia("(max-width: 760px)").matches)
-            menu.setMobileMenu(true);
+          if (window.matchMedia("(max-width: 760px)").matches) menu.setMobileMenu(true);
           else
             void mail.setPreferences({
               sidebar_collapsed: !mail.preferences.sidebar_collapsed,
@@ -229,7 +213,8 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         }}
       >
         <Icon name="search" />
-        <Input variant="integrated"
+        <Input
+          variant="integrated"
           ref={searchInput}
           aria-label="Search mail"
           placeholder="Search mail"
@@ -260,13 +245,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         ) : (
           <Popover.Root open={filters} onOpenChange={openFilters}>
             <Popover.Trigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Search filters"
-                />
-              }
+              render={<Button variant="ghost" size="icon" aria-label="Search filters" />}
             >
               <Icon name="controls" />
             </Popover.Trigger>
@@ -280,12 +259,10 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         )}
       </SearchField>
       <Drawer.Provider>
-        <Drawer.Root
-          open={filters && mobile}
-          onOpenChange={openFilters}
-          swipeDirection="right"
-        >
-          <DrawerPopup side="right" padding="none"
+        <Drawer.Root open={filters && mobile} onOpenChange={openFilters} swipeDirection="right">
+          <DrawerPopup
+            side="right"
+            padding="none"
             className="mail-search-drawer"
             viewportProps={{
               className: "mail-drawer-viewport mail-drawer-right",
@@ -305,14 +282,23 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             {filterForm}
           </DrawerPopup>
         </Drawer.Root>
-        <WorkspaceNavigationDrawer open={menu.mobileMenu} onOpenChange={menu.setMobileMenu} title="Mail" account={mobileAccount} actions={<MailSettingsButton />}><MailSidebar /></WorkspaceNavigationDrawer>
+        <WorkspaceNavigationDrawer
+          open={menu.mobileMenu}
+          onOpenChange={menu.setMobileMenu}
+          title="Mail"
+          account={mobileAccount}
+          actions={<MailSettingsButton />}
+        >
+          <MailSidebar />
+        </WorkspaceNavigationDrawer>
       </Drawer.Provider>
     </header>
   );
 }
 
 export function MailPreferenceFields() {
-  const menu = useMailMenu(), mail = useMail();
+  const menu = useMailMenu(),
+    mail = useMail();
   return (
     <div className="mail-preference-fields">
       <MailField label="Display density">
@@ -382,8 +368,7 @@ export function MailPreferenceFields() {
         />
       </MailField>
       <p className="mail-hint">
-        Your preferences apply only to your account. Folder and mailbox settings
-        are shared.
+        Your preferences apply only to your account. Folder and mailbox settings are shared.
       </p>
     </div>
   );

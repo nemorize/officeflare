@@ -1,13 +1,5 @@
 import type { ReactNode, ComponentProps } from "react";
-import {
-  Button,
-  Icon,
-  Tooltip,
-  TooltipPopup,
-  Menu,
-  MenuPopup,
-  type IconProps,
-} from "./ui";
+import { Button, Icon, Tooltip, TooltipPopup, Menu, MenuPopup, type IconProps } from "./ui";
 export function MailIconButton({
   icon,
   label,
@@ -19,9 +11,7 @@ export function MailIconButton({
   return (
     <Tooltip.Root>
       <Tooltip.Trigger
-        render={
-          <Button size="icon" variant="ghost" aria-label={label} {...props} />
-        }
+        render={<Button size="icon" variant="ghost" aria-label={label} {...props} />}
       >
         <Icon name={icon} />
       </Tooltip.Trigger>
@@ -42,9 +32,7 @@ export function MailMenu({
 }) {
   return (
     <Menu.Root>
-      <Menu.Trigger
-        render={<Button size="icon" variant={variant} aria-label={label} />}
-      >
+      <Menu.Trigger render={<Button size="icon" variant={variant} aria-label={label} />}>
         <Icon name={icon} />
       </Menu.Trigger>
       <MenuPopup className="mail-action-menu">{children}</MenuPopup>

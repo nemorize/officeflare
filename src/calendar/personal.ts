@@ -1,13 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
-import {
-  calendarCondition,
-  condition,
-  first,
-  requireCalendar,
-  rows,
-} from "./access";
+import { calendarCondition, condition, first, requireCalendar, rows } from "./access";
 import type { CalendarContext, Copy } from "./types";
 import {
   body,
@@ -24,11 +18,7 @@ import { change, insert, mutate, update } from "./mutations";
 import { copyDto } from "./event-data";
 const routes = new Hono<AppEnv>();
 routes.get("/calendars/:calendarId/labels", async (c) => {
-  const cal = await requireCalendar(
-    c,
-    identifier(c.req.param("calendarId")),
-    4,
-  );
+  const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 4);
   return c.json({
     labels: await rows(
       c.env,
@@ -47,12 +37,7 @@ routes.post("/calendars/:calendarId/labels", async (c) => {
       calendar_id: cal.id,
       name: text(data.name, "name", 255),
       color: color(data.color),
-      sort_order: integer(
-        data.sort_order ?? 0,
-        "sort_order",
-        -1000000,
-        1000000,
-      ),
+      sort_order: integer(data.sort_order ?? 0, "sort_order", -1000000, 1000000),
       version: 1,
       created_at: stamp,
       updated_at: stamp,
@@ -95,12 +80,7 @@ routes.patch("/calendars/:calendarId/labels/:labelId", async (c) => {
     if (!values.color) fail(400, "INVALID_INPUT", "Label color is required");
   }
   if ("sort_order" in data)
-    values.sort_order = integer(
-      data.sort_order,
-      "sort_order",
-      -1000000,
-      1000000,
-    );
+    values.sort_order = integer(data.sort_order, "sort_order", -1000000, 1000000);
   await mutate(c, {
     operation: "label.update",
     request: data,
@@ -122,11 +102,7 @@ routes.patch("/calendars/:calendarId/labels/:labelId", async (c) => {
   return c.json({ label: { ...old, ...values } });
 });
 routes.delete("/calendars/:calendarId/labels/:labelId", async (c) => {
-  const cal = await requireCalendar(
-      c,
-      identifier(c.req.param("calendarId")),
-      5,
-    ),
+  const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 5),
     id = identifier(c.req.param("labelId")),
     version = expectedVersion(c);
   await mutate(c, {
@@ -180,13 +156,7 @@ routes.get("/copies/:copyId", async (c) => {
   return c.json({ copy: copyDto(value) });
 });
 routes.patch("/copies/:copyId", async (c) => {
-  const data = await body(c, [
-      "version",
-      "color",
-      "label_id",
-      "private_properties",
-      "hidden",
-    ]),
+  const data = await body(c, ["version", "color", "label_id", "private_properties", "hidden"]),
     { value, cal } = await copyTarget(c),
     version = expectedVersion(c, data),
     values: Record<string, string | number | null> = {
@@ -195,14 +165,12 @@ routes.patch("/copies/:copyId", async (c) => {
     };
   if ("color" in data) values.color_override = color(data.color);
   if ("label_id" in data)
-    values.label_id =
-      data.label_id === null ? null : identifier(data.label_id, "label_id");
+    values.label_id = data.label_id === null ? null : identifier(data.label_id, "label_id");
   if ("private_properties" in data)
     values.private_properties_json = JSON.stringify(
       jsonObject(data.private_properties, "private_properties"),
     );
-  if ("hidden" in data)
-    values.hidden_at = flag(data.hidden, "hidden") ? now() : null;
+  if ("hidden" in data) values.hidden_at = flag(data.hidden, "hidden") ? now() : null;
   const label = values.label_id,
     check =
       typeof label === "string"
@@ -229,16 +197,7 @@ routes.patch("/copies/:copyId", async (c) => {
     ],
     build: (proof) => [
       update(c, "calendar_event_copies", values, "id=?", [value.id], proof),
-      change(
-        c,
-        proof,
-        null,
-        "copy",
-        value.id,
-        version + 1,
-        "upsert",
-        c.get("identity").user.id,
-      ),
+      change(c, proof, null, "copy", value.id, version + 1, "upsert", c.get("identity").user.id),
     ],
   });
   return c.json({ copy: copyDto({ ...value, ...values } as Copy) });
@@ -267,16 +226,7 @@ routes.delete("/copies/:copyId", async (c) => {
         [value.id],
         proof,
       ),
-      change(
-        c,
-        proof,
-        null,
-        "copy",
-        value.id,
-        version + 1,
-        "upsert",
-        c.get("identity").user.id,
-      ),
+      change(c, proof, null, "copy", value.id, version + 1, "upsert", c.get("identity").user.id),
     ],
   });
   return c.body(null, 204);

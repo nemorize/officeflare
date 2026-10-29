@@ -17,13 +17,21 @@ interface ThemeEnvironment {
 
 export function createColorThemeStore(environment: ThemeEnvironment) {
   const read = () => {
-    try { return colorTheme(environment.read()); }
-    catch { return "system" as const; }
+    try {
+      return colorTheme(environment.read());
+    } catch {
+      return "system" as const;
+    }
   };
   let preference = read();
   const listeners = new Set<() => void>();
-  const apply = () => environment.apply(preference === "system" ? environment.systemDark() ? "dark" : "light" : preference);
-  const notify = () => { for (const listener of listeners) listener(); };
+  const apply = () =>
+    environment.apply(
+      preference === "system" ? (environment.systemDark() ? "dark" : "light") : preference,
+    );
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   const stopSystem = environment.onSystemChange(() => {
     if (preference === "system") apply();
   });
@@ -37,15 +45,24 @@ export function createColorThemeStore(environment: ThemeEnvironment) {
     getSnapshot: () => preference,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     setPreference: (value: unknown) => {
       preference = colorTheme(value);
-      try { environment.write(preference); }
-      catch { /* The current tab can still change theme when storage is blocked. */ }
+      try {
+        environment.write(preference);
+      } catch {
+        /* The current tab can still change theme when storage is blocked. */
+      }
       apply();
       notify();
     },
-    dispose: () => { stopSystem(); stopStorage(); listeners.clear(); },
+    dispose: () => {
+      stopSystem();
+      stopStorage();
+      listeners.clear();
+    },
   };
 }

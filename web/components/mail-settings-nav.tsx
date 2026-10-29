@@ -12,7 +12,12 @@ const pages = [
   ["/mail/activity", "Activity & storage"],
 ] as const;
 
-export function MailSettingsLayout({ title, description, actions, children }: {
+export function MailSettingsLayout({
+  title,
+  description,
+  actions,
+  children,
+}: {
   title: string;
   description: ReactNode;
   actions?: ReactNode;
@@ -24,18 +29,23 @@ export function MailSettingsLayout({ title, description, actions, children }: {
     nav = useRef<HTMLDivElement>(null),
     selected = pages.find(([route]) => route === pathname)?.[0] ?? "/mail/settings";
   useEffect(() => {
-    nav.current?.querySelector('[data-active]')?.scrollIntoView({
-      block: "nearest", inline: "nearest",
+    nav.current?.querySelector("[data-active]")?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
     });
   }, [selected]);
   return (
     <>
-      <ConsolePageHeader title={title} description={description}>{actions}</ConsolePageHeader>
+      <ConsolePageHeader title={title} description={description}>
+        {actions}
+      </ConsolePageHeader>
       <Tabs.Root value={selected} onValueChange={(route) => navigate(mail.href(route))}>
         <div ref={nav} className="mail-settings-nav">
           <Tabs.List aria-label="Mail settings sections">
             {pages.map(([route, label]) => (
-              <Tabs.Tab key={route} value={route}>{label}</Tabs.Tab>
+              <Tabs.Tab key={route} value={route}>
+                {label}
+              </Tabs.Tab>
             ))}
           </Tabs.List>
         </div>

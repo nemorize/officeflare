@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calendarView, calendarStartView, readCalendarView, saveCalendarView } from "../web/lib/calendar-view.ts";
+import {
+  calendarView,
+  calendarStartView,
+  readCalendarView,
+  saveCalendarView,
+} from "../web/lib/calendar-view.ts";
 
 test("calendar start view respects links, account preferences and a legacy browser cache", () => {
   const prefs = { default_view: "week", remember_view: true, last_view: "month" };
@@ -17,10 +22,13 @@ test("calendar start view respects links, account preferences and a legacy brows
 test("calendar view survives reopening and stays separate for each account", () => {
   const values = new Map();
   const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
-    getItem: key => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, value),
-  } });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    },
+  });
   try {
     assert.equal(readCalendarView("alice@example.com"), null);
     for (const view of ["day", "week", "month", "agenda"]) {
@@ -41,7 +49,12 @@ test("calendar view survives reopening and stays separate for each account", () 
 
 test("unavailable browser storage does not prevent calendar navigation", () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("Storage blocked"); } });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("Storage blocked");
+    },
+  });
   try {
     assert.equal(readCalendarView("alice@example.com"), null);
     assert.doesNotThrow(() => saveCalendarView("alice@example.com", "month"));

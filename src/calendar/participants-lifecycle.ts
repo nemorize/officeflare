@@ -3,20 +3,11 @@ import type { Calendar, CalendarContext, Event, Override, Bind } from "./types";
 import type { Attendee, Policy } from "./collaboration-types";
 import { first, rows } from "./access";
 import { insert, update } from "./mutations";
-import {
-  allAttendees,
-  attendeeValues,
-  effectiveAttendees,
-  policy,
-} from "./attendance-store";
+import { allAttendees, attendeeValues, effectiveAttendees, policy } from "./attendance-store";
 import { attendeeCopyStatements } from "./attendees";
 import { prepareDeliveries } from "./delivery";
 import { applyOverride, originalOccurrence } from "./recurrence";
-export async function participatingScopes(
-  c: CalendarContext,
-  event: Event,
-  overrides: Override[],
-) {
+export async function participatingScopes(c: CalendarContext, event: Event, overrides: Override[]) {
   const scopes = await rows<{ id: string; occurrence_key: string }>(
     c.env,
     "SELECT s.id,s.occurrence_key FROM calendar_event_scopes s WHERE s.event_id=? AND s.occurrence_key<>'' AND (EXISTS(SELECT 1 FROM calendar_event_attendees a WHERE a.scope_id=s.id AND a.removed_at IS NULL) OR EXISTS(SELECT 1 FROM calendar_event_registrations r WHERE r.event_id=s.event_id AND r.occurrence_key=s.occurrence_key AND r.status IN('confirmed','pending','waitlisted'))) ORDER BY s.occurrence_key",
@@ -75,15 +66,9 @@ export async function detachParticipants(
     key,
     { resend: true },
   );
-  const notices = await prepareDeliveries(
-    c,
-    cal,
-    destination,
-    clones,
-    "invite",
-    "",
-    { resend: true },
-  );
+  const notices = await prepareDeliveries(c, cal, destination, clones, "invite", "", {
+    resend: true,
+  });
   return (proof: string, operation: string) => [
     ...clones.flatMap((value, index) =>
       members[index]!.scope_id === scopeId
@@ -170,15 +155,10 @@ export async function splitParticipants(
         return false;
       }
     });
-  const newNotices = await prepareDeliveries(
-      c,
-      cal,
-      next,
-      [...clones, ...future],
-      "invite",
-      "",
-      { resend: true, overrides },
-    ),
+  const newNotices = await prepareDeliveries(c, cal, next, [...clones, ...future], "invite", "", {
+      resend: true,
+      overrides,
+    }),
     oldNotices = await prepareDeliveries(
       c,
       cal,
@@ -214,9 +194,7 @@ export async function splitParticipants(
       })
       .map((value) => value.occurrence_key);
   return (proof: string, operation: string) => [
-    ...clones.map((value) =>
-      insert(c, "calendar_event_attendees", attendeeValues(value), proof),
-    ),
+    ...clones.map((value) => insert(c, "calendar_event_attendees", attendeeValues(value), proof)),
     ...attendeeCopyStatements(c, next, [...clones, ...future], proof),
     ...policies.map((value) =>
       insert(

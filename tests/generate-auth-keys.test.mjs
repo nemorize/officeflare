@@ -32,7 +32,10 @@ test("auth key generation creates and adds a stable mail encryption key", async 
   assert.equal((await stat(fresh)).mode & 0o777, 0o600);
 
   const template = join(directory, "template.vars");
-  await writeFile(template, "AUTH_SIGNING_KEYS='keep-auth'\nMAIL_ENCRYPTION_KEY='replace-with-32-random-bytes-in-base64url'\n");
+  await writeFile(
+    template,
+    "AUTH_SIGNING_KEYS='keep-auth'\nMAIL_ENCRYPTION_KEY='replace-with-32-random-bytes-in-base64url'\n",
+  );
   execFileSync(process.execPath, [script, template], { env: cleanNodeEnv() });
   const templateContents = await readFile(template, "utf8");
   assert.ok(templateContents.startsWith("AUTH_SIGNING_KEYS='keep-auth'\n"));
@@ -46,7 +49,10 @@ test("auth key generation creates and adds a stable mail encryption key", async 
   assert.ok(updated.startsWith(original));
   const existingMailKey = generatedMailKey(updated);
 
-  const rerun = spawnSync(process.execPath, [script, existing], { env: cleanNodeEnv(), encoding: "utf8" });
+  const rerun = spawnSync(process.execPath, [script, existing], {
+    env: cleanNodeEnv(),
+    encoding: "utf8",
+  });
   assert.notEqual(rerun.status, 0);
   assert.match(rerun.stderr, /refusing to rotate secrets/);
   assert.equal(await readFile(existing, "utf8"), updated);

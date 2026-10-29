@@ -3,12 +3,18 @@ import type { ComponentPropsWithRef } from "react";
 
 export { NavigationMenu };
 
-export interface NavigationMenuPopupProps extends ComponentPropsWithRef<typeof NavigationMenu.Popup> {
+export interface NavigationMenuPopupProps extends ComponentPropsWithRef<
+  typeof NavigationMenu.Popup
+> {
   portalProps?: Omit<NavigationMenu.Portal.Props, "children">;
   positionerProps?: Omit<NavigationMenu.Positioner.Props, "children">;
 }
 
-export function NavigationMenuPopup({ portalProps, positionerProps, ...props }: NavigationMenuPopupProps) {
+export function NavigationMenuPopup({
+  portalProps,
+  positionerProps,
+  ...props
+}: NavigationMenuPopupProps) {
   return (
     <NavigationMenu.Portal {...portalProps}>
       <NavigationMenu.Positioner data-ui="popup-positioner" {...positionerProps}>

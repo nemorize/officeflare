@@ -8,7 +8,11 @@ export interface ContextMenuPopupProps extends ComponentPropsWithRef<typeof Cont
   positionerProps?: Omit<ContextMenu.Positioner.Props, "children">;
 }
 
-export function ContextMenuPopup({ portalProps, positionerProps, ...props }: ContextMenuPopupProps) {
+export function ContextMenuPopup({
+  portalProps,
+  positionerProps,
+  ...props
+}: ContextMenuPopupProps) {
   return (
     <ContextMenu.Portal {...portalProps}>
       <ContextMenu.Positioner data-ui="popup-positioner" {...positionerProps}>

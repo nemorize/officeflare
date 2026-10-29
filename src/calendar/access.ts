@@ -1,17 +1,6 @@
 import { now } from "../auth/types";
-import {
-  permissionClosure,
-  type Permission,
-} from "../authorization/permissions";
-import type {
-  Bind,
-  Calendar,
-  CalendarContext,
-  CalendarEnv,
-  Condition,
-  Event,
-  Role,
-} from "./types";
+import { permissionClosure, type Permission } from "../authorization/permissions";
+import type { Bind, Calendar, CalendarContext, CalendarEnv, Condition, Event, Role } from "./types";
 import { fail } from "./input";
 export const statement = (env: CalendarEnv, sql: string, ...args: Bind[]) =>
   env.DB.withSession("first-primary")
@@ -38,10 +27,7 @@ export function permission(user: string, key: Permission) {
     user,
   );
 }
-export function identity(
-  c: CalendarContext,
-  action: Permission | null = "calendar.access",
-) {
+export function identity(c: CalendarContext, action: Permission | null = "calendar.access") {
   const { user, session } = c.get("identity");
   return combine(
     condition(
@@ -78,12 +64,7 @@ const roleRank = (user: string, alias: string): Condition =>
     user,
     user,
   );
-export function calendarAccess(
-  user: string,
-  alias = "cal",
-  min = 1,
-  trash = false,
-) {
+export function calendarAccess(user: string, alias = "cal", min = 1, trash = false) {
   const role = roleRank(user, alias);
   return condition(
     `${alias}.status='active' ${trash ? "" : `AND ${alias}.trashed_at IS NULL`} AND EXISTS(SELECT 1 FROM users owner WHERE owner.id=${alias}.data_owner_user_id AND ${active("owner")}) AND (${role.sql})>=?`,
@@ -91,29 +72,26 @@ export function calendarAccess(
     min,
   );
 }
-export async function calendars(
-  c: CalendarContext,
-  includeTrash = false,
-): Promise<Calendar[]> {
+export async function calendars(c: CalendarContext, includeTrash = false): Promise<Calendar[]> {
   const user = c.get("identity").user.id,
     access = calendarAccess(user, "cal", 1, includeTrash),
     role = roleRank(user, "cal");
-  const load = () => rows<Calendar & { access_rank: number }>(
-    c.env,
-    `SELECT cal.*,(${role.sql}) access_rank,EXISTS(SELECT 1 FROM calendar_primary_calendars p WHERE p.calendar_id=cal.id AND p.user_id=?) is_primary FROM calendars cal WHERE ${access.sql} ORDER BY cal.created_at,cal.id`,
-    ...role.args,
-    user,
-    ...access.args,
-  );
+  const load = () =>
+    rows<Calendar & { access_rank: number }>(
+      c.env,
+      `SELECT cal.*,(${role.sql}) access_rank,EXISTS(SELECT 1 FROM calendar_primary_calendars p WHERE p.calendar_id=cal.id AND p.user_id=?) is_primary FROM calendars cal WHERE ${access.sql} ORDER BY cal.created_at,cal.id`,
+      ...role.args,
+      user,
+      ...access.args,
+    );
   let values = await load();
-  if (!values.some(cal => cal.is_primary) && c.get("initializeCalendar")) {
-    await c.get("initializeCalendar")!(); values = await load();
+  if (!values.some((cal) => cal.is_primary) && c.get("initializeCalendar")) {
+    await c.get("initializeCalendar")!();
+    values = await load();
   }
   return values.map(({ access_rank, ...value }) => ({
     ...value,
-    effective_role: (Object.keys(rank) as Role[]).find(
-      (key) => rank[key] === access_rank,
-    )!,
+    effective_role: (Object.keys(rank) as Role[]).find((key) => rank[key] === access_rank)!,
   }));
 }
 export async function resolveCalendar(c: CalendarContext, id: string) {
@@ -125,32 +103,30 @@ export async function resolveCalendar(c: CalendarContext, id: string) {
   );
   if (!value) {
     await c.get("initializeCalendar")?.();
-    value = await first<{ calendar_id: string }>(c.env, "SELECT calendar_id FROM calendar_primary_calendars WHERE user_id=?", c.get("identity").user.id);
+    value = await first<{ calendar_id: string }>(
+      c.env,
+      "SELECT calendar_id FROM calendar_primary_calendars WHERE user_id=?",
+      c.get("identity").user.id,
+    );
   }
   if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
   return value.calendar_id;
 }
-export async function requireCalendar(
-  c: CalendarContext,
-  id: string,
-  min = 1,
-  trash = false,
-) {
+export async function requireCalendar(c: CalendarContext, id: string, min = 1, trash = false) {
   const resolved = await resolveCalendar(c, id),
     value = (await calendars(c, trash)).find(
       (cal) => cal.id === resolved && rank[cal.effective_role] >= min,
     );
   if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
   if ((min === 3 || min === 4) && value.kind === "external")
-    fail(403, "READ_ONLY_CALENDAR", "External calendars are read-only. Edit events at their source.");
+    fail(
+      403,
+      "READ_ONLY_CALENDAR",
+      "External calendars are read-only. Edit events at their source.",
+    );
   return value;
 }
-export function calendarCondition(
-  c: CalendarContext,
-  cal: Calendar,
-  min = 1,
-  trash = false,
-) {
+export function calendarCondition(c: CalendarContext, cal: Calendar, min = 1, trash = false) {
   const access = calendarAccess(c.get("identity").user.id, "cal", min, trash);
   return condition(
     `EXISTS(SELECT 1 FROM calendars cal WHERE cal.id=? AND cal.version=? ${min === 3 || min === 4 ? "AND cal.kind<>'external'" : ""} AND ${access.sql})`,
@@ -167,8 +143,7 @@ export function privateEvent(event: Event, cal: Calendar) {
 }
 export function canSeeDetails(event: Event, cal: Calendar) {
   return (
-    rank[cal.effective_role] >= 2 &&
-    (!privateEvent(event, cal) || rank[cal.effective_role] >= 4)
+    rank[cal.effective_role] >= 2 && (!privateEvent(event, cal) || rank[cal.effective_role] >= 4)
   );
 }
 export async function requireEvent(
@@ -187,7 +162,8 @@ export async function requireEvent(
   if (
     !value ||
     (edit &&
-      (cal.kind === "external" || rank[cal.effective_role] < 3 ||
+      (cal.kind === "external" ||
+        rank[cal.effective_role] < 3 ||
         (privateEvent(value, cal) && rank[cal.effective_role] < 4) ||
         value.authority !== "native"))
   )

@@ -64,11 +64,7 @@ export function DriveDetails({
     <aside className="drive-details" aria-label={`Details for ${item.name}`}>
       <header>
         <h2>File information</h2>
-        <DriveIconButton
-          icon="close"
-          label="Close file information"
-          onClick={onClose}
-        />
+        <DriveIconButton icon="close" label="Close file information" onClick={onClose} />
       </header>
       <div className="drive-details-identity">
         <DriveFileIcon item={item} large />
@@ -76,10 +72,7 @@ export function DriveDetails({
         <span>{fileKind(item).label}</span>
       </div>
       <Tabs.Root value={tab} onValueChange={(value) => setTab(String(value))}>
-        <Tabs.List
-          className="drive-details-tabs"
-          aria-label="File information sections"
-        >
+        <Tabs.List className="drive-details-tabs" aria-label="File information sections">
           <Tabs.Tab value="details">Details</Tabs.Tab>
           <Tabs.Tab value="activity">Activity</Tabs.Tab>
           {!item.trashed_at && <Tabs.Tab value="comments">Comments</Tabs.Tab>}
@@ -104,13 +97,9 @@ export function DriveDetails({
           </div>
           <dl className="drive-metadata">
             <dt>Owner</dt>
-            <dd>
-              {item.owner?.display_name || item.owner?.email_address || "—"}
-            </dd>
+            <dd>{item.owner?.display_name || item.owner?.email_address || "—"}</dd>
             <dt>Your access</dt>
-            <dd className="drive-capitalize">
-              {item.effective_role ?? "Viewer"}
-            </dd>
+            <dd className="drive-capitalize">{item.effective_role ?? "Viewer"}</dd>
             <dt>Type</dt>
             <dd>{fileKind(item).label}</dd>
             {item.kind === "file" && (
@@ -133,40 +122,38 @@ export function DriveDetails({
           <Field.Root className="drive-field">
             <Field.Label>Description</Field.Label>
             <Textarea
-                  rows={4}
-                  maxLength={2000}
-                  value={description}
-                  readOnly={!canEdit(item) || !!item.trashed_at}
-                  placeholder="Add a description"
-                  onChange={(event) => setDescription(event.target.value)}
-                />
+              rows={4}
+              maxLength={2000}
+              value={description}
+              readOnly={!canEdit(item) || !!item.trashed_at}
+              placeholder="Add a description"
+              onChange={(event) => setDescription(event.target.value)}
+            />
             <Field.Description>
               {canEdit(item) && !item.trashed_at
                 ? "Visible to people who can access this item."
                 : "Provided by the owner."}
             </Field.Description>
           </Field.Root>
-          {canEdit(item) &&
-            !item.trashed_at &&
-            description !== item.description && (
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={action.busy}
-                onClick={() =>
-                  void action.run(async () => {
-                    await api(`/api/drive/items/${item.id}`, {
-                      method: "PATCH",
-                      body: { version: item.version, description },
-                    });
-                    drive.refresh();
-                    notify.success("Description saved.");
-                  })
-                }
-              >
-                Save description
-              </Button>
-            )}
+          {canEdit(item) && !item.trashed_at && description !== item.description && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={action.busy}
+              onClick={() =>
+                void action.run(async () => {
+                  await api(`/api/drive/items/${item.id}`, {
+                    method: "PATCH",
+                    body: { version: item.version, description },
+                  });
+                  drive.refresh();
+                  notify.success("Description saved.");
+                })
+              }
+            >
+              Save description
+            </Button>
+          )}
           <DriveNotice error={action.error} />
           <p className="drive-details-note">
             <Icon name="shield" />
@@ -193,13 +180,14 @@ export function DriveDetails({
   );
   return small ? (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup layout="side-panel" padding="none" data-ui-theme="neutral"
+      <DialogPopup
+        layout="side-panel"
+        padding="none"
+        data-ui-theme="neutral"
         className="drive-details-mobile"
         viewportProps={{ className: "drive-details-viewport" }}
       >
-        <Dialog.Title className="visually-hidden">
-          File information
-        </Dialog.Title>
+        <Dialog.Title className="visually-hidden">File information</Dialog.Title>
         <Dialog.Description className="visually-hidden">
           Details, activity, comments and previous file versions.
         </Dialog.Description>
@@ -247,11 +235,7 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
   };
   return (
     <div className="drive-activity">
-      <DriveState
-        loading={events.loading}
-        error={events.error}
-        retry={events.reload}
-      />
+      <DriveState loading={events.loading} error={events.error} retry={events.reload} />
       {!events.loading && !events.error && !events.items.length && (
         <p className="drive-muted">No activity yet.</p>
       )}
@@ -260,8 +244,7 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
           <span className="drive-event-icon">
             <Icon
               name={
-                event.action.includes("permission") ||
-                event.action.includes("link")
+                event.action.includes("permission") || event.action.includes("link")
                   ? "users"
                   : event.action.includes("comment")
                     ? "mail"
@@ -273,8 +256,7 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
           </span>
           <div>
             <strong>
-              {event.actor_name ||
-                (event.link_id ? "Public link visitor" : "Workspace account")}
+              {event.actor_name || (event.link_id ? "Public link visitor" : "Workspace account")}
             </strong>
             <p>{labels[event.action] || event.action.replaceAll("_", " ")}</p>
             <time dateTime={new Date(event.created_at * 1000).toISOString()}>
@@ -284,11 +266,7 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
         </div>
       ))}
       {events.next && (
-        <Button
-          size="sm"
-          disabled={events.more}
-          onClick={() => void events.loadMore()}
-        >
+        <Button size="sm" disabled={events.more} onClick={() => void events.loadMore()}>
           {events.more ? "Loading…" : "Load earlier activity"}
         </Button>
       )}
@@ -333,11 +311,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
         ]}
         onChange={setFilter}
       />
-      <DriveState
-        loading={comments.loading}
-        error={comments.error}
-        retry={comments.reload}
-      />
+      <DriveState loading={comments.loading} error={comments.error} retry={comments.reload} />
       {!comments.loading && !roots.length && (
         <div className="drive-panel-empty">
           <Icon name="mail" width="28" height="28" />
@@ -345,109 +319,94 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
         </div>
       )}
       {roots.map((root) => (
-        <div
-          className={`drive-comment-thread${root.resolved ? " is-resolved" : ""}`}
-          key={root.id}
-        >
-          {[
-            root,
-            ...comments.items.filter(
-              (comment) => comment.parent_id === root.id,
-            ),
-          ].map((comment) => (
-            <div
-              className={`drive-comment${comment.parent_id ? " drive-comment-reply" : ""}`}
-              key={comment.id}
-            >
-              <div>
-                <strong>{comment.author_name || "Workspace account"}</strong>
-                <time>{driveDate(comment.created_at, true)}</time>
-              </div>
-              <p>{comment.body}</p>
-              <div className="drive-comment-actions">
-                {!comment.parent_id && canComment(item) && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setParent(comment.id);
-                      setEdit(null);
-                      setBody("");
-                    }}
-                  >
-                    Reply
-                  </Button>
-                )}
-                {!comment.parent_id && canEdit(item) && canComment(item) && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={action.busy}
-                    onClick={() =>
-                      mutate(() =>
-                        api(
-                          `/api/drive/items/${item.id}/comments/${comment.id}`,
-                          {
+        <div className={`drive-comment-thread${root.resolved ? " is-resolved" : ""}`} key={root.id}>
+          {[root, ...comments.items.filter((comment) => comment.parent_id === root.id)].map(
+            (comment) => (
+              <div
+                className={`drive-comment${comment.parent_id ? " drive-comment-reply" : ""}`}
+                key={comment.id}
+              >
+                <div>
+                  <strong>{comment.author_name || "Workspace account"}</strong>
+                  <time>{driveDate(comment.created_at, true)}</time>
+                </div>
+                <p>{comment.body}</p>
+                <div className="drive-comment-actions">
+                  {!comment.parent_id && canComment(item) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setParent(comment.id);
+                        setEdit(null);
+                        setBody("");
+                      }}
+                    >
+                      Reply
+                    </Button>
+                  )}
+                  {!comment.parent_id && canEdit(item) && canComment(item) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={action.busy}
+                      onClick={() =>
+                        mutate(() =>
+                          api(`/api/drive/items/${item.id}/comments/${comment.id}`, {
                             method: "PATCH",
                             body: {
                               version: comment.version,
                               resolved: !comment.resolved,
                             },
-                          },
-                        ),
-                      )
-                    }
-                  >
-                    {comment.resolved ? "Reopen" : "Resolve"}
-                  </Button>
-                )}
-                {comment.author_user_id === account.user?.id && canComment(item) && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEdit(comment);
-                        setParent(comment.parent_id);
-                        setBody(comment.body);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <DriveIconButton
-                      icon="trash"
-                      label="Delete comment"
-                      disabled={action.busy}
-                      onClick={() =>
-                        mutate(() =>
-                          api(
-                            `/api/drive/items/${item.id}/comments/${comment.id}`,
-                            {
-                              method: "PATCH",
-                              body: { version: comment.version, deleted: true },
-                            },
-                          ),
+                          }),
                         )
                       }
-                    />
-                  </>
-                )}
-                {comment.resolved && (
-                  <span>
-                    <Icon name="check" />
-                    Resolved
-                  </span>
-                )}
+                    >
+                      {comment.resolved ? "Reopen" : "Resolve"}
+                    </Button>
+                  )}
+                  {comment.author_user_id === account.user?.id && canComment(item) && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEdit(comment);
+                          setParent(comment.parent_id);
+                          setBody(comment.body);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <DriveIconButton
+                        icon="trash"
+                        label="Delete comment"
+                        disabled={action.busy}
+                        onClick={() =>
+                          mutate(() =>
+                            api(`/api/drive/items/${item.id}/comments/${comment.id}`, {
+                              method: "PATCH",
+                              body: { version: comment.version, deleted: true },
+                            }),
+                          )
+                        }
+                      />
+                    </>
+                  )}
+                  {comment.resolved && (
+                    <span>
+                      <Icon name="check" />
+                      Resolved
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ),
+          )}
         </div>
       ))}
       {comments.next && (
-        <Button
-          disabled={comments.more}
-          onClick={() => void comments.loadMore()}
-        >
+        <Button disabled={comments.more} onClick={() => void comments.loadMore()}>
           Load more comments
         </Button>
       )}
@@ -457,15 +416,10 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
           onSubmit={(event) => {
             event.preventDefault();
             mutate(async () => {
-              await api(
-                `/api/drive/items/${item.id}/comments${edit ? `/${edit.id}` : ""}`,
-                {
-                  method: edit ? "PATCH" : "POST",
-                  body: edit
-                    ? { version: edit.version, body }
-                    : { body, parent_id: parent },
-                },
-              );
+              await api(`/api/drive/items/${item.id}/comments${edit ? `/${edit.id}` : ""}`, {
+                method: edit ? "PATCH" : "POST",
+                body: edit ? { version: edit.version, body } : { body, parent_id: parent },
+              });
               setBody("");
               setParent(null);
               setEdit(null);
@@ -474,20 +428,16 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
         >
           <Field.Root className="drive-field">
             <Field.Label>
-              {edit
-                ? "Edit comment"
-                : parent
-                  ? "Reply to thread"
-                  : "Add a comment"}
+              {edit ? "Edit comment" : parent ? "Reply to thread" : "Add a comment"}
             </Field.Label>
             <Textarea
-                  rows={3}
-                  value={body}
-                  onChange={(event) => setBody(event.target.value)}
-                  maxLength={5000}
-                  required
-                  placeholder="Write a comment…"
-                />
+              rows={3}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              maxLength={5000}
+              required
+              placeholder="Write a comment…"
+            />
           </Field.Root>
           <div>
             {(parent || edit) && (
@@ -514,9 +464,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
         </form>
       )}
       {!canComment(item) && (
-        <p className="drive-muted">
-          You need commenter access to join the conversation.
-        </p>
+        <p className="drive-muted">You need commenter access to join the conversation.</p>
       )}
       <DriveNotice error={action.error} />
     </div>
@@ -544,21 +492,14 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
         </Button>
       )}
       <p className="drive-muted">Previous versions use your storage quota.</p>
-      <DriveState
-        loading={versions.loading}
-        error={versions.error}
-        retry={versions.reload}
-      />
+      <DriveState loading={versions.loading} error={versions.error} retry={versions.reload} />
       {versions.items.map((version) => (
         <div className="drive-version" key={version.id}>
           <Icon name="file" />
           <div>
-            <strong>
-              {version.current ? "Current version" : "Previous version"}
-            </strong>
+            <strong>{version.current ? "Current version" : "Previous version"}</strong>
             <span>
-              {driveDate(version.created_at, true)} ·{" "}
-              {formatBytes(version.size)}
+              {driveDate(version.created_at, true)} · {formatBytes(version.size)}
             </span>
             <div>
               <Button
@@ -598,19 +539,14 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
         </div>
       ))}
       {versions.next && (
-        <Button
-          disabled={versions.more}
-          onClick={() => void versions.loadMore()}
-        >
+        <Button disabled={versions.more} onClick={() => void versions.loadMore()}>
           Load more versions
         </Button>
       )}
       <DriveNotice error={action.error} />
       {confirm && (
         <DriveConfirmDialog
-          title={
-            confirm.deleting ? "Delete this version?" : "Restore this version?"
-          }
+          title={confirm.deleting ? "Delete this version?" : "Restore this version?"}
           description={
             confirm.deleting
               ? "This previous file version will be permanently deleted."
@@ -625,15 +561,11 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
               `/api/drive/items/${item.id}/versions/${confirm.version.id}${confirm.deleting ? `?version=${current.version}` : "/restore"}`,
               {
                 method: confirm.deleting ? "DELETE" : "POST",
-                ...(confirm.deleting
-                  ? {}
-                  : { body: { version: current.version } }),
+                ...(confirm.deleting ? {} : { body: { version: current.version } }),
               },
             );
             drive.refresh();
-            notify.success(
-              confirm.deleting ? "Version deleted." : "Version restored.",
-            );
+            notify.success(confirm.deleting ? "Version deleted." : "Version restored.");
           }}
         />
       )}

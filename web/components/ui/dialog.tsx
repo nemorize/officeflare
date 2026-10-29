@@ -12,12 +12,24 @@ export interface DialogPopupProps extends ComponentPropsWithRef<typeof Dialog.Po
   viewportProps?: Omit<Dialog.Viewport.Props, "children">;
 }
 
-export function DialogPopup({ padding = "normal", layout = "dialog", portalProps, backdropProps, viewportProps, ...props }: DialogPopupProps) {
+export function DialogPopup({
+  padding = "normal",
+  layout = "dialog",
+  portalProps,
+  backdropProps,
+  viewportProps,
+  ...props
+}: DialogPopupProps) {
   return (
     <Dialog.Portal {...portalProps}>
       <Dialog.Backdrop data-ui="dialog-backdrop" {...backdropProps} />
       <Dialog.Viewport data-ui="dialog-viewport" data-layout={layout} {...viewportProps}>
-        <Dialog.Popup data-ui="dialog-popup" data-layout={layout} data-padding={padding} {...props} />
+        <Dialog.Popup
+          data-ui="dialog-popup"
+          data-layout={layout}
+          data-padding={padding}
+          {...props}
+        />
       </Dialog.Viewport>
     </Dialog.Portal>
   );
@@ -25,12 +37,24 @@ export function DialogPopup({ padding = "normal", layout = "dialog", portalProps
 
 export type AlertDialogPopupProps = DialogPopupProps;
 
-export function AlertDialogPopup({ padding = "normal", layout = "dialog", portalProps, backdropProps, viewportProps, ...props }: AlertDialogPopupProps) {
+export function AlertDialogPopup({
+  padding = "normal",
+  layout = "dialog",
+  portalProps,
+  backdropProps,
+  viewportProps,
+  ...props
+}: AlertDialogPopupProps) {
   return (
     <AlertDialog.Portal {...portalProps}>
       <AlertDialog.Backdrop data-ui="dialog-backdrop" {...backdropProps} />
       <AlertDialog.Viewport data-ui="dialog-viewport" data-layout={layout} {...viewportProps}>
-        <AlertDialog.Popup data-ui="dialog-popup" data-layout={layout} data-padding={padding} {...props} />
+        <AlertDialog.Popup
+          data-ui="dialog-popup"
+          data-layout={layout}
+          data-padding={padding}
+          {...props}
+        />
       </AlertDialog.Viewport>
     </AlertDialog.Portal>
   );

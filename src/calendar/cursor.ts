@@ -7,9 +7,8 @@ const encode = (value: Uint8Array) =>
     .replaceAll("/", "_")
     .replaceAll("=", "");
 const decode = (value: string) =>
-  Uint8Array.from(
-    atob(value.replaceAll("-", "+").replaceAll("_", "/")),
-    (char) => char.charCodeAt(0),
+  Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (char) =>
+    char.charCodeAt(0),
   );
 const encoder = new TextEncoder();
 const key = (env: CalendarEnv) =>
@@ -26,9 +25,7 @@ export async function cursor(
   scope: string,
   position: string | number,
 ) {
-  const payload = encode(
-    encoder.encode(JSON.stringify([user, scope, position, now() + 86400])),
-  );
+  const payload = encode(encoder.encode(JSON.stringify([user, scope, position, now() + 86400])));
   return `${payload}.${encode(new Uint8Array(await crypto.subtle.sign("HMAC", await key(env), encoder.encode(payload))))}`;
 }
 export async function readCursor(
@@ -62,9 +59,7 @@ export async function readCursor(
       value[3] <= now() ||
       !(
         typeof value[2] === "string" ||
-        (typeof value[2] === "number" &&
-          Number.isSafeInteger(value[2]) &&
-          value[2] >= 0)
+        (typeof value[2] === "number" && Number.isSafeInteger(value[2]) && value[2] >= 0)
       )
     )
       throw new Error();

@@ -57,21 +57,14 @@ const zoneCache = new Map<string, string[]>();
 function timeZone(name: string) {
   const cached = zoneCache.get(name);
   if (cached) return cached;
-  let point = Temporal.Instant.from("1969-01-01T00:00:00Z").toZonedDateTimeISO(
-    name,
-  );
+  let point = Temporal.Instant.from("1969-01-01T00:00:00Z").toZonedDateTimeISO(name);
   const offset = (n: string) => n.replaceAll(":", "");
-  const groups = new Map<
-    string,
-    { from: string; to: string; kind: string; dates: string[] }
-  >();
+  const groups = new Map<string, { from: string; to: string; kind: string; dates: string[] }>();
   groups.set("initial", {
     from: offset(point.offset),
     to: offset(point.offset),
     kind: "STANDARD",
-    dates: [
-      compact(point.toPlainDateTime().toString({ fractionalSecondDigits: 0 })),
-    ],
+    dates: [compact(point.toPlainDateTime().toString({ fractionalSecondDigits: 0 }))],
   });
   for (let count = 0; count < 1000; count++) {
     const next = point.getTimeZoneTransition("next");
@@ -79,15 +72,10 @@ function timeZone(name: string) {
     const old = next.subtract({ seconds: 1 }),
       from = offset(old.offset),
       to = offset(next.offset),
-      kind =
-        next.offsetNanoseconds > old.offsetNanoseconds
-          ? "DAYLIGHT"
-          : "STANDARD",
+      kind = next.offsetNanoseconds > old.offsetNanoseconds ? "DAYLIGHT" : "STANDARD",
       key = from + to + kind;
     const local = compact(
-      new Date(next.epochMilliseconds + old.offsetNanoseconds / 1e6)
-        .toISOString()
-        .slice(0, 19),
+      new Date(next.epochMilliseconds + old.offsetNanoseconds / 1e6).toISOString().slice(0, 19),
     );
     const group = groups.get(key) ?? { from, to, kind, dates: [] };
     group.dates.push(local);
@@ -101,9 +89,7 @@ function timeZone(name: string) {
       `DTSTART:${value.dates[0]}`,
       `TZOFFSETFROM:${value.from}`,
       `TZOFFSETTO:${value.to}`,
-      ...(value.dates.length > 1
-        ? [`RDATE:${value.dates.slice(1).join(",")}`]
-        : []),
+      ...(value.dates.length > 1 ? [`RDATE:${value.dates.slice(1).join(",")}`] : []),
       `END:${value.kind}`,
     );
   lines.push("END:VTIMEZONE");
@@ -122,9 +108,7 @@ function recurrence(lines: string[], event: Event) {
     return [
       ...(z.length ? [`${head!.split(";")[0]}:${z.join(",")}`] : []),
       ...(local.length
-        ? [
-            `${head!.split(";")[0]};TZID=${event.start_time_zone}:${local.join(",")}`,
-          ]
+        ? [`${head!.split(";")[0]};TZID=${event.start_time_zone}:${local.join(",")}`]
         : []),
     ];
   });
@@ -164,11 +148,7 @@ function component(
       `DTSTART;TZID=${event.start_time_zone}:${compact(event.start_local!)}`,
       `DTEND;TZID=${event.end_time_zone}:${compact(event.end_local!)}`,
     );
-  else
-    lines.push(
-      `DTSTART:${utc(event.start_at!)}`,
-      `DTEND:${utc(event.end_at!)}`,
-    );
+  else lines.push(`DTSTART:${utc(event.start_at!)}`, `DTEND:${utc(event.end_at!)}`);
   lines.push(
     `SUMMARY:${escape(event.title)}`,
     `STATUS:${options.method === "CANCEL" || event.status === "cancelled" ? "CANCELLED" : event.status.toUpperCase()}`,
@@ -188,23 +168,14 @@ function component(
       `ATTENDEE;CN=${parameter(attendee.display_name || attendee.email_address)};ROLE=${attendee.optional ? "OPT-PARTICIPANT" : "REQ-PARTICIPANT"};PARTSTAT=${attendee.response_status.toUpperCase().replaceAll("_", "-")};RSVP=TRUE:mailto:${attendee.email_address}`,
     );
   if (options.url) lines.push(`URL:${options.url}`);
-  if (recurring)
-    lines.push(...recurrence(JSON.parse(event.recurrence_json), event));
+  if (recurring) lines.push(...recurrence(JSON.parse(event.recurrence_json), event));
   lines.push("END:VEVENT");
   return lines;
 }
-export function calendarFile(
-  payload: DeliveryPayload,
-  sender?: string,
-  stamp?: number,
-) {
+export function calendarFile(payload: DeliveryPayload, sender?: string, stamp?: number) {
   const event = payload.event!;
   const method =
-    payload.action === "cancel"
-      ? "CANCEL"
-      : payload.action === "export"
-        ? "PUBLISH"
-        : "REQUEST";
+    payload.action === "cancel" ? "CANCEL" : payload.action === "export" ? "PUBLISH" : "REQUEST";
   const entries = [
     { event, key: payload.occurrence_key || undefined },
     ...(payload.overrides ?? []).map((value) => ({
@@ -216,9 +187,7 @@ export function calendarFile(
     ...new Set(
       entries
         .filter(
-          (value) =>
-            value.event.time_kind === "timed" &&
-            value.event.recurrence_json !== "[]",
+          (value) => value.event.time_kind === "timed" && value.event.recurrence_json !== "[]",
         )
         .map((value) => value.event.start_time_zone!),
     ),
@@ -244,10 +213,7 @@ export function calendarFile(
   ];
   return lines.map(fold).join("\r\n") + "\r\n";
 }
-export function exportCalendar(
-  values: { event: Event; key?: string }[],
-  stamp: number,
-) {
+export function exportCalendar(values: { event: Event; key?: string }[], stamp: number) {
   return (
     [
       "BEGIN:VCALENDAR",

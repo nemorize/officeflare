@@ -2,13 +2,7 @@ import { Hono } from "hono";
 import { now, uuid, type AppEnv } from "../auth/types";
 import { digest } from "../auth/crypto";
 import type { Attendee } from "./collaboration-types";
-import type {
-  Bind,
-  Calendar,
-  CalendarContext,
-  Event,
-  Condition,
-} from "./types";
+import type { Bind, Calendar, CalendarContext, Event, Condition } from "./types";
 import {
   active,
   calendarCondition,
@@ -23,16 +17,7 @@ import {
   requireEvent,
   rows,
 } from "./access";
-import {
-  body,
-  choice,
-  expectedVersion,
-  fail,
-  identifier,
-  integer,
-  pageLimit,
-  text,
-} from "./input";
+import { body, choice, expectedVersion, fail, identifier, integer, pageLimit, text } from "./input";
 import {
   attendeeDto,
   attendeeValues,
@@ -63,23 +48,12 @@ export function attendeeCopyStatements(
   proof: string,
 ) {
   return attendees
-    .filter(
-      (value) => value.user_id && value.user_id !== event.organizer_user_id,
-    )
+    .filter((value) => value.user_id && value.user_id !== event.organizer_user_id)
     .flatMap((value) => [
       c.env.DB.prepare(
         `INSERT INTO calendar_event_copies(id,event_id,calendar_id,copy_kind) SELECT ?,?,p.calendar_id,'attendee' FROM calendar_primary_calendars p WHERE p.user_id=? AND ${proof} ON CONFLICT(event_id,calendar_id) DO UPDATE SET removed_at=NULL`,
       ).bind(uuid(), event.id, value.user_id),
-      change(
-        c,
-        proof,
-        null,
-        "invitation",
-        value.id,
-        value.version,
-        "upsert",
-        value.user_id,
-      ),
+      change(c, proof, null, "invitation", value.id, value.version, "upsert", value.user_id),
     ]);
 }
 export async function prepareNewAttendees(
@@ -92,40 +66,19 @@ export async function prepareNewAttendees(
   sendUpdates?: unknown,
 ) {
   const values =
-    input === undefined
-      ? []
-      : await expandAttendeeInputs(c, input, event, scopeId, key);
-  const effective = values.length
-    ? await attendanceDetails(c, cal, event, key)
-    : event;
-  if (
-    values.some((value) =>
-      ["accepted", "tentative"].includes(value.response_status),
-    )
-  )
-    fail(
-      400,
-      "RECIPIENT_RESPONSE_REQUIRED",
-      "Only recipients can accept an invitation",
-    );
-  const delivery = await prepareDeliveries(
-    c,
-    cal,
-    effective,
-    values,
-    "invite",
-    key,
-    { sendUpdates, resend: true },
-  );
+    input === undefined ? [] : await expandAttendeeInputs(c, input, event, scopeId, key);
+  const effective = values.length ? await attendanceDetails(c, cal, event, key) : event;
+  if (values.some((value) => ["accepted", "tentative"].includes(value.response_status)))
+    fail(400, "RECIPIENT_RESPONSE_REQUIRED", "Only recipients can accept an invitation");
+  const delivery = await prepareDeliveries(c, cal, effective, values, "invite", key, {
+    sendUpdates,
+    resend: true,
+  });
   return {
     values,
-    checks: values.length
-      ? [permission(c.get("identity").user.id, "calendar.events.invite")]
-      : [],
+    checks: values.length ? [permission(c.get("identity").user.id, "calendar.events.invite")] : [],
     build: (proof: string, operation: string) => [
-      ...values.map((value) =>
-        insert(c, "calendar_event_attendees", attendeeValues(value), proof),
-      ),
+      ...values.map((value) => insert(c, "calendar_event_attendees", attendeeValues(value), proof)),
       ...attendeeCopyStatements(c, event, values, proof),
       ...delivery(proof, operation),
     ],
@@ -133,19 +86,9 @@ export async function prepareNewAttendees(
 }
 const root = "/calendars/:calendarId/events/:eventId";
 async function target(c: CalendarContext, edit = false) {
-  const cal = await requireCalendar(
-      c,
-      identifier(c.req.param("calendarId")),
-      edit ? 3 : 1,
-    ),
-    event = await requireEvent(
-      c,
-      cal,
-      identifier(c.req.param("eventId")),
-      edit,
-    );
-  if (!canSeeDetails(event, cal))
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+  const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), edit ? 3 : 1),
+    event = await requireEvent(c, cal, identifier(c.req.param("eventId")), edit);
+  if (!canSeeDetails(event, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
   return { cal, event };
 }
 const routes = new Hono<AppEnv>();
@@ -153,46 +96,26 @@ routes.get(root + "/attendees", async (c) => {
   const { cal, event } = await target(c),
     key = c.req.query("occurrence_key") ?? "";
   const effective = await occurrence(c, event, key);
-  if (!canSeeDetails(effective, cal))
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+  if (!canSeeDetails(effective, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
   const list = await effectiveAttendees(c, event.id, key),
-    owner =
-      cal.effective_role === "data_owner" || cal.effective_role === "manager",
+    owner = cal.effective_role === "data_owner" || cal.effective_role === "manager",
     guest = JSON.parse(effective.guest_permissions_json);
   return c.json({
     attendees: (owner || guest.can_see_other_guests === true
       ? list
       : list.filter((value) => value.user_id === c.get("identity").user.id)
-    ).map((value) =>
-      attendeeDto(value, owner || value.user_id === c.get("identity").user.id),
-    ),
+    ).map((value) => attendeeDto(value, owner || value.user_id === c.get("identity").user.id)),
   });
 });
 routes.post(root + "/attendees", async (c) => {
-  const data = await body(c, [
-      "version",
-      "attendees",
-      "occurrence_key",
-      "send_updates",
-    ]),
+  const data = await body(c, ["version", "attendees", "occurrence_key", "send_updates"]),
     { cal, event } = await target(c, true),
     version = expectedVersion(c, data),
-    key =
-      data.occurrence_key === undefined
-        ? ""
-        : text(data.occurrence_key, "occurrence_key", 64),
+    key = data.occurrence_key === undefined ? "" : text(data.occurrence_key, "occurrence_key", 64),
     selected = await scope(c, event, key),
-    newAttendees = await prepareNewAttendees(
-      c,
-      cal,
-      event,
-      data.attendees,
-      selected.id,
-      key,
-    );
+    newAttendees = await prepareNewAttendees(c, cal, event, data.attendees, selected.id, key);
   const effective = await attendanceDetails(c, cal, event, key);
-  if (!newAttendees.values.length)
-    fail(400, "INVALID_ATTENDEE", "Choose at least one attendee");
+  if (!newAttendees.values.length) fail(400, "INVALID_ATTENDEE", "Choose at least one attendee");
   const old = await effectiveAttendees(c, event.id, key);
   if (old.length + newAttendees.values.length > 100)
     fail(422, "TOO_MANY_ATTENDEES", "At most 100 attendees are allowed");
@@ -200,21 +123,15 @@ routes.post(root + "/attendees", async (c) => {
     newAttendees.values.some((value) =>
       old.some(
         (old) =>
-          old.email_key === value.email_key ||
-          (!!value.user_id && old.user_id === value.user_id),
+          old.email_key === value.email_key || (!!value.user_id && old.user_id === value.user_id),
       ),
     )
   )
     fail(409, "ATTENDEE_EXISTS", "An attendee is already invited");
-  const notices = await prepareDeliveries(
-    c,
-    cal,
-    effective,
-    newAttendees.values,
-    "invite",
-    key,
-    { sendUpdates: data.send_updates, resend: true },
-  );
+  const notices = await prepareDeliveries(c, cal, effective, newAttendees.values, "invite", key, {
+    sendUpdates: data.send_updates,
+    resend: true,
+  });
   const result = await mutate(c, {
     action: "calendar.events.invite",
     operation: `attendees.add:${event.id}:${key}`,
@@ -235,9 +152,7 @@ routes.post(root + "/attendees", async (c) => {
             ).bind(
               event.id,
               key,
-              JSON.stringify(
-                newAttendees.values.map((value) => value.email_key),
-              ),
+              JSON.stringify(newAttendees.values.map((value) => value.email_key)),
             ),
           ]
         : []),
@@ -253,12 +168,7 @@ routes.post(root + "/attendees", async (c) => {
   return c.json(result, 201);
 });
 routes.patch(root + "/attendees/:attendeeId", async (c) => {
-  const data = await body(c, [
-      "version",
-      "optional",
-      "additional_guests",
-      "display_name",
-    ]),
+  const data = await body(c, ["version", "optional", "additional_guests", "display_name"]),
     { cal, event } = await target(c, true),
     version = expectedVersion(c, data),
     id = identifier(c.req.param("attendeeId")),
@@ -269,9 +179,7 @@ routes.patch(root + "/attendees/:attendeeId", async (c) => {
       c,
       [
         {
-          ...(value.user_id
-            ? { user_id: value.user_id }
-            : { email_address: value.email_address }),
+          ...(value.user_id ? { user_id: value.user_id } : { email_address: value.email_address }),
           optional: "optional" in data ? data.optional : !!value.optional,
           additional_guests: data.additional_guests ?? value.additional_guests,
           display_name: data.display_name ?? value.display_name,
@@ -289,13 +197,7 @@ routes.patch(root + "/attendees/:attendeeId", async (c) => {
       version: version + 1,
       updated_at: now(),
     },
-    checks = await capacityChecks(
-      c,
-      event,
-      next,
-      value.occurrence_key,
-      value.response_status,
-    );
+    checks = await capacityChecks(c, event, next, value.occurrence_key, value.response_status);
   await mutate(c, {
     action: "calendar.events.invite",
     operation: "attendee.update",
@@ -340,12 +242,7 @@ routes.delete(root + "/attendees/:attendeeId", async (c) => {
     key = c.req.query("occurrence_key") ?? "",
     value = (await allAttendees(c, event.id)).find((value) => value.id === id);
   if (!value) fail(404, "ATTENDEE_NOT_FOUND", "Attendee not found");
-  const effective = await attendanceDetails(
-      c,
-      cal,
-      event,
-      key || value.occurrence_key,
-    ),
+  const effective = await attendanceDetails(c, cal, event, key || value.occurrence_key),
     cancelled = {
       ...effective,
       sequence: event.sequence + 1,
@@ -361,9 +258,7 @@ routes.delete(root + "/attendees/:attendeeId", async (c) => {
       key || value.occurrence_key,
       { resend: true },
     ),
-    remaining = (await allAttendees(c, event.id)).filter(
-      (item) => item.id !== id,
-    ),
+    remaining = (await allAttendees(c, event.id)).filter((item) => item.id !== id),
     updates = await prepareDeliveries(
       c,
       cal,
@@ -422,14 +317,7 @@ routes.delete(root + "/attendees/:attendeeId", async (c) => {
             ).bind(id),
           ]),
       ...bumpAttendance(c, event, proof, key),
-      update(
-        c,
-        "calendar_events",
-        { sequence: event.sequence + 1 },
-        "id=?",
-        [event.id],
-        proof,
-      ),
+      update(c, "calendar_events", { sequence: event.sequence + 1 }, "id=?", [event.id], proof),
       ...notices(proof, operation),
       ...updates(proof, operation),
     ],
@@ -451,10 +339,7 @@ export interface Invitation {
     request: Record<string, unknown>;
   };
 }
-export async function invitation(
-  c: CalendarContext,
-  internal = false,
-): Promise<Invitation> {
+export async function invitation(c: CalendarContext, internal = false): Promise<Invitation> {
   const id = internal ? identifier(c.req.param("attendeeId")) : null,
     token = internal ? null : text(c.req.param("token"), "token", 100);
   if (token && !/^ofci_[A-Za-z0-9_-]{43}$/.test(token))
@@ -482,14 +367,9 @@ export async function invitation(
       : null;
   if (!event || !cal) fail(404, "INVITATION_NOT_FOUND", "Invitation not found");
   const recipient = attendee.user_id
-    ? condition(
-        `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${active("u")})`,
-        attendee.user_id,
-      )
+    ? condition(`EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${active("u")})`, attendee.user_id)
     : condition("1");
-  if (
-    !(await first(c.env, `SELECT 1 WHERE ${recipient.sql}`, ...recipient.args))
-  )
+  if (!(await first(c.env, `SELECT 1 WHERE ${recipient.sql}`, ...recipient.args)))
     fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
   const auth = combine(
     recipient,
@@ -524,49 +404,30 @@ export async function respond(
 ) {
   const { attendee, event, cal, auth, actorKey, user } = context,
     version = expectedVersion(c, data),
-    selected = choice(
-      data.scope ?? (attendee.occurrence_key ? "single" : "all"),
-      "scope",
-      ["single", "all"],
-    ),
+    selected = choice(data.scope ?? (attendee.occurrence_key ? "single" : "all"), "scope", [
+      "single",
+      "all",
+    ]),
     key =
       selected === "single"
-        ? text(
-            data.occurrence_key ?? attendee.occurrence_key,
-            "occurrence_key",
-            64,
-          )
+        ? text(data.occurrence_key ?? attendee.occurrence_key, "occurrence_key", 64)
         : "";
-  if (
-    attendee.occurrence_key &&
-    (selected !== "single" || key !== attendee.occurrence_key)
-  )
+  if (attendee.occurrence_key && (selected !== "single" || key !== attendee.occurrence_key))
     fail(403, "INVITATION_SCOPE", "This invitation covers one occurrence only");
   await occurrence(c, event, key);
-  if (
-    !(await effectiveAttendees(c, event.id, key)).some(
-      (value) => value.id === attendee.id,
-    )
-  )
-    fail(
-      404,
-      "INVITATION_NOT_FOUND",
-      "Invitation is no longer valid for this occurrence",
-    );
+  if (!(await effectiveAttendees(c, event.id, key)).some((value) => value.id === attendee.id))
+    fail(404, "INVITATION_NOT_FOUND", "Invitation is no longer valid for this occurrence");
   const status = choice(data.response_status, "response_status", [
       "accepted",
       "tentative",
       "declined",
     ]),
-    mode = choice(
-      data.attendance_mode ?? attendee.attendance_mode,
-      "attendance_mode",
-      ["unspecified", "in_person", "virtual"],
-    ),
-    comment =
-      data.comment === undefined
-        ? ""
-        : text(data.comment, "comment", 1000, true),
+    mode = choice(data.attendance_mode ?? attendee.attendance_mode, "attendance_mode", [
+      "unspecified",
+      "in_person",
+      "virtual",
+    ]),
+    comment = data.comment === undefined ? "" : text(data.comment, "comment", 1000, true),
     checks = await capacityChecks(c, event, attendee, key, status);
   const registration = await first<{ status: string }>(
     c.env,
@@ -575,25 +436,18 @@ export async function respond(
     key,
   );
   if (registration && registration.status !== "confirmed")
-    fail(
-      409,
-      "REGISTRATION_NOT_CONFIRMED",
-      "This registration is not confirmed",
-    );
+    fail(409, "REGISTRATION_NOT_CONFIRMED", "This registration is not confirmed");
   for (const check of checks)
     if (!(await first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args)))
       fail(409, "REGISTRATION_FULL", "This occurrence has reached capacity");
-  const promotion =
-    status === "declined" ? await preparePromotion(c, event, cal, key) : null;
+  const promotion = status === "declined" ? await preparePromotion(c, event, cal, key) : null;
   const result = {
     attendee_id: attendee.id,
     version: version + 1,
     response_status: status,
     attendance_mode: mode,
     occurrence_key: key,
-    ...(context.registration
-      ? { registration_version: context.registration.version + 1 }
-      : {}),
+    ...(context.registration ? { registration_version: context.registration.version + 1 } : {}),
   };
   let response = result;
   try {
@@ -671,11 +525,7 @@ export async function respond(
     if (error instanceof Error && "status" in error && error.status === 412) {
       for (const check of checks)
         if (!(await first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args)))
-          fail(
-            409,
-            "REGISTRATION_FULL",
-            "This occurrence has reached capacity",
-          );
+          fail(409, "REGISTRATION_FULL", "This occurrence has reached capacity");
     }
     throw error;
   }
@@ -685,12 +535,7 @@ export async function respond(
 export async function invitationDto(c: CalendarContext, context: Invitation) {
   const { attendee, event, cal } = context;
   const key = context.occurrenceKey ?? attendee.occurrence_key;
-  if (
-    attendee.removed_at ||
-    event.trashed_at ||
-    event.status === "cancelled" ||
-    cal.trashed_at
-  )
+  if (attendee.removed_at || event.trashed_at || event.status === "cancelled" || cal.trashed_at)
     return {
       attendee: { id: attendee.id, version: attendee.version },
       event: { id: event.id, status: "cancelled" },
@@ -700,11 +545,7 @@ export async function invitationDto(c: CalendarContext, context: Invitation) {
   try {
     effective = await occurrence(c, event, key);
   } catch (error) {
-    if (
-      error instanceof Error &&
-      "status" in error &&
-      [404, 409].includes(Number(error.status))
-    )
+    if (error instanceof Error && "status" in error && [404, 409].includes(Number(error.status)))
       return {
         attendee: { id: attendee.id, version: attendee.version },
         event: { id: event.id, status: "cancelled" },
@@ -723,8 +564,7 @@ export async function invitationDto(c: CalendarContext, context: Invitation) {
   return {
     attendee: attendeeDto(own, true),
     event: eventDto(effective, cal),
-    attendees: (JSON.parse(event.guest_permissions_json)
-      .can_see_other_guests === true
+    attendees: (JSON.parse(event.guest_permissions_json).can_see_other_guests === true
       ? others
       : others.filter((value) => value.id === attendee.id)
     ).map((value) => attendeeDto(value, value.id === attendee.id)),
@@ -776,9 +616,9 @@ ownInvitations.get("/inbox-invitations/:attendeeId/event.ics", async (c) => {
       kind: "invitation",
       action: "invite",
       event,
-      attendee: (
-        await effectiveAttendees(c, own.event.id, own.attendee.occurrence_key)
-      ).find((value) => value.id === own.attendee.id)!,
+      attendee: (await effectiveAttendees(c, own.event.id, own.attendee.occurrence_key)).find(
+        (value) => value.id === own.attendee.id,
+      )!,
       occurrence_key: own.attendee.occurrence_key,
     }),
     200,
@@ -798,9 +638,9 @@ routes.post(root + "/rsvp", async (c) => {
       "scope",
       "occurrence_key",
     ]),
-    mine = (
-      await effectiveAttendees(c, event.id, String(data.occurrence_key ?? ""))
-    ).find((value) => value.user_id === c.get("identity").user.id);
+    mine = (await effectiveAttendees(c, event.id, String(data.occurrence_key ?? ""))).find(
+      (value) => value.user_id === c.get("identity").user.id,
+    );
   if (!mine) fail(404, "INVITATION_NOT_FOUND", "Your invitation was not found");
   c.req.param;
   const cal = await requireCalendar(c, identifier(c.req.param("calendarId")));
@@ -844,16 +684,12 @@ routes.post(root + "/invitations/resend", async (c) => {
     (!Array.isArray(ids) ||
       ids.length > 100 ||
       ids.some(
-        (value) =>
-          typeof value !== "string" ||
-          !values.some((attendee) => attendee.id === value),
+        (value) => typeof value !== "string" || !values.some((attendee) => attendee.id === value),
       ))
   )
     fail(400, "INVALID_INPUT", "Invalid attendees");
   const selected =
-    ids === undefined
-      ? values
-      : values.filter((value) => (ids as string[]).includes(value.id));
+    ids === undefined ? values : values.filter((value) => (ids as string[]).includes(value.id));
   if (
     await first(
       c.env,
@@ -867,15 +703,7 @@ routes.post(root + "/invitations/resend", async (c) => {
       "Resolve unknown provider acceptance before resending",
     );
   const effective = await occurrence(c, event, key),
-    notices = await prepareDeliveries(
-      c,
-      cal,
-      effective,
-      selected,
-      "invite",
-      key,
-      { resend: true },
-    );
+    notices = await prepareDeliveries(c, cal, effective, selected, "invite", key, { resend: true });
   await mutate(c, {
     action: "calendar.events.invite",
     operation: `invitation.resend:${event.id}:${key}`,

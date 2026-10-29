@@ -12,7 +12,9 @@ export interface UIProviderProps {
 export function UIProvider({ children, direction = "ltr", tooltipProps }: UIProviderProps) {
   return (
     <DirectionProvider direction={direction}>
-      <Tooltip.Provider {...tooltipProps}><NotificationsProvider>{children}</NotificationsProvider></Tooltip.Provider>
+      <Tooltip.Provider {...tooltipProps}>
+        <NotificationsProvider>{children}</NotificationsProvider>
+      </Tooltip.Provider>
     </DirectionProvider>
   );
 }

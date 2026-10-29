@@ -31,8 +31,7 @@ interface Hours {
 function minute(value: unknown, end = false) {
   const raw = text(value, "time", 5);
   if (end && raw === "24:00") return 1440;
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw))
-    fail(400, "INVALID_WORKING_HOURS", "Use HH:mm times");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) fail(400, "INVALID_WORKING_HOURS", "Use HH:mm times");
   return Number(raw.slice(0, 2)) * 60 + Number(raw.slice(3));
 }
 function ranges(value: unknown) {
@@ -44,16 +43,11 @@ function ranges(value: unknown) {
       fields(data, ["start", "end"]);
       const start = minute(data.start),
         end = minute(data.end, true);
-      if (end <= start)
-        fail(400, "INVALID_WORKING_HOURS", "End must follow start");
+      if (end <= start) fail(400, "INVALID_WORKING_HOURS", "End must follow start");
       return { start, end };
     })
     .sort((a, b) => a.start - b.start);
-  if (
-    parsed.some(
-      (value, index) => index > 0 && value.start < parsed[index - 1]!.end,
-    )
-  )
+  if (parsed.some((value, index) => index > 0 && value.start < parsed[index - 1]!.end))
     fail(400, "INVALID_WORKING_HOURS", "Working intervals cannot overlap");
   return parsed;
 }
@@ -67,11 +61,7 @@ const dto = (value: Hours) => {
 };
 export async function workingHours(c: CalendarContext, user: string) {
   return (
-    (await first<Hours>(
-      c.env,
-      "SELECT * FROM calendar_working_hours WHERE user_id=?",
-      user,
-    )) ?? {
+    (await first<Hours>(c.env, "SELECT * FROM calendar_working_hours WHERE user_id=?", user)) ?? {
       user_id: user,
       time_zone: "UTC",
       weekly_json: "{}",
@@ -91,9 +81,7 @@ routes.put("/working-hours", async (c) => {
   const data = await body(c, ["version", "time_zone", "weekly", "exceptions"]),
     user = c.get("identity").user.id,
     old = await workingHours(c, user),
-    version = old.version
-      ? expectedVersion(c, data)
-      : integer(data.version ?? 0, "version", 0, 0),
+    version = old.version ? expectedVersion(c, data) : integer(data.version ?? 0, "version", 0, 0),
     weekly = jsonObject(data.weekly, "weekly"),
     exceptions = jsonObject(data.exceptions ?? {}, "exceptions", 20000),
     value = {
@@ -110,10 +98,7 @@ routes.put("/working-hours", async (c) => {
       ),
       exceptions_json: JSON.stringify(
         Object.fromEntries(
-          Object.entries(exceptions).map(([day, value]) => [
-            date(day).toString(),
-            ranges(value),
-          ]),
+          Object.entries(exceptions).map(([day, value]) => [date(day).toString(), ranges(value)]),
         ),
       ),
       version: version + 1,
@@ -130,10 +115,7 @@ routes.put("/working-hours", async (c) => {
             user,
             version,
           )
-        : condition(
-            "NOT EXISTS(SELECT 1 FROM calendar_working_hours WHERE user_id=?)",
-            user,
-          ),
+        : condition("NOT EXISTS(SELECT 1 FROM calendar_working_hours WHERE user_id=?)", user),
     ],
     build: (proof) => [
       old.version
@@ -143,12 +125,7 @@ routes.put("/working-hours", async (c) => {
   });
   return c.json({ working_hours: dto(value) });
 });
-export async function calendarBusy(
-  c: CalendarContext,
-  cal: Calendar,
-  min: number,
-  max: number,
-) {
+export async function calendarBusy(c: CalendarContext, cal: Calendar, min: number, max: number) {
   const candidates = await rows<Event>(
     c.env,
     `SELECT e.* FROM calendar_events e JOIN calendars organizer ON organizer.id=e.organizer_calendar_id JOIN users owner ON owner.id=organizer.data_owner_user_id WHERE e.trashed_at IS NULL AND e.status<>'cancelled' AND organizer.trashed_at IS NULL AND organizer.status='active' AND ${active("owner")} AND (e.organizer_calendar_id=? OR EXISTS(SELECT 1 FROM calendar_event_copies cp JOIN calendar_event_attendees a ON a.user_id=? JOIN calendar_event_scopes s ON s.id=a.scope_id AND s.event_id=e.id WHERE cp.event_id=e.id AND cp.calendar_id=? AND cp.removed_at IS NULL AND a.removed_at IS NULL)) AND (e.recurrence_json<>'[]' OR (e.start_at<? AND e.end_at>?) OR (e.start_date<? AND e.end_date>?)) LIMIT 2001`,
@@ -160,8 +137,7 @@ export async function calendarBusy(
     new Date((max + 172800) * 1000).toISOString().slice(0, 10),
     new Date((min - 172800) * 1000).toISOString().slice(0, 10),
   );
-  if (candidates.length > 2000)
-    fail(422, "TOO_MANY_EVENTS", "Narrow the calendar selection");
+  if (candidates.length > 2000) fail(422, "TOO_MANY_EVENTS", "Narrow the calendar selection");
   const overrides = await loadOverrides(
       c,
       candidates.map((value) => value.id),
@@ -201,20 +177,16 @@ export async function calendarBusy(
         start: Math.max(min, range.min),
         end: Math.min(max, range.max),
       });
-      if (busy.length > 5000)
-        fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
+      if (busy.length > 5000) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
     }
   }
   return merge(busy);
 }
 export function merge(values: { start: number; end: number }[]) {
   const result: { start: number; end: number }[] = [];
-  for (const value of values.sort(
-    (a, b) => a.start - b.start || a.end - b.end,
-  )) {
+  for (const value of values.sort((a, b) => a.start - b.start || a.end - b.end)) {
     const last = result.at(-1);
-    if (last && value.start <= last.end)
-      last.end = Math.max(last.end, value.end);
+    if (last && value.start <= last.end) last.end = Math.max(last.end, value.end);
     else result.push({ ...value });
   }
   return result;
@@ -252,9 +224,9 @@ function insideWorking(value: { start: number; end: number }, hours: Hours) {
   if (hours.version === 0) return false;
   const weekly = JSON.parse(hours.weekly_json),
     exceptions = JSON.parse(hours.exceptions_json),
-    start = Temporal.Instant.fromEpochMilliseconds(
-      value.start * 1000,
-    ).toZonedDateTimeISO(hours.time_zone),
+    start = Temporal.Instant.fromEpochMilliseconds(value.start * 1000).toZonedDateTimeISO(
+      hours.time_zone,
+    ),
     day = start.toPlainDate(),
     key = day.toString(),
     ranges = (exceptions[key] ?? weekly[start.dayOfWeek % 7] ?? []) as {
@@ -266,14 +238,14 @@ function insideWorking(value: { start: number; end: number }, hours: Hours) {
         day
           .toPlainDateTime()
           .add({ minutes: range.start })
-          .toZonedDateTime(hours.time_zone, { disambiguation: "compatible" })
-          .epochMilliseconds / 1000,
+          .toZonedDateTime(hours.time_zone, { disambiguation: "compatible" }).epochMilliseconds /
+        1000,
       to =
         day
           .toPlainDateTime()
           .add({ minutes: range.end })
-          .toZonedDateTime(hours.time_zone, { disambiguation: "compatible" })
-          .epochMilliseconds / 1000;
+          .toZonedDateTime(hours.time_zone, { disambiguation: "compatible" }).epochMilliseconds /
+        1000;
     return value.start >= from && value.end <= to;
   });
 }
@@ -292,15 +264,10 @@ routes.post("/availability/query", async (c) => {
         : !!flag(data.working_hours_only, "working_hours_only"),
     range = queryRange(data.time_min, data.time_max),
     selected = await selection(c, data.calendar_ids),
-    duration =
-      integer(data.duration_minutes ?? 30, "duration_minutes", 1, 1440) * 60,
+    duration = integer(data.duration_minutes ?? 30, "duration_minutes", 1, 1440) * 60,
     step = integer(data.step_minutes ?? 15, "step_minutes", 1, 1440) * 60,
     busy = merge(
-      (
-        await Promise.all(
-          selected.map((cal) => calendarBusy(c, cal, range.min, range.max)),
-        )
-      ).flat(),
+      (await Promise.all(selected.map((cal) => calendarBusy(c, cal, range.min, range.max)))).flat(),
     ),
     hours = await Promise.all(
       [...new Set(selected.map((cal) => cal.data_owner_user_id))].map((user) =>
@@ -317,9 +284,7 @@ routes.post("/availability/query", async (c) => {
   ) {
     const value = { start, end: start + duration };
     if (
-      !busy.some(
-        (block) => value.start < block.end && value.end > block.start,
-      ) &&
+      !busy.some((block) => value.start < block.end && value.end > block.start) &&
       (!workingOnly || hours.every((hours) => insideWorking(value, hours)))
     )
       values.push(wire(value));

@@ -25,24 +25,21 @@ import type { MailPartitionDO } from "./partition";
 export const mailbox = (env: Env, mailboxId: string) =>
   env.MAILBOX.getByName(mailboxId) as DurableObjectStub<MailboxDO>;
 export const partition = (env: Env, partitionId: string) =>
-  env.MAIL_PARTITION.getByName(
-    partitionId,
-  ) as DurableObjectStub<MailPartitionDO>;
-const systems = [
-  "inbox",
-  "sent",
-  "drafts",
-  "archive",
-  "spam",
-  "trash",
-] as const;
+  env.MAIL_PARTITION.getByName(partitionId) as DurableObjectStub<MailPartitionDO>;
+const systems = ["inbox", "sent", "drafts", "archive", "spam", "trash"] as const;
 export class MailboxDO extends DurableObject<Env> {
   private sql: SqlStorage;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, removeContacts, removeTemplates, htmlSignatures, eventReceipts]);
+      migrate(ctx.storage, [
+        schema,
+        removeContacts,
+        removeTemplates,
+        htmlSignatures,
+        eventReceipts,
+      ]);
     });
   }
   async initialize(mailboxId: string) {
@@ -50,13 +47,9 @@ export class MailboxDO extends DurableObject<Env> {
       this.sql,
       "SELECT mailbox_id FROM mailbox_settings WHERE id=1",
     );
-    if (existing && existing.mailbox_id !== mailboxId)
-      fail(409, "Mailbox identity mismatch");
+    if (existing && existing.mailbox_id !== mailboxId) fail(409, "Mailbox identity mismatch");
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(
-        "INSERT OR IGNORE INTO mailbox_settings(id,mailbox_id) VALUES(1,?)",
-        mailboxId,
-      );
+      this.sql.exec("INSERT OR IGNORE INTO mailbox_settings(id,mailbox_id) VALUES(1,?)", mailboxId);
       for (const system of systems)
         this.sql.exec(
           "INSERT OR IGNORE INTO folders(id,name,system_key) VALUES(?,?,?)",
@@ -70,16 +63,11 @@ export class MailboxDO extends DurableObject<Env> {
   }
   private identity() {
     return (
-      row<{ mailbox_id: string }>(
-        this.sql,
-        "SELECT mailbox_id FROM mailbox_settings WHERE id=1",
-      )?.mailbox_id ?? fail(409, "Mailbox is not initialized")
+      row<{ mailbox_id: string }>(this.sql, "SELECT mailbox_id FROM mailbox_settings WHERE id=1")
+        ?.mailbox_id ?? fail(409, "Mailbox is not initialized")
     );
   }
-  async allocate(
-    operationId: string,
-    reservedBytes = 64 * 1024 * 1024,
-  ): Promise<string> {
+  async allocate(operationId: string, reservedBytes = 64 * 1024 * 1024): Promise<string> {
     // Serialize the entire rollover protocol, including child initialization. No child calls back into this object.
     return this.ctx.blockConcurrencyWhile(async () => {
       const previous = row<{ partition_id: string }>(
@@ -88,22 +76,13 @@ export class MailboxDO extends DurableObject<Env> {
         operationId,
       );
       if (previous) return previous.partition_id;
-      let active = row<Partition>(
-        this.sql,
-        "SELECT * FROM partitions WHERE status='active'",
-      );
+      let active = row<Partition>(this.sql, "SELECT * FROM partitions WHERE status='active'");
       if (active) {
         const size = await partition(this.env, active.id).size();
-        this.sql.exec(
-          "UPDATE partitions SET database_bytes=? WHERE id=?",
-          size,
-          active.id,
-        );
+        this.sql.exec("UPDATE partitions SET database_bytes=? WHERE id=?", size, active.id);
         const configured = Number(this.env.MAIL_PARTITION_TARGET_BYTES);
         const target =
-          Number.isSafeInteger(configured) &&
-          configured > 0 &&
-          configured < 9000000000
+          Number.isSafeInteger(configured) && configured > 0 && configured < 9000000000
             ? configured
             : 6000000000;
         const reserved = row<{ n: number }>(
@@ -140,13 +119,8 @@ export class MailboxDO extends DurableObject<Env> {
         }
         await partition(this.env, next.id).initialize(this.identity(), next.id);
         this.ctx.storage.transactionSync(() => {
-          this.sql.exec(
-            "UPDATE partitions SET status='closed' WHERE status='active'",
-          );
-          this.sql.exec(
-            "UPDATE partitions SET status='active' WHERE id=?",
-            next!.id,
-          );
+          this.sql.exec("UPDATE partitions SET status='closed' WHERE status='active'");
+          this.sql.exec("UPDATE partitions SET status='active' WHERE id=?", next!.id);
         });
         active = next;
       }
@@ -161,16 +135,9 @@ export class MailboxDO extends DurableObject<Env> {
     });
   }
   completeAllocation(operationId: string) {
-    this.sql.exec(
-      "UPDATE allocations SET reserved_bytes=0 WHERE operation_id=?",
-      operationId,
-    );
+    this.sql.exec("UPDATE allocations SET reserved_bytes=0 WHERE operation_id=?", operationId);
   }
-  registerRequest(
-    operationId: string,
-    requestHash: string,
-    resourceId: string,
-  ) {
+  registerRequest(operationId: string, requestHash: string, resourceId: string) {
     const previous = row<{ request_hash: string; resource_id: string }>(
       this.sql,
       "SELECT * FROM request_keys WHERE operation_id=?",
@@ -197,25 +164,25 @@ export class MailboxDO extends DurableObject<Env> {
     requestHash: string,
   ) {
     return this.ctx.blockConcurrencyWhile(async () =>
-      partition(this.env, partitionId).createDraft(
-        input,
-        operationId,
-        requestHash,
-      ),
+      partition(this.env, partitionId).createDraft(input, operationId, requestHash),
     );
   }
-  async storeMessage(
-    partitionId: string,
-    input: import("./types").MessageInput,
-  ) {
+  async storeMessage(partitionId: string, input: import("./types").MessageInput) {
     return this.ctx.blockConcurrencyWhile(async () => {
-      if (!this.hasFolder(input.folder_id))
-        fail(409, "Folder no longer exists");
-      const store = partition(this.env, partitionId), messageId = await store.insert(input);
+      if (!this.hasFolder(input.folder_id)) fail(409, "Folder no longer exists");
+      const store = partition(this.env, partitionId),
+        messageId = await store.insert(input);
       if (input.snoozed_until !== undefined) {
         // On a restore retry, use the stored value so later user edits survive.
         const message = await store.internalMessage(messageId);
-        if (message?.snoozed_until) await this.schedule({ id: "snooze:" + messageId, partition_id: partitionId, kind: "snooze", reference_id: messageId, due_at: message.snoozed_until });
+        if (message?.snoozed_until)
+          await this.schedule({
+            id: "snooze:" + messageId,
+            partition_id: partitionId,
+            kind: "snooze",
+            reference_id: messageId,
+            due_at: message.snoozed_until,
+          });
       }
       return messageId;
     });
@@ -234,14 +201,8 @@ export class MailboxDO extends DurableObject<Env> {
     },
   ): Promise<import("./types").MessageRow> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      if (changes.folder_id && !this.hasFolder(changes.folder_id))
-        fail(404, "Folder not found");
-      return partition(this.env, partitionId).patch(
-        messageId,
-        actorId,
-        version,
-        changes,
-      );
+      if (changes.folder_id && !this.hasFolder(changes.folder_id)) fail(404, "Folder not found");
+      return partition(this.env, partitionId).patch(messageId, actorId, version, changes);
     });
   }
   partitions() {
@@ -250,35 +211,96 @@ export class MailboxDO extends DurableObject<Env> {
       "SELECT * FROM partitions WHERE status<>'preparing' ORDER BY ordinal",
     );
   }
-  commandPlan(operation: string, requestHash: string, plan?: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
-    const previous = row<{ request_hash: string; resource_id: string }>(this.sql, "SELECT * FROM request_keys WHERE operation_id=? AND expires_at>?", operation, epoch());
-    if (previous && previous.request_hash !== requestHash) fail(409, "Idempotency key reused with different request");
+  commandPlan(
+    operation: string,
+    requestHash: string,
+    plan?: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[],
+  ) {
+    const previous = row<{ request_hash: string; resource_id: string }>(
+      this.sql,
+      "SELECT * FROM request_keys WHERE operation_id=? AND expires_at>?",
+      operation,
+      epoch(),
+    );
+    if (previous && previous.request_hash !== requestHash)
+      fail(409, "Idempotency key reused with different request");
     if (!previous && !plan) return null;
-    return JSON.parse(previous?.resource_id ?? this.registerRequest(operation, requestHash, JSON.stringify(plan))) as NonNullable<typeof plan>;
+    return JSON.parse(
+      previous?.resource_id ?? this.registerRequest(operation, requestHash, JSON.stringify(plan)),
+    ) as NonNullable<typeof plan>;
   }
-  async changeMessages(actorId: string, operation: string, requestHash: string, items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[]) {
+  async changeMessages(
+    actorId: string,
+    operation: string,
+    requestHash: string,
+    items: { id: string; version: number; changes: Parameters<MailPartitionDO["patch"]>[3] }[],
+  ) {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const allowed = new Set(this.partitions().map(entry => entry.id));
+      const allowed = new Set(this.partitions().map((entry) => entry.id));
       const groups = new Map<string, typeof items>();
       for (const item of items) {
         const partitionId = item.id.split(".")[0]!;
         if (!allowed.has(partitionId)) fail(404, "Mail resource not found");
-        if (item.changes.folder_id && !this.hasFolder(item.changes.folder_id)) fail(404, "Folder not found");
+        if (item.changes.folder_id && !this.hasFolder(item.changes.folder_id))
+          fail(404, "Folder not found");
         groups.set(partitionId, [...(groups.get(partitionId) ?? []), item]);
       }
       const results = [];
       const entries = [...groups];
-      for (let start = 0; start < entries.length; start += 4) results.push(...(await Promise.all(entries.slice(start, start + 4).map(([partitionId, group]) => partition(this.env, partitionId).patchMany(actorId, operation, requestHash, group)))).flat());
+      for (let start = 0; start < entries.length; start += 4)
+        results.push(
+          ...(
+            await Promise.all(
+              entries
+                .slice(start, start + 4)
+                .map(([partitionId, group]) =>
+                  partition(this.env, partitionId).patchMany(
+                    actorId,
+                    operation,
+                    requestHash,
+                    group,
+                  ),
+                ),
+            )
+          ).flat(),
+        );
       return results;
     });
   }
   /** Take this watermark before reading a snapshot; catch-up then cannot miss writes. */
   changeWindow(actorId: string, since?: number) {
-    const cursor = row<{ n: number }>(this.sql, "SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='events'),0) n")!.n;
+    const cursor = row<{ n: number }>(
+      this.sql,
+      "SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name='events'),0) n",
+    )!.n;
     const oldest = row<{ n: number | null }>(this.sql, "SELECT min(sequence) n FROM events")!.n;
-    const reset = since !== undefined && (since > cursor || (since < cursor && (oldest === null || since < oldest - 1)));
-    const events = since === undefined || reset ? [] : rows<{ sequence: number; payload_json: string }>(this.sql, "SELECT sequence,payload_json FROM events WHERE sequence>? AND (private_user_id IS NULL OR private_user_id=?) ORDER BY sequence LIMIT 257", since, actorId);
-    return { cursor, reset: reset || events.length > 256, events: events.length > 256 ? [] : events.map(event => JSON.parse(event.payload_json) as { message_id: string; thread_id?: string; operation: string }) };
+    const reset =
+      since !== undefined &&
+      (since > cursor || (since < cursor && (oldest === null || since < oldest - 1)));
+    const events =
+      since === undefined || reset
+        ? []
+        : rows<{ sequence: number; payload_json: string }>(
+            this.sql,
+            "SELECT sequence,payload_json FROM events WHERE sequence>? AND (private_user_id IS NULL OR private_user_id=?) ORDER BY sequence LIMIT 257",
+            since,
+            actorId,
+          );
+    return {
+      cursor,
+      reset: reset || events.length > 256,
+      events:
+        events.length > 256
+          ? []
+          : events.map(
+              (event) =>
+                JSON.parse(event.payload_json) as {
+                  message_id: string;
+                  thread_id?: string;
+                  operation: string;
+                },
+            ),
+    };
   }
   folders() {
     return rows<{
@@ -298,31 +320,18 @@ export class MailboxDO extends DurableObject<Env> {
       folderId,
     );
     if (existing?.system_key) fail(409, "System folders cannot be renamed");
-    if (existing && existing.version !== version)
-      fail(409, "Folder version changed");
+    if (existing && existing.version !== version) fail(409, "Folder version changed");
     if (
-      row(
-        this.sql,
-        "SELECT id FROM folders WHERE lower(name)=lower(?) AND id<>?",
-        name,
-        folderId,
-      )
+      row(this.sql, "SELECT id FROM folders WHERE lower(name)=lower(?) AND id<>?", name, folderId)
     )
       fail(409, "Folder name is already used");
     if (existing)
-      this.sql.exec(
-        "UPDATE folders SET name=?,version=version+1 WHERE id=?",
-        name,
-        folderId,
-      );
-    else
-      this.sql.exec("INSERT INTO folders(id,name) VALUES(?,?)", folderId, name);
+      this.sql.exec("UPDATE folders SET name=?,version=version+1 WHERE id=?", name, folderId);
+    else this.sql.exec("INSERT INTO folders(id,name) VALUES(?,?)", folderId, name);
     return row(this.sql, "SELECT * FROM folders WHERE id=?", folderId);
   }
   async deleteFolder(folderId: string, version: number) {
-    return this.ctx.blockConcurrencyWhile(async () =>
-      this.removeFolder(folderId, version),
-    );
+    return this.ctx.blockConcurrencyWhile(async () => this.removeFolder(folderId, version));
   }
   private async removeFolder(folderId: string, version: number) {
     const existing = row<{ system_key: string | null; version: number }>(
@@ -337,11 +346,7 @@ export class MailboxDO extends DurableObject<Env> {
       if (await partition(this.env, entry.id).folderCount(folderId))
         fail(409, "Folder is not empty");
     // Recheck after child calls; keep folder routing changes serialized with new writes via the caller.
-    this.sql.exec(
-      "DELETE FROM folders WHERE id=? AND version=?",
-      folderId,
-      version,
-    );
+    this.sql.exec("DELETE FROM folders WHERE id=? AND version=?", folderId, version);
   }
   settings() {
     return row<Record<string, string | number | null>>(
@@ -359,12 +364,9 @@ export class MailboxDO extends DurableObject<Env> {
       "auto_reply_text",
     ];
     const keys = Object.keys(data);
-    if (keys.some((key) => !allowed.includes(key)) || !keys.length)
-      fail(400, "Invalid settings");
+    if (keys.some((key) => !allowed.includes(key)) || !keys.length) fail(400, "Invalid settings");
     this.sql.exec(
-      "UPDATE mailbox_settings SET " +
-        keys.map((key) => key + "=?").join(",") +
-        " WHERE id=1",
+      "UPDATE mailbox_settings SET " + keys.map((key) => key + "=?").join(",") + " WHERE id=1",
       ...keys.map((key) => data[key]!),
     );
     return this.settings();
@@ -376,30 +378,16 @@ export class MailboxDO extends DurableObject<Env> {
     );
   }
   blockSender(address: string, blocked: boolean) {
-    if (blocked)
-      this.sql.exec("INSERT OR IGNORE INTO blocked_senders VALUES(?)", address);
-    else
-      this.sql.exec(
-        "DELETE FROM blocked_senders WHERE email_address=?",
-        address,
-      );
+    if (blocked) this.sql.exec("INSERT OR IGNORE INTO blocked_senders VALUES(?)", address);
+    else this.sql.exec("DELETE FROM blocked_senders WHERE email_address=?", address);
   }
   rules() {
-    return rows<Rule>(
-      this.sql,
-      "SELECT * FROM rules ORDER BY priority DESC,id LIMIT 100",
-    );
+    return rows<Rule>(this.sql, "SELECT * FROM rules ORDER BY priority DESC,id LIMIT 100");
   }
   putRule(value: Rule) {
-    const existing = row<Rule>(
-      this.sql,
-      "SELECT * FROM rules WHERE id=?",
-      value.id,
-    );
-    if (existing && value.version !== existing.version)
-      fail(409, "Rule version changed");
-    if (!existing && this.rules().length >= 100)
-      fail(409, "Rule limit reached");
+    const existing = row<Rule>(this.sql, "SELECT * FROM rules WHERE id=?", value.id);
+    if (existing && value.version !== existing.version) fail(409, "Rule version changed");
+    if (!existing && this.rules().length >= 100) fail(409, "Rule limit reached");
     this.sql.exec(
       "INSERT INTO rules VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,priority=excluded.priority,enabled=excluded.enabled,conditions_json=excluded.conditions_json,actions_json=excluded.actions_json,version=rules.version+1",
       value.id,
@@ -423,11 +411,7 @@ export class MailboxDO extends DurableObject<Env> {
       matched_rules: [] as string[],
     };
     if (
-      row(
-        this.sql,
-        "SELECT email_address FROM blocked_senders WHERE email_address=?",
-        input.from,
-      )
+      row(this.sql, "SELECT email_address FROM blocked_senders WHERE email_address=?", input.from)
     ) {
       result.folder_id = "spam";
       result.is_spam = true;
@@ -451,11 +435,7 @@ export class MailboxDO extends DurableObject<Env> {
         continue;
       result.matched_rules.push(rule.id);
       for (const action of JSON.parse(rule.actions_json) as RuleAction[]) {
-        if (
-          action.type === "move" &&
-          action.folder_id &&
-          this.hasFolder(action.folder_id)
-        )
+        if (action.type === "move" && action.folder_id && this.hasFolder(action.folder_id))
           result.folder_id = action.folder_id;
         if (action.type === "spam") {
           result.folder_id = "spam";
@@ -481,13 +461,21 @@ export class MailboxDO extends DurableObject<Env> {
     );
     return true;
   }
-  async schedule(task: ScheduledMailTask) { return this.scheduleMany([task]); }
+  async schedule(task: ScheduledMailTask) {
+    return this.scheduleMany([task]);
+  }
   async scheduleMany(tasks: ScheduledMailTask[]) {
     if (tasks.length > 2000) fail(400, "Too many scheduled tasks");
     this.ctx.storage.transactionSync(() => {
-      for (const task of tasks) this.sql.exec(
-        "INSERT INTO scheduled_tasks(id,partition_id,kind,reference_id,due_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET due_at=excluded.due_at,dispatched_at=NULL",
-        task.id, task.partition_id, task.kind, task.reference_id, task.due_at);
+      for (const task of tasks)
+        this.sql.exec(
+          "INSERT INTO scheduled_tasks(id,partition_id,kind,reference_id,due_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET due_at=excluded.due_at,dispatched_at=NULL",
+          task.id,
+          task.partition_id,
+          task.kind,
+          task.reference_id,
+          task.due_at,
+        );
     });
     await this.resetAlarm();
   }
@@ -503,10 +491,7 @@ export class MailboxDO extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(
       Math.max(
         Date.now() + 1000,
-        Math.min(
-          (next ?? epoch() + 3600) * 1000,
-          Date.now() + (dataPending ? 300000 : 3600000),
-        ),
+        Math.min((next ?? epoch() + 3600) * 1000, Date.now() + (dataPending ? 300000 : 3600000)),
       ),
     );
   }
@@ -528,11 +513,7 @@ export class MailboxDO extends DurableObject<Env> {
         partition_id: task.partition_id,
         reference_id: task.reference_id,
       } satisfies WorkTask);
-      this.sql.exec(
-        "UPDATE scheduled_tasks SET dispatched_at=? WHERE id=?",
-        epoch(),
-        task.id,
-      );
+      this.sql.exec("UPDATE scheduled_tasks SET dispatched_at=? WHERE id=?", epoch(), task.id);
     }
     for (const job of rows<{ id: string }>(
       this.sql,
@@ -545,7 +526,10 @@ export class MailboxDO extends DurableObject<Env> {
         reference_id: job.id,
       });
     // Delivery alarms run frequently; retention and repair stay hourly.
-    const maintenance = row<{ completed_at: number }>(this.sql, "SELECT completed_at FROM maintenance_state WHERE id=1")!;
+    const maintenance = row<{ completed_at: number }>(
+      this.sql,
+      "SELECT completed_at FROM maintenance_state WHERE id=1",
+    )!;
     if (maintenance.completed_at <= epoch() - 3600) {
       for (const entry of this.partitions())
         await partition(this.env, entry.id).maintenance(
@@ -553,19 +537,10 @@ export class MailboxDO extends DurableObject<Env> {
         );
       this.sql.exec("DELETE FROM allocations WHERE expires_at<?", epoch());
       this.sql.exec("DELETE FROM request_keys WHERE expires_at<?", epoch());
-      this.sql.exec(
-        "DELETE FROM recent_provider_messages WHERE expires_at<?",
-        epoch(),
-      );
+      this.sql.exec("DELETE FROM recent_provider_messages WHERE expires_at<?", epoch());
       this.sql.exec("DELETE FROM websocket_tickets WHERE expires_at<?", epoch());
-      this.sql.exec(
-        "DELETE FROM auto_reply_receipts WHERE replied_at<?",
-        epoch() - 86400,
-      );
-      this.sql.exec(
-        "DELETE FROM scheduled_tasks WHERE dispatched_at<?",
-        epoch() - 7 * 86400,
-      );
+      this.sql.exec("DELETE FROM auto_reply_receipts WHERE replied_at<?", epoch() - 86400);
+      this.sql.exec("DELETE FROM scheduled_tasks WHERE dispatched_at<?", epoch() - 7 * 86400);
       this.sql.exec(
         "DELETE FROM events WHERE created_at<? OR sequence<(SELECT coalesce(max(sequence),0)-1000 FROM events)",
         epoch() - 7 * 86400,
@@ -595,11 +570,7 @@ export class MailboxDO extends DurableObject<Env> {
       epoch() + 30 * 86400,
     );
   }
-  providerMessage(
-    provider: string,
-    connectionId: string,
-    providerMessageId: string,
-  ) {
+  providerMessage(provider: string, connectionId: string, providerMessageId: string) {
     return row<{ partition_id: string; submission_id: string }>(
       this.sql,
       "SELECT partition_id,submission_id FROM recent_provider_messages WHERE provider=? AND connection_id=? AND provider_message_id=?",
@@ -641,8 +612,7 @@ export class MailboxDO extends DurableObject<Env> {
         progress: number;
         cursor_json: string;
         error_code: string | null;
-      }>(this.sql, "SELECT * FROM data_jobs WHERE id=?", jobId) ??
-      fail(404, "Job not found")
+      }>(this.sql, "SELECT * FROM data_jobs WHERE id=?", jobId) ?? fail(404, "Job not found")
     );
   }
   claimDataJob(jobId: string) {
@@ -650,11 +620,8 @@ export class MailboxDO extends DurableObject<Env> {
     if (
       ["completed", "failed"].includes(job.status) ||
       (job.status === "processing" &&
-        row<{ updated_at: number }>(
-          this.sql,
-          "SELECT updated_at FROM data_jobs WHERE id=?",
-          jobId,
-        )!.updated_at >
+        row<{ updated_at: number }>(this.sql, "SELECT updated_at FROM data_jobs WHERE id=?", jobId)!
+          .updated_at >
           epoch() - 300)
     )
       return null;
@@ -665,12 +632,7 @@ export class MailboxDO extends DurableObject<Env> {
     );
     return job;
   }
-  advanceDataJob(
-    jobId: string,
-    progress: number,
-    cursor: string,
-    completed: boolean,
-  ) {
+  advanceDataJob(jobId: string, progress: number, cursor: string, completed: boolean) {
     this.sql.exec(
       "UPDATE data_jobs SET status=?,progress=?,cursor_json=?,updated_at=? WHERE id=?",
       completed ? "completed" : "queued",
@@ -681,8 +643,7 @@ export class MailboxDO extends DurableObject<Env> {
     );
   }
   retryDataJob(jobId: string, actor: MailActor) {
-    if (this.dataJob(jobId).status !== "failed")
-      fail(409, "Only failed jobs may be retried");
+    if (this.dataJob(jobId).status !== "failed") fail(409, "Only failed jobs may be retried");
     this.sql.exec(
       "UPDATE data_jobs SET status='queued',actor_json=?,error_code=NULL,updated_at=? WHERE id=?",
       JSON.stringify(actor),
@@ -734,9 +695,7 @@ export class MailboxDO extends DurableObject<Env> {
   async fetch(request: Request) {
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
       return new Response("Expected WebSocket upgrade", { status: 400 });
-    return this.openEvents(
-      new URL(request.url).searchParams.get("ticket") ?? "",
-    );
+    return this.openEvents(new URL(request.url).searchParams.get("ticket") ?? "");
   }
   private async openEvents(token: string) {
     const hashed = await hash(token);
@@ -754,39 +713,81 @@ export class MailboxDO extends DurableObject<Env> {
     sockets[1].serializeAttachment(actor);
     return new Response(null, { status: 101, webSocket: sockets[0] });
   }
-  async emit(message: MailEvent) { return this.emitMany([message]); }
+  async emit(message: MailEvent) {
+    return this.emitMany([message]);
+  }
   async emitMany(messages: MailEvent[]) {
     if (messages.length > 50) fail(400, "Too many events");
     const mailboxId = this.identity();
-    const events = this.ctx.storage.transactionSync(() => messages.flatMap(message => {
-      const payload = { mailbox_id: mailboxId, message_id: message.message_id, thread_id: message.thread_id, version: message.version, operation: message.operation };
-      const event = row<{ sequence: number }>(this.sql,
-        "INSERT OR IGNORE INTO events(payload_json,private_user_id,created_at,event_id) VALUES(?,?,?,?) RETURNING sequence",
-        JSON.stringify(payload), message.private_user_id ?? null, epoch(), message.event_id ?? null);
-      const receipt = event ?? (message.event_id ? row<{ sequence: number }>(this.sql, "SELECT sequence FROM events WHERE event_id=?", message.event_id) : null);
-      return receipt ? [{ payload: { ...payload, sequence: receipt.sequence }, privateUser: message.private_user_id }] : [];
-    }));
+    const events = this.ctx.storage.transactionSync(() =>
+      messages.flatMap((message) => {
+        const payload = {
+          mailbox_id: mailboxId,
+          message_id: message.message_id,
+          thread_id: message.thread_id,
+          version: message.version,
+          operation: message.operation,
+        };
+        const event = row<{ sequence: number }>(
+          this.sql,
+          "INSERT OR IGNORE INTO events(payload_json,private_user_id,created_at,event_id) VALUES(?,?,?,?) RETURNING sequence",
+          JSON.stringify(payload),
+          message.private_user_id ?? null,
+          epoch(),
+          message.event_id ?? null,
+        );
+        const receipt =
+          event ??
+          (message.event_id
+            ? row<{ sequence: number }>(
+                this.sql,
+                "SELECT sequence FROM events WHERE event_id=?",
+                message.event_id,
+              )
+            : null);
+        return receipt
+          ? [
+              {
+                payload: { ...payload, sequence: receipt.sequence },
+                privateUser: message.private_user_id,
+              },
+            ]
+          : [];
+      }),
+    );
     if (!events.length) return;
     const groups = new Map<string, { actor: MailActor; sockets: WebSocket[] }>();
     for (const socket of this.ctx.getWebSockets()) {
       const actor = socket.deserializeAttachment() as MailActor;
-      if (!events.some(event => !event.privateUser || event.privateUser === actor.user_id)) continue;
-      const key = JSON.stringify(actor), group = groups.get(key) ?? { actor, sockets: [] };
-      group.sockets.push(socket); groups.set(key, group);
+      if (!events.some((event) => !event.privateUser || event.privateUser === actor.user_id))
+        continue;
+      const key = JSON.stringify(actor),
+        group = groups.get(key) ?? { actor, sockets: [] };
+      group.sockets.push(socket);
+      groups.set(key, group);
     }
     const entries = [...groups.values()];
-    for (let start = 0; start < entries.length; start += 8) await Promise.all(entries.slice(start, start + 8).map(async ({ actor, sockets }) => {
-      try {
-        await authorize(this.env, actor, mailboxId, "read");
-      } catch (error) {
-        if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error;
-        for (const socket of sockets) socket.close(1008, "Access revoked");
-        return;
-      }
-      for (const socket of sockets) for (const event of events) if (!event.privateUser || event.privateUser === actor.user_id) {
-        try { socket.send(JSON.stringify(event.payload)); } catch { /* Closed sockets catch up using the event log. */ }
-      }
-    }));
+    for (let start = 0; start < entries.length; start += 8)
+      await Promise.all(
+        entries.slice(start, start + 8).map(async ({ actor, sockets }) => {
+          try {
+            await authorize(this.env, actor, mailboxId, "read");
+          } catch (error) {
+            if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error;
+            for (const socket of sockets) socket.close(1008, "Access revoked");
+            return;
+          }
+          for (const socket of sockets)
+            for (const event of events)
+              if (!event.privateUser || event.privateUser === actor.user_id) {
+                try {
+                  socket.send(JSON.stringify(event.payload));
+                } catch {
+                  /* Closed sockets catch up using the event log. */
+                }
+              }
+        }),
+      );
   }
   async webSocketMessage(socket: WebSocket) {
     try {

@@ -21,25 +21,45 @@ test("Resend sends in the Workers runtime and never follows credential-bearing r
         }};
       `,
     },
-    bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:sockets"],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "browser",
+    external: ["cloudflare:sockets"],
   });
   const requests = [];
   let redirect = false;
-  const mf = new Miniflare(convertV4MiniflareOptions({ workers: [{
-    name: "provider-test", modules: true, script: bundled.outputFiles[0].text, compatibilityDate: "2026-09-29",
-    bindings: { MAIL_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url") },
-    outboundService: async (request) => {
-      requests.push({url: request.url, headers: new Headers(request.headers), body: await request.json()});
-      return redirect
-        ? new Response(null, {status: 307, headers: {Location: "https://untrusted.example.test/emails"}})
-        : Response.json({id: "resend-workers-message"});
-    },
-  }] }));
+  const mf = new Miniflare(
+    convertV4MiniflareOptions({
+      workers: [
+        {
+          name: "provider-test",
+          modules: true,
+          script: bundled.outputFiles[0].text,
+          compatibilityDate: "2026-09-29",
+          bindings: { MAIL_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url") },
+          outboundService: async (request) => {
+            requests.push({
+              url: request.url,
+              headers: new Headers(request.headers),
+              body: await request.json(),
+            });
+            return redirect
+              ? new Response(null, {
+                  status: 307,
+                  headers: { Location: "https://untrusted.example.test/emails" },
+                })
+              : Response.json({ id: "resend-workers-message" });
+          },
+        },
+      ],
+    }),
+  );
   t.after(() => mf.dispose());
 
   const accepted = await mf.dispatchFetch("https://test.local");
   assert.equal(accepted.status, 200);
-  assert.deepEqual(await accepted.json(), {provider_message_id: "resend-workers-message"});
+  assert.deepEqual(await accepted.json(), { provider_message_id: "resend-workers-message" });
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "https://api.resend.com/emails");
   assert.equal(requests[0].headers.get("authorization"), "Bearer test-resend-key");
@@ -49,7 +69,7 @@ test("Resend sends in the Workers runtime and never follows credential-bearing r
   redirect = true;
   const rejected = await mf.dispatchFetch("https://test.local");
   assert.equal(rejected.status, 502);
-  assert.deepEqual(await rejected.json(), {error: "E_PROVIDER_REJECTED"});
+  assert.deepEqual(await rejected.json(), { error: "E_PROVIDER_REJECTED" });
   assert.equal(requests.length, 2, "redirect destination must never receive a request");
   assert.ok(requests.every((request) => request.url === "https://api.resend.com/emails"));
 });

@@ -28,23 +28,16 @@ export function RecipientField({
     if (pending.trim()) onChange([...chips, pending.trim(), ""].join(", "));
   };
   return (
-    <Field.Root className="mail-recipient-field" invalid={chips.some(chip => !valid(chip))}>
+    <Field.Root className="mail-recipient-field" invalid={chips.some((chip) => !valid(chip))}>
       <Field.Label htmlFor={id}>{label}</Field.Label>
       <div className="mail-recipient-controls">
         {chips.map((chip, index) => (
-          <Chip
-            key={`${chip}:${index}`}
-            invalid={!valid(chip)}
-          >
+          <Chip key={`${chip}:${index}`} invalid={!valid(chip)}>
             <Button
               variant="ghost"
               size="sm"
               aria-label={`Edit ${chip}${valid(chip) ? "" : ", invalid email address"}`}
-              onClick={() =>
-                onChange(
-                  [...chips.filter((_, i) => i !== index), chip].join(", "),
-                )
-              }
+              onClick={() => onChange([...chips.filter((_, i) => i !== index), chip].join(", "))}
             >
               {!valid(chip) && <Icon name="info" width="12" height="12" />} {chip}
             </Button>
@@ -52,25 +45,20 @@ export function RecipientField({
               variant="ghost"
               size="icon"
               aria-label={`Remove ${chip}`}
-              onClick={() =>
-                onChange(
-                  [...chips.filter((_, i) => i !== index), pending].join(", "),
-                )
-              }
+              onClick={() => onChange([...chips.filter((_, i) => i !== index), pending].join(", "))}
             >
               <Icon name="close" width="12" height="12" />
             </Button>
           </Chip>
         ))}
-        <Input variant="integrated"
+        <Input
+          variant="integrated"
           id={id}
           value={pending.trimStart()}
           inputMode="email"
           autoComplete="off"
           placeholder={chips.length ? "" : "Add recipients"}
-          onChange={(event) =>
-            onChange([...chips, event.target.value].join(", "))
-          }
+          onChange={(event) => onChange([...chips, event.target.value].join(", "))}
           onBlur={() => {
             if (valid(pending)) commit();
           }}
@@ -88,11 +76,7 @@ export function RecipientField({
             const text = event.clipboardData.getData("text/plain");
             if (/[;\n]/.test(text)) {
               event.preventDefault();
-              onChange(
-                [...chips, pending + text.replaceAll(/[;\n]/g, ", ")].join(
-                  ", ",
-                ),
-              );
+              onChange([...chips, pending + text.replaceAll(/[;\n]/g, ", ")].join(", "));
             }
           }}
         />
@@ -100,7 +84,8 @@ export function RecipientField({
       {action}
       {chips.some((chip) => !valid(chip)) && (
         <Field.Description>
-          Invalid addresses: {chips.filter(chip => !valid(chip)).join(", ")}. Edit or remove them before sending.
+          Invalid addresses: {chips.filter((chip) => !valid(chip)).join(", ")}. Edit or remove them
+          before sending.
         </Field.Description>
       )}
     </Field.Root>

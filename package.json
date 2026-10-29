@@ -15,22 +15,28 @@
   },
   "scripts": {
     "dev": "vite",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:staged": "lint-staged",
     "cf-typegen": "wrangler types",
     "typecheck": "npm run cf-typegen && tsc --noEmit && tsc --project tsconfig.web.json",
     "build:web": "vite build",
     "build": "npm run build:web && wrangler deploy --dry-run --outdir dist",
     "preview": "wrangler dev",
-    "check": "npm run typecheck && npm run build",
+    "check": "npm run format:check && npm run typecheck && npm run build",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "node --experimental-strip-types scripts/deploy.mjs",
     "tail": "wrangler tail",
-    "prepare": "npm run cf-typegen",
+    "prepare": "husky && npm run cf-typegen",
     "auth:keys": "node scripts/generate-auth-keys.mjs",
     "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs"
   },
   "overrides": {
     "undici": "7.29.1"
+  },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.60.0",
@@ -41,7 +47,11 @@
     "@types/sanitize-html": "2.16.2",
     "@vitejs/plugin-react": "5.2.0",
     "esbuild": "0.28.1",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
     "miniflare": "5.20260926.0-alpha",
+    "prettier": "3.9.10",
+    "prettier-plugin-sql-cst": "0.23.1",
     "typescript": "7.0.2",
     "vite": "8.3.2",
     "wrangler": "4.143.0"

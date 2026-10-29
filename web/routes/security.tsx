@@ -1,5 +1,16 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Button, Dialog, DialogPopup, Fieldset, Form, Icon, Select, SelectPopup, TextField, useNotifications } from "@/components/ui";
+import {
+  Button,
+  Dialog,
+  DialogPopup,
+  Fieldset,
+  Form,
+  Icon,
+  Select,
+  SelectPopup,
+  TextField,
+  useNotifications,
+} from "@/components/ui";
 import { PasswordField } from "../components/password-field";
 import { useAccount } from "../components/account-context";
 import { ApiError, api, errorMessage } from "../lib/api";
@@ -9,7 +20,10 @@ import { sessions, useSession } from "../lib/session";
 import { SessionStorageError } from "../lib/session-manager";
 import { AuthenticatorSettings } from "../components/authenticator-settings";
 
-interface Grant { reauthentication_token: string; expires_at: number; }
+interface Grant {
+  reauthentication_token: string;
+  expires_at: number;
+}
 
 export function SecurityPage() {
   const notify = useNotifications();
@@ -29,14 +43,29 @@ export function SecurityPage() {
 
   function cancelVerification() {
     if (inFlight.current) return;
-    setChallenge(null); setCode(""); setDialogError(""); setCurrentPassword(""); setPassword(""); setConfirmation("");
+    setChallenge(null);
+    setCode("");
+    setDialogError("");
+    setCurrentPassword("");
+    setPassword("");
+    setConfirmation("");
   }
 
   async function change(grant: Grant) {
-    if (grant.expires_at * 1000 <= Date.now()) throw new Error("Verification expired. Enter your current password and try again.");
-    const tokens = await api<Session>("/api/me/password", { method: "PUT", token: grant.reauthentication_token, body: { new_password: password } });
+    if (grant.expires_at * 1000 <= Date.now())
+      throw new Error("Verification expired. Enter your current password and try again.");
+    const tokens = await api<Session>("/api/me/password", {
+      method: "PUT",
+      token: grant.reauthentication_token,
+      body: { new_password: password },
+    });
     await sessions.accept(tokens, auth.session?.email ?? "");
-    setPassword(""); setCurrentPassword(""); setConfirmation(""); setChallenge(null); setCode(""); setDialogError("");
+    setPassword("");
+    setCurrentPassword("");
+    setConfirmation("");
+    setChallenge(null);
+    setCode("");
+    setDialogError("");
     notify.success("Your password has been changed. Other sessions have been signed out.");
     await reload().catch(() => {});
   }
@@ -45,78 +74,210 @@ export function SecurityPage() {
     event.preventDefault();
     if (inFlight.current) return;
     setError("");
-    try { validatePassword(password, confirmation); }
-    catch (failure) { setError(failure instanceof Error ? failure.message : "Check your password."); return; }
-    inFlight.current = true; setBusy(true);
     try {
-      const result = await api<Grant | MfaChallenge>("/api/auth/reauthenticate", { method: "POST", retryAuth: false, body: { password: currentPassword } });
+      validatePassword(password, confirmation);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Check your password.");
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      const result = await api<Grant | MfaChallenge>("/api/auth/reauthenticate", {
+        method: "POST",
+        retryAuth: false,
+        body: { password: currentPassword },
+      });
       setCurrentPassword("");
       if ("next" in result) {
-        setChallenge(result); setMethod(result.methods[0]?.id ?? ""); setRecovery(result.methods.length === 0); setDialogError(""); setCode("");
+        setChallenge(result);
+        setMethod(result.methods[0]?.id ?? "");
+        setRecovery(result.methods.length === 0);
+        setDialogError("");
+        setCode("");
       } else await change(result);
     } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 401) setError("Check your current password and try again.");
-      else notify.error(failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
-    } finally { inFlight.current = false; setBusy(false); }
+      if (failure instanceof ApiError && failure.status === 401)
+        setError("Check your current password and try again.");
+      else
+        notify.error(
+          failure instanceof SessionStorageError ? failure.message : errorMessage(failure),
+        );
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!challenge || inFlight.current) return;
     if (challenge.expires_at * 1000 <= Date.now()) {
-      cancelVerification(); setError("Verification expired. Enter your current password and try again."); return;
+      cancelVerification();
+      setError("Verification expired. Enter your current password and try again.");
+      return;
     }
-    inFlight.current = true; setBusy(true); setDialogError("");
+    inFlight.current = true;
+    setBusy(true);
+    setDialogError("");
     try {
       const grant = await api<Grant>(recovery ? "/api/auth/mfa/recovery" : "/api/auth/mfa/verify", {
-        method: "POST", token: challenge.challenge_token,
+        method: "POST",
+        token: challenge.challenge_token,
         body: recovery ? { recovery_code: code.trim() } : { method_id: method, code: code.trim() },
       });
       await change(grant);
     } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 401) setDialogError("The code is incorrect or verification has expired. Check the code and try again.");
-      else notify.error(failure instanceof SessionStorageError ? failure.message : errorMessage(failure));
-    } finally { inFlight.current = false; setBusy(false); }
+      if (failure instanceof ApiError && failure.status === 401)
+        setDialogError(
+          "The code is incorrect or verification has expired. Check the code and try again.",
+        );
+      else
+        notify.error(
+          failure instanceof SessionStorageError ? failure.message : errorMessage(failure),
+        );
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   }
 
-  return <section className="account-page">
-    <header className="account-page-header"><h1>Security</h1><p>Keep your account secure.</p></header>
-    <section className="account-panel">
-      <div className="account-panel-header"><h2>Password</h2><p>Use 15–128 characters. Changing your password signs out other sessions.</p></div>
-      <Form onSubmit={submit} aria-busy={busy}>
-        <Fieldset.Root disabled={busy}>
-          <PasswordField id="current-password" label="Current password" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
-          <PasswordField id="account-new-password" label="New password" value={password} onChange={setPassword} autoComplete="new-password" />
-          <PasswordField id="account-confirm-password" label="Confirm new password" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
-        </Fieldset.Root>
-        {error && <p className="account-notice" data-error role="alert"><Icon name="info" />{error}</p>}
-        <div className="account-actions"><Button type="submit" variant="primary" disabled={busy}>{busy ? "Verifying…" : "Change password"}</Button></div>
-      </Form>
-    </section>
-    <AuthenticatorSettings />
-    <Dialog.Root open={challenge !== null} onOpenChange={(open) => { if (!open) cancelVerification(); }}>
-      <DialogPopup>
-        <Dialog.Title>Verify your identity</Dialog.Title>
-        <Dialog.Description>{recovery ? "Enter a saved recovery code to change your password." : "Enter a code from your authenticator app to change your password."}</Dialog.Description>
-        <Form onSubmit={verify} className="account-dialog-form" aria-busy={busy}>
+  return (
+    <section className="account-page">
+      <header className="account-page-header">
+        <h1>Security</h1>
+        <p>Keep your account secure.</p>
+      </header>
+      <section className="account-panel">
+        <div className="account-panel-header">
+          <h2>Password</h2>
+          <p>Use 15–128 characters. Changing your password signs out other sessions.</p>
+        </div>
+        <Form onSubmit={submit} aria-busy={busy}>
           <Fieldset.Root disabled={busy}>
-            {!recovery && challenge && challenge.methods.length > 1 && <Select.Root
-              items={challenge.methods.map((item, index) => ({ value: item.id, label: item.name || `Authenticator app ${index + 1}` }))}
-              value={method} onValueChange={(value) => { setMethod(value ?? ""); setCode(""); setDialogError(""); }}>
-              <Select.Label>Authentication method</Select.Label><Select.Trigger><Select.Value /></Select.Trigger>
-              <SelectPopup><Select.List>{challenge.methods.map((item, index) => <Select.Item key={item.id} value={item.id}><Select.ItemText>{item.name || `Authenticator app ${index + 1}`}</Select.ItemText></Select.Item>)}</Select.List></SelectPopup>
-            </Select.Root>}
-            <TextField key={recovery ? "recovery" : "authenticator"} label={recovery ? "Recovery code" : "Authentication code"} name="code"
-              autoComplete="one-time-code" inputMode={recovery ? "text" : "numeric"} pattern={recovery ? undefined : "[0-9]{6}"}
-              maxLength={recovery ? 64 : 6} required value={code} onValueChange={setCode} />
-            {dialogError && <p className="account-notice" data-error role="alert">{dialogError}</p>}
-            {challenge && challenge.methods.length > 0 && <Button type="button" variant="ghost" onClick={() => { setRecovery(!recovery); setCode(""); setDialogError(""); }}>
-              {recovery ? "Use an authenticator code" : "Use a recovery code"}
-            </Button>}
-            <div className="account-actions"><Button type="button" onClick={cancelVerification}>Cancel</Button><Button type="submit" variant="primary">{busy ? "Verifying…" : "Verify and change password"}</Button></div>
+            <PasswordField
+              id="current-password"
+              label="Current password"
+              value={currentPassword}
+              onChange={setCurrentPassword}
+              autoComplete="current-password"
+            />
+            <PasswordField
+              id="account-new-password"
+              label="New password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+            />
+            <PasswordField
+              id="account-confirm-password"
+              label="Confirm new password"
+              value={confirmation}
+              onChange={setConfirmation}
+              autoComplete="new-password"
+            />
           </Fieldset.Root>
+          {error && (
+            <p className="account-notice" data-error role="alert">
+              <Icon name="info" />
+              {error}
+            </p>
+          )}
+          <div className="account-actions">
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "Verifying…" : "Change password"}
+            </Button>
+          </div>
         </Form>
-      </DialogPopup>
-    </Dialog.Root>
-  </section>;
+      </section>
+      <AuthenticatorSettings />
+      <Dialog.Root
+        open={challenge !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelVerification();
+        }}
+      >
+        <DialogPopup>
+          <Dialog.Title>Verify your identity</Dialog.Title>
+          <Dialog.Description>
+            {recovery
+              ? "Enter a saved recovery code to change your password."
+              : "Enter a code from your authenticator app to change your password."}
+          </Dialog.Description>
+          <Form onSubmit={verify} className="account-dialog-form" aria-busy={busy}>
+            <Fieldset.Root disabled={busy}>
+              {!recovery && challenge && challenge.methods.length > 1 && (
+                <Select.Root
+                  items={challenge.methods.map((item, index) => ({
+                    value: item.id,
+                    label: item.name || `Authenticator app ${index + 1}`,
+                  }))}
+                  value={method}
+                  onValueChange={(value) => {
+                    setMethod(value ?? "");
+                    setCode("");
+                    setDialogError("");
+                  }}
+                >
+                  <Select.Label>Authentication method</Select.Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                  </Select.Trigger>
+                  <SelectPopup>
+                    <Select.List>
+                      {challenge.methods.map((item, index) => (
+                        <Select.Item key={item.id} value={item.id}>
+                          <Select.ItemText>
+                            {item.name || `Authenticator app ${index + 1}`}
+                          </Select.ItemText>
+                        </Select.Item>
+                      ))}
+                    </Select.List>
+                  </SelectPopup>
+                </Select.Root>
+              )}
+              <TextField
+                key={recovery ? "recovery" : "authenticator"}
+                label={recovery ? "Recovery code" : "Authentication code"}
+                name="code"
+                autoComplete="one-time-code"
+                inputMode={recovery ? "text" : "numeric"}
+                pattern={recovery ? undefined : "[0-9]{6}"}
+                maxLength={recovery ? 64 : 6}
+                required
+                value={code}
+                onValueChange={setCode}
+              />
+              {dialogError && (
+                <p className="account-notice" data-error role="alert">
+                  {dialogError}
+                </p>
+              )}
+              {challenge && challenge.methods.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setRecovery(!recovery);
+                    setCode("");
+                    setDialogError("");
+                  }}
+                >
+                  {recovery ? "Use an authenticator code" : "Use a recovery code"}
+                </Button>
+              )}
+              <div className="account-actions">
+                <Button type="button" onClick={cancelVerification}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary">
+                  {busy ? "Verifying…" : "Verify and change password"}
+                </Button>
+              </div>
+            </Fieldset.Root>
+          </Form>
+        </DialogPopup>
+      </Dialog.Root>
+    </section>
+  );
 }

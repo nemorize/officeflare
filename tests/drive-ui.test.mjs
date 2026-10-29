@@ -15,11 +15,22 @@ import { createApiClient } from "../web/lib/api-client.ts";
 import { driveSearchParams, isDriveSearch, readDriveSearch } from "../web/lib/drive-search.ts";
 
 test("Drive searches retain advanced constraints and reset without leaving hidden filters", () => {
-  const fields = { q: " Annual & budget ", type: "image/*", owner: " Team% ", scope: "shared", after: "2026-10-01", before: "2026-10-14" };
+  const fields = {
+    q: " Annual & budget ",
+    type: "image/*",
+    owner: " Team% ",
+    scope: "shared",
+    after: "2026-10-01",
+    before: "2026-10-14",
+  };
   const params = driveSearchParams(fields);
   assert.equal(params.get("kind"), "file");
   assert.equal(params.get("content_type"), "image/*");
-  assert.deepEqual(readDriveSearch(new URLSearchParams(params.toString())), { ...fields, q: "Annual & budget", owner: "Team%" });
+  assert.deepEqual(readDriveSearch(new URLSearchParams(params.toString())), {
+    ...fields,
+    q: "Annual & budget",
+    owner: "Team%",
+  });
   const clearedText = driveSearchParams({ ...readDriveSearch(params), q: "" });
   assert.equal(isDriveSearch(clearedText), true);
   assert.equal(clearedText.get("owner"), "Team%");
@@ -33,26 +44,16 @@ test("Drive searches retain advanced constraints and reset without leaving hidde
 
 test("Drive selection supports single, additive and anchored range selection", () => {
   const ids = ["a", "b", "c", "d"];
-  assert.deepEqual(
-    [...selectDriveItems(ids, new Set(["d"]), "b", null, false, false)],
-    ["b"],
-  );
-  assert.deepEqual(
-    [...selectDriveItems(ids, new Set(["a"]), "b", null, false, true)],
-    ["a", "b"],
-  );
-  assert.deepEqual(
-    [...selectDriveItems(ids, new Set(["a", "b"]), "b", null, false, true)],
-    ["a"],
-  );
-  assert.deepEqual(
-    [...selectDriveItems(ids, new Set(["d"]), "c", "a", true, false)].sort(),
-    ["a", "b", "c", "d"],
-  );
-  assert.deepEqual(
-    [...selectDriveItems(ids, new Set(), "a", "missing", true, false)],
-    ["a"],
-  );
+  assert.deepEqual([...selectDriveItems(ids, new Set(["d"]), "b", null, false, false)], ["b"]);
+  assert.deepEqual([...selectDriveItems(ids, new Set(["a"]), "b", null, false, true)], ["a", "b"]);
+  assert.deepEqual([...selectDriveItems(ids, new Set(["a", "b"]), "b", null, false, true)], ["a"]);
+  assert.deepEqual([...selectDriveItems(ids, new Set(["d"]), "c", "a", true, false)].sort(), [
+    "a",
+    "b",
+    "c",
+    "d",
+  ]);
+  assert.deepEqual([...selectDriveItems(ids, new Set(), "a", "missing", true, false)], ["a"]);
 });
 test("Drive roles, route views and file previews reflect actual capabilities", () => {
   assert.equal(canEdit({ effective_role: "viewer" }), false);
@@ -68,14 +69,8 @@ test("Drive roles, route views and file previews reflect actual capabilities", (
   });
   assert.equal(previewKind({ size: 12, content_type: "image/svg+xml" }), null);
   assert.equal(previewKind({ size: 12, content_type: "text/html" }), "text");
-  assert.equal(
-    previewKind({ size: 21 * 1024 * 1024, content_type: "image/png" }),
-    null,
-  );
-  assert.equal(
-    previewKind({ size: 1, content_type: "application/pdf" }),
-    "pdf",
-  );
+  assert.equal(previewKind({ size: 21 * 1024 * 1024, content_type: "image/png" }), null);
+  assert.equal(previewKind({ size: 1, content_type: "application/pdf" }), "pdf");
   assert.equal(formatBytes(1024 ** 3), "1 GB");
 });
 test("Folder upload builds parent paths before children without path traversal", () => {
@@ -87,10 +82,7 @@ test("Folder upload builds parent paths before children without path traversal",
     ]),
     ["Project", "Project/images", "Project/images/icons"],
   );
-  assert.throws(
-    () => folderPaths([{ webkitRelativePath: "Project/../a.txt" }]),
-    /Invalid/,
-  );
+  assert.throws(() => folderPaths([{ webkitRelativePath: "Project/../a.txt" }]), /Invalid/);
   assert.deepEqual(folderPaths([{ webkitRelativePath: "" }]), []);
 });
 test("Public link URLs target the standalone viewer and never include passwords", () => {
@@ -145,8 +137,7 @@ test("Multipart retry skips confirmed parts and preserves upload identity", asyn
     patches = [];
   const api = async (path, options) => {
     paths.push(path);
-    if (!options?.method)
-      return { upload: session, parts: [{ part_number: 1, size: partBytes }] };
+    if (!options?.method) return { upload: session, parts: [{ part_number: 1, size: partBytes }] };
     if (path.endsWith("/complete")) return { item: { id: "file" } };
     assert.equal(options.body.size, 3);
     return {};
@@ -171,18 +162,13 @@ test("Completed retry is idempotent and cancellation never commits", async () =>
   await uploadDriveFile(
     async (path, options) => {
       paths.push(path);
-      return options?.method
-        ? { item: { id: "file" } }
-        : { upload: session, parts: [] };
+      return options?.method ? { item: { id: "file" } } : { upload: session, parts: [] };
     },
     { file, parent: null, upload: session },
     new AbortController().signal,
     () => {},
   );
-  assert.deepEqual(paths, [
-    "/api/drive/uploads/ready",
-    "/api/drive/uploads/ready/complete",
-  ]);
+  assert.deepEqual(paths, ["/api/drive/uploads/ready", "/api/drive/uploads/ready/complete"]);
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(
@@ -207,9 +193,7 @@ test("API response mode returns authenticated streams and refreshes expired acce
     },
     fetch: async (_path, options) => {
       tokens.push(options.headers.Authorization);
-      return refreshes
-        ? new Response("stream")
-        : new Response("{}", { status: 401 });
+      return refreshes ? new Response("stream") : new Response("{}", { status: 401 });
     },
   });
   const response = await client("/api/drive/items/file/content", {

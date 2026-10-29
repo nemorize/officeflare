@@ -21,12 +21,7 @@ import { invitation, invitationDto, respond } from "./attendees";
 import { invitationPage, sharePage } from "./public-page";
 import { policy } from "./attendance-store";
 import { readableAttachments } from "./attachments";
-export function publicEvent(
-  event: Event,
-  cal: Calendar,
-  link: ShareLink,
-  key?: string,
-) {
+export function publicEvent(event: Event, cal: Calendar, link: ShareLink, key?: string) {
   const redacted = link.target_type === "calendar" && privateEvent(event, cal),
     fields = redacted ? [] : (JSON.parse(link.shared_fields_json) as string[]),
     value = {
@@ -39,12 +34,8 @@ export function publicEvent(
     };
   return {
     ...value,
-    ...(fields.includes("description_html")
-      ? { description_html: event.description_html }
-      : {}),
-    ...(fields.includes("location")
-      ? { location: JSON.parse(event.location_json) }
-      : {}),
+    ...(fields.includes("description_html") ? { description_html: event.description_html } : {}),
+    ...(fields.includes("location") ? { location: JSON.parse(event.location_json) } : {}),
     ...(fields.includes("organizer")
       ? { organizer: { email_address: event.organizer_email } }
       : {}),
@@ -70,8 +61,7 @@ export async function publicInstances(c: Parameters<typeof publicLink>[0]) {
         new Date((range.max + 172800) * 1000).toISOString().slice(0, 10),
         new Date((range.min - 172800) * 1000).toISOString().slice(0, 10),
       );
-  if (candidates.length > 200)
-    fail(422, "TOO_MANY_EVENTS", "Narrow the shared calendar scope");
+  if (candidates.length > 200) fail(422, "TOO_MANY_EVENTS", "Narrow the shared calendar scope");
   const overrides = await loadOverrides(
       c,
       candidates.map((value) => value.id),
@@ -94,29 +84,18 @@ export async function publicInstances(c: Parameters<typeof publicLink>[0]) {
           recurring: value.recurrence_json !== "[]",
         })),
     );
-  if (values.length > 500)
-    fail(422, "TOO_MANY_OCCURRENCES", "Narrow the shared date range");
+  if (values.length > 500) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the shared date range");
   return { link, cal, values };
 }
 export const publicRoutes = new Hono<AppEnv>();
 publicRoutes.use("/public/*", async (c, next) => {
   publicHeaders(c);
-  await limitPublic(
-    c,
-    `public:${c.req.header("cf-connecting-ip") ?? "unknown"}`,
-    300,
-    600,
-  );
+  await limitPublic(c, `public:${c.req.header("cf-connecting-ip") ?? "unknown"}`, 300, 600);
   await next();
 });
 publicRoutes.use("/invitations/*", async (c, next) => {
   publicHeaders(c);
-  await limitPublic(
-    c,
-    `invitation:${c.req.header("cf-connecting-ip") ?? "unknown"}`,
-    300,
-    600,
-  );
+  await limitPublic(c, `invitation:${c.req.header("cf-connecting-ip") ?? "unknown"}`, 300, 600);
   await next();
 });
 publicRoutes.get("/public/share-links/:token", async (c) => {
@@ -130,12 +109,10 @@ publicRoutes.get("/public/share-links/:token", async (c) => {
     fail(403, "LINK_SCOPE", "This link covers one occurrence");
   let effective = event ? await occurrence(c, event, requested) : null;
   if (effective && !inLinkRange(link, effective, cal)) {
-    if (requested || event?.recurrence_json === "[]")
-      assertLinkOccurrence(link, effective, cal);
+    if (requested || event?.recurrence_json === "[]") assertLinkOccurrence(link, effective, cal);
     effective = null;
   }
-  const p =
-    event && link.mode === "join" ? await policy(c, event.id, requested) : null;
+  const p = event && link.mode === "join" ? await policy(c, event.id, requested) : null;
   return c.json({
     link: {
       mode: link.mode,
@@ -153,9 +130,9 @@ publicRoutes.get("/public/share-links/:token", async (c) => {
           ...publicEvent(effective, cal, link, requested || undefined),
           ...(JSON.parse(link.shared_fields_json).includes("attachments")
             ? {
-                attachments: (
-                  await readableAttachments(c, effective, requested)
-                ).filter((value) => "url" in value),
+                attachments: (await readableAttachments(c, effective, requested)).filter(
+                  (value) => "url" in value,
+                ),
               }
             : {}),
         }
@@ -183,8 +160,7 @@ publicRoutes.get("/public/share-links/:token/events", async (c) => {
 publicRoutes.get("/public/share-links/:token/export.ics", async (c) => {
   const { link, cal } = await publicLink(c);
   await linkSession(c, link);
-  if (!link.allow_ics)
-    fail(403, "ICS_DISABLED", "This link does not allow calendar downloads");
+  if (!link.allow_ics) fail(403, "ICS_DISABLED", "This link does not allow calendar downloads");
   const fields = JSON.parse(link.shared_fields_json) as string[];
   let values: { event: Event; key?: string }[];
   if (link.target_type === "event" && link.occurrence_key) {
@@ -203,25 +179,16 @@ publicRoutes.get("/public/share-links/:token/export.ics", async (c) => {
     }));
   }
   const sanitized = values.map((value) => {
-    const visible =
-      link.target_type === "event" || !privateEvent(value.event, cal);
+    const visible = link.target_type === "event" || !privateEvent(value.event, cal);
     return {
       ...value,
       event: {
         ...value.event,
         title: visible && fields.includes("title") ? value.event.title : "Busy",
         description_html:
-          visible && fields.includes("description_html")
-            ? value.event.description_html
-            : "",
-        location_json:
-          visible && fields.includes("location")
-            ? value.event.location_json
-            : "{}",
-        organizer_email:
-          visible && fields.includes("organizer")
-            ? value.event.organizer_email
-            : "",
+          visible && fields.includes("description_html") ? value.event.description_html : "",
+        location_json: visible && fields.includes("location") ? value.event.location_json : "{}",
+        organizer_email: visible && fields.includes("organizer") ? value.event.organizer_email : "",
       },
     };
   });
@@ -261,22 +228,14 @@ publicRoutes.get("/invitations/:token/event.ics", async (c) => {
     context.cal.trashed_at
   )
     fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
-  const event = await occurrence(
-    c,
-    context.event,
-    context.attendee.occurrence_key,
-  );
+  const event = await occurrence(c, context.event, context.attendee.occurrence_key);
   return c.body(
     calendarFile({
       kind: "invitation",
       action: "invite",
       event,
       attendee: (
-        await effectiveAttendees(
-          c,
-          context.event.id,
-          context.attendee.occurrence_key,
-        )
+        await effectiveAttendees(c, context.event.id, context.attendee.occurrence_key)
       ).find((value) => value.id === context.attendee.id)!,
       occurrence_key: context.attendee.occurrence_key,
     }),

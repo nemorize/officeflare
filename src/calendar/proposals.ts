@@ -1,23 +1,8 @@
 import { Hono } from "hono";
 import { now, uuid, type AppEnv } from "../auth/types";
 import type { CalendarContext, Event } from "./types";
-import {
-  body,
-  choice,
-  expectedVersion,
-  fail,
-  identifier,
-  integer,
-  text,
-} from "./input";
-import {
-  condition,
-  eventCondition,
-  first,
-  requireCalendar,
-  requireEvent,
-  rows,
-} from "./access";
+import { body, choice, expectedVersion, fail, identifier, integer, text } from "./input";
+import { condition, eventCondition, first, requireCalendar, requireEvent, rows } from "./access";
 import { invitation, type Invitation } from "./attendees";
 import {
   allAttendees,
@@ -53,9 +38,7 @@ export async function propose(
   const { event, cal, attendee, auth, actorKey, user } = context,
     key =
       attendee.occurrence_key ||
-      (event.recurrence_json === "[]"
-        ? ""
-        : text(data.occurrence_key, "occurrence_key", 64));
+      (event.recurrence_json === "[]" ? "" : text(data.occurrence_key, "occurrence_key", 64));
   if (
     attendee.occurrence_key &&
     data.occurrence_key !== undefined &&
@@ -65,9 +48,7 @@ export async function propose(
   const effective = await occurrence(c, event, key);
   if (
     attendee.removed_at ||
-    !(await effectiveAttendees(c, event.id, key)).some(
-      (value) => value.id === attendee.id,
-    )
+    !(await effectiveAttendees(c, event.id, key)).some((value) => value.id === attendee.id)
   )
     fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
   writeEvent({ start: data.start, end: data.end }, cal, {
@@ -82,10 +63,7 @@ export async function propose(
       occurrence_key: key,
       start_json: JSON.stringify(data.start),
       end_json: JSON.stringify(data.end),
-      comment:
-        data.comment === undefined
-          ? ""
-          : text(data.comment, "comment", 1000, true),
+      comment: data.comment === undefined ? "" : text(data.comment, "comment", 1000, true),
       status: "pending",
       version: 1,
     };
@@ -134,17 +112,15 @@ export async function propose(
   return result;
 }
 export const ownProposalRoutes = new Hono<AppEnv>();
-ownProposalRoutes.post(
-  "/inbox-invitations/:attendeeId/time-proposals",
-  async (c) =>
-    c.json(
-      await propose(
-        c,
-        await invitation(c, true),
-        await body(c, ["start", "end", "comment", "occurrence_key"]),
-      ),
-      201,
+ownProposalRoutes.post("/inbox-invitations/:attendeeId/time-proposals", async (c) =>
+  c.json(
+    await propose(
+      c,
+      await invitation(c, true),
+      await body(c, ["start", "end", "comment", "occurrence_key"]),
     ),
+    201,
+  ),
 );
 export const publicProposalRoutes = new Hono<AppEnv>();
 publicProposalRoutes.post("/invitations/:token/time-proposals", async (c) =>
@@ -160,17 +136,8 @@ publicProposalRoutes.post("/invitations/:token/time-proposals", async (c) =>
 const routes = new Hono<AppEnv>(),
   root = "/calendars/:calendarId/events/:eventId";
 async function target(c: CalendarContext) {
-  const cal = await requireCalendar(
-      c,
-      identifier(c.req.param("calendarId")),
-      3,
-    ),
-    event = await requireEvent(
-      c,
-      cal,
-      identifier(c.req.param("eventId")),
-      true,
-    );
+  const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 3),
+    event = await requireEvent(c, cal, identifier(c.req.param("eventId")), true);
   return { cal, event };
 }
 routes.get(root + "/time-proposals", async (c) => {
@@ -209,16 +176,9 @@ routes.post(root + "/time-proposals/:proposalId/resolve", async (c) => {
     decision = choice(data.decision, "decision", ["accept", "reject"]);
   if (!proposal || proposal.status !== "pending")
     fail(409, "PROPOSAL_STATE", "This proposal is not pending");
-  const effective = await attendanceDetails(
-      c,
-      cal,
-      event,
-      proposal.occurrence_key,
-    ),
+  const effective = await attendanceDetails(c, cal, event, proposal.occurrence_key),
     accepted = decision === "accept",
-    eventVersion = accepted
-      ? integer(data.event_version, "event_version", 1)
-      : event.version;
+    eventVersion = accepted ? integer(data.event_version, "event_version", 1) : event.version;
   const next = {
       ...writeEvent(
         {
@@ -226,9 +186,7 @@ routes.post(root + "/time-proposals/:proposalId/resolve", async (c) => {
           end: JSON.parse(proposal.end_json),
         },
         cal,
-        proposal.occurrence_key
-          ? { ...effective, recurrence_json: "[]" }
-          : event,
+        proposal.occurrence_key ? { ...effective, recurrence_json: "[]" } : event,
       ),
       sequence: event.sequence + 1,
       version: eventVersion + 1,

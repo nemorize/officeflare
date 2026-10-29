@@ -15,12 +15,7 @@ import {
 import { useMail } from "./mail-context";
 import { MailIconButton, MailMenu } from "./mail-controls";
 import { MailHtml, SendStatus } from "./mail-body";
-import {
-  MailNotice,
-  MailState,
-  useMailAction,
-  useMailResource,
-} from "./mail-common";
+import { MailNotice, MailState, useMailAction, useMailResource } from "./mail-common";
 import { Button, Icon, Menu, Popover, PopoverPopup } from "./ui";
 import { Confirm } from "./console-shared";
 export function ConversationReader({
@@ -39,9 +34,14 @@ export function ConversationReader({
   actionError?: string;
 }) {
   const [cursor, setCursor] = useState<string | null>(null);
-  const mail = useMail(), cache = useMailCache(),
+  const mail = useMail(),
+    cache = useMailCache(),
     path = mailboxPath(mail.box!.id),
-    initial = useMailResource<{ message: MessageDetail; messages: Message[]; next_cursor: string | null }>(
+    initial = useMailResource<{
+      message: MessageDetail;
+      messages: Message[];
+      next_cursor: string | null;
+    }>(
       `${path}/ui/conversation/${id}?conversation=${mail.preferences.conversation_view}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
       mail.revision,
     ),
@@ -65,10 +65,7 @@ export function ConversationReader({
         cursor
           ? [
               ...new Map(
-                [...old, ...thread.data!.messages].map((entry) => [
-                  entry.id,
-                  entry,
-                ]),
+                [...old, ...thread.data!.messages].map((entry) => [entry.id, entry]),
               ).values(),
             ]
           : thread.data!.messages,
@@ -89,11 +86,20 @@ export function ConversationReader({
     const body = { targets: [{ id: target.id, version: target.version }], changes };
     const finish = cache.beginMutation();
     try {
-      const result = await api<MailCommandResult>(path + "/ui/commands", { method: "POST", body, headers: new MailOperation().headers(body) });
+      const result = await api<MailCommandResult>(path + "/ui/commands", {
+        method: "POST",
+        body,
+        headers: new MailOperation().headers(body),
+      });
       mail.committed(result);
-      const failure = result.results.find(item => !item.success);
-      if (failure && !failure.success) { initial.reload(); throw new Error(failure.error); }
-    } finally { finish(); }
+      const failure = result.results.find((item) => !item.success);
+      if (failure && !failure.success) {
+        initial.reload();
+        throw new Error(failure.error);
+      }
+    } finally {
+      finish();
+    }
   };
 
   const messageActions = target && (
@@ -145,13 +151,9 @@ export function ConversationReader({
       >
         Block sender
       </Menu.Item>
-      {(target.draft ||
-        target.folder_id === "trash" ||
-        target.folder_id === "spam") && (
+      {(target.draft || target.folder_id === "trash" || target.folder_id === "spam") && (
         <Menu.Item
-          disabled={
-            !canWrite || action.busy || target.draft?.state === "submitted"
-          }
+          disabled={!canWrite || action.busy || target.draft?.state === "submitted"}
           onClick={() => setDeleting(target)}
         >
           {target.draft ? "Discard draft" : "Delete permanently"}
@@ -175,18 +177,10 @@ export function ConversationReader({
   return (
     <section className="mail-conversation" aria-label="Message detail">
       <div className="mail-conversation-toolbar">
-        <MailIconButton
-          icon="back"
-          label="Back to messages"
-          onClick={onClose}
-        />
+        <MailIconButton icon="back" label="Back to messages" onClick={onClose} />
         {(actions || messageActions) && (
           <div className="mail-toolbar-actions">
-            {actions ? (
-              actions(messageActions)
-            ) : (
-              <MailMenu>{messageActions}</MailMenu>
-            )}
+            {actions ? actions(messageActions) : <MailMenu>{messageActions}</MailMenu>}
           </div>
         )}
         <div className="mail-toolbar-spacer" />
@@ -240,9 +234,10 @@ export function ConversationReader({
             <div className="mail-conversation-title">
               <h1>{message.subject || "(No subject)"}</h1>
               <span className="mail-badge">
-                {message.draft?.state === "submitted" ? "Outbox" :
-                  mail.folders.find((folder) => folder.id === message.folder_id)
-                    ?.name ?? message.folder_id}
+                {message.draft?.state === "submitted"
+                  ? "Outbox"
+                  : (mail.folders.find((folder) => folder.id === message.folder_id)?.name ??
+                    message.folder_id)}
               </span>
             </div>
             {thread.data?.next_cursor && (
@@ -316,7 +311,8 @@ function MessageCard({
   onActivate: () => void;
   replyShortcut: boolean;
 }) {
-  const mail = useMail(), cache = useMailCache(),
+  const mail = useMail(),
+    cache = useMailCache(),
     path = mailboxPath(mail.box!.id),
     action = useMailAction(),
     [open, setOpen] = useState(expanded);
@@ -329,14 +325,7 @@ function MessageCard({
     readAttempted = useRef(false);
   useEffect(() => setOpen(expanded), [expanded]);
   useEffect(() => {
-    if (
-      !open ||
-      !message ||
-      message.draft ||
-      !canWrite ||
-      readAttempted.current
-    )
-      return;
+    if (!open || !message || message.draft || !canWrite || readAttempted.current) return;
     readAttempted.current = true;
     if (message.is_read) return;
     const finish = cache.beginMutation();
@@ -344,7 +333,11 @@ function MessageCard({
       method: "POST",
       body: { targets: [{ id: message.id, version: message.version }], changes: { is_read: true } },
     })
-      .then(result => { mail.committed(result); const failure = result.results.find(item => !item.success); if (failure && !failure.success) throw new Error(failure.error); })
+      .then((result) => {
+        mail.committed(result);
+        const failure = result.results.find((item) => !item.success);
+        if (failure && !failure.success) throw new Error(failure.error);
+      })
       .catch(() => {})
       .finally(finish);
   }, [open, message]);
@@ -355,21 +348,17 @@ function MessageCard({
     }
     const data = kind === "forward" ? { to: [] } : {};
     try {
-      const result = await api<{ message: MessageDetail }>(
-        `${path}/messages/${entry.id}/${kind}`,
-        {
-          method: "POST",
-          body: data,
-          headers: operation.current.headers({ kind, ...data }),
-        },
-      );
+      const result = await api<{ message: MessageDetail }>(`${path}/messages/${entry.id}/${kind}`, {
+        method: "POST",
+        body: data,
+        headers: operation.current.headers({ kind, ...data }),
+      });
       operation.current.complete();
       cache.replace(path + "/drafts/" + result.message.id, result);
       cache.replace(path + "/messages/" + result.message.id, result);
       mail.compose(result.message.id, true);
     } catch (error) {
-      if (error instanceof ApiError && error.status < 500)
-        operation.current.complete();
+      if (error instanceof ApiError && error.status < 500) operation.current.complete();
       throw error;
     }
   };
@@ -397,9 +386,7 @@ function MessageCard({
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          <strong>
-            {entry.from_address || (entry.draft_owner_id ? "Draft" : "Me")}
-          </strong>
+          <strong>{entry.from_address || (entry.draft_owner_id ? "Draft" : "Me")}</strong>
           <span>
             {open
               ? `to ${
@@ -418,20 +405,11 @@ function MessageCard({
           <>
             <Popover.Root>
               <Popover.Trigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Message details"
-                  />
-                }
+                render={<Button variant="ghost" size="icon" aria-label="Message details" />}
               >
                 <Icon name="down" />
               </Popover.Trigger>
-              <PopoverPopup
-                className="mail-envelope-popup"
-                positionerProps={{ align: "end" }}
-              >
+              <PopoverPopup className="mail-envelope-popup" positionerProps={{ align: "end" }}>
                 <dl>
                   {[
                     ["From", message.from_address],
@@ -476,11 +454,7 @@ function MessageCard({
       {open && (
         <div className="mail-card-content">
           <MailNotice error={action.error} />
-          <MailState
-            loading={!message}
-            error={resource.error}
-            retry={resource.reload}
-          />
+          <MailState loading={!message} error={resource.error} retry={resource.reload} />
           {message && (
             <>
               {message.submissions
@@ -491,18 +465,15 @@ function MessageCard({
               {!plain && message.body.html ? (
                 <MailHtml message={message} path={path} />
               ) : (
-                <pre className="mail-plain-body">
-                  {message.body.text || "(Empty message)"}
-                </pre>
+                <pre className="mail-plain-body">{message.body.text || "(Empty message)"}</pre>
               )}
-              {message.attachments.filter(
-                (file) => file.disposition !== "inline",
-              ).length > 0 && (
+              {message.attachments.filter((file) => file.disposition !== "inline").length > 0 && (
                 <div className="mail-attachment-cards">
                   {message.attachments
                     .filter((file) => file.disposition !== "inline")
                     .map((file) => (
-                      <Button variant="card"
+                      <Button
+                        variant="card"
                         key={file.id}
                         className="mail-attachment"
                         onClick={() => {
@@ -547,9 +518,11 @@ function MessageCard({
                             method: "POST",
                           });
                           mail.refresh();
-                          mail.feedback(pending.status === "unknown"
-                            ? "Draft reopened. The provider may already have accepted this email."
-                            : "Send canceled. Draft is ready to continue.");
+                          mail.feedback(
+                            pending.status === "unknown"
+                              ? "Draft reopened. The provider may already have accepted this email."
+                              : "Send canceled. Draft is ready to continue.",
+                          );
                         }
                         mail.compose(message.id, true);
                       });

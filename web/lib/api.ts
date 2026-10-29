@@ -3,7 +3,8 @@ import { sessions } from "./session";
 
 export { ApiError } from "./api-client";
 export const api = createApiClient({
-  accessToken: () => sessions.accessToken(), refresh: () => sessions.restore(true),
+  accessToken: () => sessions.accessToken(),
+  refresh: () => sessions.restore(true),
   fetch: (...args) => fetch(...args),
 });
 
@@ -15,5 +16,7 @@ export interface AccountUser {
   password_changed_at: number | null;
   created_at: number;
 }
-export const errorMessage = (failure: unknown) => failure instanceof ApiError ? failure.message :
-  "Unable to connect to the server. Check your connection and try again.";
+export const errorMessage = (failure: unknown) =>
+  failure instanceof ApiError
+    ? failure.message
+    : "Unable to connect to the server. Check your connection and try again.";
