@@ -1052,23 +1052,6 @@
   opacity: 0.45;
   cursor: default;
 }
-.calendar-shortcuts {
-  padding-top: 14px;
-}
-.calendar-shortcuts p {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 14px;
-  font-size: 12px;
-}
-.calendar-shortcuts kbd {
-  padding: 3px 7px;
-  border: 1px solid var(--ui-control-border);
-  border-radius: 5px;
-  font-size: 10px;
-}
 .calendar-editor[data-ui="dialog-popup"] {
   width: min(780px, calc(100vw - 48px));
   padding: 0;

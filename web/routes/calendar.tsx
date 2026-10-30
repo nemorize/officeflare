@@ -26,7 +26,6 @@ import {
   calendarApi,
   calendarFailure,
   calendarRank,
-  calendarViews,
   eventKey,
   eventPath,
   type CalendarEvent,
@@ -38,7 +37,6 @@ import {
   localEndpoint,
   minuteTime,
   shiftedEventTimes,
-  todayIn,
 } from "../lib/calendar-date";
 import { draftForEvent, eventChanges } from "../lib/calendar-editor";
 
@@ -159,10 +157,6 @@ function CalendarTrash() {
           <h2>Deleted events</h2>
           <p>Restore events from calendars you own.</p>
         </div>
-        <Button variant="ghost" onClick={() => calendar.refresh()}>
-          <Icon name="refresh" />
-          Refresh
-        </Button>
       </div>
       <CalendarNotice error={resource.error || action.error} />
       {resource.loading ? (
@@ -251,37 +245,6 @@ export function CalendarPage() {
   useEffect(() => {
     setDetail(null);
   }, [calendar.date, calendar.view, calendar.query, location.pathname]);
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if (
-        !main ||
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        document.querySelector(
-          '[data-ui="dialog-popup"], [data-ui="popover-popup"], [data-ui="menu-popup"]',
-        ) ||
-        (event.target as HTMLElement).closest(
-          "input,textarea,select,[contenteditable=true],[role=combobox]",
-        )
-      )
-        return;
-      const key = event.key.toLowerCase(),
-        view = calendarViews.find((view) => view.key.toLowerCase() === key);
-      if (view) {
-        event.preventDefault();
-        calendar.navigate(calendar.date, view.value);
-      } else if (key === "t") calendar.navigate(todayIn(calendar.zone));
-      else if (key === "j" || key === "k") calendar.step(key === "j" ? 1 : -1);
-      else if (key === "c" && calendar.can("events.create")) {
-        event.preventDefault();
-        calendar.setCreate({ date: calendar.date });
-      }
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, [calendar, main]);
   const commit = (change: PendingChange, scope: CalendarScope) =>
     action.run(async () => {
       const { event, master, times } = change;

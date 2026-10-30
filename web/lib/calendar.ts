@@ -112,11 +112,11 @@ export const calendarColors = [
   { value: "#a17670", label: "Clay" },
   { value: "#897a95", label: "Mauve" },
 ];
-export const calendarViews: { value: CalendarView; label: string; key: string }[] = [
-  { value: "day", label: "Day", key: "D" },
-  { value: "week", label: "Week", key: "W" },
-  { value: "month", label: "Month", key: "M" },
-  { value: "agenda", label: "Schedule", key: "A" },
+export const calendarViews: { value: CalendarView; label: string }[] = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "agenda", label: "Schedule" },
 ];
 export const calendarRank = (cal?: CalendarRecord) =>
   cal

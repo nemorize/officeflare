@@ -220,25 +220,6 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
     return <CalendarFeedDialog cal={cal} onClose={onClose} />;
   if (id === "import") return <CalendarImportDialog onClose={onClose} />;
   if (id === "working-hours") return <CalendarWorkingHours onClose={onClose} />;
-  if (id === "shortcuts")
-    return (
-      <CalendarModal title="Keyboard shortcuts" onClose={onClose}>
-        <div className="calendar-shortcuts">
-          {[
-            ["C", "Create event"],
-            ["T", "Go to today"],
-            ["J / K", "Next / previous period"],
-            ["D / W / M / A", "Day / week / month / schedule"],
-            ["Esc", "Close an open dialog"],
-          ].map(([key, label]) => (
-            <p key={key}>
-              <span>{label}</span>
-              <kbd>{key}</kbd>
-            </p>
-          ))}
-        </div>
-      </CalendarModal>
-    );
   return (
     <CalendarModal
       title={id === "new" ? "Create a calendar" : (cal?.name ?? "Calendar")}
