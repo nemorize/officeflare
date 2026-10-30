@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import { Script, runInNewContext } from "node:vm";
 import { build } from "esbuild";
 import { en } from "../shared/i18n/en.ts";
+import { ko } from "../shared/i18n/ko.ts";
+import { ja } from "../shared/i18n/ja.ts";
 import { t, plural, messageParts, isMessageKey, isStaticMessageKey } from "../shared/i18n/index.ts";
 import { enumLabel } from "../shared/i18n/labels.ts";
 import { auditUiStrings, findUiStrings } from "../scripts/audit-ui-strings.mjs";
@@ -43,6 +45,69 @@ async function loadModule(entry, exposeSmtp = false) {
   );
   return module.exports;
 }
+
+test("Korean and Japanese resources cover every source message with identical parameters", () => {
+  const keys = Object.keys(en).sort();
+  const names = (value) =>
+    [...new Set([...value.matchAll(/\{([A-Za-z_]\w*)\}/g)].map((match) => match[1]))].sort();
+  for (const [locale, messages] of Object.entries({ ko, ja })) {
+    assert.deepEqual(Object.keys(messages).sort(), keys, locale);
+    for (const key of keys) {
+      const value = messages[key];
+      assert.equal(typeof value, "string", `${locale}:${key}`);
+      assert.ok(value.trim(), `${locale}:${key} must not be empty`);
+      assert.deepEqual(names(value), names(en[key]), `${locale}:${key}`);
+    }
+  }
+});
+
+test("translations distinguish permission labels, message states, and calendar responses", () => {
+  assert.equal(ko["common.save"], "저장");
+  assert.equal(ja["common.save"], "保存");
+  for (const [messages, expected] of [
+    [ko, ["읽기", "읽음", "열림", "불참", "거절", "압축 파일"]],
+    [ja, ["読み取り", "既読", "オープン", "不参加", "却下", "アーカイブ"]],
+  ]) {
+    assert.deepEqual(
+      [
+        "routesMailIntegrations.read",
+        "routesMailManage.read",
+        "labels.open",
+        "publicCalendar.decline",
+        "componentsDriveDialogs.decline",
+        "libDrive.archive",
+      ].map((key) => messages[key]),
+      expected,
+    );
+    assert.equal(messages["counts.items.one"], messages["counts.items.other"]);
+    assert.match(messages["counts.items.other"], /\{count\}/);
+    assert.notEqual(
+      messages["routesConsoleDrive.transferThisUserSFilesAndFoldersIncludingTrash"],
+      en["routesConsoleDrive.transferThisUserSFilesAndFoldersIncludingTrash"],
+    );
+  }
+});
+
+test("translations retain protocol templates, URLs, provider names, and byte units", () => {
+  for (const messages of [ko, ja]) {
+    for (const key of [
+      "calendarInput.ifMatch",
+      "componentsCalendarFeed.httpsCalendarExampleComCalendarIcs",
+      "componentsMailEditorContent.border1pxSolidDdddddPadding8px",
+      "componentsMailEditorContent.margin0012px",
+      "driveContent.sandboxDefaultSrcNoneFrameAncestorsSelf",
+      "libMailEditor.12px0",
+      "libMailHelpers.b",
+      "libMailHelpers.gb",
+      "mailProviders.amazonSesV2",
+      "mailProviders.microsoftGraph",
+      "mailService.replySubject",
+      "routesMfaManagement.officeflare",
+    ]) {
+      assert.equal(messages[key], en[key], key);
+    }
+  }
+});
 
 test("named message values are substituted once, without interpreting user content", () => {
   assert.equal(t("workspace.navigation", { name: "Mail" }), "Mail navigation");
