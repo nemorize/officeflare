@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { ReactNode, ComponentProps } from "react";
 import { Button, Icon, Tooltip, TooltipPopup, Menu, MenuPopup, type IconProps } from "./ui";
 export function MailIconButton({
@@ -20,7 +21,7 @@ export function MailIconButton({
   );
 }
 export function MailMenu({
-  label = "More actions",
+  label = t("componentsMailControls.moreActions"),
   icon = "more",
   children,
   variant = "ghost",

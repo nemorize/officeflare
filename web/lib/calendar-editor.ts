@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { CalendarEndpoint, CalendarEvent, CalendarScope } from "./calendar";
 import {
   addDays,
@@ -67,7 +68,7 @@ export function draftForEvent(event: CalendarEvent, fallbackZone: string): Event
 export function draftTimes(draft: EventDraft) {
   if (draft.allDay) {
     if (draft.endDate < draft.startDate)
-      throw new Error("The end date must be on or after the start date.");
+      throw new Error(t("libCalendarEditor.theEndDateMustBeOnOrAfterThe"));
     return {
       start: { date: draft.startDate } as CalendarEndpoint,
       end: { date: addDays(draft.endDate, 1) } as CalendarEndpoint,
@@ -76,7 +77,7 @@ export function draftTimes(draft: EventDraft) {
   const start = localEndpoint(draft.startDate, draft.startTime, draft.zone),
     end = localEndpoint(draft.endDate, draft.endTime, draft.zone);
   if (Temporal.Instant.compare(start.date_time!, end.date_time!) >= 0)
-    throw new Error("The end time must be after the start time.");
+    throw new Error(t("libCalendarEditor.theEndTimeMustBeAfterTheStartTime"));
   return { start, end };
 }
 export function draftRecurrence(draft: EventDraft, existing?: string[]) {
@@ -99,7 +100,7 @@ export function draftRecurrence(draft: EventDraft, existing?: string[]) {
   if (draft.ends === "count") parts.push(`COUNT=${draft.count}`);
   if (draft.ends === "until") {
     if (draft.until < draft.startDate)
-      throw new Error("Repeat end must not be before the event starts.");
+      throw new Error(t("libCalendarEditor.repeatEndMustNotBeBeforeTheEventStarts"));
     const end = draft.allDay
       ? draft.until.replaceAll("-", "")
       : Temporal.Instant.from(localEndpoint(draft.until, "23:59:59", draft.zone).date_time!)
@@ -129,7 +130,8 @@ export function eventChanges(
   scope: CalendarScope = "all",
 ) {
   const fields: Record<string, unknown> = {};
-  if (!initial || draft.title !== initial.title) fields.title = draft.title.trim() || "(Untitled)";
+  if (!initial || draft.title !== initial.title)
+    fields.title = draft.title.trim() || t("libCalendarEditor.untitled");
   if (!initial || draft.location !== initial.location)
     fields.location = draft.location ? { label: draft.location } : {};
   if (!initial || draft.description !== initial.description)

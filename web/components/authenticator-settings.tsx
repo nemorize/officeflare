@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -38,7 +40,7 @@ export function AuthenticatorSettings() {
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [name, setName] = useState("Authenticator app");
+  const [name, setName] = useState(t("componentsAuthenticatorSettings.authenticatorApp"));
   const [setup, setSetup] = useState<AuthenticatorSetup | null>(null);
   const [code, setCode] = useState("");
   const [action, setAction] = useState<Action | null>(null);
@@ -90,7 +92,7 @@ export function AuthenticatorSettings() {
     event.preventDefault();
     setError("");
     if (!name.trim() || name.trim().length > 100) {
-      setError("Enter an authenticator name with up to 100 characters.");
+      setError(t("componentsAuthenticatorSettings.enterAnAuthenticatorNameWithUpTo100Characters"));
       return;
     }
     setAction({ kind: "start", name: name.trim() });
@@ -100,11 +102,13 @@ export function AuthenticatorSettings() {
     event.preventDefault();
     setError("");
     if (!setup || expired) {
-      setError("This setup has expired. Remove the pending authenticator and start again.");
+      setError(
+        t("componentsAuthenticatorSettings.thisSetupHasExpiredRemoveThePendingAuthenticatorAnd"),
+      );
       return;
     }
     if (!/^[0-9]{6}$/.test(code.trim())) {
-      setError("Enter the six-digit code from your new authenticator.");
+      setError(t("componentsAuthenticatorSettings.enterTheSixDigitCodeFromYourNewAuthenticator"));
       return;
     }
     setAction({ kind: "activate", setup, code: code.trim() });
@@ -127,7 +131,7 @@ export function AuthenticatorSettings() {
           setSetup(null);
           setCode("");
           notify.success(
-            "OTP is enabled. Other sessions have been signed out. Save recovery codes below so you can sign in if you lose your authenticator.",
+            t("componentsAuthenticatorSettings.otpIsEnabledOtherSessionsHaveBeenSignedOut"),
           );
           break;
         case "remove":
@@ -137,7 +141,9 @@ export function AuthenticatorSettings() {
             setCode("");
           }
           notify.success(
-            "The authenticator has been removed. Other sessions have been signed out.",
+            t(
+              "componentsAuthenticatorSettings.theAuthenticatorHasBeenRemovedOtherSessionsHaveBeen",
+            ),
           );
           break;
         case "recovery": {
@@ -145,7 +151,7 @@ export function AuthenticatorSettings() {
           setRecoveryCodes(result.recovery_codes);
           setSavedCodes(false);
           notify.success(
-            "New recovery codes have been generated. Previous codes are no longer valid. Other sessions have been signed out.",
+            t("componentsAuthenticatorSettings.newRecoveryCodesHaveBeenGeneratedPreviousCodesAre"),
           );
           break;
         }
@@ -157,8 +163,10 @@ export function AuthenticatorSettings() {
           ? failure.message
           : failure instanceof ApiError && failure.status === 401
             ? action.kind === "activate"
-              ? "The new authenticator code is incorrect or verification expired. Enter a fresh code and try again."
-              : "Verification expired. Verify your identity again."
+              ? t(
+                  "componentsAuthenticatorSettings.theNewAuthenticatorCodeIsIncorrectOrVerificationExpired",
+                )
+              : t("componentsAuthenticatorSettings.verificationExpiredVerifyYourIdentityAgain")
             : failure instanceof ApiError
               ? errorMessage(failure)
               : failure instanceof Error
@@ -174,7 +182,9 @@ export function AuthenticatorSettings() {
     const url = URL.createObjectURL(
       new Blob(
         [
-          `Officeflare recovery codes\nKeep these codes in a safe place. Each code can be used once.\n\n${recoveryCodes.join("\n")}\n`,
+          t("componentsAuthenticatorSettings.officeflareRecoveryCodesKeepTheseCodesInASafe", {
+            join: recoveryCodes.join("\n"),
+          }),
         ],
         { type: "text/plain;charset=utf-8" },
       ),
@@ -188,37 +198,51 @@ export function AuthenticatorSettings() {
 
   const title =
     action?.kind === "activate"
-      ? "Enable OTP"
+      ? t("componentsAuthenticatorSettings.enableOtp")
       : action?.kind === "remove"
-        ? "Remove authenticator"
+        ? t("componentsAuthenticatorSettings.removeAuthenticator")
         : action?.kind === "recovery"
-          ? "Generate recovery codes"
-          : "Register an authenticator";
+          ? t("componentsAuthenticatorSettings.generateRecoveryCodes")
+          : t("componentsAuthenticatorSettings.registerAnAuthenticator");
   const description =
     action?.kind === "activate"
-      ? "Confirm your identity to enable your new authenticator. Other sessions will be signed out."
+      ? t("componentsAuthenticatorSettings.confirmYourIdentityToEnableYourNewAuthenticatorOther")
       : action?.kind === "remove"
-        ? `${action.method.status === "active" && active.length === 1 ? "Removing your last authenticator turns off OTP and invalidates your recovery codes. " : ""}Confirm your identity to remove ${action.method.name || "this authenticator"}. Other sessions will be signed out.`
+        ? t("componentsAuthenticatorSettings.confirmYourIdentityToRemoveOtherSessionsWillBe", {
+            value1:
+              action.method.status === "active" && active.length === 1
+                ? t(
+                    "componentsAuthenticatorSettings.removingYourLastAuthenticatorTurnsOffOtpAndInvalidates",
+                  )
+                : "",
+            value2: action.method.name || t("componentsAuthenticatorSettings.thisAuthenticator"),
+          })
         : action?.kind === "recovery"
-          ? "Confirm your identity to generate ten recovery codes. Previous recovery codes will be replaced and other sessions will be signed out."
-          : "Enter your current password to create a QR code for your authenticator app.";
+          ? t(
+              "componentsAuthenticatorSettings.confirmYourIdentityToGenerateTenRecoveryCodesPrevious",
+            )
+          : t("componentsAuthenticatorSettings.enterYourCurrentPasswordToCreateAQrCode");
 
   return (
     <section className="account-panel account-mfa-panel" aria-labelledby="account-mfa-title">
       <div className="account-panel-header account-mfa-header">
         <div>
-          <h2 id="account-mfa-title">Two-factor authentication (OTP)</h2>
-          <p>Use a code from your authenticator app when you sign in.</p>
+          <h2 id="account-mfa-title">
+            {t("componentsAuthenticatorSettings.twoFactorAuthenticationOtp")}
+          </h2>
+          <p>{t("componentsAuthenticatorSettings.useACodeFromYourAuthenticatorAppWhenYou")}</p>
         </div>
         {ready && (
           <span className="account-mfa-status" data-enabled={active.length > 0}>
-            {active.length > 0 ? "Enabled" : "Not enabled"}
+            {active.length > 0
+              ? t("common.enabled")
+              : t("componentsAuthenticatorSettings.notEnabled")}
           </span>
         )}
       </div>
       {loading && (
         <p className="account-loading" role="status">
-          Loading authenticators…
+          {t("componentsAuthenticatorSettings.loadingAuthenticators")}
         </p>
       )}
       {error && (
@@ -237,13 +261,15 @@ export function AuthenticatorSettings() {
                     <Icon name="shield" />
                   </span>
                   <div>
-                    <strong>{method.name || "Authenticator app"}</strong>
+                    <strong>
+                      {method.name || t("componentsAuthenticatorSettings.authenticatorApp")}
+                    </strong>
                     <p>
                       {method.status === "active"
-                        ? "Active"
+                        ? t("common.active")
                         : method.status === "pending"
-                          ? "Awaiting verification"
-                          : "Setup expired"}
+                          ? t("componentsAuthenticatorSettings.awaitingVerification")
+                          : t("componentsAuthenticatorSettings.setupExpired")}
                     </p>
                   </div>
                   <Button
@@ -254,7 +280,7 @@ export function AuthenticatorSettings() {
                       setAction({ kind: "remove", method });
                     }}
                   >
-                    Remove
+                    {t("common.remove")}
                   </Button>
                 </li>
               ))}
@@ -262,21 +288,24 @@ export function AuthenticatorSettings() {
           )}
           {setup ? (
             <div className="account-otp-setup">
-              <h3>Connect your authenticator</h3>
+              <h3>{t("componentsAuthenticatorSettings.connectYourAuthenticator")}</h3>
               {expired ? (
                 <p className="account-notice" data-error role="alert">
-                  This QR code has expired. Remove the pending authenticator and start again.
+                  {t(
+                    "componentsAuthenticatorSettings.thisQrCodeHasExpiredRemoveThePendingAuthenticator",
+                  )}
                 </p>
               ) : (
                 <>
                   <p>
-                    Scan this QR code in your authenticator app, or enter the setup key manually.
-                    Setup expires at{" "}
-                    {new Date(setup.setup_expires_at * 1000).toLocaleTimeString("en", {
-                      hour: "numeric",
-                      minute: "2-digit",
+                    {t("componentsAuthenticatorSettings.scanThisQrCodeInYourAuthenticatorAppOr", {
+                      toLocaleTimeString: new Date(
+                        setup.setup_expires_at * 1000,
+                      ).toLocaleTimeString("en", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }),
                     })}
-                    .
                   </p>
                   <div className="account-otp-qr">
                     <QRCodeSVG
@@ -284,11 +313,11 @@ export function AuthenticatorSettings() {
                       size={204}
                       marginSize={4}
                       level="M"
-                      title="Authenticator setup QR code"
+                      title={t("componentsAuthenticatorSettings.authenticatorSetupQrCode")}
                     />
                   </div>
                   <TextField
-                    label="Setup key"
+                    label={t("componentsAuthenticatorSettings.setupKey")}
                     value={authenticatorKey(setup.provisioning_uri)}
                     readOnly
                     autoComplete="off"
@@ -297,7 +326,7 @@ export function AuthenticatorSettings() {
                   <Form onSubmit={verify} className="account-otp-form">
                     <Fieldset.Root disabled={action !== null || loading}>
                       <TextField
-                        label="Code from your new authenticator"
+                        label={t("componentsAuthenticatorSettings.codeFromYourNewAuthenticator")}
                         name="new_authenticator_code"
                         inputMode="numeric"
                         autoComplete="one-time-code"
@@ -309,7 +338,7 @@ export function AuthenticatorSettings() {
                       />
                       <div className="account-actions">
                         <Button type="submit" variant="primary">
-                          Verify and enable OTP
+                          {t("componentsAuthenticatorSettings.verifyAndEnableOtp")}
                         </Button>
                       </div>
                     </Fieldset.Root>
@@ -325,36 +354,38 @@ export function AuthenticatorSettings() {
                   setCode("");
                 }}
               >
-                Hide setup
+                {t("componentsAuthenticatorSettings.hideSetup")}
               </Button>
               <p className="account-verification-hint">
-                OTP stays disabled for this authenticator until you verify its code. A hidden setup
-                cannot be reopened; remove the pending authenticator to start again.
+                {t(
+                  "componentsAuthenticatorSettings.otpStaysDisabledForThisAuthenticatorUntilYouVerify",
+                )}
               </p>
             </div>
           ) : (
             <Form onSubmit={begin} className="account-otp-form">
               <Fieldset.Root disabled={loading || action !== null || capacity >= 5}>
                 <TextField
-                  label="Authenticator name"
+                  label={t("componentsAuthenticatorSettings.authenticatorName")}
                   name="authenticator_name"
                   required
                   maxLength={100}
                   value={name}
                   onValueChange={setName}
-                  description="Choose a name to recognize this device."
+                  description={t(
+                    "componentsAuthenticatorSettings.chooseANameToRecognizeThisDevice",
+                  )}
                 />
                 <div className="account-actions">
                   <Button type="submit" variant="primary">
                     <Icon name="plus" />
-                    Register authenticator
+                    {t("componentsAuthenticatorSettings.registerAuthenticator")}
                   </Button>
                 </div>
               </Fieldset.Root>
               {capacity >= 5 && (
                 <p className="account-verification-hint">
-                  You can have up to five active or pending authenticators. Remove one to add
-                  another.
+                  {t("componentsAuthenticatorSettings.youCanHaveUpToFiveActiveOrPending")}
                 </p>
               )}
             </Form>
@@ -362,12 +393,19 @@ export function AuthenticatorSettings() {
           {active.length > 0 && (
             <div className="account-recovery-section">
               <div>
-                <h3>Recovery codes</h3>
+                <h3>{t("componentsAuthenticatorSettings.recoveryCodes")}</h3>
                 <p>
-                  {remaining > 0
-                    ? `${remaining} unused codes remaining.`
-                    : "No recovery codes saved yet."}{" "}
-                  Keep them somewhere safe in case you lose your authenticator.
+                  <LocalizedMessage
+                    id="componentsAuthenticatorSettings.keepThemSomewhereSafeInCaseYouLoseYour"
+                    values={{
+                      value1:
+                        remaining > 0
+                          ? t("componentsAuthenticatorSettings.unusedCodesRemaining", {
+                              remaining: remaining,
+                            })
+                          : t("componentsAuthenticatorSettings.noRecoveryCodesSavedYet"),
+                    }}
+                  />
                 </p>
               </div>
               <Button
@@ -378,7 +416,9 @@ export function AuthenticatorSettings() {
                   setAction({ kind: "recovery" });
                 }}
               >
-                {remaining > 0 ? "Replace recovery codes" : "Generate recovery codes"}
+                {remaining > 0
+                  ? t("componentsAuthenticatorSettings.replaceRecoveryCodes")
+                  : t("componentsAuthenticatorSettings.generateRecoveryCodes")}
               </Button>
             </div>
           )}
@@ -388,7 +428,9 @@ export function AuthenticatorSettings() {
         open={action !== null}
         title={title}
         description={description}
-        confirmLabel={action?.kind === "start" ? "Create QR code" : title}
+        confirmLabel={
+          action?.kind === "start" ? t("componentsAuthenticatorSettings.createQrCode") : title
+        }
         onOpenChange={(open) => {
           if (!open) setAction(null);
         }}
@@ -404,10 +446,9 @@ export function AuthenticatorSettings() {
         }}
       >
         <DialogPopup>
-          <Dialog.Title>Save your recovery codes</Dialog.Title>
+          <Dialog.Title>{t("componentsAuthenticatorSettings.saveYourRecoveryCodes")}</Dialog.Title>
           <Dialog.Description>
-            These codes are shown only once. Each code can be used once to sign in without your
-            authenticator.
+            {t("componentsAuthenticatorSettings.theseCodesAreShownOnlyOnceEachCodeCan")}
           </Dialog.Description>
           <ul className="account-recovery-codes">
             {recoveryCodes.map((value) => (
@@ -417,7 +458,7 @@ export function AuthenticatorSettings() {
             ))}
           </ul>
           <Button type="button" onClick={downloadCodes}>
-            Download codes
+            {t("componentsAuthenticatorSettings.downloadCodes")}
           </Button>
           <CheckboxLabel className="account-recovery-confirm">
             <Checkbox.Root
@@ -428,7 +469,7 @@ export function AuthenticatorSettings() {
                 <Icon name="check" width="12" height="12" />
               </Checkbox.Indicator>
             </Checkbox.Root>
-            I saved my recovery codes
+            {t("componentsAuthenticatorSettings.iSavedMyRecoveryCodes")}
           </CheckboxLabel>
           <div className="account-actions">
             <Button
@@ -440,7 +481,7 @@ export function AuthenticatorSettings() {
                 setSavedCodes(false);
               }}
             >
-              Done
+              {t("common.done")}
             </Button>
           </div>
         </DialogPopup>

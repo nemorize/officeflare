@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now, uuid } from "../auth/types";
 import { digest } from "../auth/crypto";
 import { body, unauthorized } from "../auth/input";
@@ -56,7 +57,7 @@ export async function destination(c: DriveContext, parent: unknown) {
   if (parent === undefined || parent === null || parent === "root")
     return { parent_id: null, owner_user_id: c.get("identity").user.id, check: condition("1") };
   const folder = await requireItem(c, identifier(parent, "parent_id"), "edit");
-  if (folder.kind !== "folder") fail(400, "The destination must be a folder");
+  if (folder.kind !== "folder") fail(400, t("driveStorage.theDestinationMustBeAFolder"));
   return {
     parent_id: folder.id,
     owner_user_id: folder.owner_user_id,
@@ -80,7 +81,7 @@ export const quotaCondition = (owner: string, size: number) =>
 export async function ensureCapacity(c: DriveContext, owner: string, size: number) {
   const quota = (await account(c, owner))!;
   if (quota.used_bytes + quota.reserved_bytes + size > quota.quota_bytes)
-    fail(413, "Drive storage quota exceeded");
+    fail(413, t("driveStorage.driveStorageQuotaExceeded"));
 }
 const uploadView = (upload: DriveUpload) => ({
   id: upload.id,
@@ -102,19 +103,20 @@ async function requireUpload(c: DriveContext) {
     identifier(c.req.param("uploadId")),
     c.get("identity").user.id,
   );
-  if (!upload) fail(404, "Upload not found");
+  if (!upload) fail(404, t("driveStorage.uploadNotFound"));
   if (
     upload.status === "cancelled" ||
     (upload.expires_at <= now() && upload.status !== "completed")
   )
-    fail(410, "Upload expired or cancelled");
+    fail(410, t("driveStorage.uploadExpiredOrCancelled"));
   await uploadTarget(c, upload);
   return upload;
 }
 async function uploadTarget(c: DriveContext, upload: DriveUpload) {
   if (upload.base_version > 0) await requireItem(c, upload.item_id, "edit");
   else if (upload.parent_id) await requireItem(c, upload.parent_id, "edit");
-  else if (upload.owner_user_id !== c.get("identity").user.id) fail(404, "Upload not found");
+  else if (upload.owner_user_id !== c.get("identity").user.id)
+    fail(404, t("driveStorage.uploadNotFound"));
 }
 function uploadChecks(
   c: DriveContext,
@@ -162,10 +164,10 @@ function uploadChecks(
 async function payload(c: DriveContext, expected: number) {
   const declared = c.req.header("content-length");
   if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) !== expected))
-    fail(400, "Upload size mismatch");
+    fail(400, t("driveStorage.uploadSizeMismatch"));
   const content = await c.req.arrayBuffer();
   if (content.byteLength !== expected || content.byteLength > PART_BYTES)
-    fail(400, "Upload size mismatch");
+    fail(400, t("driveStorage.uploadSizeMismatch"));
   return content;
 }
 const sha256 = async (content: ArrayBuffer) =>
@@ -190,25 +192,22 @@ uploads.post("/", async (c) => {
     contentType = mime(data.content_type),
     hash = checksum(data.sha256);
   if (size > (await settings(c.env)).max_file_bytes)
-    fail(413, "File exceeds the workspace file size limit");
+    fail(413, t("driveStorage.fileExceedsTheWorkspaceFileSizeLimit"));
   const mode = data.mode ?? (size <= PART_BYTES ? "single" : "multipart");
-  if (mode !== "single" && mode !== "multipart") fail(400, "Invalid upload mode");
+  if (mode !== "single" && mode !== "multipart") fail(400, t("driveStorage.invalidUploadMode"));
   if ((mode === "single" && size > PART_BYTES) || (mode === "multipart" && size === 0))
-    fail(400, "Invalid upload size for this mode");
+    fail(400, t("driveStorage.invalidUploadSizeForThisMode"));
   if (mode === "multipart" && hash)
-    fail(
-      400,
-      "Full-file SHA-256 is supported for single uploads; multipart parts accept X-Content-SHA256",
-    );
+    fail(400, t("driveStorage.fullFileSha256IsSupportedForSingleUploads"));
   const id = uuid(),
     itemId = data.item_id === undefined ? uuid() : identifier(data.item_id, "item_id");
   const existing = data.item_id === undefined ? null : await requireItem(c, itemId, "edit");
-  if (existing?.kind === "folder") fail(400, "Folders have no file content");
+  if (existing?.kind === "folder") fail(400, t("driveStorage.foldersHaveNoFileContent"));
   if (
     (existing && (data.name !== undefined || data.parent_id !== undefined)) ||
     (!existing && data.version !== undefined)
   )
-    fail(400, "Content uploads cannot move or rename items");
+    fail(400, t("driveStorage.contentUploadsCannotMoveOrRenameItems"));
   const target = existing
     ? {
         parent_id: existing.parent_id,
@@ -317,10 +316,10 @@ uploads.get("/:uploadId", async (c) => {
 });
 uploads.put("/:uploadId/content", async (c) => {
   const upload = await requireUpload(c);
-  if (upload.mode !== "single") fail(400, "Use multipart parts for this upload");
+  if (upload.mode !== "single") fail(400, t("driveStorage.useMultipartPartsForThisUpload"));
   const content = await payload(c, upload.size),
     hash = await sha256(content);
-  if (upload.sha256 && upload.sha256 !== hash) fail(400, "SHA-256 mismatch");
+  if (upload.sha256 && upload.sha256 !== hash) fail(400, t("driveStorage.sha256Mismatch"));
   if (upload.status === "ready") return c.json({ upload: uploadView(upload) });
   if (upload.status === "writing" && leaseExpired(upload))
     await statement(
@@ -347,7 +346,7 @@ uploads.put("/:uploadId/content", async (c) => {
     });
     if (!object) object = await c.env.DRIVE_BUCKET.head(upload.blob_key);
     if (!object || object.size !== upload.size || object.customMetadata?.sha256 !== hash)
-      fail(409, "Upload content changed; create a new upload");
+      fail(409, t("driveStorage.uploadContentChangedCreateANewUpload"));
     await mutate(c, uploadChecks(c, upload, ["writing"], false, lease), (proof) => [
       statement(
         c.env,
@@ -369,7 +368,8 @@ uploads.put("/:uploadId/content", async (c) => {
 });
 uploads.put("/:uploadId/parts/:part", async (c) => {
   const upload = await requireUpload(c);
-  if (upload.mode !== "multipart" || !upload.multipart_id) fail(400, "Not a multipart upload");
+  if (upload.mode !== "multipart" || !upload.multipart_id)
+    fail(400, t("driveStorage.notAMultipartUpload"));
   const part = integer(
     Number(c.req.param("part")),
     "part_number",
@@ -379,7 +379,8 @@ uploads.put("/:uploadId/parts/:part", async (c) => {
   const size = Math.min(PART_BYTES, upload.size - (part - 1) * PART_BYTES),
     content = await payload(c, size);
   const expected = checksum(c.req.header("x-content-sha256"));
-  if (expected && (await sha256(content)) !== expected) fail(400, "Part SHA-256 mismatch");
+  if (expected && (await sha256(content)) !== expected)
+    fail(400, t("driveStorage.partSha256Mismatch"));
   if (upload.status === "writing" && leaseExpired(upload))
     await statement(
       c.env,
@@ -460,7 +461,7 @@ uploads.post("/:uploadId/complete", async (c) => {
           part.size !== Math.min(PART_BYTES, upload.size - index * PART_BYTES),
       ))
   )
-    fail(409, "Upload has missing parts");
+    fail(409, t("driveStorage.uploadHasMissingParts"));
   await mutate(
     c,
     uploadChecks(c, upload, upload.mode === "single" ? ["ready"] : ["open", "ready"], true),
@@ -481,7 +482,8 @@ uploads.post("/:uploadId/complete", async (c) => {
         upload.blob_key,
         upload.multipart_id,
       ).complete(parts.map((part) => ({ partNumber: part.part_number, etag: part.etag })));
-    if (!object || object.size !== upload.size) fail(409, "Upload content is incomplete");
+    if (!object || object.size !== upload.size)
+      fail(409, t("driveStorage.uploadContentIsIncomplete"));
     const recipients = upload.base_version
       ? await audience(c, upload.item_id)
       : upload.parent_id
@@ -537,8 +539,8 @@ uploads.post("/:uploadId/complete", async (c) => {
         recipients,
         notification: {
           type: "drive.updated",
-          title: "Drive file updated",
-          body: "A file in your shared Drive was updated.",
+          title: t("driveStorage.driveFileUpdated"),
+          body: t("driveStorage.aFileInYourSharedDriveWasUpdated"),
           recipients,
         },
       },
@@ -556,7 +558,7 @@ uploads.post("/:uploadId/complete", async (c) => {
 });
 uploads.delete("/:uploadId", async (c) => {
   const upload = await requireUpload(c);
-  if (upload.status === "completed") fail(409, "A completed upload cannot be cancelled");
+  if (upload.status === "completed") fail(409, t("driveStorage.aCompletedUploadCannotBeCancelled"));
   await mutate(c, uploadChecks(c, upload, ["allocating", "open", "ready", "writing"]), (proof) => [
     statement(
       c.env,

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 export class ApiError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -59,7 +60,7 @@ export function createApiClient(deps: {
       response = await send(await deps.accessToken());
     }
     if (!response.ok) {
-      let message = "Unable to complete your request. Try again later.";
+      let message = t("libApiClient.unableToCompleteYourRequestTryAgainLater");
       try {
         const result = (await response.json()) as { error?: unknown };
         if (response.status < 500 && typeof result.error === "string") message = result.error;

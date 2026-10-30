@@ -1,18 +1,19 @@
+import { t } from "../../shared/i18n/index.ts";
 import sanitizeHtml from "sanitize-html";
 import { fail } from "./types";
 
 export function text(value: unknown, key: string, max = 200, empty = false): string {
   if (typeof value !== "string" || value.length > max || (!empty && !value.trim()))
-    fail(400, "Invalid " + key);
+    fail(400, t("mailInput.invalidField", { field: key }));
   return value;
 }
 export function flag(value: unknown, key: string): number {
-  if (typeof value !== "boolean") fail(400, "Invalid " + key);
+  if (typeof value !== "boolean") fail(400, t("mailInput.invalidField", { field: key }));
   return Number(value);
 }
 export function integer(value: unknown, key: string, min: number, max: number): number {
   if (!Number.isSafeInteger(value) || (value as number) < min || (value as number) > max)
-    fail(400, "Invalid " + key);
+    fail(400, t("mailInput.invalidField", { field: key }));
   return value as number;
 }
 export function email(value: unknown): string {
@@ -23,7 +24,7 @@ export function email(value: unknown): string {
     result.startsWith(".") ||
     result.includes("..")
   )
-    fail(400, "Invalid email_address");
+    fail(400, t("mailInput.invalidEmailAddress"));
   return result;
 }
 export function replyToAddress(value: unknown): string | null {
@@ -33,7 +34,8 @@ export function replyToAddress(value: unknown): string | null {
 }
 export function recipients(value: unknown, key: string): string[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 50) fail(400, "Invalid " + key);
+  if (!Array.isArray(value) || value.length > 50)
+    fail(400, t("mailInput.invalidField", { field: key }));
   return [...new Set(value.map(email))];
 }
 export function domain(value: unknown) {
@@ -42,7 +44,7 @@ export function domain(value: unknown) {
     name.split(".").length < 2 ||
     name.split(".").some((part) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(part))
   )
-    fail(400, "Invalid domain");
+    fail(400, t("mailInput.invalidDomain"));
   return name;
 }
 export function localPart(value: unknown) {
@@ -173,16 +175,18 @@ export function htmlText(html: string) {
 }
 export async function jsonBody(request: Request, fields: string[]) {
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? ""))
-    fail(415, "Expected application/json");
+    fail(415, t("mailInput.expectedApplicationJson"));
   let value: unknown;
   try {
     value = await request.json();
   } catch {
-    fail(400, "Invalid JSON");
+    fail(400, t("mailInput.invalidJson"));
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) fail(400, "Invalid JSON object");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    fail(400, t("mailInput.invalidJsonObject"));
   const data = value as Record<string, unknown>;
-  if (Object.keys(data).some((key) => !fields.includes(key))) fail(400, "Unknown field");
+  if (Object.keys(data).some((key) => !fields.includes(key)))
+    fail(400, t("mailInput.unknownField"));
   return data;
 }
 export async function hash(value: string) {
@@ -197,20 +201,20 @@ export function rfcId(value?: string | null) {
 export function strictId(value: unknown, key = "id") {
   const result = text(value, key, 36);
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(result))
-    fail(400, "Invalid " + key);
+    fail(400, t("mailInput.invalidField", { field: key }));
   return result;
 }
 
 export function composeState(value: unknown): import("./types").ComposeState {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    fail(400, "Invalid compose_state");
+    fail(400, t("mailInput.invalidComposeState"));
   const data = value as Record<string, unknown>;
   if (
     Object.keys(data).some(
       (key) => !["to", "cc", "bcc", "reply_to", "address_id", "schedule"].includes(key),
     )
   )
-    fail(400, "Invalid compose_state");
+    fail(400, t("mailInput.invalidComposeState"));
   const result: import("./types").ComposeState = {
     to: text(data.to ?? "", "to", 16384, true),
     cc: text(data.cc ?? "", "cc", 16384, true),

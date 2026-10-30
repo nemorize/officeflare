@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import ipaddr from "ipaddr.js";
 import { imageSize } from "image-size";
 import sanitizeHtml from "sanitize-html";
@@ -23,7 +24,7 @@ const privacyHeaders = {
 
 export function remoteUrl(value: string, base?: string): URL {
   if (value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value))
-    throw new Error("Invalid remote URL");
+    throw new Error(t("mailRemote.invalidRemoteUrl"));
   const url = new URL(value, base);
   if (url.protocol === "http:" && (!url.port || url.port === "80")) {
     url.protocol = "https:";
@@ -40,7 +41,7 @@ export function remoteUrl(value: string, base?: string): URL {
     !/^[a-z0-9.-]+$/.test(host) ||
     /(?:^|\.)(?:localhost|local|internal|lan|home|onion|arpa|invalid)$/.test(host)
   )
-    throw new Error("Remote resources require a public HTTPS hostname");
+    throw new Error(t("mailRemote.remoteResourcesRequireAPublicHttpsHostname"));
   url.hostname = host;
   url.hash = "";
   return url;
@@ -55,9 +56,9 @@ export function publicAddress(value: string): boolean {
 export async function boundedBody(response: Response, maximum: number): Promise<Uint8Array> {
   if (Number(response.headers.get("Content-Length")) > maximum) {
     await response.body?.cancel();
-    throw new Error("Remote resource is too large");
+    throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
   }
-  if (!response.body) throw new Error("Empty remote resource");
+  if (!response.body) throw new Error(t("mailRemote.emptyRemoteResource"));
   const reader = response.body.getReader(),
     chunks: Uint8Array[] = [];
   let size = 0;
@@ -66,14 +67,14 @@ export async function boundedBody(response: Response, maximum: number): Promise<
       const chunk = await reader.read();
       if (chunk.done) break;
       size += chunk.value.byteLength;
-      if (size > maximum) throw new Error("Remote resource is too large");
+      if (size > maximum) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
       chunks.push(chunk.value);
     }
   } catch (error) {
     await reader.cancel().catch(() => {});
     throw error;
   }
-  if (!size) throw new Error("Empty remote resource");
+  if (!size) throw new Error(t("mailRemote.emptyRemoteResource"));
   const body = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) {
@@ -92,11 +93,11 @@ export async function publicDns(hostname: string, fetcher: RemoteFetcher, signal
         signal,
         headers: { ...privacyHeaders, Accept: "application/dns-json" },
       });
-      if (!response.ok) throw new Error("DNS lookup failed");
+      if (!response.ok) throw new Error(t("mailRemote.dnsLookupFailed"));
       const result = JSON.parse(
         new TextDecoder().decode(await boundedBody(response, 16 * 1024)),
       ) as { Status?: number; Answer?: { type: number; data: string }[] };
-      if (result.Status !== 0) throw new Error("DNS lookup failed");
+      if (result.Status !== 0) throw new Error(t("mailRemote.dnsLookupFailed"));
       return (result.Answer ?? [])
         .filter((record) => record.type === 1 || record.type === 28)
         .map((record) => record.data);
@@ -104,7 +105,7 @@ export async function publicDns(hostname: string, fetcher: RemoteFetcher, signal
   );
   const addresses = records.flat();
   if (!addresses.length || addresses.some((address) => !publicAddress(address)))
-    throw new Error("Private network resources are blocked");
+    throw new Error(t("mailRemote.privateNetworkResourcesAreBlocked"));
 }
 function safeSvg(body: Uint8Array): Uint8Array {
   const source = new TextDecoder().decode(body);
@@ -196,7 +197,8 @@ function safeSvg(body: Uint8Array): Uint8Array {
       }),
     },
   });
-  if (!/^\s*<svg\b/.test(clean) || clean.length > 256 * 1024) throw new Error("Invalid SVG image");
+  if (!/^\s*<svg\b/.test(clean) || clean.length > 256 * 1024)
+    throw new Error(t("mailRemote.invalidSvgImage"));
   return new TextEncoder().encode(clean);
 }
 export function validatedImage(
@@ -222,7 +224,7 @@ export function validatedImage(
     !dimensions.height ||
     dimensions.width * dimensions.height > 40_000_000
   )
-    throw new Error("Unsupported remote image");
+    throw new Error(t("mailRemote.unsupportedRemoteImage"));
   return { body, contentType: expected };
 }
 export async function fetchRemoteAsset(
@@ -235,7 +237,7 @@ export async function fetchRemoteAsset(
   const signal = AbortSignal.timeout(8000);
   for (let hop = 0; hop <= 3; hop++) {
     if (url.hostname === ownHost.toLowerCase().replace(/\.$/, ""))
-      throw new Error("Application resources cannot be proxied");
+      throw new Error(t("mailRemote.applicationResourcesCannotBeProxied"));
     await publicDns(url.hostname, fetcher, signal);
     const response = await fetcher(url.href, {
       signal,
@@ -251,13 +253,13 @@ export async function fetchRemoteAsset(
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get("Location");
       await response.body?.cancel();
-      if (!location || hop === 3) throw new Error("Invalid remote redirect");
+      if (!location || hop === 3) throw new Error(t("mailRemote.invalidRemoteRedirect"));
       url = remoteUrl(location, url.href);
       continue;
     }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error("Remote resource unavailable");
+      throw new Error(t("mailRemote.remoteResourceUnavailable"));
     }
     const contentType =
       response.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
@@ -266,7 +268,7 @@ export async function fetchRemoteAsset(
       (kind === "image" && !/^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(contentType))
     ) {
       await response.body?.cancel();
-      throw new Error("Unsupported remote resource type");
+      throw new Error(t("mailRemote.unsupportedRemoteResourceType"));
     }
     const body = await boundedBody(response, maximumBytes[kind]);
     return {
@@ -274,5 +276,5 @@ export async function fetchRemoteAsset(
       url: url.href,
     };
   }
-  throw new Error("Invalid remote redirect");
+  throw new Error(t("mailRemote.invalidRemoteRedirect"));
 }

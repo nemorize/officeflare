@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { hydrateMailResources } from "../lib/mail-ui";
@@ -27,6 +28,6 @@ export function MailResourceProvider({ children }: { children: ReactNode }) {
 }
 export function useMailCache() {
   const cache = useContext(Context);
-  if (!cache) throw new Error("Mail resource scope is unavailable");
+  if (!cache) throw new Error(t("componentsMailResourceContext.mailResourceScopeIsUnavailable"));
   return cache;
 }

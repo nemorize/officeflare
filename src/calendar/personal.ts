@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -43,7 +44,7 @@ routes.post("/calendars/:calendarId/labels", async (c) => {
       updated_at: stamp,
       deleted_at: null,
     };
-  if (!value.color) fail(400, "INVALID_INPUT", "Label color is required");
+  if (!value.color) fail(400, "INVALID_INPUT", t("calendarPersonal.labelColorIsRequired"));
   const result = await mutate(c, {
     operation: `label.create:${cal.id}`,
     idempotent: true,
@@ -69,7 +70,7 @@ routes.patch("/calendars/:calendarId/labels/:labelId", async (c) => {
       id,
       cal.id,
     );
-  if (!old) fail(404, "LABEL_NOT_FOUND", "Label not found");
+  if (!old) fail(404, "LABEL_NOT_FOUND", t("calendarPersonal.labelNotFound"));
   const values: Record<string, string | number | null> = {
     version: version + 1,
     updated_at: now(),
@@ -77,7 +78,7 @@ routes.patch("/calendars/:calendarId/labels/:labelId", async (c) => {
   if ("name" in data) values.name = text(data.name, "name", 255);
   if ("color" in data) {
     values.color = color(data.color);
-    if (!values.color) fail(400, "INVALID_INPUT", "Label color is required");
+    if (!values.color) fail(400, "INVALID_INPUT", t("calendarPersonal.labelColorIsRequired"));
   }
   if ("sort_order" in data)
     values.sort_order = integer(data.sort_order, "sort_order", -1000000, 1000000);
@@ -146,7 +147,7 @@ async function copyTarget(c: CalendarContext) {
       "SELECT * FROM calendar_event_copies WHERE id=? AND removed_at IS NULL",
       id,
     );
-  if (!value) fail(404, "COPY_NOT_FOUND", "Event copy not found");
+  if (!value) fail(404, "COPY_NOT_FOUND", t("calendarPersonal.eventCopyNotFound"));
   const cal = await requireCalendar(c, value.calendar_id, 6);
   return { value, cal };
 }
@@ -181,7 +182,7 @@ routes.patch("/copies/:copyId", async (c) => {
           )
         : condition("1");
   if (!(await first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args)))
-    fail(400, "INVALID_LABEL", "Label does not belong to this calendar");
+    fail(400, "INVALID_LABEL", t("calendarPersonal.labelDoesNotBelongToThisCalendar"));
   await mutate(c, {
     operation: "copy.update",
     request: data,

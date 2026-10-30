@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { HTTPException } from "hono/http-exception";
 import { invalid, string } from "../auth/input";
 export function fail(
@@ -8,31 +9,32 @@ export function fail(
 }
 export function integer(value: unknown, key: string, min = 0, max = Number.MAX_SAFE_INTEGER) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max)
-    invalid(`Invalid ${key}`);
+    invalid(t("driveInput.invalid", { key: key }));
   return value;
 }
 export function name(value: unknown) {
   const result = string(value, "name", 255).normalize("NFC").trim();
   if (!result || result === "." || result === ".." || /[\x00-\x1f\x7f/\\]/.test(result))
-    invalid("Invalid name");
+    invalid(t("driveInput.invalidName"));
   return result;
 }
 export function text(value: unknown, key: string, max: number) {
   if (typeof value !== "string" || value.length > max || value.includes("\0"))
-    invalid(`Invalid ${key}`);
+    invalid(t("driveInput.invalid", { key: key }));
   return value;
 }
 export function bool(value: unknown, key: string) {
-  if (typeof value !== "boolean") invalid(`Invalid ${key}`);
+  if (typeof value !== "boolean") invalid(t("driveInput.invalid", { key: key }));
   return value;
 }
 export function identifier(value: unknown, key = "id") {
   const result = string(value, key, 128);
-  if (!/^[A-Za-z0-9_-]+$/.test(result)) invalid(`Invalid ${key}`);
+  if (!/^[A-Za-z0-9_-]+$/.test(result)) invalid(t("driveInput.invalid", { key: key }));
   return result;
 }
 export function role(value: unknown) {
-  if (value !== "viewer" && value !== "commenter" && value !== "editor") invalid("Invalid role");
+  if (value !== "viewer" && value !== "commenter" && value !== "editor")
+    invalid(t("driveInput.invalidRole"));
   return value;
 }
 export function expiry(value: unknown) {
@@ -42,11 +44,12 @@ export function mime(value: unknown) {
   const result =
     value === undefined ? "application/octet-stream" : string(value, "content_type", 200);
   if (!/^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/.test(result))
-    invalid("Invalid content_type");
+    invalid(t("driveInput.invalidContentType"));
   return result.toLowerCase();
 }
 export function checksum(value: unknown) {
   if (value == null) return null;
-  if (typeof value !== "string" || !/^[a-f0-9]{64}$/i.test(value)) invalid("Invalid sha256");
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/i.test(value))
+    invalid(t("driveInput.invalidSha256"));
   return value.toLowerCase();
 }

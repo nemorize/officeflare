@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useMail, useMailMenu, MailSidebar } from "./mail-context";
@@ -28,7 +29,7 @@ export function MailSettingsButton() {
   return (
     <MailIconButton
       icon="settings"
-      label="Mail settings"
+      label={t("componentsMailChrome.mailSettings")}
       nativeButton={false}
       render={
         <NavLink to={mail.href("/mail/settings")} onClick={() => menu.setMobileMenu(false)} />
@@ -140,25 +141,33 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         submit(true);
       }}
     >
-      {!mobile && <h2>Search filters</h2>}
+      {!mobile && <h2>{t("componentsMailChrome.searchFilters")}</h2>}
       <div className="mail-filter-fields">
         <div className="mail-form-grid">
-          <MailInput label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <MailInput label="To" value={to} onChange={(e) => setTo(e.target.value)} />
           <MailInput
-            label="Subject"
+            label={t("componentsMailChrome.from")}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+          <MailInput
+            label={t("componentsMailChrome.to")}
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+          <MailInput
+            label={t("componentsMailChrome.subject")}
             fieldClassName="mail-filter-subject"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           />
           <MailInput
-            label="After"
+            label={t("componentsMailChrome.after2")}
             type="date"
             value={after}
             onChange={(e) => setAfter(e.target.value)}
           />
           <MailInput
-            label="Before"
+            label={t("componentsMailChrome.before2")}
             type="date"
             value={before}
             onChange={(e) => setBefore(e.target.value)}
@@ -167,17 +176,17 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         <div className="mail-filter-checks">
           <CheckboxLabel>
             <MailCheckbox checked={unread} onCheckedChange={(v) => setUnread(!!v)} />
-            Unread only
+            {t("componentsMailChrome.unreadOnly")}
           </CheckboxLabel>
           <CheckboxLabel>
             <MailCheckbox checked={attached} onCheckedChange={(v) => setAttached(!!v)} />
-            Has attachments
+            {t("componentsMailChrome.hasAttachments")}
           </CheckboxLabel>
         </div>
       </div>
       <div className="mail-filter-footer">
         <Button variant="primary" type="submit">
-          Search
+          {t("common.search")}
         </Button>
       </div>
     </MailForm>
@@ -186,7 +195,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
     <header className="mail-topbar">
       <MailIconButton
         icon="menu"
-        label="Toggle mail navigation"
+        label={t("componentsMailChrome.toggleMailNavigation")}
         onClick={() => {
           if (window.matchMedia("(max-width: 760px)").matches) menu.setMobileMenu(true);
           else
@@ -199,7 +208,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         <MailIconButton
           className="mail-topbar-compose"
           icon="plus"
-          label="Compose"
+          label={t("componentsMailChrome.compose")}
           disabled={!mail.box?.access?.read || !mail.box?.access?.write}
           onClick={() => mail.compose()}
         />
@@ -216,8 +225,8 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         <Input
           variant="integrated"
           ref={searchInput}
-          aria-label="Search mail"
-          placeholder="Search mail"
+          aria-label={t("componentsMailChrome.searchMail")}
+          placeholder={t("componentsMailChrome.searchMail")}
           value={search}
           maxLength={1000}
           onChange={(event) => setSearch(event.target.value)}
@@ -225,7 +234,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         {search && (
           <MailIconButton
             icon="close"
-            label="Clear search"
+            label={t("componentsMailChrome.clearSearch")}
             onClick={() => {
               setSearch("");
               navigate(mail.href("/mail"));
@@ -236,7 +245,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Search filters"
+            aria-label={t("componentsMailChrome.searchFilters")}
             aria-haspopup="dialog"
             onClick={() => openFilters(true)}
           >
@@ -245,7 +254,13 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         ) : (
           <Popover.Root open={filters} onOpenChange={openFilters}>
             <Popover.Trigger
-              render={<Button variant="ghost" size="icon" aria-label="Search filters" />}
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("componentsMailChrome.searchFilters")}
+                />
+              }
             >
               <Icon name="controls" />
             </Popover.Trigger>
@@ -269,15 +284,15 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
             }}
           >
             <div className="mail-drawer-heading">
-              <Drawer.Title>Search filters</Drawer.Title>
+              <Drawer.Title>{t("componentsMailChrome.searchFilters")}</Drawer.Title>
               <MailIconButton
                 icon="close"
-                label="Close search filters"
+                label={t("componentsMailChrome.closeSearchFilters")}
                 onClick={() => openFilters(false)}
               />
             </div>
             <Drawer.Description className="mail-sr-only">
-              Find messages in this mailbox.
+              {t("componentsMailChrome.findMessagesInThisMailbox")}
             </Drawer.Description>
             {filterForm}
           </DrawerPopup>
@@ -285,7 +300,7 @@ export function MailTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
         <WorkspaceNavigationDrawer
           open={menu.mobileMenu}
           onOpenChange={menu.setMobileMenu}
-          title="Mail"
+          title={t("componentsMailChrome.mail")}
           account={mobileAccount}
           actions={<MailSettingsButton />}
         >
@@ -301,7 +316,7 @@ export function MailPreferenceFields() {
     mail = useMail();
   return (
     <div className="mail-preference-fields">
-      <MailField label="Display density">
+      <MailField label={t("componentsMailChrome.displayDensity")}>
         <MailSelect
           value={mail.preferences.density}
           onValueChange={(density) => {
@@ -310,12 +325,12 @@ export function MailPreferenceFields() {
             });
           }}
           options={[
-            { value: "comfortable", label: "Comfortable" },
-            { value: "compact", label: "Compact" },
+            { value: "comfortable", label: t("componentsMailChrome.comfortable") },
+            { value: "compact", label: t("componentsMailChrome.compact") },
           ]}
         />
       </MailField>
-      <MailField label="Reading pane">
+      <MailField label={t("componentsMailChrome.readingPane")}>
         <MailSelect
           value={mail.preferences.reading_pane}
           onValueChange={(reading_pane) => {
@@ -324,8 +339,8 @@ export function MailPreferenceFields() {
             });
           }}
           options={[
-            { value: "none", label: "Full-width list" },
-            { value: "right", label: "Right of inbox" },
+            { value: "none", label: t("componentsMailChrome.fullWidthList") },
+            { value: "right", label: t("componentsMailChrome.rightOfInbox") },
           ]}
         />
       </MailField>
@@ -339,8 +354,8 @@ export function MailPreferenceFields() {
           }}
         />
         <span>
-          <strong>Conversation view</strong>
-          <small>Group replies into one conversation.</small>
+          <strong>{t("componentsMailChrome.conversationView")}</strong>
+          <small>{t("componentsMailChrome.groupRepliesIntoOneConversation")}</small>
         </span>
       </CheckboxLabel>
       <CheckboxLabel className="mail-preference-check">
@@ -351,11 +366,11 @@ export function MailPreferenceFields() {
           }}
         />
         <span>
-          <strong>Keyboard shortcuts</strong>
-          <small>c Compose · / Search · j/k Move · e Archive · r Reply</small>
+          <strong>{t("componentsMailChrome.keyboardShortcuts")}</strong>
+          <small>{t("componentsMailChrome.cComposeSearchJKMoveEArchiveR")}</small>
         </span>
       </CheckboxLabel>
-      <MailField label="Undo send">
+      <MailField label={t("componentsMailChrome.undoSend")}>
         <MailSelect
           value={String(mail.preferences.undo_seconds)}
           onValueChange={(value) => {
@@ -363,12 +378,14 @@ export function MailPreferenceFields() {
           }}
           options={[0, 5, 10, 20, 30].map((value) => ({
             value: String(value),
-            label: value ? `${value} seconds` : "Off",
+            label: value
+              ? t("componentsMailChrome.seconds", { value: value })
+              : t("componentsMailChrome.off"),
           }))}
         />
       </MailField>
       <p className="mail-hint">
-        Your preferences apply only to your account. Folder and mailbox settings are shared.
+        {t("componentsMailChrome.yourPreferencesApplyOnlyToYourAccountFolderAnd")}
       </p>
     </div>
   );

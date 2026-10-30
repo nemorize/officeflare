@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "../components/i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useAccess } from "../components/console-access";
@@ -43,10 +46,10 @@ interface Configuration {
   members: Member[];
 }
 const roleOptions = [
-  { value: "viewer", label: "Read only" },
-  { value: "member", label: "Read, write & send" },
-  { value: "manager", label: "Mailbox manager" },
-  { value: "custom", label: "Custom access" },
+  { value: "viewer", label: t("routesConsoleSharedMailboxes.readOnly") },
+  { value: "member", label: t("routesConsoleSharedMailboxes.readWriteSend") },
+  { value: "manager", label: t("routesConsoleSharedMailboxes.mailboxManager") },
+  { value: "custom", label: t("routesConsoleSharedMailboxes.customAccess") },
 ];
 function assignment(member: Member): Assignment {
   const permissions = Object.fromEntries(rights.map((key) => [key, !!member[key]])) as Rights;
@@ -75,8 +78,8 @@ export function SharedMailboxes() {
   return (
     <>
       <ConsolePageHeader
-        title="Shared mailboxes"
-        description="Manage team addresses and the people who use them together."
+        title={t("routesConsoleSharedMailboxes.sharedMailboxes")}
+        description={t("routesConsoleSharedMailboxes.manageTeamAddressesAndThePeopleWhoUseThem")}
       >
         {permissions.includes("admin.mail.mailboxes.manage") && (
           <Button
@@ -84,14 +87,14 @@ export function SharedMailboxes() {
             render={<Link to="/console/mail/mailboxes/new" />}
             variant="primary"
           >
-            New shared mailbox
+            {t("routesConsoleSharedMailboxes.newSharedMailbox")}
           </Button>
         )}
       </ConsolePageHeader>
       <div className="mail-field">
         <Input
-          aria-label="Find shared mailboxes"
-          placeholder="Name or email address"
+          aria-label={t("routesConsoleSharedMailboxes.findSharedMailboxes")}
+          placeholder={t("routesConsoleSharedMailboxes.nameOrEmailAddress")}
           value={search}
           onValueChange={setSearch}
         />
@@ -104,14 +107,16 @@ export function SharedMailboxes() {
       {resource.data && (
         <div className="mail-table-wrap">
           <table className="mail-table">
-            <caption className="console-sr-only">Shared mailboxes</caption>
+            <caption className="console-sr-only">
+              {t("routesConsoleSharedMailboxes.sharedMailboxes")}
+            </caption>
             <thead>
               <tr>
-                <th>Mailbox</th>
-                <th>Members</th>
-                <th>Status</th>
+                <th>{t("routesConsoleSharedMailboxes.mailbox")}</th>
+                <th>{t("routesConsoleSharedMailboxes.members")}</th>
+                <th>{t("common.status")}</th>
                 <th>
-                  <span className="console-sr-only">Actions</span>
+                  <span className="console-sr-only">{t("common.actions")}</span>
                 </th>
               </tr>
             </thead>
@@ -121,12 +126,14 @@ export function SharedMailboxes() {
                   <td>
                     <Link to={`/console/mail/mailboxes/${box.id}`}>
                       <strong>{box.name}</strong>
-                      <small>{box.email_address ?? "Address not set"}</small>
+                      <small>
+                        {box.email_address ?? t("routesConsoleSharedMailboxes.addressNotSet")}
+                      </small>
                     </Link>
                   </td>
                   <td>{box.member_count ?? 0}</td>
                   <td>
-                    <span className="mail-badge">{box.status}</span>
+                    <span className="mail-badge">{enumLabel(box.status)}</span>
                   </td>
                   <td>
                     <Button
@@ -134,7 +141,9 @@ export function SharedMailboxes() {
                       render={<Link to={`/console/mail/mailboxes/${box.id}`} />}
                       size="sm"
                     >
-                      {permissions.includes("admin.mail.mailboxes.manage") ? "Manage" : "View"}
+                      {permissions.includes("admin.mail.mailboxes.manage")
+                        ? t("routesConsoleSharedMailboxes.manage")
+                        : t("routesConsoleSharedMailboxes.view")}
                     </Button>
                   </td>
                 </tr>
@@ -144,8 +153,8 @@ export function SharedMailboxes() {
           {!boxes.length && (
             <p className="mail-empty">
               {search
-                ? "No shared mailboxes match your search."
-                : "No shared mailboxes yet. Create a team address and choose its members in one step."}
+                ? t("routesConsoleSharedMailboxes.noSharedMailboxesMatchYourSearch")
+                : t("routesConsoleSharedMailboxes.noSharedMailboxesYetCreateATeamAddressAnd")}
             </p>
           )}
         </div>
@@ -166,11 +175,15 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
   return (
     <section className="account-page console-page console-detail-page mail-console-page">
       <Link to="/console/mail/mailboxes" className="console-back">
-        ← Shared mailboxes
+        {t("routesConsoleSharedMailboxes.sharedMailboxes2")}
       </Link>
       <ConsolePageHeader
-        title={creating ? "New shared mailbox" : (config.data?.mailbox.name ?? "Shared mailbox")}
-        description="Set a team address and shared access in one place."
+        title={
+          creating
+            ? t("routesConsoleSharedMailboxes.newSharedMailbox")
+            : (config.data?.mailbox.name ?? t("routesConsoleSharedMailboxes.sharedMailbox"))
+        }
+        description={t("routesConsoleSharedMailboxes.setATeamAddressAndSharedAccessInOne")}
       />
       <MailState
         loading={
@@ -281,7 +294,7 @@ function SharedMailboxForm({
     if (existing) {
       await api(`/api/mail/mailboxes/${box!.id}/configuration`, { method: "PATCH", body });
       onSaved();
-      notify.success("Shared mailbox saved.");
+      notify.success(t("routesConsoleSharedMailboxes.sharedMailboxSaved"));
     } else {
       pending.current ??= body;
       let result: { mailbox: Mailbox };
@@ -302,7 +315,9 @@ function SharedMailboxForm({
       }
       operation.current.complete();
       pending.current = null;
-      notify.success("Shared mailbox created with its address and members.");
+      notify.success(
+        t("routesConsoleSharedMailboxes.sharedMailboxCreatedWithItsAddressAndMembers"),
+      );
       navigate(`/console/mail/mailboxes/${result.mailbox.id}`);
     }
     window.dispatchEvent(new Event("officeflare:mail-access-changed"));
@@ -310,14 +325,14 @@ function SharedMailboxForm({
   if (box?.kind === "personal")
     return (
       <MailSection
-        title="Personal mailbox"
-        description="Personal mail belongs with the user account."
+        title={t("routesConsoleSharedMailboxes.personalMailbox")}
+        description={t("routesConsoleSharedMailboxes.personalMailBelongsWithTheUserAccount")}
       >
         <Button
           nativeButton={false}
           render={<Link to={`/console/users/${encodeURIComponent(box.owner_user_id)}`} />}
         >
-          Manage user
+          {t("routesConsoleSharedMailboxes.manageUser")}
         </Button>
       </MailSection>
     );
@@ -332,15 +347,17 @@ function SharedMailboxForm({
       >
         <MailFieldset disabled={action.busy || uncertain || !manage}>
           <MailSection
-            title="Team address"
-            description="The address and mailbox are created and saved together."
+            title={t("routesConsoleSharedMailboxes.teamAddress")}
+            description={t(
+              "routesConsoleSharedMailboxes.theAddressAndMailboxAreCreatedAndSavedTogether",
+            )}
           >
             <div className="mail-form">
               <MailInput
-                label="Mailbox name"
+                label={t("routesConsoleSharedMailboxes.mailboxName")}
                 required
                 maxLength={100}
-                placeholder="Support"
+                placeholder={t("routesConsoleSharedMailboxes.support")}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -358,24 +375,31 @@ function SharedMailboxForm({
               )}
               {existing && primary && (
                 <p className="mail-hint">
-                  Changing the address keeps the previous address as an alias.
+                  {t("routesConsoleSharedMailboxes.changingTheAddressKeepsThePreviousAddressAsAn")}
                 </p>
               )}
               {!addressManage && (
                 <p className="mail-hint">
-                  Address changes require mail domain management permission.
+                  {t(
+                    "routesConsoleSharedMailboxes.addressChangesRequireMailDomainManagementPermission",
+                  )}
                 </p>
               )}
               {existing && (
-                <MailField label="Mailbox status">
+                <MailField label={t("routesConsoleSharedMailboxes.mailboxStatus")}>
                   <MailSelect
                     value={status}
                     onValueChange={setStatus}
                     options={[
-                      { value: "active", label: "Active" },
-                      { value: "disabled", label: "Disabled" },
+                      { value: "active", label: t("common.active") },
+                      { value: "disabled", label: t("common.disabled") },
                       ...(status === "provisioning"
-                        ? [{ value: "provisioning", label: "Preparing mailbox" }]
+                        ? [
+                            {
+                              value: "provisioning",
+                              label: t("routesConsoleSharedMailboxes.preparingMailbox"),
+                            },
+                          ]
                         : []),
                     ]}
                   />
@@ -384,24 +408,30 @@ function SharedMailboxForm({
             </div>
           </MailSection>
           <MailSection
-            title="People with access"
-            description="Members find this shared mailbox alongside their personal mail. Read only members cannot send or change messages."
+            title={t("routesConsoleSharedMailboxes.peopleWithAccess")}
+            description={t(
+              "routesConsoleSharedMailboxes.membersFindThisSharedMailboxAlongsideTheirPersonalMail",
+            )}
           >
             <div className="mail-record">
               <div>
-                <strong>{owner?.display_name || owner?.email_address || "Mailbox owner"}</strong>
+                <strong>
+                  {owner?.display_name ||
+                    owner?.email_address ||
+                    t("routesConsoleSharedMailboxes.mailboxOwner")}
+                </strong>
                 <p>
                   {owner?.email_address}
                   {!users.some((entry) => entry.id === ownerId)
-                    ? " · Mail access is not enabled"
-                    : " · Full mailbox access"}
+                    ? t("routesConsoleSharedMailboxes.mailAccessIsNotEnabled")
+                    : t("routesConsoleSharedMailboxes.fullMailboxAccess")}
                 </p>
               </div>
-              <span className="mail-badge">Owner</span>
+              <span className="mail-badge">{t("routesConsoleSharedMailboxes.owner")}</span>
             </div>
             <MailInput
-              label="Find people"
-              placeholder="Name or email address"
+              label={t("routesConsoleSharedMailboxes.findPeople")}
+              placeholder={t("routesConsoleSharedMailboxes.nameOrEmailAddress")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -432,12 +462,14 @@ function SharedMailboxForm({
                         <strong>{person.display_name || person.email_address}</strong>
                         <small>
                           {person.display_name && person.email_address}
-                          {!available && " · Mail access unavailable"}
+                          {!available && t("routesConsoleSharedMailboxes.mailAccessUnavailable")}
                         </small>
                       </Check>
                       {entry && (
                         <MailSelect
-                          aria-label={`Access for ${person.email_address}`}
+                          aria-label={t("routesConsoleSharedMailboxes.accessFor", {
+                            email_address: person.email_address,
+                          })}
                           value={entry.role}
                           options={roleOptions}
                           onValueChange={(role) =>
@@ -473,10 +505,10 @@ function SharedMailboxForm({
                             >
                               {
                                 {
-                                  can_read: "Read mail",
-                                  can_write: "Change mail",
-                                  can_send: "Send mail",
-                                  can_manage: "Manage mailbox",
+                                  can_read: t("routesConsoleSharedMailboxes.readMail"),
+                                  can_write: t("routesConsoleSharedMailboxes.changeMail"),
+                                  can_send: t("routesConsoleSharedMailboxes.sendMail"),
+                                  can_manage: t("routesConsoleSharedMailboxes.manageMailbox"),
                                 }[key]
                               }
                             </Check>
@@ -489,24 +521,29 @@ function SharedMailboxForm({
             </div>
             {!people.length && (
               <p className="mail-hint">
-                No other users with Mail access.
-                {permissions.includes("admin.users.create") && (
-                  <>
-                    {" "}
-                    <Link to="/console/users/new">Add a user →</Link>
-                  </>
-                )}
+                <LocalizedMessage
+                  id="routesConsoleSharedMailboxes.noOtherUsersWithMailAccess"
+                  values={{
+                    value1: permissions.includes("admin.users.create") && (
+                      <>
+                        {" "}
+                        <Link to="/console/users/new">
+                          {t("routesConsoleSharedMailboxes.addAUser")}
+                        </Link>
+                      </>
+                    ),
+                  }}
+                />
               </p>
             )}
-            <p className="mail-hint">
-              {selected.length} {selected.length === 1 ? "member" : "members"} selected · Folders
-              and messages are shared by the mailbox.
-            </p>
+            <p className="mail-hint">{plural("mail.sharedMembers", selected.length)}</p>
           </MailSection>
         </MailFieldset>
         <MailNotice error={action.error} />
         {uncertain && (
-          <p className="mail-hint">Retry to recover the result of this same creation request.</p>
+          <p className="mail-hint">
+            {t("routesConsoleSharedMailboxes.retryToRecoverTheResultOfThisSameCreation")}
+          </p>
         )}
         {manage && (
           <div className="mail-actions">
@@ -515,7 +552,7 @@ function SharedMailboxForm({
               disabled={action.busy}
               render={<Link to="/console/mail/mailboxes" />}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
@@ -523,20 +560,22 @@ function SharedMailboxForm({
               disabled={action.busy || (!existing && (!ownerId || (addressManage && !domainId)))}
             >
               {action.busy
-                ? "Saving…"
+                ? t("common.saving")
                 : uncertain
-                  ? "Check creation result"
+                  ? t("routesConsoleSharedMailboxes.checkCreationResult")
                   : existing
-                    ? "Save shared mailbox"
-                    : "Create shared mailbox"}
+                    ? t("routesConsoleSharedMailboxes.saveSharedMailbox")
+                    : t("routesConsoleSharedMailboxes.createSharedMailbox")}
             </Button>
           </div>
         )}
       </MailForm>
       {box && (
         <MailSection
-          title="Addresses and delivery"
-          description="Manage address delivery and aliases for this same shared mailbox."
+          title={t("routesConsoleSharedMailboxes.addressesAndDelivery")}
+          description={t(
+            "routesConsoleSharedMailboxes.manageAddressDeliveryAndAliasesForThisSameShared",
+          )}
         >
           <MailboxAliases
             mailbox={box}

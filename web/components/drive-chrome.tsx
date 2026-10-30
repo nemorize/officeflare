@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
@@ -27,6 +29,17 @@ import {
 } from "../lib/drive-search";
 import { useWorkspaceMobile } from "../lib/workspace-responsive";
 
+export function DriveSettingsButton({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <DriveIconButton
+      icon="settings"
+      label={t("componentsDriveChrome.driveSettings")}
+      nativeButton={false}
+      render={<NavLink to="/drive/settings" onClick={onNavigate} />}
+    />
+  );
+}
+
 export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const drive = useDrive(),
     location = useLocation();
@@ -35,8 +48,11 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="workspace-create-action drive-sidebar-new">
         <DriveNewMenu />
       </div>
-      <nav aria-label="Drive navigation" className="workspace-nav drive-nav">
-        <h2>Files</h2>
+      <nav
+        aria-label={t("componentsDriveChrome.driveNavigation")}
+        className="workspace-nav drive-nav"
+      >
+        <h2>{t("componentsDriveChrome.files")}</h2>
         {workspaceApps
           .find((app) => app.path === "/drive")!
           .menu.map((item) => (
@@ -59,7 +75,14 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="drive-storage">
         <div>
           <Icon name="drive" />
-          <span>Storage</span>
+          <span>{t("componentsDriveChrome.storage")}</span>
+          <NavLink
+            to="/drive/activity"
+            onClick={onNavigate}
+            aria-label={t("componentsDriveChrome.viewDriveActivityAndStorage")}
+          >
+            <Icon name="chevron" />
+          </NavLink>
         </div>
         {drive.quota ? (
           <>
@@ -67,21 +90,32 @@ export function DriveSidebar({ onNavigate }: { onNavigate?: () => void }) {
               value={drive.quota.used_bytes + drive.quota.reserved_bytes}
               min={0}
               max={Math.max(1, drive.quota.quota_bytes)}
-              aria-label="Drive storage used"
+              aria-label={t("componentsDriveChrome.driveStorageUsed")}
             >
               <Meter.Track>
                 <Meter.Indicator />
               </Meter.Track>
             </Meter.Root>
             <p>
-              {formatBytes(drive.quota.used_bytes)} of {formatBytes(drive.quota.quota_bytes)} used
+              <LocalizedMessage
+                id="componentsDriveChrome.ofUsed"
+                values={{
+                  formatBytes: formatBytes(drive.quota.used_bytes),
+                  value2: formatBytes(drive.quota.quota_bytes),
+                }}
+              />
             </p>
             {!!drive.quota.reserved_bytes && (
-              <p>{formatBytes(drive.quota.reserved_bytes)} reserved for uploads</p>
+              <p>
+                <LocalizedMessage
+                  id="componentsDriveChrome.reservedForUploads"
+                  values={{ formatBytes: formatBytes(drive.quota.reserved_bytes) }}
+                />
+              </p>
             )}
           </>
         ) : (
-          <p>Checking storage…</p>
+          <p>{t("componentsDriveChrome.checkingStorage")}</p>
         )}
       </div>
     </div>
@@ -127,19 +161,19 @@ export function DriveTopbar({
         submit(true);
       }}
     >
-      {!mobile && <h2>Search filters</h2>}
+      {!mobile && <h2>{t("componentsDriveChrome.searchFilters")}</h2>}
       <div className="drive-filter-fields">
         <DriveField
-          label="Name or description"
+          label={t("componentsDriveChrome.nameOrDescription")}
           value={fields.q}
           maxLength={255}
           onChange={(event) => updateField("q", event.target.value)}
         />
         <div className="drive-filter-grid">
           <Field.Root className="drive-field">
-            <Field.Label>Type</Field.Label>
+            <Field.Label>{t("componentsDriveChrome.type")}</Field.Label>
             <DriveSelect
-              label="Search file type"
+              label={t("componentsDriveChrome.searchFileType")}
               value={fields.type}
               onChange={(value) => updateField("type", value)}
               options={
@@ -150,9 +184,9 @@ export function DriveTopbar({
             />
           </Field.Root>
           <Field.Root className="drive-field">
-            <Field.Label>Search in</Field.Label>
+            <Field.Label>{t("componentsDriveChrome.searchIn")}</Field.Label>
             <DriveSelect
-              label="Search location"
+              label={t("componentsDriveChrome.searchLocation")}
               value={fields.scope}
               onChange={(value) => updateField("scope", value)}
               options={driveSearchScopes}
@@ -160,22 +194,22 @@ export function DriveTopbar({
           </Field.Root>
         </div>
         <DriveField
-          label="Owner"
-          placeholder="Name or email"
+          label={t("componentsDriveChrome.owner")}
+          placeholder={t("componentsDriveChrome.nameOrEmail")}
           value={fields.owner}
           maxLength={255}
           onChange={(event) => updateField("owner", event.target.value)}
         />
         <div className="drive-filter-grid">
           <DriveField
-            label="Modified from"
+            label={t("componentsDriveChrome.modifiedFrom")}
             type="date"
             value={fields.after}
             max={fields.before || undefined}
             onChange={(event) => updateField("after", event.target.value)}
           />
           <DriveField
-            label="Modified through"
+            label={t("componentsDriveChrome.modifiedThrough")}
             type="date"
             value={fields.before}
             min={fields.after || undefined}
@@ -185,10 +219,10 @@ export function DriveTopbar({
       </div>
       <div className="drive-filter-footer">
         <Button variant="ghost" onClick={() => setFields(readDriveSearch(new URLSearchParams()))}>
-          Reset filters
+          {t("componentsDriveChrome.resetFilters")}
         </Button>
         <Button variant="primary" type="submit">
-          Search
+          {t("common.search")}
         </Button>
       </div>
     </form>
@@ -197,7 +231,7 @@ export function DriveTopbar({
     <header className="workspace-topbar drive-topbar">
       <DriveIconButton
         icon="menu"
-        label="Toggle Drive navigation"
+        label={t("componentsDriveChrome.toggleDriveNavigation")}
         aria-expanded={mobile ? menu : !sidebarCollapsed}
         aria-haspopup={mobile ? "dialog" : undefined}
         onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
@@ -205,8 +239,9 @@ export function DriveTopbar({
       <WorkspaceNavigationDrawer
         open={menu}
         onOpenChange={setMenu}
-        title="Drive"
+        title={t("componentsDriveChrome.drive")}
         account={mobileAccount}
+        actions={<DriveSettingsButton onNavigate={() => setMenu(false)} />}
       >
         <DriveSidebar onNavigate={() => setMenu(false)} />
       </WorkspaceNavigationDrawer>
@@ -222,8 +257,8 @@ export function DriveTopbar({
         <Input
           variant="integrated"
           ref={input}
-          aria-label="Search in Drive"
-          placeholder="Search in Drive"
+          aria-label={t("componentsDriveChrome.searchInDrive")}
+          placeholder={t("componentsDriveChrome.searchInDrive")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           maxLength={255}
@@ -231,7 +266,7 @@ export function DriveTopbar({
         {(query || isDriveSearch(params)) && (
           <DriveIconButton
             icon="close"
-            label="Clear search"
+            label={t("componentsDriveChrome.clearSearch")}
             onClick={() => {
               setQuery("");
               navigate("/drive");
@@ -243,7 +278,7 @@ export function DriveTopbar({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Search filters"
+            aria-label={t("componentsDriveChrome.searchFilters")}
             aria-haspopup="dialog"
             data-active={isDriveSearch(params) || undefined}
             onClick={() => openFilters(true)}
@@ -257,7 +292,7 @@ export function DriveTopbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Search filters"
+                  aria-label={t("componentsDriveChrome.searchFilters")}
                   data-active={isDriveSearch(params) || undefined}
                 />
               }
@@ -277,15 +312,15 @@ export function DriveTopbar({
         <Drawer.Root open={filters && mobile} onOpenChange={openFilters} swipeDirection="right">
           <DrawerPopup side="right" padding="none" className="drive-search-drawer">
             <div className="drive-search-drawer-heading">
-              <Drawer.Title>Search filters</Drawer.Title>
+              <Drawer.Title>{t("componentsDriveChrome.searchFilters")}</Drawer.Title>
               <DriveIconButton
                 icon="close"
-                label="Close search filters"
+                label={t("componentsDriveChrome.closeSearchFilters")}
                 onClick={() => openFilters(false)}
               />
             </div>
             <Drawer.Description className="visually-hidden">
-              Find files and folders you can access.
+              {t("componentsDriveChrome.findFilesAndFoldersYouCanAccess")}
             </Drawer.Description>
             {filterForm}
           </DrawerPopup>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import ICAL from "ical.js";
 import { Temporal } from "@js-temporal/polyfill";
 import { HTTPException } from "hono/http-exception";
@@ -29,7 +30,7 @@ const invalid = (message: string): never => {
 const message = (error: unknown) =>
   (error instanceof HTTPException || error instanceof Error
     ? error.message
-    : "Invalid iCalendar entry."
+    : t("calendarIcalImport.invalidIcalendarEntry")
   ).slice(0, 512);
 const escapeHtml = (value: string) =>
   value
@@ -48,7 +49,7 @@ function components(
   limits: { maxBytes: number; maxEntries: number; allowEmpty: boolean },
 ) {
   if (!content.trim() || new TextEncoder().encode(content).length > limits.maxBytes)
-    invalid("The iCalendar file is empty or exceeds the size limit.");
+    invalid(t("calendarIcalImport.theIcalendarFileIsEmptyOrExceedsTheSize"));
   const lines = content
     .replace(/^\uFEFF/, "")
     .replace(/\r\n|\r/g, "\n")
@@ -64,17 +65,17 @@ function components(
     if (!line) continue;
     const begin = /^BEGIN:([A-Z0-9-]+)$/i.exec(line),
       end = /^END:([A-Z0-9-]+)$/i.exec(line);
-    if (ended) invalid("The file must contain exactly one VCALENDAR.");
+    if (ended) invalid(t("calendarIcalImport.theFileMustContainExactlyOneVcalendar"));
     if (begin) {
       if (!stack.length && begin[1]!.toUpperCase() !== "VCALENDAR")
-        invalid("Expected a VCALENDAR file.");
+        invalid(t("calendarIcalImport.expectedAVcalendarFile"));
       if (stack.length) block.push(line);
       else header.push(line);
       stack.push(begin[1]!.toUpperCase());
-      if (stack.length > 8) invalid("Calendar components are nested too deeply.");
+      if (stack.length > 8) invalid(t("calendarIcalImport.calendarComponentsAreNestedTooDeeply"));
     } else if (end) {
       if (stack.pop() !== end[1]!.toUpperCase())
-        invalid("Mismatched calendar component boundaries.");
+        invalid(t("calendarIcalImport.mismatchedCalendarComponentBoundaries"));
       if (stack.length) block.push(line);
       else {
         header.push(line);
@@ -83,27 +84,31 @@ function components(
       if (stack.length === 1) {
         parts.push({ name: end[1]!.toLowerCase(), raw: block.join("\r\n") });
         block = [];
-        if (parts.length > limits.maxEntries + 100) invalid("Too many calendar components.");
+        if (parts.length > limits.maxEntries + 100)
+          invalid(t("calendarIcalImport.tooManyCalendarComponents"));
       }
     } else if (stack.length === 1) header.push(line);
     else if (stack.length > 1) block.push(line);
-    else invalid("Expected a VCALENDAR file.");
+    else invalid(t("calendarIcalImport.expectedAVcalendarFile"));
   }
-  if (stack.length || !ended) invalid("The calendar file is incomplete.");
+  if (stack.length || !ended) invalid(t("calendarIcalImport.theCalendarFileIsIncomplete"));
   const root = new ICAL.Component(ICAL.parse(header.join("\r\n")));
-  if (value(root, "version") !== "2.0") invalid("Only iCalendar version 2.0 is supported.");
+  if (value(root, "version") !== "2.0")
+    invalid(t("calendarIcalImport.onlyIcalendarVersion20IsSupported"));
   const scale = root.getFirstPropertyValue("calscale");
   if (scale && String(scale).toUpperCase() !== "GREGORIAN")
-    invalid("Only Gregorian calendars are supported.");
+    invalid(t("calendarIcalImport.onlyGregorianCalendarsAreSupported"));
   const entries = parts.filter((part) => part.name !== "vtimezone");
-  if (!entries.length && !limits.allowEmpty) invalid("No calendar entries were found.");
+  if (!entries.length && !limits.allowEmpty)
+    invalid(t("calendarIcalImport.noCalendarEntriesWereFound"));
   if (entries.length > limits.maxEntries)
-    invalid(`Import at most ${limits.maxEntries} entries at a time.`);
+    invalid(t("calendarIcalImport.importAtMostEntriesAtATime", { maxEntries: limits.maxEntries }));
   return { parts, entries };
 }
 function one(component: Component, name: string) {
   const values = component.getAllProperties(name);
-  if (values.length > 1) invalid(`Repeated ${name.toUpperCase()} property.`);
+  if (values.length > 1)
+    invalid(t("calendarIcalImport.repeatedProperty", { toUpperCase: name.toUpperCase() }));
   return values[0];
 }
 const value = (component: Component, name: string) => {
@@ -118,12 +123,12 @@ function timeValue(
 ) {
   const tzid = property.getParameter("tzid");
   if (property.type === "date") {
-    if (!/^\d{8}$/.test(raw) || tzid) invalid("Invalid DATE value.");
+    if (!/^\d{8}$/.test(raw) || tzid) invalid(t("calendarIcalImport.invalidDateValue"));
     return { date: date(`${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`).toString() };
   }
   if (property.type !== "date-time" || !/^\d{8}T\d{6}Z?$/.test(raw))
-    invalid("Invalid DATE-TIME value.");
-  if (raw.endsWith("Z") && tzid) invalid("A UTC date cannot also specify TZID.");
+    invalid(t("calendarIcalImport.invalidDateTimeValue"));
+  if (raw.endsWith("Z") && tzid) invalid(t("calendarIcalImport.aUtcDateCannotAlsoSpecifyTzid"));
   const name = raw.endsWith("Z")
     ? "UTC"
     : tzid
@@ -133,21 +138,21 @@ function timeValue(
   try {
     timeZone = zone(name);
   } catch {
-    invalid(`Unsupported time zone: ${name}. Use an IANA time zone such as Asia/Seoul.`);
+    invalid(t("calendarIcalImport.unsupportedTimeZoneUseAnIanaTimeZoneSuch", { name: name }));
   }
   const local = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T${raw.slice(9, 11)}:${raw.slice(11, 13)}:${raw.slice(13, 15)}`;
   // Temporal rejects invalid dates rather than normalizing them as ICAL.Time does.
-  if (Number(raw.slice(13, 15)) > 59) invalid("Leap seconds are not supported.");
+  if (Number(raw.slice(13, 15)) > 59) invalid(t("calendarIcalImport.leapSecondsAreNotSupported"));
   const plain = (() => {
     try {
       return Temporal.PlainDateTime.from(local, { overflow: "reject" });
     } catch {
-      return invalid(`Invalid date or time: ${raw}. Check the day, month and time values.`);
+      return invalid(t("calendarIcalImport.invalidDateOrTimeCheckTheDayMonthAnd", { raw: raw }));
     }
   })();
   const zoned = plain.toZonedDateTime(timeZone, { disambiguation: "earlier" });
   if (!plain.equals(zoned.toPlainDateTime()))
-    invalid("The event time falls in a daylight-saving gap.");
+    invalid(t("calendarIcalImport.theEventTimeFallsInADaylightSavingGap"));
   return {
     date_time: zoned.toInstant().toString({ fractionalSecondDigits: 0 }),
     time_zone: timeZone,
@@ -161,7 +166,7 @@ function rawValue(property: Property) {
     if (line[i] === '"') quoted = !quoted;
     if (line[i] === ":" && !quoted) return line.slice(i + 1);
   }
-  return invalid("Invalid calendar property.");
+  return invalid(t("calendarIcalImport.invalidCalendarProperty"));
 }
 function readTime(property: Property, cal: Calendar, aliases: Map<string, string>) {
   return timeValue(property, rawValue(property), cal.time_zone, aliases);
@@ -185,7 +190,7 @@ function fields(
       coordinates.length !== 2 ||
       coordinates.some((value) => !/^[+-]?\d+(?:\.\d+)?$/.test(value))
     )
-      invalid("Invalid GEO coordinates.");
+      invalid(t("calendarIcalImport.invalidGeoCoordinates"));
     data.location = {
       ...(typeof data.location === "string"
         ? { label: data.location }
@@ -201,19 +206,20 @@ function fields(
   const privacy = value(component, "class").toUpperCase();
   if (privacy) {
     if (!["PUBLIC", "PRIVATE", "CONFIDENTIAL"].includes(privacy))
-      invalid("Unsupported CLASS value.");
+      invalid(t("calendarIcalImport.unsupportedClassValue"));
     data.visibility = privacy === "PUBLIC" ? "public" : "private";
   }
   const transparency = value(component, "transp").toUpperCase();
   if (transparency) {
-    if (!["TRANSPARENT", "OPAQUE"].includes(transparency)) invalid("Unsupported TRANSP value.");
+    if (!["TRANSPARENT", "OPAQUE"].includes(transparency))
+      invalid(t("calendarIcalImport.unsupportedTranspValue"));
     data.transparency = transparency === "TRANSPARENT" ? "free" : "busy";
   }
   const start = one(component, "dtstart"),
     end = one(component, "dtend"),
     duration = one(component, "duration");
-  if (end && duration) invalid("Specify DTEND or DURATION, not both.");
-  if (!start && (end || duration || !existing)) invalid("DTSTART is required.");
+  if (end && duration) invalid(t("calendarIcalImport.specifyDtendOrDurationNotBoth"));
+  if (!start && (end || duration || !existing)) invalid(t("calendarIcalImport.dtstartIsRequired"));
   if (start) {
     const from = readTime(start, cal, aliases);
     data.start = from;
@@ -221,11 +227,11 @@ function fields(
     else if (duration) {
       const raw = rawValue(duration);
       if (!/^P(?=\d|T\d)(?:\d+W|(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+S)?)?)$/.test(raw))
-        invalid("Invalid or unsupported DURATION.");
+        invalid(t("calendarIcalImport.invalidOrUnsupportedDuration"));
       const amount = Temporal.Duration.from(raw);
       if (from.date) {
         if (amount.hours || amount.minutes || amount.seconds)
-          invalid("All-day durations must use days or weeks.");
+          invalid(t("calendarIcalImport.allDayDurationsMustUseDaysOrWeeks"));
         data.end = { date: Temporal.PlainDate.from(from.date).add(amount).toString() };
       } else {
         const to = Temporal.Instant.from(from.date_time!)
@@ -238,10 +244,7 @@ function fields(
       }
     } else if (from.date)
       data.end = { date: Temporal.PlainDate.from(from.date).add({ days: 1 }).toString() };
-    else
-      invalid(
-        "Timed events need DTEND or a positive DURATION; zero-duration events are not supported.",
-      );
+    else invalid(t("calendarIcalImport.timedEventsNeedDtendOrAPositiveDurationZero"));
   }
   return data;
 }
@@ -275,7 +278,7 @@ function recurrence(
         .map((raw) => {
           const result = timeValue(property, raw, cal.time_zone, aliases);
           if (!!result.date !== (event.time_kind === "all_day"))
-            invalid("Recurrence dates must match DTSTART's value type.");
+            invalid(t("calendarIcalImport.recurrenceDatesMustMatchDtstartSValueType"));
           return result.date
             ? result.date.replaceAll("-", "")
             : result.date_time!.replaceAll("-", "").replaceAll(":", "");
@@ -289,11 +292,9 @@ function recurrence(
 const warningsFor = (component: Component) => {
   const warnings: string[] = [];
   if (component.hasProperty("attendee") || component.hasProperty("organizer"))
-    warnings.push(
-      "Imported as a personal copy. Organizer and guests are not imported; no invitations are sent.",
-    );
+    warnings.push(t("calendarIcalImport.importedAsAPersonalCopyOrganizerAndGuestsAre"));
   if (component.getAllSubcomponents("valarm").length)
-    warnings.push("Reminders are not supported and were not imported.");
+    warnings.push(t("calendarIcalImport.remindersAreNotSupportedAndWereNotImported"));
   const names = [
     "attach",
     "url",
@@ -307,20 +308,22 @@ const warningsFor = (component: Component) => {
   const ignored = names.filter((name) => component.hasProperty(name));
   if (ignored.length)
     warnings.push(
-      `These properties are not imported: ${ignored.map((name) => name.toUpperCase()).join(", ")}.`,
+      t("calendarIcalImport.thesePropertiesAreNotImported", {
+        join: ignored.map((name) => name.toUpperCase()).join(", "),
+      }),
     );
   if (
     component
       .getAllProperties("dtstart")
       .some((p) => p.type === "date-time" && !p.getParameter("tzid") && !rawValue(p).endsWith("Z"))
   )
-    warnings.push("Floating times use the destination calendar's time zone.");
+    warnings.push(t("calendarIcalImport.floatingTimesUseTheDestinationCalendarSTimeZone"));
   return warnings;
 };
 function status(component: Component) {
   const result = value(component, "status").toLowerCase() || "confirmed";
   if (!["confirmed", "tentative", "cancelled"].includes(result))
-    invalid("Unsupported event STATUS.");
+    invalid(t("calendarIcalImport.unsupportedEventStatus"));
   return result;
 }
 export function parseCalendarImport(
@@ -355,13 +358,15 @@ export function parseCalendarImport(
       uid: "",
       title: "",
       status: "ready",
-      message: "Ready to import.",
+      message: t("calendarIcalImport.readyToImport"),
       warnings: [],
     };
     reports.push(report);
     if (part.name !== "vevent") {
       report.status = "skipped";
-      report.message = `Unsupported component: ${part.name.toUpperCase()}.`;
+      report.message = t("calendarIcalImport.unsupportedComponent", {
+        toUpperCase: part.name.toUpperCase(),
+      });
       continue;
     }
     try {
@@ -386,20 +391,21 @@ export function parseCalendarImport(
   for (const group of groups.values()) {
     try {
       if (broken.has(group[0]!.report.uid))
-        invalid("Another entry with this UID is invalid; the entire series was skipped.");
+        invalid(t("calendarIcalImport.anotherEntryWithThisUidIsInvalidTheEntire"));
       const masters = group.filter((item) => !item.component.hasProperty("recurrence-id"));
       if (masters.length !== 1)
         invalid(
           masters.length
-            ? "Repeated UID: multiple master events in this file."
-            : "The recurring event's master is missing.",
+            ? t("calendarIcalImport.repeatedUidMultipleMasterEventsInThisFile")
+            : t("calendarIcalImport.theRecurringEventSMasterIsMissing"),
         );
       const master = masters[0]!,
         component = master.component;
       for (const item of group)
         if (item.component.getAllSubcomponents().some((child) => child.name !== "valarm"))
-          invalid("Unsupported nested event component.");
-      if (component.hasProperty("exrule")) invalid("EXRULE is not supported; use EXDATE.");
+          invalid(t("calendarIcalImport.unsupportedNestedEventComponent"));
+      if (component.hasProperty("exrule"))
+        invalid(t("calendarIcalImport.exruleIsNotSupportedUseExdate"));
       let event = writeEvent(fields(component, cal, aliases), cal);
       event = writeEvent({ recurrence: recurrence(component, event, cal, aliases) }, cal, event);
       event.i_cal_uid = master.report.uid;
@@ -409,12 +415,13 @@ export function parseCalendarImport(
         keys = new Set<string>();
       for (const item of group.filter((item) => item !== master)) {
         const id = one(item.component, "recurrence-id")!;
-        if (id.getParameter("range")) invalid("RECURRENCE-ID RANGE is not supported.");
+        if (id.getParameter("range"))
+          invalid(t("calendarIcalImport.recurrenceIdRangeIsNotSupported"));
         if (["rrule", "rdate", "exdate", "exrule"].some((name) => item.component.hasProperty(name)))
-          invalid("An occurrence exception cannot define recurrence.");
+          invalid(t("calendarIcalImport.anOccurrenceExceptionCannotDefineRecurrence"));
         const start = readTime(id, cal, aliases);
         const key = start.date ? `d:${start.date}` : `t:${start.date_time}`;
-        if (keys.has(key)) invalid("Repeated RECURRENCE-ID in this series.");
+        if (keys.has(key)) invalid(t("calendarIcalImport.repeatedRecurrenceIdInThisSeries"));
         keys.add(key);
         const original = originalOccurrence(event, key),
           effective = applyOverride(event, original);

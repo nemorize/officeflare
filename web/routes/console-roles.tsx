@@ -1,3 +1,4 @@
+import { t, plural } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import {
@@ -36,34 +37,45 @@ export function RolesPage() {
     <section className="account-page console-page">
       <header className="account-page-header console-page-header">
         <div>
-          <h1>Roles</h1>
-          <p>Control service access and administration with explicit permissions.</p>
+          <h1>{t("routesConsoleRoles.roles")}</h1>
+          <p>
+            {t("routesConsoleRoles.controlServiceAccessAndAdministrationWithExplicitPermissions")}
+          </p>
         </div>
         {canRead && access.permissions.includes("admin.roles.create") && (
           <Button nativeButton={false} render={<Link to="/console/roles/new" />} variant="primary">
             <Icon name="plus" />
-            New role
+            {t("routesConsoleRoles.newRole")}
           </Button>
         )}
       </header>
       <section className="account-panel console-list-panel">
         {!canRead ? (
-          <p className="console-empty">You do not have permission to view roles.</p>
+          <p className="console-empty">
+            {t("routesConsoleRoles.youDoNotHavePermissionToViewRoles")}
+          </p>
         ) : !resource.data ? (
-          <ResourceState {...resource} kind="list" label="Loading roles…" rows={5} />
+          <ResourceState
+            {...resource}
+            kind="list"
+            label={t("routesConsoleRoles.loadingRoles")}
+            rows={5}
+          />
         ) : (
           <>
             <div className="console-table-scroll">
               <table className="console-table">
-                <caption className="console-sr-only">Workspace roles</caption>
+                <caption className="console-sr-only">
+                  {t("routesConsoleRoles.workspaceRoles")}
+                </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Role</th>
-                    <th scope="col">Permissions</th>
-                    <th scope="col">Users</th>
-                    <th scope="col">New users</th>
+                    <th scope="col">{t("routesConsoleRoles.role")}</th>
+                    <th scope="col">{t("routesConsoleRoles.permissions")}</th>
+                    <th scope="col">{t("routesConsoleRoles.users")}</th>
+                    <th scope="col">{t("routesConsoleRoles.newUsers")}</th>
                     <th scope="col">
-                      <span className="console-sr-only">Actions</span>
+                      <span className="console-sr-only">{t("common.actions")}</span>
                     </th>
                   </tr>
                 </thead>
@@ -83,7 +95,7 @@ export function RolesPage() {
                               {role.label}
                               {role.is_system && (
                                 <span className="console-badge" data-muted>
-                                  System
+                                  {t("routesConsoleRoles.system")}
                                 </span>
                               )}
                             </strong>
@@ -95,9 +107,11 @@ export function RolesPage() {
                       <td>{role.assigned_user_count ?? 0}</td>
                       <td>
                         {role.is_default ? (
-                          <span className="console-badge">Default</span>
+                          <span className="console-badge">{t("routesConsoleRoles.default")}</span>
                         ) : (
-                          <span className="console-subtext">Optional</span>
+                          <span className="console-subtext">
+                            {t("routesConsoleRoles.optional")}
+                          </span>
                         )}
                       </td>
                       <td>
@@ -106,9 +120,9 @@ export function RolesPage() {
                           render={<Link to={`/console/roles/${encodeURIComponent(role.id)}`} />}
                           variant="ghost"
                           size="sm"
-                          aria-label={`View ${role.label}`}
+                          aria-label={t("routesConsoleRoles.view", { label: role.label })}
                         >
-                          View
+                          {t("routesConsoleRoles.view2")}
                           <Icon name="chevron" width="12" height="12" />
                         </Button>
                       </td>
@@ -118,14 +132,16 @@ export function RolesPage() {
               </table>
               {!resource.data.roles.length && (
                 <p className="console-empty">
-                  No roles yet. Create a role to define workspace access.
+                  {t("routesConsoleRoles.noRolesYetCreateARoleToDefineWorkspace")}
                 </p>
               )}
             </div>
             <div className="console-pagination">
               <span>
-                Page {cursors.length} · {resource.data.roles.length}{" "}
-                {resource.data.roles.length === 1 ? "role" : "roles"}
+                {t("routesConsoleRoles.page", {
+                  page: cursors.length,
+                  roles: plural("counts.roles", resource.data.roles.length),
+                })}
               </span>
               <div>
                 <Button
@@ -133,7 +149,7 @@ export function RolesPage() {
                   disabled={cursors.length === 1}
                   onClick={() => setCursors((current) => current.slice(0, -1))}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <Button
                   size="sm"
@@ -143,7 +159,7 @@ export function RolesPage() {
                       setCursors((current) => [...current, resource.data!.next_cursor]);
                   }}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             </div>
@@ -211,7 +227,9 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
     try {
       body = rolePayload({ key, label, description, permissions: selected }, role);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Check the role settings.");
+      setError(
+        failure instanceof Error ? failure.message : t("routesConsoleRoles.checkTheRoleSettings"),
+      );
       return;
     }
     if (
@@ -220,7 +238,7 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
       body.description === role.description &&
       [...body.permissions].sort().join() === [...role.permissions].sort().join()
     ) {
-      notify.info("No changes to save.");
+      notify.info(t("routesConsoleRoles.noChangesToSave"));
       return;
     }
     inFlight.current = true;
@@ -230,7 +248,11 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
         creating ? "/api/roles" : `/api/roles/${encodeURIComponent(id)}`,
         { method: creating ? "POST" : "PUT", body },
       );
-      notify.success(creating ? "The role has been created." : "The role has been updated.");
+      notify.success(
+        creating
+          ? t("routesConsoleRoles.theRoleHasBeenCreated")
+          : t("routesConsoleRoles.theRoleHasBeenUpdated"),
+      );
       if (creating) navigate(`/console/roles/${encodeURIComponent(result.role.id)}`);
       else resource.update(result);
       access.refresh();
@@ -252,7 +274,7 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
         body: { is_default: isDefault, version: role.version },
       });
       resource.update(result);
-      notify.success("The default role setting has been updated.");
+      notify.success(t("routesConsoleRoles.theDefaultRoleSettingHasBeenUpdated"));
     } catch (failure) {
       notify.error(errorMessage(failure));
       if (failure instanceof ApiError && failure.status === 403) access.refresh();
@@ -274,35 +296,39 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
       }
     >
       <Link to="/console/roles" className="console-back">
-        ← Roles
+        {t("routesConsoleRoles.roles2")}
       </Link>
       <header className="account-page-header">
-        <h1>{creating ? "New role" : role?.label || "Role"}</h1>
+        <h1>
+          {creating ? t("routesConsoleRoles.newRole") : role?.label || t("routesConsoleRoles.role")}
+        </h1>
         <p>
           {creating
-            ? "Choose service access and administrative actions."
+            ? t("routesConsoleRoles.chooseServiceAccessAndAdministrativeActions")
             : role?.is_system
-              ? "This protected system role is managed by Officeflare."
-              : `Assigned to ${role?.assigned_user_count ?? 0} users. Permission changes apply immediately.`}
+              ? t("routesConsoleRoles.thisProtectedSystemRoleIsManagedByOfficeflare")
+              : t("routesConsoleRoles.assignedToUsersPermissionChangesApplyImmediately", {
+                  value1: role?.assigned_user_count ?? 0,
+                })}
         </p>
       </header>
       {!creating && !role ? (
-        <ResourceState {...resource} kind="form" label="Loading role…" />
+        <ResourceState {...resource} kind="form" label={t("routesConsoleRoles.loadingRole")} />
       ) : (
         <>
           <Form onSubmit={submit} aria-busy={busy}>
             <section className="account-panel">
               <div className="account-panel-header">
-                <h2>Role information</h2>
+                <h2>{t("routesConsoleRoles.roleInformation")}</h2>
                 {!owned && (
                   <p>
-                    You cannot change this role because it contains permissions you do not hold.
+                    {t("routesConsoleRoles.youCannotChangeThisRoleBecauseItContainsPermissions")}
                   </p>
                 )}
               </div>
               <Fieldset.Root disabled={busy}>
                 <TextField
-                  label="Role name"
+                  label={t("routesConsoleRoles.roleName")}
                   name="label"
                   required
                   maxLength={100}
@@ -311,7 +337,7 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                   readOnly={!editable}
                 />
                 <TextField
-                  label="Role key"
+                  label={t("routesConsoleRoles.roleKey")}
                   name="key"
                   required
                   maxLength={64}
@@ -320,12 +346,14 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                   readOnly={!creating}
                   description={
                     creating
-                      ? "A unique lowercase name, such as team-manager. It cannot be changed later."
+                      ? t("routesConsoleRoles.aUniqueLowercaseNameSuchAsTeamManagerIt")
                       : undefined
                   }
                 />
                 <Field.Root name="description">
-                  <Field.Label htmlFor="console-role-description">Description</Field.Label>
+                  <Field.Label htmlFor="console-role-description">
+                    {t("routesConsoleRoles.description")}
+                  </Field.Label>
                   <Textarea
                     id="console-role-description"
                     name="description"
@@ -340,16 +368,20 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
             </section>
             <section className="account-panel">
               <div className="account-panel-header">
-                <h2>Permissions</h2>
+                <h2>{t("routesConsoleRoles.permissions")}</h2>
                 <p>
                   {editable
-                    ? "Required parent permissions are selected together. Removing a parent also removes dependent actions."
-                    : "Service entry and administrative actions are independent permissions."}
+                    ? t(
+                        "routesConsoleRoles.requiredParentPermissionsAreSelectedTogetherRemovingAParent",
+                      )
+                    : t(
+                        "routesConsoleRoles.serviceEntryAndAdministrativeActionsAreIndependentPermissions",
+                      )}
                 </p>
               </div>
               {creating && editable && (
                 <div className="console-role-templates">
-                  <span>Start with a template</span>
+                  <span>{t("routesConsoleRoles.startWithATemplate")}</span>
                   {roleTemplates.map((template) => (
                     <Button
                       type="button"
@@ -393,11 +425,15 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                       disabled={busy}
                       onClick={() => navigate("/console/roles")}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   )}
                   <Button type="submit" variant="primary" disabled={busy}>
-                    {busy ? "Saving…" : creating ? "Create role" : "Save changes"}
+                    {busy
+                      ? t("common.saving")
+                      : creating
+                        ? t("routesConsoleRoles.createRole")
+                        : t("common.saveChanges")}
                   </Button>
                 </div>
               )}
@@ -406,9 +442,9 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
           {!creating && role && !role.is_system && (
             <section className="account-panel">
               <div className="account-panel-header">
-                <h2>New user defaults</h2>
+                <h2>{t("routesConsoleRoles.newUserDefaults")}</h2>
                 <p>
-                  Default roles are selected when creating users. Changes apply to future accounts.
+                  {t("routesConsoleRoles.defaultRolesAreSelectedWhenCreatingUsersChangesApply")}
                 </p>
               </div>
               <Check
@@ -416,12 +452,11 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                 onChange={setDefault}
                 disabled={busy || !canDefaults || !defaultEligible(role.permissions)}
               >
-                Assign this role to new users by default
+                {t("routesConsoleRoles.assignThisRoleToNewUsersByDefault")}
               </Check>
               {!defaultEligible(role.permissions) && (
                 <p className="console-subtext">
-                  Default roles can only grant Mail, Calendar or Drive access. Administrative roles
-                  require explicit assignment.
+                  {t("routesConsoleRoles.defaultRolesCanOnlyGrantMailCalendarOrDrive")}
                 </p>
               )}
               {canDefaults && (
@@ -432,7 +467,7 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                       void saveDefault();
                     }}
                   >
-                    Save default setting
+                    {t("routesConsoleRoles.saveDefaultSetting")}
                   </Button>
                 </div>
               )}
@@ -441,14 +476,16 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
           {!creating && role && canDelete && (
             <section className="account-panel account-danger-panel">
               <div>
-                <h2>Delete role</h2>
+                <h2>{t("routesConsoleRoles.deleteRole")}</h2>
                 <p>
-                  Remove this role from {role.assigned_user_count ?? 0} assigned users
-                  {role.is_default ? " and from new user defaults" : ""}.
+                  {t("routesConsoleRoles.removeThisRoleFromAssignedUsers", {
+                    value1: role.assigned_user_count ?? 0,
+                    value2: role.is_default ? t("routesConsoleRoles.andFromNewUserDefaults") : "",
+                  })}
                 </p>
               </div>
               <Button variant="danger" disabled={busy} onClick={() => setRemove(true)}>
-                Delete role
+                {t("routesConsoleRoles.deleteRole")}
               </Button>
             </section>
           )}
@@ -457,13 +494,15 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
       <Confirm
         open={remove}
         destructive
-        title="Delete this role?"
-        description={`Delete ${role?.label || "this role"}? All assigned users immediately lose the access it provides.`}
-        label="Delete role"
+        title={t("routesConsoleRoles.deleteThisRole")}
+        description={t("routesConsoleRoles.deleteAllAssignedUsersImmediatelyLoseTheAccessIt", {
+          value1: role?.label || t("routesConsoleRoles.thisRole"),
+        })}
+        label={t("routesConsoleRoles.deleteRole")}
         onClose={() => setRemove(false)}
         onConfirm={async () => {
           await api(`/api/roles/${encodeURIComponent(id)}`, { method: "DELETE" });
-          notify.success("The role has been deleted.");
+          notify.success(t("routesConsoleRoles.theRoleHasBeenDeleted"));
           access.refresh();
           navigate("/console/roles");
         }}

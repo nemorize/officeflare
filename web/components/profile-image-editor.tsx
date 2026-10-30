@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   useEffect,
   useRef,
@@ -76,13 +77,13 @@ export function ProfileImageEditor({
         source.naturalWidth > 8192 ||
         source.naturalHeight > 8192
       )
-        setError("Choose an image up to 8192 × 8192 pixels.");
+        setError(t("componentsProfileImageEditor.chooseAnImageUpTo81928192Pixels"));
       else setImage(source);
       setLoading(false);
     };
     source.onerror = () => {
       if (!cancelled) {
-        setError("This image could not be opened. Choose a valid PNG, JPEG or WebP file.");
+        setError(t("componentsProfileImageEditor.thisImageCouldNotBeOpenedChooseAValid"));
         setLoading(false);
       }
     };
@@ -304,7 +305,7 @@ export function ProfileImageEditor({
       const output = document.createElement("canvas");
       output.width = output.height = profilePhotoSize;
       const context = output.getContext("2d");
-      if (!context) throw new Error("Unable to crop this image.");
+      if (!context) throw new Error(t("componentsProfileImageEditor.unableToCropThisImage"));
       const current = viewRef.current,
         crop = photoCrop(
           image.naturalWidth,
@@ -318,7 +319,10 @@ export function ProfileImageEditor({
       context.drawImage(image, crop.left, crop.top, crop.width, crop.height);
       const photo = await new Promise<Blob>((resolve, reject) =>
         output.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error("Unable to resize this image."))),
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error(t("componentsProfileImageEditor.unableToResizeThisImage"))),
           "image/webp",
           0.9,
         ),
@@ -328,7 +332,12 @@ export function ProfileImageEditor({
       onClose();
     } catch (failure) {
       if (uploading) notify.error(errorMessage(failure));
-      else setError(failure instanceof Error ? failure.message : "Unable to resize this image.");
+      else
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : t("componentsProfileImageEditor.unableToResizeThisImage"),
+        );
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -345,16 +354,16 @@ export function ProfileImageEditor({
       <DialogPopup padding="none" className="account-photo-dialog">
         <div className="account-photo-dialog-header">
           <div>
-            <Dialog.Title>Crop photo</Dialog.Title>
+            <Dialog.Title>{t("componentsProfileImageEditor.cropPhoto")}</Dialog.Title>
             <Dialog.Description>
-              Drag to reposition. Pinch or use the slider to zoom.
+              {t("componentsProfileImageEditor.dragToRepositionPinchOrUseTheSliderTo")}
             </Dialog.Description>
           </div>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Close photo editor"
+            aria-label={t("componentsProfileImageEditor.closePhotoEditor")}
             disabled={busy}
             onClick={onClose}
           >
@@ -363,7 +372,7 @@ export function ProfileImageEditor({
         </div>
         {loading && (
           <p className="account-photo-message" role="status">
-            Opening image…
+            {t("componentsProfileImageEditor.openingImage")}
           </p>
         )}
         {error && (
@@ -381,7 +390,7 @@ export function ProfileImageEditor({
                   height={previewSize}
                   tabIndex={0}
                   role="img"
-                  aria-label="Photo preview"
+                  aria-label={t("componentsProfileImageEditor.photoPreview")}
                   onKeyDown={reposition}
                   onPointerDown={(event) => {
                     if (busy || event.button !== 0) return;
@@ -413,7 +422,7 @@ export function ProfileImageEditor({
                 onValueChange={(value) => zoom(Number(value))}
               >
                 <div className="account-photo-zoom-label">
-                  <Slider.Label>Zoom</Slider.Label>
+                  <Slider.Label>{t("componentsProfileImageEditor.zoom")}</Slider.Label>
                   <Button
                     type="button"
                     variant="ghost"
@@ -423,7 +432,7 @@ export function ProfileImageEditor({
                       updateView(initialView);
                     }}
                   >
-                    Reset
+                    {t("common.reset")}
                   </Button>
                 </div>
                 <div className="account-photo-zoom-controls">
@@ -431,7 +440,7 @@ export function ProfileImageEditor({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label="Zoom out"
+                    aria-label={t("componentsProfileImageEditor.zoomOut")}
                     disabled={busy || view.zoom <= 1}
                     onClick={() => zoom(viewRef.current.zoom - 0.1)}
                   >
@@ -441,7 +450,7 @@ export function ProfileImageEditor({
                     <Slider.Track>
                       <Slider.Indicator />
                       <Slider.Thumb
-                        aria-label="Zoom"
+                        aria-label={t("componentsProfileImageEditor.zoom")}
                         aria-valuetext={`${Math.round(view.zoom * 100)}%`}
                       />
                     </Slider.Track>
@@ -450,7 +459,7 @@ export function ProfileImageEditor({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label="Zoom in"
+                    aria-label={t("componentsProfileImageEditor.zoomIn")}
                     disabled={busy || view.zoom >= 3}
                     onClick={() => zoom(viewRef.current.zoom + 0.1)}
                   >
@@ -462,10 +471,10 @@ export function ProfileImageEditor({
           )}
           <div className="account-photo-footer">
             <Button type="button" disabled={busy} onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={!image || busy}>
-              {busy ? "Saving…" : "Save photo"}
+              {busy ? t("common.saving") : t("componentsProfileImageEditor.savePhoto")}
             </Button>
           </div>
         </Form>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { and, eq, exists, isNull } from "drizzle-orm";
 import { conflict } from "../auth/input";
@@ -47,7 +48,7 @@ images.put("/profile-image", async (c) => {
         .where(and(eq(users.id, user.id), accessWon(db, session.id, operation))),
     ]);
     if (result[1].meta.changes !== 1)
-      conflict("Account or profile image changed; reload and retry");
+      conflict(t("routesProfileImages.accountOrProfileImageChangedReloadAndRetry"));
   } catch (failure) {
     await c.env.PROFILE_BUCKET.delete(key).catch(() => {});
     throw failure;
@@ -83,7 +84,8 @@ images.delete("/profile-image", async (c) => {
       .set({ profile_image_key: null, updated_at: now() })
       .where(and(eq(users.id, user.id), accessWon(db, session.id, operation))),
   ]);
-  if (result[1].meta.changes !== 1) conflict("Account or profile image changed; reload and retry");
+  if (result[1].meta.changes !== 1)
+    conflict(t("routesProfileImages.accountOrProfileImageChangedReloadAndRetry"));
   if (user.profile_image_key?.startsWith(profileImagePrefix(user.id)))
     c.executionCtx.waitUntil(c.env.PROFILE_BUCKET.delete(user.profile_image_key));
   const updated = await db.select().from(users).where(eq(users.id, user.id)).get();

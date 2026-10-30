@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { cleanHtml, htmlText, text } from "./input";
 import { fail, id, type Attachment, type MailBody } from "./types";
 
@@ -14,10 +15,11 @@ export function textHtml(value: string) {
     .join("");
 }
 export function editorBody(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) fail(400, "Invalid editor_body");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    fail(400, t("mailEditor.invalidEditorBody"));
   const input = value as Record<string, unknown>;
   if (Object.keys(input).some((key) => key !== "text" && key !== "html"))
-    fail(400, "Invalid editor_body");
+    fail(400, t("mailEditor.invalidEditorBody"));
   const html = cleanHtml(text(input.html ?? "", "html", 2 * 1024 ** 2, true), {}, true);
   const plain = text(input.text ?? "", "text", 2 * 1024 ** 2, true);
   return { text: plain || htmlText(html), html };
@@ -35,7 +37,7 @@ export function composedBody(
       `<blockquote style="border-left:2px solid #dddddd;padding-left:16px;margin:16px 0">${quoted.html || textHtml(quoted.text)}</blockquote>`
     : editor.html;
   if (text.length > 2 * 1024 ** 2 || html.length > 2 * 1024 ** 2)
-    fail(413, "Message body is too large");
+    fail(413, t("mailEditor.messageBodyIsTooLarge"));
   return {
     text,
     html,
@@ -55,7 +57,7 @@ export async function validateSignatureImages(env: Env, mailboxId: string, html:
   for (const cid of inlineContentIds(html)) {
     const imageId = /^([a-f0-9-]{36})@officeflare\.image$/.exec(cid)?.[1];
     if (!imageId || !(await env.MAIL_BUCKET.head(imageAssetKey(mailboxId, imageId))))
-      fail(400, "A signature image is unavailable in this mailbox");
+      fail(400, t("mailEditor.aSignatureImageIsUnavailableInThisMailbox"));
   }
 }
 export async function attachEditorImages(
@@ -74,10 +76,10 @@ export async function attachEditorImages(
   for (const cid of referenced) {
     if (files.some((file) => file.content_id === cid)) continue;
     const imageId = /^([a-f0-9-]{36})@officeflare\.image$/.exec(cid)?.[1];
-    if (!imageId) fail(400, "An inline image is missing from the message");
+    if (!imageId) fail(400, t("mailEditor.anInlineImageIsMissingFromTheMessage"));
     const asset = await env.MAIL_BUCKET.get(imageAssetKey(mailboxId, imageId));
-    if (!asset) fail(400, "An inline image is unavailable in this mailbox");
-    if (files.length >= 32) fail(400, "A draft can have at most 32 attachments");
+    if (!asset) fail(400, t("mailEditor.anInlineImageIsUnavailableInThisMailbox"));
+    if (files.length >= 32) fail(400, t("mailEditor.aDraftCanHaveAtMost32Attachments"));
     const fileId = id(),
       r2Key = `attachments/${mailboxId}/${messageId}/${fileId}`;
     createdKeys.push(r2Key);

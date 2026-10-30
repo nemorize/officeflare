@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../auth/types";
 import type { Permission } from "../authorization/permissions";
@@ -21,7 +22,7 @@ export interface DriveSettings {
 }
 export async function settings(env: DriveEnv) {
   const value = await first<DriveSettings>(env, "SELECT * FROM drive_settings WHERE id=1");
-  if (!value) fail(503, "Drive settings are unavailable");
+  if (!value) fail(503, t("drivePolicy.driveSettingsAreUnavailable"));
   return value;
 }
 export function requestSettings(c: DriveContext) {
@@ -89,7 +90,7 @@ async function actionBody(c: DriveContext) {
   try {
     return await c.req.json<Record<string, unknown>>();
   } catch {
-    fail(400, "Invalid JSON request body");
+    fail(400, t("drivePolicy.invalidJsonRequestBody"));
   }
 }
 // Establish action permissions once, then repeat the same check inside D1 writes and after R2 reads.
@@ -118,7 +119,7 @@ export const requireDriveAction = createMiddleware<AppEnv>(async (c, next) => {
     } else if (/\/links(?:\/[^/]+)?$/.test(path)) {
       const data = await actionBody(c);
       if (!data || Array.isArray(data) || typeof data !== "object")
-        fail(400, "Invalid request body");
+        fail(400, t("drivePolicy.invalidRequestBody"));
       if (!(
         method === "PATCH" &&
         data.revoked === true &&
@@ -137,7 +138,7 @@ export const requireDriveAction = createMiddleware<AppEnv>(async (c, next) => {
       else {
         const data = await actionBody(c);
         if (!data || Array.isArray(data) || typeof data !== "object")
-          fail(400, "Invalid request body");
+          fail(400, t("drivePolicy.invalidRequestBody"));
         if (data.trashed === true) actions.push("drive.files.delete");
         if (
           data.trashed !== true ||
@@ -154,6 +155,6 @@ export const requireDriveAction = createMiddleware<AppEnv>(async (c, next) => {
     args: [...action.args, c.get("identity").user.id],
   };
   if (!(await first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args)))
-    fail(403, "Drive action is restricted by your role, account status or workspace policy");
+    fail(403, t("drivePolicy.driveActionIsRestrictedByYourRoleAccountStatus"));
   await next();
 });

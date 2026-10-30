@@ -1,11 +1,13 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { t } from "../../shared/i18n/index.ts";
 export const bytes = (value: number) =>
   value < 1024
-    ? `${value} B`
+    ? t("libMailHelpers.b", { value: value })
     : value < 1024 ** 2
-      ? `${(value / 1024).toFixed(1)} KB`
+      ? t("libMailHelpers.kb", { toFixed: (value / 1024).toFixed(1) })
       : value < 1024 ** 3
-        ? `${(value / 1024 ** 2).toFixed(1)} MB`
-        : `${(value / 1024 ** 3).toFixed(2)} GB`;
+        ? t("libMailHelpers.mb", { toFixed: (value / 1024 ** 2).toFixed(1) })
+        : t("libMailHelpers.gb", { toFixed: (value / 1024 ** 3).toFixed(2) });
 export const mailDate = (value: number | null) =>
   value
     ? new Date(value * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
@@ -27,14 +29,14 @@ export function parseRecipients(value: string): string[] {
         address.includes(".."),
     )
   )
-    throw new Error("Enter email addresses separated by commas.");
+    throw new Error(t("libMailHelpers.enterEmailAddressesSeparatedByCommas"));
   return [...new Set(addresses.map((address) => address.toLowerCase()))];
 }
 export function scheduledTime(value: string, now = Date.now()): number | undefined {
   if (!value) return undefined;
   const timestamp = new Date(value).getTime();
   if (!Number.isFinite(timestamp) || timestamp <= now || timestamp > now + 366 * 86400_000)
-    throw new Error("Choose a future time within 366 days.");
+    throw new Error(t("libMailHelpers.chooseAFutureTimeWithin366Days"));
   return Math.floor(timestamp / 1000);
 }
 export const cancelableSubmission = (status: string) =>
@@ -42,37 +44,35 @@ export const cancelableSubmission = (status: string) =>
 export const retryableSubmission = (status: string) => status === "failed";
 export const submissionLabel = (status: string) =>
   ({
-    accepted: "Accepted by provider",
-    unknown: "Acceptance unknown",
-    retry_wait: "Waiting to retry",
-    processing: "Sending",
-    queued: "Queued",
-    scheduled: "Scheduled",
-    canceled: "Canceled",
-    failed: "Failed",
-  })[status] ?? status;
+    accepted: t("libMailHelpers.acceptedByProvider"),
+    unknown: t("libMailHelpers.acceptanceUnknown"),
+    retry_wait: t("libMailHelpers.waitingToRetry"),
+    processing: t("libMailHelpers.sending"),
+    queued: t("libMailHelpers.queued"),
+    scheduled: t("libMailHelpers.scheduled"),
+    canceled: t("libMailHelpers.canceled"),
+    failed: t("libMailHelpers.failed"),
+  })[status] ?? enumLabel(status);
 export function mailErrorDescription(code: string) {
   const messages: Record<string, string> = {
-    message_too_large: "This message is too large. Remove attachments or shorten the message.",
-    E_CONTENT_TOO_LARGE: "This message is too large. Remove attachments or shorten the message.",
-    provider_unavailable: "The mail service is temporarily unavailable. Try again later.",
-    invalid_mbox_format:
-      "This file is not a valid mailbox archive. Choose an MBOX file and try again.",
-    invalid_eml_format: "This file is not a valid email message. Choose an EML file and try again.",
-    rate_limited: "Too many requests. Wait a moment before trying again.",
-    quota_exceeded: "The mailbox is out of storage. Free up space or contact an administrator.",
+    message_too_large: t("libMailHelpers.thisMessageIsTooLargeRemoveAttachmentsOrShorten"),
+    E_CONTENT_TOO_LARGE: t("libMailHelpers.thisMessageIsTooLargeRemoveAttachmentsOrShorten"),
+    provider_unavailable: t("libMailHelpers.theMailServiceIsTemporarilyUnavailableTryAgainLater"),
+    invalid_mbox_format: t("libMailHelpers.thisFileIsNotAValidMailboxArchiveChoose"),
+    invalid_eml_format: t("libMailHelpers.thisFileIsNotAValidEmailMessageChoose"),
+    rate_limited: t("libMailHelpers.tooManyRequestsWaitAMomentBeforeTryingAgain"),
+    quota_exceeded: t("libMailHelpers.theMailboxIsOutOfStorageFreeUpSpace"),
   };
-  return (
-    messages[code] ??
-    "This operation could not be completed. Try again or contact an administrator."
-  );
+  return messages[code] ?? t("libMailHelpers.thisOperationCouldNotBeCompletedTryAgainOr");
 }
 export function mailFailure(failure: unknown) {
-  return failure instanceof Error ? failure.message : "Unable to complete the request.";
+  return failure instanceof Error
+    ? failure.message
+    : t("libMailHelpers.unableToCompleteTheRequest");
 }
 export async function embeddedMailImage(blob: Blob): Promise<string> {
   if (!/^image\/[a-z0-9.+-]+$/i.test(blob.type) || blob.size > 5 * 1024 ** 2)
-    throw new Error("Unsupported mail image");
+    throw new Error(t("libMailHelpers.unsupportedMailImage"));
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = "";
   for (let index = 0; index < bytes.length; index += 8192)
@@ -80,7 +80,8 @@ export async function embeddedMailImage(blob: Blob): Promise<string> {
   return `data:${blob.type};base64,${btoa(binary)}`;
 }
 export function htmlFrame(html: string, resizeNonce?: string) {
-  if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce)) throw new Error("Invalid frame nonce");
+  if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce))
+    throw new Error(t("libMailHelpers.invalidFrameNonce"));
   const policy = resizeNonce ? " script-src 'nonce-" + resizeNonce + "';" : "";
   // Only this nonce-authorized script can run; the frame keeps an opaque origin.
   const resize = resizeNonce
@@ -122,9 +123,7 @@ export class MailOperation {
   headers(body: object) {
     const serialized = JSON.stringify(body);
     if (this.serialized !== null && this.serialized !== serialized)
-      throw new Error(
-        "The previous request has an unknown outcome. Retry it before changing the message.",
-      );
+      throw new Error(t("libMailHelpers.thePreviousRequestHasAnUnknownOutcomeRetryIt"));
     this.serialized = serialized;
     return { "Idempotency-Key": this.key };
   }

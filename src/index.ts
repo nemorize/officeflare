@@ -1,3 +1,4 @@
+import { t } from "../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import api from "./routes/api";
@@ -28,11 +29,11 @@ for (const path of ["/jmap", "/jmap/*", "/mcp"])
     return app.fetch(new Request(url, c.req.raw), c.env, c.executionCtx);
   });
 
-app.notFound((c) => c.html(renderPage("Page not found"), 404));
+app.notFound((c) => c.html(renderPage(t("index.pageNotFound")), 404));
 
 app.onError((error, c) => {
   const status = error instanceof HTTPException ? error.status : 500;
-  const message = status >= 500 ? "Internal server error" : error.message;
+  const message = status >= 500 ? t("index.internalServerError") : error.message;
   const headers = new Headers(
     error instanceof HTTPException ? error.getResponse().headers : undefined,
   );
@@ -57,7 +58,7 @@ app.onError((error, c) => {
     return c.json({ error: message }, { status, headers });
   }
 
-  const title = status >= 500 ? "An error occurred" : message;
+  const title = status >= 500 ? t("index.anErrorOccurred") : message;
   return c.html(renderPage(title), { status, headers });
 });
 

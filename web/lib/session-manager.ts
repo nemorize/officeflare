@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { Session } from "./auth";
 
 export const SESSION_KEY = "officeflare.auth.session.v1";
@@ -18,7 +19,7 @@ export interface SessionSnapshot {
 
 export class SessionStorageError extends Error {
   constructor() {
-    super("Unable to save your session. Enable browser storage and try again.");
+    super(t("libSessionManager.unableToSaveYourSessionEnableBrowserStorageAnd"));
   }
 }
 
@@ -170,7 +171,7 @@ export class SessionManager {
       expiresAt: this.deps.now() + tokens.expires_in * 1000,
       refreshRequestId: null,
     };
-    if (!validStored(session)) throw new Error("Invalid session response");
+    if (!validStored(session)) throw new Error(t("libSessionManager.invalidSessionResponse"));
     try {
       await this.deps.lock(() => {
         this.save(session);
@@ -226,7 +227,7 @@ export class SessionManager {
           refreshRequestId: null,
         };
         if (!validStored(next) || next.tokens.session_id !== previous.tokens.session_id)
-          throw new Error("Invalid session response");
+          throw new Error(t("libSessionManager.invalidSessionResponse"));
         this.save(next);
         return next;
       });
@@ -254,7 +255,9 @@ export class SessionManager {
       let stored = await this.rotate(force);
       if (!stored) {
         if (revision === this.revision)
-          this.signedOut(this.snapshot.session ? "Your session has ended. Sign in again." : "");
+          this.signedOut(
+            this.snapshot.session ? t("libSessionManager.yourSessionHasEndedSignInAgain") : "",
+          );
         return null;
       }
       let profile;
@@ -264,7 +267,8 @@ export class SessionManager {
         if (status(error) !== 401) throw error;
         stored = await this.rotate(true);
         if (!stored) {
-          if (revision === this.revision) this.signedOut("Your session has ended. Sign in again.");
+          if (revision === this.revision)
+            this.signedOut(t("libSessionManager.yourSessionHasEndedSignInAgain"));
           return null;
         }
         try {
@@ -277,7 +281,8 @@ export class SessionManager {
             if (current?.tokens.refresh_token === rejectedToken)
               this.deps.storage.removeItem(SESSION_KEY);
           });
-          if (revision === this.revision) this.signedOut("Your session has ended. Sign in again.");
+          if (revision === this.revision)
+            this.signedOut(t("libSessionManager.yourSessionHasEndedSignInAgain"));
           return null;
         }
       }
@@ -305,7 +310,7 @@ export class SessionManager {
         this.update({
           ...this.snapshot,
           status: this.snapshot.session ? "signed_in" : "unavailable",
-          error: "Unable to restore your session. Check your connection. Retrying automatically.",
+          error: t("libSessionManager.unableToRestoreYourSessionCheckYourConnectionRetrying"),
         });
         const delay = Math.max(this.retryDelay, retryAfter(error));
         this.retryDelay = Math.min(this.retryDelay * 2, 60_000);
@@ -326,13 +331,13 @@ export class SessionManager {
 
   async accessToken() {
     const stored = await this.deps.lock(() => this.read());
-    if (!stored) throw new Error("Sign in to continue");
+    if (!stored) throw new Error(t("libSessionManager.signInToContinue"));
     const current =
       stored.expiresAt <= this.deps.now() + 30_000 || stored.refreshRequestId
         ? await this.restore()
         : stored;
     if (!current || current.expiresAt <= this.deps.now() || current.refreshRequestId)
-      throw new Error("Your session is unavailable");
+      throw new Error(t("libSessionManager.yourSessionIsUnavailable"));
     return current.tokens.access_token;
   }
 
@@ -355,7 +360,7 @@ export class SessionManager {
       }
       if (current) {
         if (current.expiresAt <= this.deps.now() || current.refreshRequestId)
-          throw new Error("Your session is unavailable");
+          throw new Error(t("libSessionManager.yourSessionIsUnavailable"));
         await this.deps.logout(current.tokens.access_token);
       }
     } catch (error) {

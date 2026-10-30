@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now } from "../auth/types";
 import type { Bind, Condition, DriveContext, DriveEnv, DriveItem } from "./types";
 import { fail } from "./input";
@@ -127,7 +128,7 @@ export async function requireItem(
     id,
     ...check.args,
   );
-  if (!item) fail(404, "Drive item not found");
+  if (!item) fail(404, t("driveAccess.driveItemNotFound"));
   return item;
 }
 export function itemCondition(

@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { Button, CheckboxControl, Input, SelectControl, useNotifications } from "./ui";
 import {
@@ -40,7 +43,7 @@ export function CalendarRegistrations({
   );
   return (
     <section className="calendar-registrations">
-      <p>Guests can register using a registration link in the Sharing tab.</p>
+      <p>{t("componentsCalendarRegistration.guestsCanRegisterUsingARegistrationLinkInThe")}</p>
       {policy.data ? (
         <RegistrationPolicyForm
           key={`${occurrenceKey}:${policy.data.policy.version}`}
@@ -49,9 +52,18 @@ export function CalendarRegistrations({
           occurrenceKey={occurrenceKey}
         />
       ) : (
-        policy.loading && <LoadingSkeleton label="Loading registration settings…" />
+        policy.loading && (
+          <LoadingSkeleton
+            label={t("componentsCalendarRegistration.loadingRegistrationSettings")}
+          />
+        )
       )}
-      <h3>Registrations {resource.data ? `(${resource.data.registrations.length})` : ""}</h3>
+      <h3>
+        <LocalizedMessage
+          id="componentsCalendarRegistration.registrations2"
+          values={{ value1: resource.data ? `(${resource.data.registrations.length})` : "" }}
+        />
+      </h3>
       {resource.data?.registrations.map((registration) => (
         <div className="calendar-guest" key={registration.id}>
           <div>
@@ -59,11 +71,13 @@ export function CalendarRegistrations({
             <small>
               {registration.email_address}
               {registration.additional_guests > 0
-                ? ` · +${registration.additional_guests} guests`
+                ? t("componentsCalendarRegistration.guests", {
+                    additional_guests: registration.additional_guests,
+                  })
                 : ""}
             </small>
           </div>
-          <span className="calendar-small-tag">{registration.status}</span>
+          <span className="calendar-small-tag">{enumLabel(registration.status)}</span>
           {calendar.can("events.invite") &&
             ["pending", "waitlisted"].includes(registration.status) && (
               <div className="calendar-registration-actions">
@@ -82,13 +96,15 @@ export function CalendarRegistrations({
                         calendar.refresh();
                         notify.success(
                           decision === "approve"
-                            ? "Registration approved."
-                            : "Registration rejected.",
+                            ? t("componentsCalendarRegistration.registrationApproved")
+                            : t("componentsCalendarRegistration.registrationRejected"),
                         );
                       });
                     }}
                   >
-                    {decision === "approve" ? "Approve" : "Reject"}
+                    {decision === "approve"
+                      ? t("componentsCalendarRegistration.approve")
+                      : t("componentsCalendarRegistration.reject")}
                   </Button>
                 ))}
               </div>
@@ -96,7 +112,9 @@ export function CalendarRegistrations({
         </div>
       ))}
       {resource.data && !resource.data.registrations.length && (
-        <p className="calendar-field-hint">No registrations yet.</p>
+        <p className="calendar-field-hint">
+          {t("componentsCalendarRegistration.noRegistrationsYet")}
+        </p>
       )}
       <CalendarNotice error={policy.error || resource.error || action.error} />
     </section>
@@ -137,36 +155,36 @@ function RegistrationPolicyForm({
             }),
           });
           calendar.refresh();
-          notify.success("Registration settings saved.");
+          notify.success(t("componentsCalendarRegistration.registrationSettingsSaved"));
         });
       }}
     >
       <div className="calendar-two-fields">
         <CalendarField
-          label="Capacity (optional)"
+          label={t("componentsCalendarRegistration.capacityOptional")}
           type="number"
           min={0}
           max={10000}
           value={capacity}
           disabled={!editable}
-          placeholder="No limit"
+          placeholder={t("componentsCalendarRegistration.noLimit")}
           onChange={(event) => setCapacity(event.target.value)}
         />
-        <CalendarField label="Approval">
+        <CalendarField label={t("componentsCalendarRegistration.approval")}>
           <SelectControl
-            aria-label="Registration approval"
+            aria-label={t("componentsCalendarRegistration.registrationApproval")}
             value={mode}
             disabled={!editable}
             onValueChange={setMode}
             options={[
-              { value: "automatic", label: "Automatic" },
-              { value: "manual", label: "Requires approval" },
+              { value: "automatic", label: t("componentsCalendarRegistration.automatic") },
+              { value: "manual", label: t("componentsCalendarRegistration.requiresApproval") },
             ]}
           />
         </CalendarField>
       </div>
       <CalendarField
-        label="Additional guests per person"
+        label={t("componentsCalendarRegistration.additionalGuestsPerPerson")}
         type="number"
         min={0}
         max={20}
@@ -177,17 +195,17 @@ function RegistrationPolicyForm({
       />
       <label className="calendar-check-label">
         <CheckboxControl checked={waitlist} disabled={!editable} onCheckedChange={setWaitlist} />
-        Enable a waiting list
+        {t("componentsCalendarRegistration.enableAWaitingList")}
       </label>
       <label className="calendar-check-label">
         <CheckboxControl checked={open} disabled={!editable} onCheckedChange={setOpen} />
-        Registration is open
+        {t("componentsCalendarRegistration.registrationIsOpen")}
       </label>
       <CalendarNotice error={action.error} />
       {editable && (
         <div>
           <Button type="submit" disabled={action.busy}>
-            Save registration settings
+            {t("componentsCalendarRegistration.saveRegistrationSettings")}
           </Button>
         </div>
       )}

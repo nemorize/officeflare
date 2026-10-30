@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui";
 import { DriveNotice } from "./drive-controls";
@@ -57,8 +59,8 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
         if (active) {
           setError(
             failure.name === "PasswordException"
-              ? "This PDF is password protected. Download it to open with your PDF reader."
-              : "This PDF could not be previewed. Download it to open with your PDF reader.",
+              ? t("componentsDrivePdfPreview.thisPdfIsPasswordProtectedDownloadItToOpen")
+              : t("componentsDrivePdfPreview.thisPdfCouldNotBePreviewedDownloadItTo"),
           );
           setBusy(false);
         }
@@ -89,7 +91,7 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
             Math.sqrt(4_000_000 / (viewport.width * viewport.height)),
           ),
           context = target.getContext("2d");
-        if (!context) throw new Error("Canvas unavailable");
+        if (!context) throw new Error(t("componentsDrivePdfPreview.canvasUnavailable"));
         target.width = Math.max(1, Math.floor(viewport.width * pixels));
         target.height = Math.max(1, Math.floor(viewport.height * pixels));
         target.style.width = `${viewport.width}px`;
@@ -108,7 +110,7 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
       })
       .catch((failure: Error) => {
         if (active && failure.name !== "RenderingCancelledException") {
-          setError("This PDF page could not be previewed. You can still download the file.");
+          setError(t("componentsDrivePdfPreview.thisPdfPageCouldNotBePreviewedYouCan"));
           setBusy(false);
         }
       });
@@ -118,18 +120,28 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
     };
   }, [document, page, width]);
   return (
-    <section className="drive-pdf-preview" aria-label={`PDF preview of ${name}`}>
-      <div className="drive-pdf-controls" role="group" aria-label="PDF pages">
+    <section
+      className="drive-pdf-preview"
+      aria-label={t("componentsDrivePdfPreview.pdfPreviewOf", { name: name })}
+    >
+      <div
+        className="drive-pdf-controls"
+        role="group"
+        aria-label={t("componentsDrivePdfPreview.pdfPages")}
+      >
         <Button
           size="sm"
           variant="ghost"
           disabled={!document || page === 1}
           onClick={() => setPage((value) => value - 1)}
         >
-          Previous
+          {t("common.previous")}
         </Button>
         <span aria-live="polite">
-          Page {page} of {document?.numPages ?? "…"}
+          <LocalizedMessage
+            id="componentsDrivePdfPreview.pageOf"
+            values={{ page: page, value2: document?.numPages ?? "…" }}
+          />
         </span>
         <Button
           size="sm"
@@ -137,7 +149,7 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
           disabled={!document || page === document.numPages}
           onClick={() => setPage((value) => value + 1)}
         >
-          Next
+          {t("common.next")}
         </Button>
       </div>
       <div className="drive-pdf-page-area" ref={pageArea}>
@@ -148,13 +160,13 @@ export default function DrivePdfPreview({ url, name }: { url: string; name: stri
             {busy && (
               <div className="drive-pdf-loading" role="status">
                 <span className="drive-spinner" />
-                <span>Rendering page…</span>
+                <span>{t("componentsDrivePdfPreview.renderingPage")}</span>
               </div>
             )}
             <canvas
               ref={canvas}
               role="img"
-              aria-label={`${name}, page ${page}`}
+              aria-label={t("componentsDrivePdfPreview.page", { name: name, page: page })}
               aria-describedby="drive-pdf-page-text"
               hidden={!document || !!error}
             />

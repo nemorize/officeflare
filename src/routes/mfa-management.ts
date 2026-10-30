@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, count, eq, exists, gt, isNotNull, isNull, lt, not, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { Buffer } from "node:buffer";
@@ -61,7 +62,7 @@ mfa.post("/totp", async (c) => {
   const data = await body(c, ["name"]),
     grant = await getGrant(c);
   const name = data.name === undefined ? null : string(data.name, "name", 100).trim();
-  if (name === "") conflict("Method name cannot be empty");
+  if (name === "") conflict(t("routesMfaManagement.methodNameCannotBeEmpty"));
   await throttle(c, "mfa-setup", grant.user_id);
   const db = c.get("db"),
     id = uuid(),
@@ -115,11 +116,12 @@ mfa.post("/totp", async (c) => {
     ),
   ]);
   if (results[0].meta.changes !== 1) unauthorized();
-  if (results[1].meta.changes !== 1) conflict("At most five active or pending methods are allowed");
-  const uri = `otpauth://totp/${encodeURIComponent(`Officeflare:${user.email_address}`)}?${new URLSearchParams(
+  if (results[1].meta.changes !== 1)
+    conflict(t("routesMfaManagement.atMostFiveActiveOrPendingMethodsAreAllowed"));
+  const uri = `otpauth://totp/${encodeURIComponent(t("routesMfaManagement.officeflare", { email_address: user.email_address }))}?${new URLSearchParams(
     {
       secret: base32(secret),
-      issuer: "Officeflare",
+      issuer: t("common.officeflare"),
       algorithm: "SHA1",
       digits: "6",
       period: "30",
@@ -271,7 +273,8 @@ mfa.get("/recovery-codes", requireAccess, async (c) => {
 mfa.post("/recovery-codes", async (c) => {
   const grant = await getGrant(c);
   await throttle(c, "mfa-change", grant.user_id);
-  if (!(await hasMfa(c, grant.user_id))) conflict("Enable MFA before generating recovery codes");
+  if (!(await hasMfa(c, grant.user_id)))
+    conflict(t("routesMfaManagement.enableMfaBeforeGeneratingRecoveryCodes"));
   const db = c.get("db"),
     timestamp = now(),
     operation = uuid(),

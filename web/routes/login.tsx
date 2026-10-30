@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PasswordField } from "../components/password-field";
 import { Link, Navigate, useLocation } from "react-router";
@@ -34,9 +35,12 @@ type Step =
   | { kind: "password_reset"; challenge: PasswordChallenge };
 
 const headings = {
-  login: ["Sign in to Officeflare", "Enter your email and password."],
-  mfa: ["Two-factor authentication", "Enter a code from your authenticator app."],
-  password_reset: ["Change password", "Set a new password to sign in."],
+  login: [t("routesLogin.signInToOfficeflare"), t("routesLogin.enterYourEmailAndPassword")],
+  mfa: [
+    t("routesLogin.twoFactorAuthentication"),
+    t("routesLogin.enterACodeFromYourAuthenticatorApp"),
+  ],
+  password_reset: [t("routesLogin.changePassword"), t("routesLogin.setANewPasswordToSignIn")],
 } as const;
 
 export function LoginPage() {
@@ -59,7 +63,9 @@ export function LoginPage() {
   const [title, description] = headings[step.kind];
 
   useEffect(() => {
-    document.title = `${step.kind === "login" ? "Sign in" : title} · Officeflare`;
+    document.title = t("routesLogin.officeflare", {
+      value1: step.kind === "login" ? t("routesLogin.signIn") : title,
+    });
     if (step.kind !== "login") heading.current?.focus();
   }, [step.kind, title]);
 
@@ -103,17 +109,17 @@ export function LoginPage() {
       step.challenge.expires_at * 1000 <= Date.now()
     ) {
       startOver();
-      setError("The verification request has expired. Sign in again.");
+      setError(t("routesLogin.theVerificationRequestHasExpiredSignInAgain"));
       return;
     }
     if (step.kind === "password_reset") {
       const length = [...newPassword].length;
       if (length < 15 || length > 128 || new TextEncoder().encode(newPassword).length > 512) {
-        setError("Your new password must contain 15–128 characters.");
+        setError(t("routesLogin.yourNewPasswordMustContain15128Characters"));
         return;
       }
       if (newPassword !== confirmation) {
-        setError("The passwords do not match.");
+        setError(t("routesLogin.thePasswordsDoNotMatch"));
         return;
       }
     }
@@ -140,20 +146,18 @@ export function LoginPage() {
       if (failure instanceof SessionStorageError) {
         notify.error(failure.message);
       } else if (failure instanceof AuthError) {
-        if (failure.status === 429) notify.error("Too many requests. Try again later.");
+        if (failure.status === 429) notify.error(t("routesLogin.tooManyRequestsTryAgainLater"));
         else if (failure.status === 401 && step.kind === "login")
-          setError("Check your email and password.");
+          setError(t("routesLogin.checkYourEmailAndPassword"));
         else if (failure.status === 401 && step.kind === "mfa")
-          setError(
-            "The code is incorrect or the verification request has expired. Check the code and try again.",
-          );
+          setError(t("routesLogin.theCodeIsIncorrectOrTheVerificationRequestHas"));
         else if (failure.status === 401 && step.kind === "password_reset") {
           startOver();
-          setError("The verification request has expired. Sign in again.");
-        } else if (failure.status === 400) setError("Check the information you entered.");
-        else notify.error("Unable to complete your request. Try again later.");
+          setError(t("routesLogin.theVerificationRequestHasExpiredSignInAgain"));
+        } else if (failure.status === 400) setError(t("routesLogin.checkTheInformationYouEntered"));
+        else notify.error(t("routesLogin.unableToCompleteYourRequestTryAgainLater"));
       } else {
-        notify.error("Unable to connect to the server. Check your connection and try again.");
+        notify.error(t("routesLogin.unableToConnectToTheServerCheckYourConnection"));
       }
     } finally {
       inFlight.current = false;
@@ -177,7 +181,7 @@ export function LoginPage() {
       <header className="login-header">
         <Link to="/login" className="login-brand">
           <OfficeflareMark />
-          Officeflare
+          {t("common.officeflare")}
         </Link>
       </header>
       <main className="login-content">
@@ -191,7 +195,7 @@ export function LoginPage() {
           {(description || (step.kind === "mfa" && recovery)) && (
             <p>
               {step.kind === "mfa" && recovery
-                ? "Enter one of your saved recovery codes."
+                ? t("routesLogin.enterOneOfYourSavedRecoveryCodes")
                 : description}
             </p>
           )}
@@ -203,7 +207,7 @@ export function LoginPage() {
                   <TextField
                     id="email"
                     name="email"
-                    label="Email"
+                    label={t("common.email")}
                     type="email"
                     autoComplete="username"
                     required
@@ -213,7 +217,7 @@ export function LoginPage() {
                   />
                   <PasswordField
                     id="password"
-                    label="Password"
+                    label={t("common.password")}
                     value={password}
                     onChange={setPassword}
                     autoComplete="current-password"
@@ -228,7 +232,8 @@ export function LoginPage() {
                       <Select.Root
                         items={step.challenge.methods.map((method, index) => ({
                           value: method.id,
-                          label: method.name || `Authenticator app ${index + 1}`,
+                          label:
+                            method.name || t("routesLogin.authenticatorApp", { value1: index + 1 }),
                         }))}
                         value={methodId}
                         onValueChange={(value) => {
@@ -237,7 +242,7 @@ export function LoginPage() {
                           setError("");
                         }}
                       >
-                        <Select.Label>Authentication method</Select.Label>{" "}
+                        <Select.Label>{t("routesLogin.authenticationMethod")}</Select.Label>{" "}
                         <Select.Trigger id="method">
                           <Select.Value />
                         </Select.Trigger>
@@ -246,7 +251,8 @@ export function LoginPage() {
                             {step.challenge.methods.map((method, index) => (
                               <Select.Item key={method.id} value={method.id}>
                                 <Select.ItemText>
-                                  {method.name || `Authenticator app ${index + 1}`}
+                                  {method.name ||
+                                    t("routesLogin.authenticatorApp", { value1: index + 1 })}
                                 </Select.ItemText>
                               </Select.Item>
                             ))}
@@ -259,17 +265,21 @@ export function LoginPage() {
                     key={recovery ? "recovery" : "totp"}
                     id="code"
                     name="code"
-                    label={recovery ? "Recovery code" : "Authentication code"}
+                    label={
+                      recovery ? t("routesLogin.recoveryCode") : t("routesLogin.authenticationCode")
+                    }
                     type="text"
                     autoComplete="one-time-code"
                     inputMode={recovery ? "text" : "numeric"}
                     pattern={recovery ? undefined : "[0-9]{6}"}
                     maxLength={recovery ? 64 : 6}
-                    placeholder={recovery ? "Enter a recovery code" : "6-digit code"}
+                    placeholder={
+                      recovery ? t("routesLogin.enterARecoveryCode") : t("routesLogin.6DigitCode")
+                    }
                     description={
                       recovery
-                        ? "Each recovery code can only be used once."
-                        : "Find the code in your authenticator app."
+                        ? t("routesLogin.eachRecoveryCodeCanOnlyBeUsedOnce")
+                        : t("routesLogin.findTheCodeInYourAuthenticatorApp")
                     }
                     required
                     value={code}
@@ -282,16 +292,16 @@ export function LoginPage() {
                 <>
                   <PasswordField
                     id="new-password"
-                    label="New password"
+                    label={t("routesLogin.newPassword")}
                     value={newPassword}
                     onChange={setNewPassword}
                     autoComplete="new-password"
                     describedBy="password-hint"
                   />
-                  <p id="password-hint">Use 15–128 characters.</p>
+                  <p id="password-hint">{t("routesLogin.use15128Characters")}</p>
                   <PasswordField
                     id="confirm-password"
-                    label="New password confirmation"
+                    label={t("routesLogin.newPasswordConfirmation")}
                     value={confirmation}
                     onChange={setConfirmation}
                     autoComplete="new-password"
@@ -310,12 +320,12 @@ export function LoginPage() {
               <p>
                 <Button type="submit" variant="primary" size="lg" className="login-submit">
                   {busy
-                    ? "Processing…"
+                    ? t("common.processing")
                     : step.kind === "login"
-                      ? "Sign in"
+                      ? t("routesLogin.signIn")
                       : step.kind === "mfa"
-                        ? "Verify"
-                        : "Change password and sign in"}
+                        ? t("routesLogin.verify")
+                        : t("routesLogin.changePasswordAndSignIn")}
                 </Button>
               </p>
 
@@ -331,7 +341,9 @@ export function LoginPage() {
                       setError("");
                     }}
                   >
-                    {recovery ? "Use an authenticator code" : "Use a recovery code"}
+                    {recovery
+                      ? t("routesLogin.useAnAuthenticatorCode")
+                      : t("routesLogin.useARecoveryCode")}
                   </Button>
                 </p>
               )}
@@ -343,7 +355,7 @@ export function LoginPage() {
                     className="login-secondary"
                     onClick={startOver}
                   >
-                    Start over
+                    {t("routesLogin.startOver")}
                   </Button>
                 </p>
               )}
@@ -352,13 +364,12 @@ export function LoginPage() {
 
           {step.kind === "login" && (
             <p className="login-help">
-              Contact your organization administrator if you need an account or have forgotten your
-              password.
+              {t("routesLogin.contactYourOrganizationAdministratorIfYouNeedAnAccount")}
             </p>
           )}
         </section>
       </main>
-      <footer className="login-footer">Officeflare · Your workspace, connected.</footer>
+      <footer className="login-footer">{t("routesLogin.officeflareYourWorkspaceConnected")}</footer>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useId } from "react";
 import type { ReactNode } from "react";
 import { parseRecipients } from "../lib/mail";
@@ -36,7 +37,10 @@ export function RecipientField({
             <Button
               variant="ghost"
               size="sm"
-              aria-label={`Edit ${chip}${valid(chip) ? "" : ", invalid email address"}`}
+              aria-label={t("componentsMailRecipients.edit", {
+                chip: chip,
+                value2: valid(chip) ? "" : t("componentsMailRecipients.invalidEmailAddress"),
+              })}
               onClick={() => onChange([...chips.filter((_, i) => i !== index), chip].join(", "))}
             >
               {!valid(chip) && <Icon name="info" width="12" height="12" />} {chip}
@@ -44,7 +48,7 @@ export function RecipientField({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Remove ${chip}`}
+              aria-label={t("componentsMailRecipients.remove", { chip: chip })}
               onClick={() => onChange([...chips.filter((_, i) => i !== index), pending].join(", "))}
             >
               <Icon name="close" width="12" height="12" />
@@ -57,7 +61,7 @@ export function RecipientField({
           value={pending.trimStart()}
           inputMode="email"
           autoComplete="off"
-          placeholder={chips.length ? "" : "Add recipients"}
+          placeholder={chips.length ? "" : t("componentsMailRecipients.addRecipients")}
           onChange={(event) => onChange([...chips, event.target.value].join(", "))}
           onBlur={() => {
             if (valid(pending)) commit();
@@ -84,8 +88,9 @@ export function RecipientField({
       {action}
       {chips.some((chip) => !valid(chip)) && (
         <Field.Description>
-          Invalid addresses: {chips.filter((chip) => !valid(chip)).join(", ")}. Edit or remove them
-          before sending.
+          {t("componentsMailRecipients.invalidAddressesEditOrRemoveThemBeforeSending", {
+            join: chips.filter((chip) => !valid(chip)).join(", "),
+          })}
         </Field.Description>
       )}
     </Field.Root>

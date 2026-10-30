@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { digest } from "../auth/crypto";
 import { verifyPassword } from "../auth/password";
@@ -39,7 +40,8 @@ async function validate(c: DriveContext) {
   c.header("Referrer-Policy", "no-referrer");
   c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
   const token = c.req.param("token");
-  if (!token || !/^ofd_[A-Za-z0-9_-]{43}$/.test(token)) fail(404, "Share link not found");
+  if (!token || !/^ofd_[A-Za-z0-9_-]{43}$/.test(token))
+    fail(404, t("drivePublic.shareLinkNotFound"));
   const hash = await digest(token),
     limitKey = await digest(
       `drive-public:${c.req.header("cf-connecting-ip") ?? "local"}:${hash}:${Math.floor(now() / 900)}`,
@@ -52,7 +54,7 @@ async function validate(c: DriveContext) {
   );
   if (rate && rate.attempts > 60) {
     c.header("Retry-After", "900");
-    fail(429, "Too many share link requests");
+    fail(429, t("drivePublic.tooManyShareLinkRequests"));
   }
   const link = await first<Link>(
     c.env,
@@ -60,11 +62,11 @@ async function validate(c: DriveContext) {
     WHERE l.token_hash=? AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at>unixepoch()) AND ${publicLinkPolicy("l")} AND ${availableItem("root.id")} AND ${activeUser("owner")} AND ${driveEnabled("owner")} AND ${cleanPath("root.id")}`,
     hash,
   );
-  if (!link) fail(404, "Share link not found");
+  if (!link) fail(404, t("drivePublic.shareLinkNotFound"));
   if (link.password_hash) {
     const password = c.req.header("x-drive-link-password");
     if (!password || password.length > 128 || !(await verifyPassword(password, link.password_hash)))
-      fail(403, "A valid share link password is required");
+      fail(403, t("drivePublic.aValidShareLinkPasswordIsRequired"));
   }
   return link;
 }
@@ -76,7 +78,7 @@ async function publicItem(c: DriveContext, link: Link, id: string) {
     id,
     ...check.args,
   );
-  if (!item) fail(404, "Shared item not found");
+  if (!item) fail(404, t("drivePublic.sharedItemNotFound"));
   return { item, check };
 }
 async function dto(c: DriveContext, item: DriveItem) {
@@ -114,7 +116,7 @@ publicDrive.get("/:token/items", async (c) => {
       ? identifier(c.req.query("parent_id"), "parent_id")
       : link.item_id;
   const parent = await publicItem(c, link, parentId);
-  if (parent.item.kind !== "folder") fail(400, "Shared item is not a folder");
+  if (parent.item.kind !== "folder") fail(400, t("drivePublic.sharedItemIsNotAFolder"));
   const pageSize = integer(Number(c.req.query("limit") ?? "50"), "limit", 1, 100),
     cursorScope = `public:${link.id}:${parentId}`;
   const after = c.req.query("cursor")
@@ -142,8 +144,9 @@ publicDrive.get("/:token/items", async (c) => {
 for (const suffix of ["content", "preview"] as const)
   publicDrive.on(["GET", "HEAD"], `/:token/items/:itemId/${suffix}`, async (c) => {
     const link = await validate(c);
-    if (!link.allow_download) fail(403, "File downloads are disabled for this link");
-    if (c.req.query("version_id")) fail(400, "Public links expose only the current file version");
+    if (!link.allow_download) fail(403, t("drivePublic.fileDownloadsAreDisabledForThisLink"));
+    if (c.req.query("version_id"))
+      fail(400, t("drivePublic.publicLinksExposeOnlyTheCurrentFileVersion"));
     const result = await publicItem(c, link, identifier(c.req.param("itemId")));
     const check = {
       sql: `${result.check.sql} AND EXISTS(SELECT 1 FROM drive_links WHERE id=? AND allow_download=1)`,

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   useCallback,
   useEffect,
@@ -28,6 +29,7 @@ import { mailFailure } from "../lib/mail";
 import { useAccess } from "./console-access";
 import { useMailCache } from "./mail-resource-context";
 import { LoadingSkeleton } from "./loading-skeleton";
+import { SettingsSection } from "./settings-layout";
 export function useMailResource<T>(path: string | null, revision = 0, poll = false) {
   const access = useAccess(),
     cache = useMailCache();
@@ -122,10 +124,14 @@ export function MailState({
   return error ? (
     <div>
       <MailNotice error={error} />
-      {retry && <Button onClick={retry}>Try again</Button>}
+      {retry && <Button onClick={retry}>{t("componentsMailCommon.tryAgain")}</Button>}
     </div>
   ) : loading ? (
-    <LoadingSkeleton kind={kind} label="Loading mail…" rows={kind === "list" ? 6 : 3} />
+    <LoadingSkeleton
+      kind={kind}
+      label={t("componentsMailCommon.loadingMail")}
+      rows={kind === "list" ? 6 : 3}
+    />
   ) : null;
 }
 export function MailField({
@@ -207,7 +213,7 @@ export function MailFileInput({
       />
       <Button disabled={disabled} onClick={() => input.current?.click()}>
         <Icon name="file" />
-        {multiple ? "Choose files" : "Choose file"}
+        {multiple ? t("componentsMailCommon.chooseFiles") : t("componentsMailCommon.chooseFile")}
       </Button>
     </div>
   );
@@ -276,7 +282,7 @@ export function MailModal({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Close dialog"
+            aria-label={t("componentsMailCommon.closeDialog")}
             disabled={busy}
             onClick={onClose}
           >
@@ -291,27 +297,11 @@ export function MailModal({
     </Dialog.Root>
   );
 }
-export function MailSection({
-  title,
-  description,
-  action,
-  children,
-}: {
+export function MailSection(props: {
   title: string;
   description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
 }) {
-  return (
-    <section className="mail-section">
-      <header>
-        <div>
-          <h2>{title}</h2>
-          {description && <p>{description}</p>}
-        </div>
-        {action}
-      </header>
-      {children}
-    </section>
-  );
+  return <SettingsSection {...props} className="mail-section" />;
 }

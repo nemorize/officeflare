@@ -1,3 +1,4 @@
+import { t } from "../shared/i18n/index.ts";
 import { lazy, StrictMode, Suspense } from "react";
 import "./lib/browser-theme";
 import { createRoot, type Root } from "react-dom/client";
@@ -57,6 +58,9 @@ const DriveAccountEditorPage = lazy(() =>
 const DrivePage = lazy(() =>
   import("./routes/drive").then((module) => ({ default: module.DrivePage })),
 );
+const DriveSettingsPage = lazy(() =>
+  import("./routes/drive-settings").then((module) => ({ default: module.DriveSettingsPage })),
+);
 const DriveLinkedItemPage = lazy(() =>
   import("./routes/drive").then((module) => ({ default: module.DriveLinkedItemPage })),
 );
@@ -107,7 +111,7 @@ const router = createBrowserRouter(
       <Route
         path="/share/drive/:token"
         element={
-          <Suspense fallback={<p className="empty-page">Opening shared files…</p>}>
+          <Suspense fallback={<p className="empty-page">{t("main.openingSharedFiles")}</p>}>
             <PublicDrivePage />
           </Suspense>
         }
@@ -139,6 +143,17 @@ const router = createBrowserRouter(
             </ServiceGate>
           }
         />
+        {["settings", "integrations", "data", "activity"].map((page) => (
+          <Route
+            key={page}
+            path={`/drive/${page}`}
+            element={
+              <ServiceGate permission="drive.access">
+                <DriveSettingsPage key={page} page={page} />
+              </ServiceGate>
+            }
+          />
+        ))}
         {[
           "/drive",
           "/drive/shared",
@@ -365,10 +380,10 @@ const router = createBrowserRouter(
           element={
             <section className="account-page">
               <header className="account-page-header">
-                <h1>Page not found</h1>
-                <p>Check the address or return to your workspace.</p>
+                <h1>{t("main.pageNotFound")}</h1>
+                <p>{t("main.checkTheAddressOrReturnToYourWorkspace")}</p>
               </header>
-              <Link to="/">Return to workspace</Link>
+              <Link to="/">{t("main.returnToWorkspace")}</Link>
             </section>
           }
         />
@@ -377,7 +392,7 @@ const router = createBrowserRouter(
         <Route
           path="/dev/ui"
           element={
-            <Suspense fallback={<p>Loading components…</p>}>
+            <Suspense fallback={<p>{t("main.loadingComponents")}</p>}>
               <UIPreviewPage />
             </Suspense>
           }

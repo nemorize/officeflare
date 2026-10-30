@@ -14,6 +14,17 @@
   display: flex;
   flex-direction: column;
 }
+.workspace-drive .workspace-sidebar-header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.drive-storage > div > a {
+  display: flex;
+  margin-left: auto;
+  color: inherit;
+}
 @media (min-width: 761px) {
   .workspace-drive.drive-sidebar-collapsed .workspace-frame {
     grid-template-columns: 0 minmax(0, 1fr);

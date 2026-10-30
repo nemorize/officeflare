@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   boundedBody,
   publicDns,
@@ -24,7 +25,7 @@ export function feedUrl(value: string, base?: string) {
   } catch {
     throw new FeedError(
       "INVALID_URL",
-      "Use a public HTTPS or webcal calendar URL without a username or password.",
+      t("calendarFeedFetch.useAPublicHttpsOrWebcalCalendarUrlWithout"),
     );
   }
 }
@@ -51,7 +52,7 @@ export async function fetchCalendarFeed(
     } catch {
       throw new FeedError(
         "UNREACHABLE",
-        "The calendar host could not be reached or does not resolve to a public address.",
+        t("calendarFeedFetch.theCalendarHostCouldNotBeReachedOrDoes"),
       );
     }
     let response: Response;
@@ -69,7 +70,7 @@ export async function fetchCalendarFeed(
     } catch {
       throw new FeedError(
         "UNREACHABLE",
-        "Unable to download the calendar. The server may be unavailable or the request timed out.",
+        t("calendarFeedFetch.unableToDownloadTheCalendarTheServerMayBe"),
       );
     }
     if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -77,8 +78,8 @@ export async function fetchCalendarFeed(
       await response.body?.cancel();
       if (!location || hop === 3)
         throw new FeedError(
-          "REDIRECT",
-          "The calendar URL redirects too many times or has an invalid redirect.",
+          t("calendarFeedFetch.redirect"),
+          t("calendarFeedFetch.theCalendarUrlRedirectsTooManyTimesOrHas"),
         );
       const next = feedUrl(location, url.href);
       // Validators belong to one resource and must not follow redirects.
@@ -91,7 +92,7 @@ export async function fetchCalendarFeed(
       if (!validators.etag && !validators.last_modified)
         throw new FeedError(
           "INVALID_RESPONSE",
-          "The calendar server returned an unexpected response.",
+          t("calendarFeedFetch.theCalendarServerReturnedAnUnexpectedResponse"),
         );
       return {
         content: null,
@@ -104,11 +105,11 @@ export async function fetchCalendarFeed(
       if ([401, 403, 404, 410].includes(response.status))
         throw new FeedError(
           "ACCESS_DENIED",
-          "The calendar link is unavailable or access was revoked. Replace the URL with a current calendar subscription link.",
+          t("calendarFeedFetch.theCalendarLinkIsUnavailableOrAccessWasRevoked"),
         );
       throw new FeedError(
         "HTTP_ERROR",
-        "The calendar server returned an error. Officeflare will retry automatically.",
+        t("calendarFeedFetch.theCalendarServerReturnedAnErrorOfficeflareWillRetry"),
       );
     }
     let bytes: Uint8Array;
@@ -117,14 +118,17 @@ export async function fetchCalendarFeed(
     } catch {
       throw new FeedError(
         "FEED_SIZE",
-        "The calendar response is empty, incomplete, or larger than 2 MiB.",
+        t("calendarFeedFetch.theCalendarResponseIsEmptyIncompleteOrLargerThan"),
       );
     }
     let content: string;
     try {
       content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
     } catch {
-      throw new FeedError("ENCODING", "The calendar must use UTF-8 encoding.");
+      throw new FeedError(
+        t("calendarFeedFetch.encoding"),
+        t("calendarFeedFetch.theCalendarMustUseUtf8Encoding"),
+      );
     }
     return {
       content,
@@ -132,5 +136,8 @@ export async function fetchCalendarFeed(
       last_modified: hop === 0 ? header(response.headers.get("Last-Modified")) : null,
     };
   }
-  throw new FeedError("REDIRECT", "Invalid calendar redirect.");
+  throw new FeedError(
+    t("calendarFeedFetch.redirect"),
+    t("calendarFeedFetch.invalidCalendarRedirect"),
+  );
 }

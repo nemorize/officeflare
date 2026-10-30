@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { invalid } from "../auth/input";
 import type { AuthEnv } from "../auth/types";
 
@@ -52,6 +53,6 @@ export async function readCursor(env: AuthEnv, userId: string, scope: string, va
       throw new Error();
     return data[2] as number;
   } catch {
-    invalid("Invalid or expired cursor");
+    invalid(t("notificationsCursor.invalidOrExpiredCursor"));
   }
 }

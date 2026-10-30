@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Button,
@@ -55,7 +56,7 @@ export function ReauthenticationDialog({
     if (challenge && challenge.expires_at * 1000 <= Date.now()) {
       setChallenge(null);
       setCode("");
-      setError("Verification expired. Enter your password again.");
+      setError(t("componentsReauthenticationDialog.verificationExpiredEnterYourPasswordAgain"));
       return;
     }
     inFlight.current = true;
@@ -89,8 +90,8 @@ export function ReauthenticationDialog({
       if (failure instanceof ApiError && failure.status === 401)
         setError(
           challenge
-            ? "Use a new code from your authenticator, or a valid recovery code. Codes can only be used once."
-            : "Check your current password and try again.",
+            ? t("componentsReauthenticationDialog.useANewCodeFromYourAuthenticatorOrA")
+            : t("componentsReauthenticationDialog.checkYourCurrentPasswordAndTryAgain"),
         );
       else notify.error(errorMessage(failure));
     } finally {
@@ -114,7 +115,7 @@ export function ReauthenticationDialog({
             {!challenge ? (
               <PasswordField
                 id="otp-current-password"
-                label="Current password"
+                label={t("componentsReauthenticationDialog.currentPassword")}
                 value={password}
                 onChange={setPassword}
                 autoComplete="current-password"
@@ -123,14 +124,20 @@ export function ReauthenticationDialog({
               <>
                 <p className="account-verification-hint">
                   {recovery
-                    ? "Enter one of your saved recovery codes."
-                    : "Verify with an existing authenticator. Use a new code; each code can only be used once."}
+                    ? t("componentsReauthenticationDialog.enterOneOfYourSavedRecoveryCodes")
+                    : t(
+                        "componentsReauthenticationDialog.verifyWithAnExistingAuthenticatorUseANewCode",
+                      )}
                 </p>
                 {!recovery && challenge.methods.length > 1 && (
                   <Select.Root
                     items={challenge.methods.map((item, index) => ({
                       value: item.id,
-                      label: item.name || `Authenticator app ${index + 1}`,
+                      label:
+                        item.name ||
+                        t("componentsReauthenticationDialog.authenticatorApp", {
+                          value1: index + 1,
+                        }),
                     }))}
                     value={method}
                     onValueChange={(next) => {
@@ -139,7 +146,9 @@ export function ReauthenticationDialog({
                       setError("");
                     }}
                   >
-                    <Select.Label>Existing authenticator</Select.Label>
+                    <Select.Label>
+                      {t("componentsReauthenticationDialog.existingAuthenticator")}
+                    </Select.Label>
                     <Select.Trigger>
                       <Select.Value />
                     </Select.Trigger>
@@ -148,7 +157,10 @@ export function ReauthenticationDialog({
                         {challenge.methods.map((item, index) => (
                           <Select.Item key={item.id} value={item.id}>
                             <Select.ItemText>
-                              {item.name || `Authenticator app ${index + 1}`}
+                              {item.name ||
+                                t("componentsReauthenticationDialog.authenticatorApp", {
+                                  value1: index + 1,
+                                })}
                             </Select.ItemText>
                           </Select.Item>
                         ))}
@@ -158,7 +170,11 @@ export function ReauthenticationDialog({
                 )}
                 <TextField
                   key={recovery ? "recovery" : "authenticator"}
-                  label={recovery ? "Recovery code" : "Authentication code"}
+                  label={
+                    recovery
+                      ? t("componentsReauthenticationDialog.recoveryCode")
+                      : t("componentsReauthenticationDialog.authenticationCode")
+                  }
                   name="verification_code"
                   autoComplete="one-time-code"
                   inputMode={recovery ? "text" : "numeric"}
@@ -178,7 +194,9 @@ export function ReauthenticationDialog({
                       setError("");
                     }}
                   >
-                    {recovery ? "Use an authenticator code" : "Use a recovery code"}
+                    {recovery
+                      ? t("componentsReauthenticationDialog.useAnAuthenticatorCode")
+                      : t("componentsReauthenticationDialog.useARecoveryCode")}
                   </Button>
                 )}
               </>
@@ -190,10 +208,14 @@ export function ReauthenticationDialog({
             )}
             <div className="account-actions">
               <Button type="button" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="primary">
-                {busy ? "Verifying…" : challenge ? "Verify and continue" : confirmLabel}
+                {busy
+                  ? t("componentsReauthenticationDialog.verifying")
+                  : challenge
+                    ? t("componentsReauthenticationDialog.verifyAndContinue")
+                    : confirmLabel}
               </Button>
             </div>
           </Fieldset.Root>

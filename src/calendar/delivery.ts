@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { sql } from "drizzle-orm";
 import { now, uuid } from "../auth/types";
 import { digest, random } from "../auth/crypto";
@@ -29,12 +30,12 @@ export function notificationStatements(
           : "calendar.updated";
   const title =
     type === "calendar.invited"
-      ? "Calendar invitation"
+      ? t("calendarDelivery.calendarInvitation")
       : type === "calendar.cancelled"
-        ? "Calendar event cancelled"
+        ? t("calendarDelivery.calendarEventCancelled")
         : type === "calendar.response"
-          ? "Calendar response"
-          : "Calendar event updated";
+          ? t("calendarDelivery.calendarResponse")
+          : t("calendarDelivery.calendarEventUpdated");
   return prepareNotification(
     c.get("db"),
     {
@@ -43,8 +44,8 @@ export function notificationStatements(
       title,
       body:
         action === "response"
-          ? "An attendee responded to your event."
-          : "Open this notification to view your invitation.",
+          ? t("calendarDelivery.anAttendeeRespondedToYourEvent")
+          : t("calendarDelivery.openThisNotificationToViewYourInvitation"),
       target_path: target,
       recipient_ids: [user],
     },
@@ -72,7 +73,11 @@ export async function prepareDeliveries(
   if (options.sendUpdates !== undefined)
     choice(options.sendUpdates, "send_updates", ["external_only", "none"]);
   if (attendees.length > 100)
-    fail(422, "TOO_MANY_ATTENDEES", "Synchronous invitation delivery is limited to 100 attendees");
+    fail(
+      422,
+      "TOO_MANY_ATTENDEES",
+      t("calendarDelivery.synchronousInvitationDeliveryIsLimitedTo100Attendees"),
+    );
   if (!occurrenceKey && attendees.some((value) => value.occurrence_key)) {
     const builds = [
       await prepareDeliveries(

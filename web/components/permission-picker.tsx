@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { Button, TextField } from "./ui";
 import { Check } from "./console-shared";
@@ -40,22 +42,22 @@ export function PermissionPicker({
   return (
     <div className="console-permission-picker">
       <TextField
-        label="Find permissions"
+        label={t("componentsPermissionPicker.findPermissions")}
         name="permission_search"
         type="search"
         value={query}
         onValueChange={setQuery}
-        placeholder="Search by action or service"
+        placeholder={t("componentsPermissionPicker.searchByActionOrService")}
       />
       <p className="console-subtext">
-        {selected.length} permissions selected · Service and administration permissions apply across
-        this workspace. Mailbox and Drive item sharing are checked separately. Drive administration
-        does not grant file content access.
+        <LocalizedMessage
+          id="componentsPermissionPicker.permissionsSelectedServiceAndAdministrationPermissionsApplyAcrossThis"
+          values={{ length: selected.length }}
+        />
       </p>
       {defaultOnly && (
         <p className="console-subtext">
-          Default roles can grant service access only. Remove the default setting before adding
-          administrative permissions.
+          {t("componentsPermissionPicker.defaultRolesCanGrantServiceAccessOnlyRemoveThe")}
         </p>
       )}
       <div className="console-permissions">
@@ -68,7 +70,9 @@ export function PermissionPicker({
               <legend>
                 <span>{title}</span>
                 <span className="console-subtext">
-                  {all.filter((item) => selected.includes(item.key)).length} / {all.length}
+                  {all.filter((item) => selected.includes(item.key)).length}
+                  {t("componentsPermissionPicker.text")}
+                  {all.length}
                 </span>
               </legend>
               {editable && (
@@ -88,7 +92,7 @@ export function PermissionPicker({
                       onChange?.(next);
                     }}
                   >
-                    Select available
+                    {t("componentsPermissionPicker.selectAvailable")}
                   </Button>
                   <Button
                     type="button"
@@ -101,7 +105,7 @@ export function PermissionPicker({
                       onChange?.(next);
                     }}
                   >
-                    Clear group
+                    {t("componentsPermissionPicker.clearGroup")}
                   </Button>
                 </div>
               )}
@@ -116,19 +120,26 @@ export function PermissionPicker({
                   <small>{item.description}</small>
                   {!!item.requires.length && (
                     <small>
-                      Requires:{" "}
-                      {item.requires
-                        .map(
-                          (key) => permissionCatalog[key as keyof typeof permissionCatalog].label,
-                        )
-                        .join(", ")}
+                      <LocalizedMessage
+                        id="componentsPermissionPicker.requires"
+                        values={{
+                          join: item.requires
+                            .map(
+                              (key) =>
+                                permissionCatalog[key as keyof typeof permissionCatalog].label,
+                            )
+                            .join(", "),
+                        }}
+                      />
                     </small>
                   )}
                   {item.impact && (
                     <small className="console-permission-impact">{item.impact}</small>
                   )}
                   {editable && !canGrant(owned, [item.key]) && (
-                    <small>You do not hold all permissions required to grant this action.</small>
+                    <small>
+                      {t("componentsPermissionPicker.youDoNotHoldAllPermissionsRequiredToGrant")}
+                    </small>
                   )}
                   <code className="console-permission-key">{item.key}</code>
                 </Check>
@@ -136,7 +147,9 @@ export function PermissionPicker({
             </fieldset>
           );
         })}
-        {!visible.length && <p className="console-empty">No matching permissions.</p>}
+        {!visible.length && (
+          <p className="console-empty">{t("componentsPermissionPicker.noMatchingPermissions")}</p>
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { createApiClient } from "./api-client";
 import type { Session } from "./auth";
 
@@ -32,7 +33,7 @@ export function authenticatorKey(uri: string) {
     !key ||
     !/^[A-Z2-7]+$/.test(key)
   ) {
-    throw new Error("The server returned an invalid authenticator setup. Start again.");
+    throw new Error(t("libMfa.theServerReturnedAnInvalidAuthenticatorSetupStartAgain"));
   }
   return key;
 }
@@ -46,7 +47,7 @@ export function createMfaClient(deps: {
   const now = deps.now ?? Date.now;
   function token(grant: ReauthenticationGrant) {
     if (grant.expires_at * 1000 <= now())
-      throw new Error("Verification expired. Verify your identity again.");
+      throw new Error(t("libMfa.verificationExpiredVerifyYourIdentityAgain"));
     return grant.reauthentication_token;
   }
   async function replace<T extends Session>(result: T) {
@@ -65,11 +66,9 @@ export function createMfaClient(deps: {
     },
     async activate(grant: ReauthenticationGrant, setup: AuthenticatorSetup, code: string) {
       if (setup.setup_expires_at * 1000 <= now())
-        throw new Error(
-          "This setup has expired. Remove the pending authenticator and start again.",
-        );
+        throw new Error(t("libMfa.thisSetupHasExpiredRemoveThePendingAuthenticatorAnd"));
       if (!/^[0-9]{6}$/.test(code.trim()))
-        throw new Error("Enter the six-digit code from your new authenticator.");
+        throw new Error(t("libMfa.enterTheSixDigitCodeFromYourNewAuthenticator"));
       return replace(
         await deps.api<Session & { method_id: string }>(
           `/api/me/mfa/totp/${encodeURIComponent(setup.method_id)}/verify`,

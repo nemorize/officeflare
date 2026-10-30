@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { AlertDialog, AlertDialogPopup, Button, Icon, useNotifications } from "@/components/ui";
 import { api, errorMessage } from "../lib/api";
@@ -14,28 +16,28 @@ interface AccountSession {
 const date = (timestamp: number) =>
   new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 function device(agent: string | null) {
-  if (!agent) return "Browser session";
+  if (!agent) return t("routesSessions.browserSession");
   const browser = /Edg\//.test(agent)
-    ? "Edge"
+    ? t("routesSessions.edge")
     : /Firefox\//.test(agent)
-      ? "Firefox"
+      ? t("routesSessions.firefox")
       : /Chrome\//.test(agent)
-        ? "Chrome"
+        ? t("routesSessions.chrome")
         : /Safari\//.test(agent)
-          ? "Safari"
-          : "Browser";
+          ? t("routesSessions.safari")
+          : t("routesSessions.browser");
   const system = /iPhone|iPad/.test(agent)
     ? "iOS"
     : /Android/.test(agent)
-      ? "Android"
+      ? t("routesSessions.android")
       : /Windows/.test(agent)
-        ? "Windows"
+        ? t("routesSessions.windows")
         : /Mac/.test(agent)
           ? "macOS"
           : /Linux/.test(agent)
-            ? "Linux"
-            : "another device";
-  return `${browser} on ${system}`;
+            ? t("routesSessions.linux")
+            : t("routesSessions.anotherDevice");
+  return t("routesSessions.on", { browser: browser, system: system });
 }
 
 export function SessionsPage() {
@@ -74,11 +76,11 @@ export function SessionsPage() {
         { method: "DELETE" },
       );
       if (target === "all") {
-        notify.success("All sessions have been signed out.");
+        notify.success(t("routesSessions.allSessionsHaveBeenSignedOut"));
         await sessions.restore();
       } else {
         setItems((current) => current.filter((item) => item.id !== target.id));
-        notify.success("The session has been signed out.");
+        notify.success(t("routesSessions.theSessionHasBeenSignedOut"));
       }
       setTarget(null);
     } catch (failure) {
@@ -92,17 +94,17 @@ export function SessionsPage() {
   return (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Sessions</h1>
-        <p>Review the devices signed in to your account.</p>
+        <h1>{t("routesSessions.sessions")}</h1>
+        <p>{t("routesSessions.reviewTheDevicesSignedInToYourAccount")}</p>
       </header>
       <section className="account-panel">
         <div className="account-panel-header">
-          <h2>Active sessions</h2>
-          <p>Sign out a session you no longer use or do not recognize.</p>
+          <h2>{t("routesSessions.activeSessions")}</h2>
+          <p>{t("routesSessions.signOutASessionYouNoLongerUseOr")}</p>
         </div>
         {loading ? (
           <p className="account-loading" role="status">
-            Loading sessions…
+            {t("routesSessions.loadingSessions")}
           </p>
         ) : (
           <>
@@ -120,20 +122,41 @@ export function SessionsPage() {
                     <div className="account-session-details">
                       <div className="account-session-title">
                         <h3>{device(item.user_agent)}</h3>
-                        {item.current && <span className="account-session-badge">This device</span>}
+                        {item.current && (
+                          <span className="account-session-badge">
+                            {t("routesSessions.thisDevice")}
+                          </span>
+                        )}
                       </div>
-                      <p>Signed in {date(item.created_at)}</p>
-                      <p>Last active {date(item.last_used_at)}</p>
-                      <p>Expires {date(item.expires_at)}</p>
+                      <p>
+                        <LocalizedMessage
+                          id="routesSessions.signedIn"
+                          values={{ date: date(item.created_at) }}
+                        />
+                      </p>
+                      <p>
+                        <LocalizedMessage
+                          id="routesSessions.lastActive"
+                          values={{ date: date(item.last_used_at) }}
+                        />
+                      </p>
+                      <p>
+                        <LocalizedMessage
+                          id="routesSessions.expires"
+                          values={{ date: date(item.expires_at) }}
+                        />
+                      </p>
                     </div>
                     {!item.current && (
                       <Button size="sm" disabled={busy} onClick={() => setTarget(item)}>
-                        Sign out
+                        {t("routesSessions.signOut")}
                       </Button>
                     )}
                   </div>
                 ))}
-                {!items.length && <p className="account-loading">No active sessions.</p>}
+                {!items.length && (
+                  <p className="account-loading">{t("routesSessions.noActiveSessions")}</p>
+                )}
               </div>
             )}
           </>
@@ -141,11 +164,11 @@ export function SessionsPage() {
       </section>
       <section className="account-panel account-danger-panel">
         <div>
-          <h2>Sign out everywhere</h2>
-          <p>End all sessions, including this device.</p>
+          <h2>{t("routesSessions.signOutEverywhere")}</h2>
+          <p>{t("routesSessions.endAllSessionsIncludingThisDevice")}</p>
         </div>
         <Button variant="danger" disabled={busy} onClick={() => setTarget("all")}>
-          Sign out everywhere
+          {t("routesSessions.signOutEverywhere")}
         </Button>
       </section>
       <AlertDialog.Root
@@ -156,16 +179,18 @@ export function SessionsPage() {
       >
         <AlertDialogPopup>
           <AlertDialog.Title>
-            {target === "all" ? "Sign out everywhere?" : "Sign out this session?"}
+            {target === "all"
+              ? t("routesSessions.signOutEverywhere2")
+              : t("routesSessions.signOutThisSession")}
           </AlertDialog.Title>
           <AlertDialog.Description>
             {target === "all"
-              ? "You will need to sign in again on every device, including this one."
-              : "The selected device will need to sign in again."}
+              ? t("routesSessions.youWillNeedToSignInAgainOnEvery")
+              : t("routesSessions.theSelectedDeviceWillNeedToSignInAgain")}
           </AlertDialog.Description>
           <div className="account-actions">
             <Button disabled={busy} onClick={() => setTarget(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="danger"
@@ -174,7 +199,7 @@ export function SessionsPage() {
                 void revoke();
               }}
             >
-              {busy ? "Signing out…" : "Sign out"}
+              {busy ? t("routesSessions.signingOut") : t("routesSessions.signOut")}
             </Button>
           </div>
         </AlertDialogPopup>

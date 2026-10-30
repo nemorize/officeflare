@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { Context } from "hono";
 import type { AuthContext } from "../auth/types";
 import { createMiddleware } from "hono/factory";
@@ -59,7 +60,7 @@ export const authenticateMail = createMiddleware<MailAppEnv>(async (c, next) => 
       await hash(token),
       epoch(),
     );
-    if (!actor) fail(401, "Invalid mail API key");
+    if (!actor) fail(401, t("mailControl.invalidMailApiKey"));
     c.set("mail_actor", actor);
     await next();
   } else {
@@ -72,14 +73,14 @@ export const authenticateMail = createMiddleware<MailAppEnv>(async (c, next) => 
       });
       // Console administration is separate from using mailbox contents.
       if (!administrativeRequest(c) && !(await can(c as unknown as AuthContext, "mail.access")))
-        fail(403, "Mail access is not enabled for this account");
+        fail(403, t("mailControl.mailAccessIsNotEnabledForThisAccount"));
       await next();
     });
   }
 });
 export async function administrator(c: Context<MailAppEnv>, permission: Permission) {
   if (c.get("mail_actor").api_key_id || !(await can(c as unknown as AuthContext, permission)))
-    fail(403, "Permission denied");
+    fail(403, t("mailControl.permissionDenied"));
 }
 const columns = {
   read: "can_read",
@@ -111,7 +112,7 @@ export async function authorize(
     actor.auth_version,
     ...(actor.api_key_id ? [actor.api_key_id, epoch(), action] : []),
   );
-  if (!mailbox) fail(403, "Mailbox access denied");
+  if (!mailbox) fail(403, t("mailControl.mailboxAccessDenied"));
   return mailbox;
 }
 export async function connection(env: Env, connectionId: string) {
@@ -120,7 +121,7 @@ export async function connection(env: Env, connectionId: string) {
     "SELECT * FROM mail_provider_connections WHERE id=? AND enabled=1",
     connectionId,
   );
-  if (!result) fail(409, "Provider connection is disabled or missing");
+  if (!result) fail(409, t("mailControl.providerConnectionIsDisabledOrMissing"));
   provider(result.provider);
   return result;
 }
@@ -174,7 +175,7 @@ export async function sender(env: Env, actor: MailActor, mailboxId: string, addr
     addressId,
     mailboxId,
   );
-  if (!result?.connection_id) fail(409, "Sending address or domain is disabled");
+  if (!result?.connection_id) fail(409, t("mailControl.sendingAddressOrDomainIsDisabled"));
   return { ...result, ...(await connection(env, result.connection_id)) };
 }
 
@@ -186,7 +187,7 @@ export function administrativeControl(
   extra?: { sql: string; bindings: (string | number | null)[] },
 ) {
   const actor = c.get("mail_actor");
-  if (actor.api_key_id) fail(403, "Session authentication required");
+  if (actor.api_key_id) fail(403, t("mailControl.sessionAuthenticationRequired"));
   const condition =
     "EXISTS(SELECT 1 FROM users u WHERE u.id=? AND u.auth_version=? AND " +
     activeAccountSql +
@@ -200,7 +201,7 @@ export function administrativeControl(
 }
 export function resourceControl(c: Context<MailAppEnv>, mailboxId: string, action: MailAction) {
   const actor = c.get("mail_actor");
-  if (actor.api_key_id) fail(403, "Session authentication required");
+  if (actor.api_key_id) fail(403, t("mailControl.sessionAuthenticationRequired"));
   const condition =
     "EXISTS(SELECT 1 FROM mail_mailboxes b JOIN users u ON u.id=? LEFT JOIN mail_mailbox_members m ON m.mailbox_id=b.id AND m.user_id=u.id WHERE b.id=? AND b.status='active' AND u.auth_version=? AND " +
     activeAccountSql +

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, eq, exists, isNull, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db";
 import { eligibleUser } from "../db/auth-conditions";
@@ -30,11 +31,11 @@ export function prepareNotification(
     input.title.length > 160 ||
     input.body.length > 1000
   ) {
-    throw new Error("Invalid notification event");
+    throw new Error(t("notificationsService.invalidNotificationEvent"));
   }
   const recipients = [...new Set(input.recipient_ids)];
   if (!recipients.length || recipients.length > 50)
-    throw new Error("Notification batches need 1 to 50 recipients");
+    throw new Error(t("notificationsService.notificationBatchesNeed1To50Recipients"));
   const definition = notificationTypes[input.type],
     timestamp = now();
   const event = insertWhen(

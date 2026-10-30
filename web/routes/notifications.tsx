@@ -1,3 +1,5 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
@@ -45,41 +47,43 @@ export function NotificationsPage() {
     <section className="account-page notification-page">
       <header className="account-page-header notification-page-header">
         <div>
-          <h1>Notifications</h1>
-          <p>Updates across your Officeflare workspace.</p>
+          <h1>{t("routesNotifications.notifications")}</h1>
+          <p>{t("routesNotifications.updatesAcrossYourOfficeflareWorkspace")}</p>
         </div>
         <Link
           to="/profile/notifications"
-          aria-label="Notification settings"
-          title="Notification settings"
+          aria-label={t("routesNotifications.notificationSettings")}
+          title={t("routesNotifications.notificationSettings")}
         >
           <Icon name="settings" width="20" height="20" />
         </Link>
       </header>
       <div className="notification-toolbar">
         <Field.Root className="notification-filter">
-          <Field.Label htmlFor="notification-state">Show</Field.Label>
+          <Field.Label htmlFor="notification-state">{t("routesNotifications.show")}</Field.Label>
           <SelectControl
             id="notification-state"
             value={state}
             onValueChange={(value) => setState(value as NotificationState)}
             options={(["inbox", "unread", "archived", "snoozed", "all"] as const).map((value) => ({
               value,
-              label: value[0]!.toUpperCase() + value.slice(1),
+              label: enumLabel(value),
             }))}
           />
         </Field.Root>
         <Field.Root className="notification-filter">
-          <Field.Label htmlFor="notification-service">Service</Field.Label>
+          <Field.Label htmlFor="notification-service">
+            {t("routesNotifications.service")}
+          </Field.Label>
           <SelectControl
             id="notification-service"
             value={service}
             onValueChange={setService}
             options={[
-              { value: "", label: "All services" },
+              { value: "", label: t("routesNotifications.allServices") },
               ...services.map((value) => ({
                 value,
-                label: value[0]!.toUpperCase() + value.slice(1),
+                label: enumLabel(value),
               })),
             ]}
           />
@@ -95,7 +99,7 @@ export function NotificationsPage() {
               void center.refresh(true);
             }}
           >
-            Retry
+            {t("common.retry")}
           </Button>
         </p>
       )}
@@ -107,7 +111,7 @@ export function NotificationsPage() {
         </ul>
         {list.loading && (
           <p className="notification-empty" role="status">
-            Loading notifications…
+            {t("routesNotifications.loadingNotifications")}
           </p>
         )}
         {!list.loading && !list.error && !list.items.length && (
@@ -117,8 +121,8 @@ export function NotificationsPage() {
               width="28"
               height="28"
             />
-            <strong>No notifications here</strong>
-            <p>Updates will appear as activity happens.</p>
+            <strong>{t("routesNotifications.noNotificationsHere")}</strong>
+            <p>{t("routesNotifications.updatesWillAppearAsActivityHappens")}</p>
           </div>
         )}
       </div>
@@ -130,7 +134,7 @@ export function NotificationsPage() {
               void list.loadMore();
             }}
           >
-            Load more
+            {t("routesNotifications.loadMore")}
           </Button>
         </div>
       )}
@@ -175,7 +179,7 @@ export function NotificationSettingsPage() {
         body: settings,
       });
       setSettings(result);
-      toast.success("Notification settings saved.");
+      toast.success(t("routesNotifications.notificationSettingsSaved"));
       await center.refresh();
     } catch (failure) {
       setError(errorMessage(failure));
@@ -186,19 +190,19 @@ export function NotificationSettingsPage() {
   return (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Notification settings</h1>
-        <p>Choose the updates you receive in your notification center.</p>
+        <h1>{t("routesNotifications.notificationSettings")}</h1>
+        <p>{t("routesNotifications.chooseTheUpdatesYouReceiveInYourNotificationCenter")}</p>
       </header>
       {error && (
         <p className="notification-error" role="alert">
           {error}
           <Button size="sm" disabled={busy} onClick={() => setReload((value) => value + 1)}>
-            Reload settings
+            {t("routesNotifications.reloadSettings")}
           </Button>
         </p>
       )}
       {!settings ? (
-        !error && <p role="status">Loading settings…</p>
+        !error && <p role="status">{t("routesNotifications.loadingSettings")}</p>
       ) : (
         <form
           onSubmit={(event) => {
@@ -208,13 +212,15 @@ export function NotificationSettingsPage() {
         >
           <section className="account-panel">
             <div className="account-panel-header">
-              <h2>In-app notifications</h2>
-              <p>Security notifications are always delivered to help protect your account.</p>
+              <h2>{t("routesNotifications.inAppNotifications")}</h2>
+              <p>
+                {t("routesNotifications.securityNotificationsAreAlwaysDeliveredToHelpProtectYour")}
+              </p>
             </div>
             <CheckboxLabel className="notification-setting">
               <span className="notification-setting-content">
-                <strong>Receive workspace updates by default</strong>
-                <small>Individual choices below override this default.</small>
+                <strong>{t("routesNotifications.receiveWorkspaceUpdatesByDefault")}</strong>
+                <small>{t("routesNotifications.individualChoicesBelowOverrideThisDefault")}</small>
               </span>
               <CheckboxControl
                 checked={settings.enabled}
@@ -228,15 +234,15 @@ export function NotificationSettingsPage() {
                   <strong>{item.label}</strong>
                   <small>
                     {item.required
-                      ? "Always on"
-                      : `${item.service === "account" ? "Account" : "System"} · ${item.category}`}
+                      ? t("routesNotifications.alwaysOn")
+                      : `${item.service === "account" ? t("routesNotifications.account") : t("routesNotifications.system")} · ${enumLabel(item.category)}`}
                   </small>
                 </span>
                 <CheckboxControl
                   checked={
                     item.required ||
                     (settings.rules[`type:${item.type}`] ??
-                      settings.rules[`category:${item.service}:${item.category}`] ??
+                      settings.rules[`category:${item.service}:${enumLabel(item.category)}`] ??
                       settings.rules[`service:${item.service}`] ??
                       settings.enabled)
                   }
@@ -252,7 +258,7 @@ export function NotificationSettingsPage() {
             ))}
             <div className="account-actions">
               <Button variant="primary" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Save changes"}
+                {busy ? t("common.saving") : t("common.saveChanges")}
               </Button>
             </div>
           </section>

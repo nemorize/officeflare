@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { all } from "./control";
 import { integer } from "./input";
 import { provider, providers } from "./providers";
@@ -15,7 +16,7 @@ export function sendingLimits(name: string, configured: number | null) {
 }
 export function configuredSendLimit(value: unknown, name: string | null) {
   if (value === null) return null;
-  if (!name) fail(400, "A sending provider is required to configure max_send_bytes");
+  if (!name) fail(400, t("mailLimits.aSendingProviderIsRequiredToConfigureMaxSend"));
   return integer(value, "max_send_bytes", 1, provider(name).capabilities.max_send_bytes);
 }
 export const providerSendMaximum = () =>
@@ -49,6 +50,6 @@ export function validateMessageSize(message: MessageSizeInput, maximum: number) 
   if (estimatedMessageBytes(message) > maximum)
     fail(
       413,
-      `Message exceeds the sending limit of ${maximum} bytes, including encoded attachments and body`,
+      t("mailLimits.messageExceedsTheSendingLimitOfBytesIncludingEncoded", { maximum: maximum }),
     );
 }

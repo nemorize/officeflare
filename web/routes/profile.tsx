@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   CheckboxLabel,
@@ -36,16 +37,18 @@ function FieldControl({
           .join(", ")
       : typeof value === "boolean"
         ? value
-          ? "Yes"
-          : "No"
+          ? t("common.yes")
+          : t("common.no")
         : field.value_type === "select" && typeof value === "string"
           ? label(field.options?.find((option) => option.value === value)?.label, value)
-          : String(value ?? "Not set");
+          : String(value ?? t("routesProfile.notSet"));
     return (
       <div className="account-readonly">
         <span className="account-readonly-label">{title}</span>
-        <span className="account-readonly-value">{display || "Not set"}</span>
-        <span className="account-readonly-value">Managed by your organization</span>
+        <span className="account-readonly-value">{display || t("routesProfile.notSet")}</span>
+        <span className="account-readonly-value">
+          {t("routesProfile.managedByYourOrganization")}
+        </span>
       </div>
     );
   }
@@ -74,11 +77,11 @@ function FieldControl({
     );
   if (field.value_type === "select" || field.value_type === "boolean") {
     const items = [
-      ...(!field.required ? [{ value: "", label: "Not set" }] : []),
+      ...(!field.required ? [{ value: "", label: t("routesProfile.notSet") }] : []),
       ...(field.value_type === "boolean"
         ? [
-            { value: "true", label: "Yes" },
-            { value: "false", label: "No" },
+            { value: "true", label: t("common.yes") },
+            { value: "false", label: t("common.no") },
           ]
         : (field.options ?? []).map((option) => ({
             value: option.value,
@@ -97,7 +100,7 @@ function FieldControl({
         >
           <Select.Label>{title}</Select.Label>
           <Select.Trigger>
-            <Select.Value placeholder="Select an option" />
+            <Select.Value placeholder={t("routesProfile.selectAnOption")} />
           </Select.Trigger>
           <SelectPopup>
             <Select.List>
@@ -183,10 +186,12 @@ export function ProfilePage() {
     let fields;
     try {
       if ([...name.trim()].length > 200)
-        throw new Error("Your display name must contain at most 200 characters.");
+        throw new Error(t("routesProfile.yourDisplayNameMustContainAtMost200Characters"));
       fields = profileChanges(definitions, values);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Check your profile information.");
+      setError(
+        failure instanceof Error ? failure.message : t("routesProfile.checkYourProfileInformation"),
+      );
       return;
     }
     inFlight.current = true;
@@ -196,7 +201,7 @@ export function ProfilePage() {
         method: "PATCH",
         body: { display_name: name.trim() || null, fields },
       });
-      notify.success("Your profile has been saved.");
+      notify.success(t("routesProfile.yourProfileHasBeenSaved"));
       await reload().catch(() => {});
     } catch (failure) {
       notify.error(errorMessage(failure));
@@ -209,13 +214,13 @@ export function ProfilePage() {
   return (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Profile</h1>
-        <p>Manage your personal information.</p>
+        <h1>{t("routesProfile.profile")}</h1>
+        <p>{t("routesProfile.manageYourPersonalInformation")}</p>
       </header>
       <ProfileImageSettings />
       {loading ? (
         <p className="account-loading" role="status">
-          Loading your profile…
+          {t("routesProfile.loadingYourProfile")}
         </p>
       ) : !ready ? (
         <section className="account-panel">
@@ -228,25 +233,25 @@ export function ProfilePage() {
           <Form onSubmit={save} aria-busy={busy}>
             <section className="account-panel">
               <div className="account-panel-header">
-                <h2>Personal information</h2>
+                <h2>{t("routesProfile.personalInformation")}</h2>
               </div>
               <Fieldset.Root disabled={busy}>
                 <TextField
-                  label="Display name"
+                  label={t("routesProfile.displayName")}
                   name="display_name"
                   autoComplete="name"
                   value={name}
                   onValueChange={setName}
-                  description="The name shown in your workspace."
+                  description={t("routesProfile.theNameShownInYourWorkspace")}
                 />
                 <TextField
-                  label="Email"
+                  label={t("common.email")}
                   name="email"
                   type="email"
                   autoComplete="email"
                   value={email}
                   readOnly
-                  description="Contact your administrator to change your email address."
+                  description={t("routesProfile.contactYourAdministratorToChangeYourEmailAddress")}
                 />
                 {definitions.map((field) => (
                   <FieldControl
@@ -267,7 +272,7 @@ export function ProfilePage() {
               )}
               <div className="account-actions">
                 <Button type="submit" variant="primary" disabled={busy}>
-                  {busy ? "Saving…" : "Save changes"}
+                  {busy ? t("common.saving") : t("common.saveChanges")}
                 </Button>
               </div>
             </section>

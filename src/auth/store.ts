@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   and,
   eq,
@@ -125,7 +126,7 @@ export async function throttle(c: AuthContext, category: string, subject?: strin
   const result = await db.batch([statements[0]!, ...statements.slice(1)]);
   if (result.some((rows, index) => rows[0]!.attempts > buckets[index]!.limit)) {
     c.header("Retry-After", String(window - (timestamp % window)));
-    throw new HTTPException(429, { message: "Too many attempts" });
+    throw new HTTPException(429, { message: t("authStore.tooManyAttempts") });
   }
   // Bounded cleanup; retain rotation history until its session expires.
   await db
@@ -450,8 +451,8 @@ export async function completeLogin(c: AuthContext, challenge: Challenge, token:
       {
         source_key: `security.sign_in:${pair.session.id}`,
         type: "security.sign_in",
-        title: "New sign-in to your account",
-        body: "A new session signed in. Review your active sessions if you do not recognize this activity.",
+        title: t("authStore.newSignInToYourAccount"),
+        body: t("authStore.aNewSessionSignedInReviewYourActiveSessions"),
         target_path: "/profile/sessions",
         recipient_ids: [user.id],
       },

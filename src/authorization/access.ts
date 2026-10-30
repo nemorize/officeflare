@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { measured } from "../observability/performance";
 import {
   and,
@@ -152,7 +153,7 @@ export async function can(
   return (await requestPermissions(c)).includes(permission);
 }
 
-export function forbidden(message = "Permission denied"): never {
+export function forbidden(message = t("authorizationAccess.permissionDenied")): never {
   throw new HTTPException(403, { message });
 }
 export const requirePermission = (permission: Permission) =>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, count, eq, exists, gt, inArray, isNull, notExists, sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -37,18 +38,20 @@ const publicRole = (role: Role) => ({
   is_default: !!role.is_default,
 });
 function missing(): never {
-  throw new HTTPException(404, { message: "Not found" });
+  throw new HTTPException(404, { message: t("routesAuthorization.notFound") });
 }
 function label(value: unknown) {
-  return string(value, "label", 100).trim() || invalid("Invalid label");
+  return string(value, "label", 100).trim() || invalid(t("routesAuthorization.invalidLabel"));
 }
 function description(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value.length > 1000) invalid("Invalid description");
+  if (typeof value !== "string" || value.length > 1000)
+    invalid(t("routesAuthorization.invalidDescription"));
   return value;
 }
 function version(value: unknown) {
-  if (!Number.isSafeInteger(value) || (value as number) < 1) invalid("Invalid version");
+  if (!Number.isSafeInteger(value) || (value as number) < 1)
+    invalid(t("routesAuthorization.invalidVersion"));
   return value as number;
 }
 async function roleWithPermissions(c: AuthContext, id: string) {
@@ -82,7 +85,7 @@ async function requireGrantable(c: AuthContext, permissions: readonly string[]) 
       .where(and(eq(users.id, c.get("identity").user.id), grantable(c, permissions)))
       .get())
   ) {
-    forbidden("Cannot grant permissions you do not hold");
+    forbidden(t("routesAuthorization.cannotGrantPermissionsYouDoNotHold"));
   }
 }
 async function commit(
@@ -99,7 +102,7 @@ async function commit(
     ...writes(accessWon(db, session.id, operation)),
   ]);
   if (result[0]!.meta.changes !== 1)
-    conflict("Account, permissions or role changed; reload and retry");
+    conflict(t("routesAuthorization.accountPermissionsOrRoleChangedReloadAndRetry"));
 }
 
 const roleRoutes = new Hono<AppEnv>();
@@ -107,7 +110,7 @@ roleRoutes.use("*", requireAccess);
 roleRoutes.get("/", requirePermission("admin.roles.read"), async (c) => {
   const cursor = c.req.query("cursor");
   if (cursor !== undefined && (cursor.length > 64 || !/^[a-z][a-z0-9_-]*$/.test(cursor)))
-    invalid("Invalid cursor");
+    invalid(t("routesAuthorization.invalidCursor"));
   const db = c.get("db"),
     rows = await db
       .select()
@@ -149,7 +152,7 @@ roleRoutes.get("/:id", requirePermission("admin.roles.read"), async (c) =>
 roleRoutes.post("/", requirePermission("admin.roles.create"), async (c) => {
   const data = await body(c, ["key", "label", "description", "permissions"]);
   const key = string(data.key, "key", 64);
-  if (!/^[a-z][a-z0-9_-]*$/.test(key)) invalid("Invalid key");
+  if (!/^[a-z][a-z0-9_-]*$/.test(key)) invalid(t("routesAuthorization.invalidKey"));
   const values = {
     id: uuid(),
     key,
@@ -162,7 +165,7 @@ roleRoutes.post("/", requirePermission("admin.roles.create"), async (c) => {
   await requireGrantable(c, permissions);
   const db = c.get("db");
   if (await db.select({ id: roles.id }).from(roles).where(eq(roles.key, key)).get())
-    conflict("Role key already exists");
+    conflict(t("routesAuthorization.roleKeyAlreadyExists"));
   await commit(
     c,
     "admin.roles.create",
@@ -185,8 +188,9 @@ roleRoutes.put("/:id", requirePermission("admin.roles.update"), async (c) => {
     db = c.get("db"),
     role = await db.select().from(roles).where(eq(roles.id, id)).get();
   if (!role) missing();
-  if (role.is_system) forbidden("System roles cannot be modified");
-  if (version(data.version) !== role.version) conflict("Role changed; reload and retry");
+  if (role.is_system) forbidden(t("routesAuthorization.systemRolesCannotBeModified"));
+  if (version(data.version) !== role.version)
+    conflict(t("routesAuthorization.roleChangedReloadAndRetry"));
   const next = {
     label: label(data.label),
     description: description(data.description),
@@ -195,9 +199,9 @@ roleRoutes.put("/:id", requirePermission("admin.roles.update"), async (c) => {
   };
   const permissions = permissionList(data.permissions);
   if (role.is_default && !defaultEligible(permissions))
-    invalid("Default roles can only grant Mail, Calendar or Drive access");
+    invalid(t("routesAuthorization.defaultRolesCanOnlyGrantMailCalendarOrDrive"));
   if (role.is_default && !(await can(c, "admin.roles.defaults.manage")))
-    forbidden("Editing a default role requires admin.roles.defaults.manage");
+    forbidden(t("routesAuthorization.editingADefaultRoleRequiresAdminRolesDefaultsManage"));
   await requireOwnedRoles(c, [id]);
   await requireGrantable(c, permissions);
   await commit(
@@ -228,13 +232,14 @@ roleRoutes.patch("/:id/default", requirePermission("admin.roles.defaults.manage"
   const data = await body(c, ["is_default", "version"]),
     id = c.req.param("id"),
     db = c.get("db");
-  if (typeof data.is_default !== "boolean") invalid("Invalid is_default");
+  if (typeof data.is_default !== "boolean") invalid(t("routesAuthorization.invalidIsDefault"));
   const role = await db.select().from(roles).where(eq(roles.id, id)).get();
   if (!role) missing();
-  if (role.is_system) forbidden("System roles cannot be default roles");
-  if (version(data.version) !== role.version) conflict("Role changed; reload and retry");
+  if (role.is_system) forbidden(t("routesAuthorization.systemRolesCannotBeDefaultRoles"));
+  if (version(data.version) !== role.version)
+    conflict(t("routesAuthorization.roleChangedReloadAndRetry"));
   if (data.is_default && !defaultEligible(await permissionsOf(c, id)))
-    invalid("Default roles can only grant Mail, Calendar or Drive access");
+    invalid(t("routesAuthorization.defaultRolesCanOnlyGrantMailCalendarOrDrive"));
   await requireOwnedRoles(c, [id]);
   const limit = data.is_default
     ? sql`(SELECT count(*) FROM roles WHERE is_default=1 AND id<>${id})<50`
@@ -261,10 +266,10 @@ roleRoutes.delete("/:id", requirePermission("admin.roles.delete"), async (c) => 
     db = c.get("db"),
     role = await db.select().from(roles).where(eq(roles.id, id)).get();
   if (!role) missing();
-  if (role.is_system) forbidden("System roles cannot be deleted");
+  if (role.is_system) forbidden(t("routesAuthorization.systemRolesCannotBeDeleted"));
   await requireOwnedRoles(c, [id]);
   if (role.is_default && !(await can(c, "admin.roles.defaults.manage")))
-    forbidden("Deleting a default role requires admin.roles.defaults.manage");
+    forbidden(t("routesAuthorization.deletingADefaultRoleRequiresAdminRolesDefaultsManage"));
   await commit(
     c,
     "admin.roles.delete",
@@ -334,9 +339,9 @@ userRoleRoutes.put("/:id/roles", requirePermission("admin.users.roles.read"), as
     expected = version(data.version),
     user = await userExists(c, id);
   if (expected !== user.role_assignment_version)
-    conflict("Assigned roles changed; reload and retry");
+    conflict(t("routesAuthorization.assignedRolesChangedReloadAndRetry"));
   const selected = ids.length ? await db.select().from(roles).where(inArray(roles.id, ids)) : [];
-  if (selected.length !== ids.length) invalid("Unknown role");
+  if (selected.length !== ids.length) invalid(t("routesAuthorization.unknownRole"));
   const current = await db
     .select({ role: roles })
     .from(userRoles)
@@ -346,9 +351,9 @@ userRoleRoutes.put("/:id/roles", requirePermission("admin.users.roles.read"), as
     added = ids.filter((key) => !oldIds.includes(key)),
     removed = oldIds.filter((key) => !ids.includes(key));
   if (added.length && !(await can(c, "admin.users.roles.assign")))
-    forbidden("Adding roles requires admin.users.roles.assign");
+    forbidden(t("routesAuthorization.addingRolesRequiresAdminUsersRolesAssign"));
   if (removed.length && !(await can(c, "admin.users.roles.remove")))
-    forbidden("Removing roles requires admin.users.roles.remove");
+    forbidden(t("routesAuthorization.removingRolesRequiresAdminUsersRolesRemove"));
   if (!added.length && !removed.length) return c.body(null, 204);
   await requireOwnedRoles(c, [...added, ...removed]);
   const allRows = [

@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useRef, useState } from "react";
 import { Button, Input, SelectControl } from "./ui";
 import {
@@ -38,15 +40,16 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
   const preview = () =>
     action.run(async () => {
       if (!file) return;
-      if (!/\.ics$/i.test(file.name)) throw new Error("Choose an .ics calendar file.");
+      if (!/\.ics$/i.test(file.name))
+        throw new Error(t("componentsCalendarImport.chooseAnIcsCalendarFile"));
       if (!file.size || file.size > 1024 * 1024)
-        throw new Error("Choose a non-empty .ics file of up to 1 MiB.");
+        throw new Error(t("componentsCalendarImport.chooseANonEmptyIcsFileOfUpTo"));
       const bytes = await file.arrayBuffer();
       let text: string;
       try {
         text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       } catch {
-        throw new Error("The file must use UTF-8 encoding.");
+        throw new Error(t("componentsCalendarImport.theFileMustUseUtf8Encoding"));
       }
       setContent(text);
       const report = await calendarApi<ImportResult>(`/calendars/${calendarId}/imports`, {
@@ -82,8 +85,8 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
   const finished = result?.dry_run === false;
   return (
     <CalendarModal
-      title="Import calendar events"
-      description="Bring events from an iCalendar (.ics) file into one of your calendars."
+      title={t("componentsCalendarImport.importCalendarEvents")}
+      description={t("componentsCalendarImport.bringEventsFromAnIcalendarIcsFileIntoOne")}
       onClose={onClose}
       busy={action.busy}
       className="calendar-import-modal"
@@ -110,15 +113,15 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
                   setFile(null);
                 }}
               >
-                Change
+                {t("componentsCalendarImport.change")}
               </Button>
             )}
           </div>
         ) : (
           <div className="calendar-settings-fields">
-            <CalendarField label="Calendar">
+            <CalendarField label={t("componentsCalendarImport.calendar")}>
               <SelectControl
-                aria-label="Import into calendar"
+                aria-label={t("componentsCalendarImport.importIntoCalendar")}
                 value={calendarId}
                 onValueChange={(value) => {
                   setCalendarId(value);
@@ -129,12 +132,12 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
               />
             </CalendarField>
             <CalendarField
-              label="iCalendar file"
-              hint="UTF-8 .ics files, up to 1 MiB and 200 entries."
+              label={t("componentsCalendarImport.icalendarFile")}
+              hint={t("componentsCalendarImport.utf8IcsFilesUpTo1MibAnd")}
             >
               <Input
                 type="file"
-                aria-label="iCalendar file"
+                aria-label={t("componentsCalendarImport.icalendarFile")}
                 accept=".ics,text/calendar"
                 disabled={action.busy || finished}
                 onChange={(event) => {
@@ -144,33 +147,55 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
               />
             </CalendarField>
             <p className="calendar-import-hint">
-              Floating times use the selected calendar’s time zone. Existing event UIDs are skipped.
-              Guests and reminders are not imported; no invitations are sent.
+              {t("componentsCalendarImport.floatingTimesUseTheSelectedCalendarSTimeZone")}
             </p>
           </div>
         )}
         {!destinations.length && (
-          <CalendarNotice error="You need permission to add events to a calendar before importing." />
+          <CalendarNotice
+            error={t("componentsCalendarImport.youNeedPermissionToAddEventsToACalendar")}
+          />
         )}
         <CalendarNotice error={action.error} />
         {result && (
           <section
             className="calendar-import-report"
-            aria-label={finished ? "Import result" : "Import preview"}
+            aria-label={
+              finished
+                ? t("componentsCalendarImport.importResult")
+                : t("componentsCalendarImport.importPreview")
+            }
           >
             <div role="status">
-              <h3>{finished ? "Import complete" : "Review import"}</h3>
-              <p>
+              <h3>
                 {finished
-                  ? `${result.events_imported} events imported · ${result.summary.imported} entries processed`
-                  : `${result.summary.ready} entries ready`}{" "}
-                · {result.summary.skipped} skipped · {result.summary.failed} failed
+                  ? t("componentsCalendarImport.importComplete")
+                  : t("componentsCalendarImport.reviewImport")}
+              </h3>
+              <p>
+                <LocalizedMessage
+                  id="componentsCalendarImport.skippedFailed"
+                  values={{
+                    value1: finished
+                      ? t("componentsCalendarImport.eventsImportedEntriesProcessed", {
+                          events_imported: result.events_imported,
+                          imported: result.summary.imported,
+                        })
+                      : t("componentsCalendarImport.entriesReady", { ready: result.summary.ready }),
+                    skipped: result.summary.skipped,
+                    failed: result.summary.failed,
+                  }}
+                />
               </p>
             </div>
             <ol>
               {result.entries.map((entry) => (
                 <li key={entry.index} data-status={entry.status}>
-                  <strong>{entry.title || entry.uid || `Entry ${entry.index}`}</strong>
+                  <strong>
+                    {entry.title ||
+                      entry.uid ||
+                      t("componentsCalendarImport.entry", { index: entry.index })}
+                  </strong>
                   <span>{entry.message}</span>
                   {entry.warnings.map((warning) => (
                     <p key={warning}>{warning}</p>
@@ -182,7 +207,7 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
         )}
         <div className="calendar-dialog-actions">
           <Button variant="ghost" disabled={action.busy} onClick={onClose}>
-            {finished ? "Done" : "Cancel"}
+            {finished ? t("common.done") : t("common.cancel")}
           </Button>
           {!finished &&
             (!result ? (
@@ -191,7 +216,9 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
                 type="submit"
                 disabled={!file || !calendarId || action.busy}
               >
-                {action.busy ? "Reading file…" : "Preview import"}
+                {action.busy
+                  ? t("componentsCalendarImport.readingFile")
+                  : t("componentsCalendarImport.previewImport")}
               </Button>
             ) : (
               <Button
@@ -201,7 +228,9 @@ export function CalendarImportDialog({ onClose }: { onClose: () => void }) {
                   void commit();
                 }}
               >
-                {action.busy ? "Importing…" : "Import events"}
+                {action.busy
+                  ? t("componentsCalendarImport.importing")
+                  : t("componentsCalendarImport.importEvents")}
               </Button>
             ))}
         </div>

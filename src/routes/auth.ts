@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, eq, exists, gt, isNotNull, isNull, not, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { Buffer } from "node:buffer";
@@ -115,7 +116,7 @@ auth.post("/refresh", async (c) => {
   const requestId =
     data?.request_id !== undefined ? string(data.request_id, "request_id", 64) : undefined;
   if (requestId && !/^[a-f0-9]{64}$/.test(requestId)) {
-    return c.json({ error: "Invalid request_id" }, 400);
+    return c.json({ error: t("routesAuth.invalidRequestId") }, 400);
   }
   const token = bearer(c);
   if (!/^ofr_[A-Za-z0-9_-]{43}$/.test(token)) unauthorized();

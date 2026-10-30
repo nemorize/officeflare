@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { body } from "../auth/input";
 import { now, uuid, type AppEnv } from "../auth/types";
@@ -71,14 +72,14 @@ const version = (data: Record<string, unknown>) => integer(data.version, "versio
 const pathId = (c: DriveContext) => identifier(c.req.param("itemId"));
 export function limit(c: DriveContext) {
   const value = c.req.query("limit") ?? "50";
-  if (!/^\d+$/.test(value)) fail(400, "Invalid limit");
+  if (!/^\d+$/.test(value)) fail(400, t("driveItems.invalidLimit"));
   return integer(Number(value), "limit", 1, 100);
 }
 function searchDate(value: string | undefined, key: string) {
   if (!value) return null;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
   if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== value)
-    fail(400, `Invalid ${key}`);
+    fail(400, t("driveItems.invalid", { key: key }));
   return date / 1000;
 }
 
@@ -87,14 +88,14 @@ items.get("/", async (c) => {
     view = c.req.query("view") ?? "my",
     kind = c.req.query("kind");
   if (!["my", "shared", "starred", "recent", "trash", "all"].includes(view))
-    fail(400, "Invalid Drive view");
-  if (kind && kind !== "file" && kind !== "folder") fail(400, "Invalid kind");
+    fail(400, t("driveItems.invalidDriveView"));
+  if (kind && kind !== "file" && kind !== "folder") fail(400, t("driveItems.invalidKind"));
   const q = text(c.req.query("q") ?? "", "q", 255),
     owner = text(c.req.query("owner") ?? "", "owner", 255).trim(),
     afterDate = searchDate(c.req.query("after"), "after"),
     beforeDate = searchDate(c.req.query("before"), "before");
   if (afterDate !== null && beforeDate !== null && afterDate > beforeDate)
-    fail(400, "Invalid date range");
+    fail(400, t("driveItems.invalidDateRange"));
   const requestedType = c.req.query("content_type"),
     contentType = requestedType
       ? requestedType.endsWith("/*")
@@ -108,7 +109,7 @@ items.get("/", async (c) => {
       : "all");
   if (parent !== "root" && parent !== "all") {
     const folder = await requireItem(c, identifier(parent, "parent_id"));
-    if (folder.kind !== "folder") fail(400, "Not a folder");
+    if (folder.kind !== "folder") fail(400, t("driveItems.notAFolder"));
   }
   const check = access(user, view === "trash" ? "owner" : "read", "d.id", view === "trash");
   const filters = [check.sql],
@@ -159,7 +160,7 @@ items.get("/", async (c) => {
   const sort = c.req.query("sort"),
     order = c.req.query("order") ?? "asc";
   if ((sort && !["name", "updated_at", "size"].includes(sort)) || !["asc", "desc"].includes(order))
-    fail(400, "Invalid sort order");
+    fail(400, t("driveItems.invalidSortOrder"));
   const scope = JSON.stringify([
       "items",
       view,
@@ -193,7 +194,7 @@ items.get("/", async (c) => {
     try {
       tuple = JSON.parse(after[1]);
     } catch {
-      fail(400, "Invalid Drive cursor");
+      fail(400, t("driveItems.invalidDriveCursor"));
     }
     if (
       !Array.isArray(tuple) ||
@@ -202,7 +203,7 @@ items.get("/", async (c) => {
       typeof tuple[1] !== "string" ||
       typeof tuple[2] !== "string"
     )
-      fail(400, "Invalid Drive cursor");
+      fail(400, t("driveItems.invalidDriveCursor"));
     const [folderGroup, nameValue, id] = tuple as [number, string, string],
       value = sort === "name" ? nameValue : after[0];
     filters.push(
@@ -346,7 +347,7 @@ items.patch("/:itemId", async (c) => {
   const data = await body(c, ["version", "name", "description", "parent_id", "trashed"]),
     expected = version(data),
     id = pathId(c);
-  if (Object.keys(data).length < 2) fail(400, "No changes supplied");
+  if (Object.keys(data).length < 2) fail(400, t("driveItems.noChangesSupplied"));
   const trash = data.trashed === undefined ? undefined : bool(data.trashed, "trashed");
   const item = await requireItem(
     c,
@@ -356,7 +357,7 @@ items.patch("/:itemId", async (c) => {
   );
   const target = data.parent_id === undefined ? null : await destination(c, data.parent_id);
   if (target && target.owner_user_id !== item.owner_user_id)
-    fail(400, "Use ownership transfer or copy to move between owners");
+    fail(400, t("driveItems.useOwnershipTransferOrCopyToMoveBetweenOwners"));
   if (
     target?.parent_id &&
     (await first(
@@ -366,7 +367,7 @@ items.patch("/:itemId", async (c) => {
       id,
     ))
   )
-    fail(400, "A folder cannot be moved into its descendants");
+    fail(400, t("driveItems.aFolderCannotBeMovedIntoItsDescendants"));
   if (trash === false && !target && item.parent_id) await requireItem(c, item.parent_id, "edit");
   const updates = ["version=version+1", "updated_at=?"],
     args: Bind[] = [now()];
@@ -437,7 +438,7 @@ items.delete("/:itemId", async (c) => {
   const id = pathId(c),
     expected = integer(Number(c.req.query("version")), "version", 1),
     item = await requireItem(c, id, "owner", true);
-  if (!item.trashed_at) fail(409, "Move the item to trash before permanent deletion");
+  if (!item.trashed_at) fail(409, t("driveItems.moveTheItemToTrashBeforePermanentDeletion"));
   const recipients = await audience(c, id);
   await mutate(
     c,
@@ -474,7 +475,7 @@ items.put("/:itemId/star", async (c) => {
 });
 items.get("/:itemId/versions", async (c) => {
   const item = await requireItem(c, pathId(c));
-  if (item.kind !== "file") fail(400, "Folders have no content versions");
+  if (item.kind !== "file") fail(400, t("driveItems.foldersHaveNoContentVersions"));
   const pageSize = limit(c),
     scope = `versions:${item.id}`,
     after = c.req.query("cursor")
@@ -513,7 +514,7 @@ items.post("/:itemId/versions/:versionId/restore", async (c) => {
     sourceId,
     id,
   );
-  if (!source) fail(404, "Version not found");
+  if (!source) fail(404, t("driveItems.versionNotFound"));
   const newId = uuid(),
     recipients = await audience(c, id);
   await ensureCapacity(c, item.owner_user_id, source.size);
@@ -547,8 +548,8 @@ items.post("/:itemId/versions/:versionId/restore", async (c) => {
       recipients,
       notification: {
         type: "drive.updated",
-        title: "Drive file updated",
-        body: "A previous version of a shared Drive file was restored.",
+        title: t("driveItems.driveFileUpdated"),
+        body: t("driveItems.aPreviousVersionOfASharedDriveFileWas"),
         recipients,
       },
     },
@@ -560,14 +561,15 @@ items.delete("/:itemId/versions/:versionId", async (c) => {
     versionId = identifier(c.req.param("versionId")),
     item = await requireItem(c, id, "owner"),
     expected = integer(Number(c.req.query("version")), "version", 1);
-  if (item.current_version_id === versionId) fail(409, "The current version cannot be deleted");
+  if (item.current_version_id === versionId)
+    fail(409, t("driveItems.theCurrentVersionCannotBeDeleted"));
   const source = await first<DriveVersion>(
     c.env,
     "SELECT * FROM drive_versions WHERE id=? AND item_id=?",
     versionId,
     id,
   );
-  if (!source) fail(404, "Version not found");
+  if (!source) fail(404, t("driveItems.versionNotFound"));
   await mutate(
     c,
     [
@@ -617,9 +619,9 @@ items.post("/:itemId/copy", async (c) => {
     `SELECT d.* FROM drive_items d WHERE id IN (${descendants("?")}) AND ${cleanPath("d.id")} LIMIT 201`,
     source.id,
   );
-  if (sourceRows.length > 200) fail(413, "Copy at most 200 items per operation");
+  if (sourceRows.length > 200) fail(413, t("driveItems.copyAtMost200ItemsPerOperation"));
   if (target.parent_id && sourceRows.some((row) => row.id === target.parent_id))
-    fail(400, "A folder cannot be copied into itself");
+    fail(400, t("driveItems.aFolderCannotBeCopiedIntoItself"));
   const ids = new Map(
     sourceRows.map((item) => [item.id, item.id === source.id ? copiedId : uuid()]),
   );
@@ -637,7 +639,7 @@ items.post("/:itemId/copy", async (c) => {
     const next = sourceRows.find(
       (item) => pending.has(item.id) && (item.id === source.id || !pending.has(item.parent_id!)),
     );
-    if (!next) fail(409, "Invalid folder hierarchy");
+    if (!next) fail(409, t("driveItems.invalidFolderHierarchy"));
     ordered.push(next);
     pending.delete(next.id);
   }

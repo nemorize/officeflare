@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   createContext,
   useCallback,
@@ -86,10 +87,10 @@ export function AccessDenied() {
   return (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Access restricted</h1>
-        <p>You do not have permission to open this page.</p>
+        <h1>{t("componentsConsoleAccess.accessRestricted")}</h1>
+        <p>{t("componentsConsoleAccess.youDoNotHavePermissionToOpenThisPage")}</p>
       </header>
-      <Link to="/">Return to workspace</Link>
+      <Link to="/">{t("componentsConsoleAccess.returnToWorkspace")}</Link>
     </section>
   );
 }
@@ -102,7 +103,7 @@ export function ConsoleGate({
 }) {
   const access = useAccess();
   if (access.status === "loading")
-    return <LoadingSkeleton kind="page" label="Checking permissions…" />;
+    return <LoadingSkeleton kind="page" label={t("componentsConsoleAccess.checkingPermissions")} />;
   if (access.status === "error")
     return (
       <section className="account-page">
@@ -123,10 +124,8 @@ export function ConsoleHome() {
   ) : (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Console</h1>
-        <p>
-          Your account can access Console. User and role management require additional permissions.
-        </p>
+        <h1>{t("componentsConsoleAccess.console")}</h1>
+        <p>{t("componentsConsoleAccess.yourAccountCanAccessConsoleUserAndRoleManagement")}</p>
       </header>
     </section>
   );
@@ -134,7 +133,7 @@ export function ConsoleHome() {
 export function ServiceGate({ permission, children }: { permission: string; children: ReactNode }) {
   const access = useAccess();
   if (access.status === "loading")
-    return <LoadingSkeleton kind="page" label="Checking permissions…" />;
+    return <LoadingSkeleton kind="page" label={t("componentsConsoleAccess.checkingPermissions")} />;
   if (access.status === "error")
     return (
       <section className="account-page">
@@ -150,7 +149,7 @@ export function WorkspaceHome() {
   if (access.status !== "ready")
     return (
       <p className="account-page" role="status">
-        {access.error || "Checking permissions…"}
+        {access.error || t("componentsConsoleAccess.checkingPermissions")}
       </p>
     );
   const app = workspaceApps.find((item) => access.permissions.includes(item.permission));

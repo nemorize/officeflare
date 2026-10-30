@@ -1,0 +1,41 @@
+.drive-settings-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-y: auto;
+}
+.drive-settings-meter {
+  margin-block: 20px;
+}
+.drive-settings-meter[data-ui="meter-root"] {
+  width: 100%;
+}
+.drive-settings-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 24px;
+  font-size: 12px;
+}
+.drive-settings-storage-grid dt {
+  color: var(--ui-muted);
+}
+.drive-settings-storage-grid dd {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.drive-settings-scroll .settings-options + .settings-hint {
+  margin-top: 16px;
+}
+@media (max-width: 760px) {
+  .drive-settings-storage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drive-settings-storage-grid > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .drive-settings-storage-grid dd {
+    margin: 0;
+  }
+}

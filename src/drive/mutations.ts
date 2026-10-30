@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { sql } from "drizzle-orm";
 import { unauthorized } from "../auth/input";
 import { uuid } from "../auth/types";
@@ -147,8 +148,8 @@ export async function mutate(
     if (!(await first(c.env, `SELECT 1 WHERE ${actor.sql}`, ...actor.args))) unauthorized();
     const action = actionCondition(c);
     if (!(await first(c.env, `SELECT 1 WHERE ${action.sql}`, ...action.args)))
-      fail(403, "Drive action is restricted by your role, account status or workspace policy");
-    fail(412, "Drive item or permissions changed. Reload and try again.");
+      fail(403, t("driveMutations.driveActionIsRestrictedByYourRoleAccountStatus"));
+    fail(412, t("driveMutations.driveItemOrPermissionsChangedReloadAndTryAgain"));
   }
   if (audit?.notification && c.env.NOTIFICATION_QUEUE)
     c.executionCtx.waitUntil(

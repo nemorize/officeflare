@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { Button, Field, Icon, Input } from "./ui";
 
@@ -37,7 +38,7 @@ export function PasswordField({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
+          aria-label={`${visible ? t("componentsPasswordField.hide") : t("componentsPasswordField.show")} ${label.toLowerCase()}`}
           aria-pressed={visible}
           onClick={() => setVisible(!visible)}
         >

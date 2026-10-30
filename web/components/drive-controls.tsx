@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { createDriveCache, useSharedDriveCache } from "./drive-resource-context";
 import {
   useCallback,
@@ -32,7 +33,7 @@ import "../routes/drive.css";
 
 export const driveFailure = (failure: unknown) =>
   failure instanceof ApiError && failure.status === 409
-    ? "This item changed. Refresh and try again."
+    ? t("componentsDriveControls.thisItemChangedRefreshAndTryAgain")
     : failure instanceof Error && !(failure instanceof ApiError) && failure.name !== "TypeError"
       ? failure.message
       : errorMessage(failure);
@@ -189,7 +190,12 @@ export function DriveModal({
       >
         <div className="drive-modal-heading">
           <Dialog.Title>{title}</Dialog.Title>
-          <DriveIconButton icon="close" label="Close dialog" onClick={onClose} disabled={busy} />
+          <DriveIconButton
+            icon="close"
+            label={t("componentsDriveControls.closeDialog")}
+            onClick={onClose}
+            disabled={busy}
+          />
         </div>
         <Dialog.Description>{description ?? ""}</Dialog.Description>
         {children}
@@ -219,17 +225,21 @@ export function DriveState({
   return error ? (
     <div className="drive-state">
       <Icon name="info" width="32" height="32" />
-      <h2>Unable to load this view</h2>
+      <h2>{t("componentsDriveControls.unableToLoadThisView")}</h2>
       <p role="alert">{error}</p>
-      {retry && <Button onClick={retry}>Try again</Button>}
+      {retry && <Button onClick={retry}>{t("componentsDriveControls.tryAgain")}</Button>}
     </div>
   ) : loading ? (
     layout ? (
       <div className={`drive-files-scroll drive-files-skeleton drive-layout-${layout}`}>
-        <LoadingSkeleton kind="list" label="Loading your files…" rows={8} />
+        <LoadingSkeleton
+          kind="list"
+          label={t("componentsDriveControls.loadingYourFiles")}
+          rows={8}
+        />
       </div>
     ) : (
-      <LoadingSkeleton label="Loading files…" />
+      <LoadingSkeleton label={t("componentsDriveControls.loadingFiles")} />
     )
   ) : null;
 }

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, asc, desc, eq, gt, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -23,7 +24,7 @@ import { visibleInbox } from "../notifications/service";
 const routes = new Hono<AppEnv>();
 const integer = (value: unknown, name: string, minimum = 0) => {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum)
-    invalid(`Invalid ${name}`);
+    invalid(t("routesNotifications.invalid", { name: name }));
   return value;
 };
 const wake = (c: AuthContext) =>
@@ -35,9 +36,9 @@ const wake = (c: AuthContext) =>
 
 routes.get("/events/ws", async (c) => {
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
-    throw new HTTPException(426, { message: "Expected WebSocket upgrade" });
+    throw new HTTPException(426, { message: t("routesNotifications.expectedWebsocketUpgrade") });
   if (c.req.header("origin") !== new URL(c.req.url).origin)
-    throw new HTTPException(403, { message: "Invalid WebSocket origin" });
+    throw new HTTPException(403, { message: t("routesNotifications.invalidWebsocketOrigin") });
   const protocols = (c.req.header("sec-websocket-protocol") ?? "")
     .split(",")
     .map((value) => value.trim());
@@ -138,7 +139,7 @@ routes.put("/preferences", async (c) => {
     Object.keys(rules).length > allowed.size ||
     Object.entries(rules).some(([key, value]) => !allowed.has(key) || typeof value !== "boolean")
   )
-    invalid("Invalid notification rules");
+    invalid(t("routesNotifications.invalidNotificationRules"));
   for (const [type, definition] of Object.entries(notificationTypes)) {
     if (
       definition.required &&
@@ -146,7 +147,7 @@ routes.put("/preferences", async (c) => {
         rules[`category:${definition.service}:${definition.category}`] === false ||
         rules[`service:${definition.service}`] === false)
     )
-      invalid("Required notifications cannot be disabled");
+      invalid(t("routesNotifications.requiredNotificationsCannotBeDisabled"));
   }
   const db = c.get("db"),
     { user, session } = c.get("identity"),
@@ -181,7 +182,9 @@ routes.put("/preferences", async (c) => {
   ]);
   if (results[0].meta.changes !== 1) unauthorized();
   if (results[1].length !== 1)
-    throw new HTTPException(412, { message: "Settings changed elsewhere. Reload and try again." });
+    throw new HTTPException(412, {
+      message: t("routesNotifications.settingsChangedElsewhereReloadAndTryAgain"),
+    });
   wake(c);
   return c.json({ enabled: data.enabled, rules, version: version + 1 });
 });
@@ -238,7 +241,7 @@ routes.post("/events/tickets", async (c) => {
   ]);
   if (results[1].meta.changes !== 1) unauthorized();
   if (results[2].meta.changes !== 1)
-    throw new HTTPException(429, { message: "Too many pending connections" });
+    throw new HTTPException(429, { message: t("routesNotifications.tooManyPendingConnections") });
   return c.json({ ticket: token, expires_at: expiresAt }, 201);
 });
 
@@ -279,16 +282,16 @@ routes.get("/", async (c) => {
     service = c.req.query("service"),
     type = c.req.query("type");
   if (!["inbox", "unread", "archived", "snoozed", "all"].includes(state))
-    invalid("Invalid notification state");
-  if (type && !knownType(type)) invalid("Unknown notification type");
+    invalid(t("routesNotifications.invalidNotificationState"));
+  if (type && !knownType(type)) invalid(t("routesNotifications.unknownNotificationType"));
   const types = Object.entries(notificationTypes)
     .filter(([key, value]) => (!type || key === type) && (!service || value.service === service))
     .map(([key]) => key);
-  if (!types.length) invalid("Unknown notification service");
+  if (!types.length) invalid(t("routesNotifications.unknownNotificationService"));
   const limitText = c.req.query("limit") ?? "30";
-  if (!/^\d+$/.test(limitText)) invalid("Invalid limit");
+  if (!/^\d+$/.test(limitText)) invalid(t("routesNotifications.invalidLimit"));
   const limit = integer(Number(limitText), "limit", 1);
-  if (limit > 100) invalid("Invalid limit");
+  if (limit > 100) invalid(t("routesNotifications.invalidLimit"));
   const scope = JSON.stringify(["list", state, service ?? "", type ?? ""]);
   const before = c.req.query("cursor")
     ? await readCursor(c.env, userId, scope, c.req.query("cursor")!)
@@ -340,14 +343,16 @@ routes.get("/", async (c) => {
 routes.patch("/:id", async (c) => {
   const data = await body(c, ["version", "read", "archived", "snoozed_until", "deleted"]),
     version = integer(data.version, "version", 1);
-  if (Object.keys(data).length < 2) invalid("No changes supplied");
+  if (Object.keys(data).length < 2) invalid(t("routesNotifications.noChangesSupplied"));
   for (const key of ["read", "archived", "deleted"])
-    if (data[key] !== undefined && typeof data[key] !== "boolean") invalid(`Invalid ${key}`);
-  if (data.deleted === false) invalid("Deleted notifications cannot be restored");
+    if (data[key] !== undefined && typeof data[key] !== "boolean")
+      invalid(t("routesNotifications.invalid2", { key: key }));
+  if (data.deleted === false)
+    invalid(t("routesNotifications.deletedNotificationsCannotBeRestored"));
   const timestamp = now();
   if (data.snoozed_until !== undefined && data.snoozed_until !== null) {
     const until = integer(data.snoozed_until, "snoozed_until", timestamp + 60);
-    if (until > timestamp + 30 * 86400) invalid("Snooze must be within 30 days");
+    if (until > timestamp + 30 * 86400) invalid(t("routesNotifications.snoozeMustBeWithin30Days"));
   }
   const db = c.get("db"),
     { user, session } = c.get("identity"),
@@ -376,8 +381,8 @@ routes.patch("/:id", async (c) => {
   if (results[1].length !== 1)
     throw new HTTPException(results[2].length ? 412 : 404, {
       message: results[2].length
-        ? "Notification changed elsewhere. Reload and try again."
-        : "Notification not found",
+        ? t("routesNotifications.notificationChangedElsewhereReloadAndTryAgain")
+        : t("routesNotifications.notificationNotFound"),
     });
   wake(c);
   return c.json({ version: version + 1 });

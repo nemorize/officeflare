@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import { Link, useBlocker } from "react-router";
 import { api } from "../lib/api";
@@ -57,15 +59,18 @@ function Rules() {
     } | null>(null);
   return (
     <MailSettingsLayout
-      title="Rules & blocked senders"
-      description="Organize incoming mail automatically for this mailbox."
+      title={t("routesMailManage.rulesBlockedSenders")}
+      description={t("routesMailManage.organizeIncomingMailAutomaticallyForThisMailbox")}
     >
       <MailRules
         path={path + "/rules"}
         folders={mail.folders}
         canManage={!!mail.box!.access?.manage}
       />
-      <MailSection title="Blocked senders" description="Messages from blocked senders go to Spam.">
+      <MailSection
+        title={t("routesMailManage.blockedSenders")}
+        description={t("routesMailManage.messagesFromBlockedSendersGoToSpam")}
+      >
         <MailState
           loading={resource.loading && !resource.data}
           error={resource.error}
@@ -87,14 +92,14 @@ function Rules() {
             }}
           >
             <MailInput
-              label="Email address"
+              label={t("routesMailManage.emailAddress")}
               type="email"
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
             <Button type="submit" size="lg" disabled={action.busy}>
-              Block sender
+              {t("routesMailManage.blockSender")}
             </Button>
           </MailForm>
         )}
@@ -116,7 +121,7 @@ function Rules() {
                     });
                   }}
                 >
-                  Unblock
+                  {t("routesMailManage.unblock")}
                 </Button>
               )}
             </div>
@@ -126,8 +131,8 @@ function Rules() {
       </MailSection>
       {mail.box!.access?.manage && (
         <MailSection
-          title="Test rules"
-          description="Preview the result for a sample message without changing any mail."
+          title={t("routesMailManage.testRules")}
+          description={t("routesMailManage.previewTheResultForASampleMessageWithoutChanging")}
         >
           <MailForm
             className="mail-form"
@@ -146,29 +151,43 @@ function Rules() {
               {(["from", "to", "subject"] as const).map((field) => (
                 <MailInput
                   key={field}
-                  label={field === "from" ? "Sender" : field === "to" ? "Recipient" : "Subject"}
+                  label={
+                    field === "from"
+                      ? t("routesMailManage.sender")
+                      : field === "to"
+                        ? t("routesMailManage.recipient")
+                        : t("routesMailManage.subject")
+                  }
                   value={test[field]}
                   onChange={(event) => setTest({ ...test, [field]: event.target.value })}
                 />
               ))}
             </div>
-            <MailField label="Body">
+            <MailField label={t("routesMailManage.body")}>
               <MailTextarea
                 value={test.body}
                 onChange={(event) => setTest({ ...test, body: event.target.value })}
               />
             </MailField>
             <Button type="submit" disabled={action.busy}>
-              Evaluate rules
+              {t("routesMailManage.evaluateRules")}
             </Button>
             {result && (
               <p role="status">
-                Folder:{" "}
-                {mail.folders.find((folder) => folder.id === result.folder_id)?.name ??
-                  result.folder_id}{" "}
-                · {result.is_read ? "Read" : "Unread"}
-                {result.is_starred ? " · Starred" : ""}
-                {result.is_spam ? " · Spam" : ""} · {result.matched_rules.length} rule(s) matched
+                <LocalizedMessage
+                  id="routesMailManage.folderRuleSMatched"
+                  values={{
+                    value1:
+                      mail.folders.find((folder) => folder.id === result.folder_id)?.name ??
+                      result.folder_id,
+                    value2: result.is_read
+                      ? t("routesMailManage.read")
+                      : t("routesMailManage.unread"),
+                    value3: result.is_starred ? t("routesMailManage.starred") : "",
+                    value4: result.is_spam ? t("routesMailManage.spam") : "",
+                    length: result.matched_rules.length,
+                  }}
+                />
               </p>
             )}
           </MailForm>
@@ -190,19 +209,19 @@ function Settings() {
   }>(mail.box!.access?.read ? path + "/addresses" : null);
   return (
     <MailSettingsLayout
-      title="Mail settings"
-      description="Choose your personal preferences and manage this mailbox."
+      title={t("routesMailManage.mailSettings")}
+      description={t("routesMailManage.chooseYourPersonalPreferencesAndManageThisMailbox")}
     >
       <MailSection
-        title="Your experience"
-        description="Personal preferences · saved automatically."
+        title={t("routesMailManage.yourExperience")}
+        description={t("routesMailManage.personalPreferencesSavedAutomatically")}
       >
         <MailPreferenceFields />
       </MailSection>
       {mail.box!.access?.write && (
         <MailSection
-          title="Folders"
-          description="Shared by everyone using this mailbox."
+          title={t("routesMailManage.folders")}
+          description={t("routesMailManage.sharedByEveryoneUsingThisMailbox")}
           action={<FolderManager />}
         >
           <div className="mail-settings-folder-list">
@@ -229,12 +248,12 @@ function Settings() {
             <SettingsSkeleton />
           )}
           <MailSection
-            title="Addresses"
-            description="Use these addresses to receive and send mail."
+            title={t("routesMailManage.addresses")}
+            description={t("routesMailManage.useTheseAddressesToReceiveAndSendMail")}
             action={
               permissions.includes("admin.mail.domains.read") && (
                 <Button nativeButton={false} render={<Link to="/console/mail/domains" />}>
-                  Manage addresses
+                  {t("routesMailManage.manageAddresses")}
                 </Button>
               )
             }
@@ -250,9 +269,14 @@ function Settings() {
                   <div>
                     <strong>{address.email_address}</strong>
                     <p>
-                      {address.is_primary ? "Primary · " : ""}
-                      {address.receive_enabled ? "Receives mail" : "Receive disabled"} ·{" "}
-                      {address.send_enabled ? "Can send" : "Send disabled"}
+                      {address.is_primary ? t("routesMailManage.primary") : ""}
+                      {address.receive_enabled
+                        ? t("routesMailManage.receivesMail")
+                        : t("routesMailManage.receiveDisabled")}
+                      {t("routesMailManage.text")}{" "}
+                      {address.send_enabled
+                        ? t("routesMailManage.canSend")
+                        : t("routesMailManage.sendDisabled")}
                     </p>
                   </div>
                 </div>
@@ -260,7 +284,7 @@ function Settings() {
             </div>
             {addresses.data && !addresses.data.addresses.length && (
               <p className="mail-hint">
-                Ask an administrator to assign an address to this mailbox.
+                {t("routesMailManage.askAnAdministratorToAssignAnAddressToThis")}
               </p>
             )}
           </MailSection>
@@ -269,8 +293,8 @@ function Settings() {
       {mail.box!.access?.manage ? (
         <Members path={path} />
       ) : (
-        <MailSection title="Sharing">
-          <p className="mail-hint">Mailbox members are managed by the owner.</p>
+        <MailSection title={t("routesMailManage.sharing")}>
+          <p className="mail-hint">{t("routesMailManage.mailboxMembersAreManagedByTheOwner")}</p>
         </MailSection>
       )}
     </MailSettingsLayout>
@@ -278,23 +302,27 @@ function Settings() {
 }
 function SettingsSkeleton() {
   return (
-    <div className="mail-settings-placeholder" role="status" aria-label="Loading mailbox settings…">
+    <div
+      className="mail-settings-placeholder"
+      role="status"
+      aria-label={t("routesMailManage.loadingMailboxSettings")}
+    >
       <div aria-hidden="true">
         <MailSection
-          title="Signature"
-          description="Added to new messages and replies. Shared mailbox changes apply to everyone."
+          title={t("routesMailManage.signature")}
+          description={t("routesMailManage.addedToNewMessagesAndRepliesSharedMailboxChanges")}
         >
           <LoadingSkeleton kind="form" rows={0} />
         </MailSection>
         <MailSection
-          title="Automatic replies"
-          description="Reply to incoming messages while you are away."
+          title={t("routesMailManage.automaticReplies")}
+          description={t("routesMailManage.replyToIncomingMessagesWhileYouAreAway")}
         >
           <LoadingSkeleton rows={1} />
         </MailSection>
         <MailSection
-          title="Trash & spam"
-          description="Choose how long this mailbox keeps deleted and spam messages."
+          title={t("routesMailManage.trashSpam")}
+          description={t("routesMailManage.chooseHowLongThisMailboxKeepsDeletedAndSpam")}
         >
           <LoadingSkeleton rows={2} />
         </MailSection>
@@ -357,14 +385,14 @@ function SettingsForm({
     return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty, imageUploading]);
   async function persist() {
-    if (imageUploading) throw new Error("Wait for the image upload to finish.");
+    if (imageUploading) throw new Error(t("routesMailManage.waitForTheImageUploadToFinish"));
     if (
       values.retention_days !== null &&
       (!Number.isInteger(values.retention_days) ||
         values.retention_days < 1 ||
         values.retention_days > 3650)
     )
-      throw new Error("Enter a whole number between 1 and 3650 days.");
+      throw new Error(t("routesMailManage.enterAWholeNumberBetween1And3650Days"));
     const result = await api<{ settings: MailSettings }>(path + "/settings", {
       method: "PATCH",
       body: { ...values, auto_reply_enabled: !!values.auto_reply_enabled },
@@ -373,7 +401,7 @@ function SettingsForm({
     setValues(next);
     setSaved(JSON.stringify(next));
     cache.replace(path + "/settings", result);
-    notify.success("Mailbox settings saved.");
+    notify.success(t("routesMailManage.mailboxSettingsSaved"));
   }
   return (
     <>
@@ -386,17 +414,17 @@ function SettingsForm({
       >
         <MailFieldset disabled={!canManage || action.busy}>
           <MailSection
-            title="Signature"
+            title={t("routesMailManage.signature")}
             description={
               canManage
-                ? "Added to new messages and replies. Shared mailbox changes apply to everyone."
-                : "Managed by the mailbox owner."
+                ? t("routesMailManage.addedToNewMessagesAndRepliesSharedMailboxChanges")
+                : t("routesMailManage.managedByTheMailboxOwner")
             }
           >
             <fieldset className="mail-editor-field">
-              <legend className="mail-sr-only">Signature editor</legend>
+              <legend className="mail-sr-only">{t("routesMailManage.signatureEditor")}</legend>
               <MailEditor
-                label="Signature"
+                label={t("routesMailManage.signature")}
                 value={values.signature_html}
                 maxImageBytes={maxImageBytes}
                 onUploadingChange={setImageUploading}
@@ -409,8 +437,8 @@ function SettingsForm({
             </fieldset>
           </MailSection>
           <MailSection
-            title="Automatic replies"
-            description="Reply to incoming messages while you are away."
+            title={t("routesMailManage.automaticReplies")}
+            description={t("routesMailManage.replyToIncomingMessagesWhileYouAreAway")}
           >
             <Check
               checked={!!values.auto_reply_enabled}
@@ -418,19 +446,19 @@ function SettingsForm({
                 setValues((old) => ({ ...old, auto_reply_enabled: Number(value) }))
               }
             >
-              Enable automatic replies
+              {t("routesMailManage.enableAutomaticReplies")}
             </Check>
             {!!values.auto_reply_enabled && (
               <div className="mail-form">
                 <MailInput
-                  label="Auto-reply subject"
+                  label={t("routesMailManage.autoReplySubject")}
                   maxLength={998}
                   value={values.auto_reply_subject}
                   onChange={(event) =>
                     setValues((old) => ({ ...old, auto_reply_subject: event.target.value }))
                   }
                 />
-                <MailField label="Auto-reply message">
+                <MailField label={t("routesMailManage.autoReplyMessage")}>
                   <MailTextarea
                     maxLength={10000}
                     value={values.auto_reply_text}
@@ -443,12 +471,12 @@ function SettingsForm({
             )}
           </MailSection>
           <MailSection
-            title="Trash & spam"
-            description="Choose how long this mailbox keeps deleted and spam messages."
+            title={t("routesMailManage.trashSpam")}
+            description={t("routesMailManage.chooseHowLongThisMailboxKeepsDeletedAndSpam")}
           >
             <MailInput
-              label="Keep messages for (days)"
-              hint="Leave empty to keep messages until you delete them. Allowed range: 1–3650 days."
+              label={t("routesMailManage.keepMessagesForDays")}
+              hint={t("routesMailManage.leaveEmptyToKeepMessagesUntilYouDeleteThem")}
               type="number"
               min={1}
               max={3650}
@@ -466,22 +494,26 @@ function SettingsForm({
         {canManage && (
           <div className="mail-settings-save">
             <span role="status">
-              {action.busy ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}
+              {action.busy
+                ? t("common.saving")
+                : dirty
+                  ? t("routesMailManage.unsavedChanges")
+                  : t("routesMailManage.allChangesSaved")}
             </span>
             <Button
               type="submit"
               variant="primary"
               disabled={action.busy || imageUploading || !dirty}
             >
-              Save mailbox settings
+              {t("routesMailManage.saveMailboxSettings")}
             </Button>
           </div>
         )}
       </MailForm>
       <MailModal
         open={blocker.state === "blocked"}
-        title="Save changes before leaving?"
-        description="Your mailbox settings have unsaved changes."
+        title={t("routesMailManage.saveChangesBeforeLeaving")}
+        description={t("routesMailManage.yourMailboxSettingsHaveUnsavedChanges")}
         busy={action.busy}
         onClose={() => blocker.state === "blocked" && blocker.reset()}
       >
@@ -497,20 +529,20 @@ function SettingsForm({
               });
             }}
           >
-            Save and continue
+            {t("routesMailManage.saveAndContinue")}
           </Button>
           <Button
             disabled={action.busy || imageUploading}
             onClick={() => blocker.state === "blocked" && blocker.proceed()}
           >
-            Discard changes
+            {t("routesMailManage.discardChanges")}
           </Button>
           <Button
             variant="ghost"
             disabled={action.busy}
             onClick={() => blocker.state === "blocked" && blocker.reset()}
           >
-            Keep editing
+            {t("routesMailManage.keepEditing")}
           </Button>
         </div>
       </MailModal>
@@ -531,10 +563,10 @@ interface MemberDirectory {
   candidates: { id: string; email_address: string; display_name: string | null }[];
 }
 const rightLabels: Record<MailRight, string> = {
-  read: "Read messages",
-  write: "Edit mail & folders",
-  send: "Send mail",
-  manage: "Manage settings & sharing",
+  read: t("routesMailManage.readMessages"),
+  write: t("routesMailManage.editMailFolders"),
+  send: t("routesMailManage.sendMail"),
+  manage: t("routesMailManage.manageSettingsSharing"),
 };
 function Members({ path }: { path: string }) {
   const mail = useMail(),
@@ -558,13 +590,19 @@ function Members({ path }: { path: string }) {
   }, [search]);
   return (
     <MailSection
-      title="Shared access"
-      description="The owner always has full access. Reading, editing, sending and managing are separate permissions."
+      title={t("routesMailManage.sharedAccess")}
+      description={t("routesMailManage.theOwnerAlwaysHasFullAccessReadingEditingSending")}
     >
       <p className="mail-hint">
-        Owner:{" "}
-        {resource.data?.candidates.find((candidate) => candidate.id === mail.box!.owner_user_id)
-          ?.email_address ?? mail.box!.owner_user_id}
+        <LocalizedMessage
+          id="routesMailManage.owner"
+          values={{
+            value1:
+              resource.data?.candidates.find(
+                (candidate) => candidate.id === mail.box!.owner_user_id,
+              )?.email_address ?? mail.box!.owner_user_id,
+          }}
+        />
       </p>
       <MailState
         loading={resource.loading && !resource.data}
@@ -581,7 +619,7 @@ function Members({ path }: { path: string }) {
                 {(Object.keys(rightLabels) as MailRight[])
                   .filter((right) => member[`can_${right}`])
                   .map((right) => rightLabels[right])
-                  .join(" · ") || "No permissions"}
+                  .join(" · ") || t("routesMailManage.noPermissions")}
               </p>
             </div>
             {member.user_id !== mail.box!.owner_user_id && (
@@ -600,10 +638,10 @@ function Members({ path }: { path: string }) {
                     );
                   }}
                 >
-                  Edit
+                  {t("common.edit")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setDeleting(member)}>
-                  Remove
+                  {t("common.remove")}
                 </Button>
               </div>
             )}
@@ -615,7 +653,7 @@ function Members({ path }: { path: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           void action.run(async () => {
-            if (!user) throw new Error("Choose a member.");
+            if (!user) throw new Error(t("routesMailManage.chooseAMember"));
             await api(`${path}/members/${user}`, { method: "PUT", body: grants });
             resource.reload();
             mail.refreshBoxes();
@@ -624,18 +662,18 @@ function Members({ path }: { path: string }) {
         }}
       >
         <MailInput
-          label="Find an account"
-          hint="Only active accounts with Mail access are listed. Search by name or sign-in email."
+          label={t("routesMailManage.findAnAccount")}
+          hint={t("routesMailManage.onlyActiveAccountsWithMailAccessAreListedSearch")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <MailField label="Member">
+        <MailField label={t("routesMailManage.member")}>
           <MailSelect
             required
             value={user}
             onValueChange={(nextValue) => setUser(nextValue)}
             options={[
-              { value: "", label: "Select an account" },
+              { value: "", label: t("routesMailManage.selectAnAccount") },
               ...((user &&
                 !resource.data?.candidates.some((candidate) => candidate.id === user) && [
                   {
@@ -673,14 +711,16 @@ function Members({ path }: { path: string }) {
         </div>
         <MailNotice error={action.error} />
         <Button type="submit" disabled={action.busy || !user}>
-          Save member access
+          {t("routesMailManage.saveMemberAccess")}
         </Button>
       </MailForm>
       <Confirm
         open={!!deleting}
-        title="Remove mailbox access?"
-        description={`${deleting?.email_address ?? "This member"} will lose the permissions granted by this mailbox.`}
-        label="Remove member"
+        title={t("routesMailManage.removeMailboxAccess")}
+        description={t("routesMailManage.willLoseThePermissionsGrantedByThisMailbox", {
+          value1: deleting?.email_address ?? t("routesMailManage.thisMember"),
+        })}
+        label={t("routesMailManage.removeMember")}
         destructive
         onClose={() => setDeleting(null)}
         onConfirm={async () => {

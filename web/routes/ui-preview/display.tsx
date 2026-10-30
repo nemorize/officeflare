@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../../components/i18n";
+import { t } from "../../../shared/i18n/index.ts";
 import { useState } from "react";
 import {
   Avatar,
@@ -17,17 +19,21 @@ export function ButtonDemo() {
   return (
     <>
       <Button variant="primary" onClick={() => setCount((value) => value + 1)}>
-        Click example button
+        {t("routesUiPreviewDisplay.clickExampleButton")}
       </Button>{" "}
-      <Button onClick={() => setCount((value) => value + 1)}>Secondary</Button>{" "}
+      <Button onClick={() => setCount((value) => value + 1)}>
+        {t("routesUiPreviewDisplay.secondary")}
+      </Button>{" "}
       <Button variant="subtle" onClick={() => setCount((value) => value + 1)}>
-        Subtle
+        {t("routesUiPreviewDisplay.subtle")}
       </Button>{" "}
       <Button variant="ghost" onClick={() => setCount((value) => value + 1)}>
-        Ghost
+        {t("routesUiPreviewDisplay.ghost")}
       </Button>{" "}
-      <Button disabled>Disabled button</Button>
-      <p role="status">Clicked {count} times</p>
+      <Button disabled>{t("routesUiPreviewDisplay.disabledButton")}</Button>
+      <p role="status">
+        <LocalizedMessage id="routesUiPreviewDisplay.clickedTimes" values={{ count: count }} />
+      </p>
     </>
   );
 }
@@ -36,11 +42,16 @@ export function AvatarDemo() {
   return (
     <>
       <Avatar.Root>
-        <Avatar.Image src={sampleImage} alt="Alex Morgan" width={40} height={40} />
-        <Avatar.Fallback>AM</Avatar.Fallback>
+        <Avatar.Image
+          src={sampleImage}
+          alt={t("routesUiPreviewDisplay.alexMorgan")}
+          width={40}
+          height={40}
+        />
+        <Avatar.Fallback>{t("routesUiPreviewDisplay.am")}</Avatar.Fallback>
       </Avatar.Root>
-      <Avatar.Root aria-label="Taylor Smith">
-        <Avatar.Fallback>TS</Avatar.Fallback>
+      <Avatar.Root aria-label={t("routesUiPreviewDisplay.taylorSmith")}>
+        <Avatar.Fallback>{t("routesUiPreviewDisplay.ts")}</Avatar.Fallback>
       </Avatar.Root>
     </>
   );
@@ -51,7 +62,8 @@ export function ProgressDemo() {
   return (
     <>
       <Progress.Root value={value}>
-        <Progress.Label>Example upload</Progress.Label> <Progress.Value />
+        <Progress.Label>{t("routesUiPreviewDisplay.exampleUpload")}</Progress.Label>{" "}
+        <Progress.Value />
         <Progress.Track>
           <Progress.Indicator />
         </Progress.Track>
@@ -60,9 +72,9 @@ export function ProgressDemo() {
         disabled={value === 100}
         onClick={() => setValue((current) => Math.min(current + 25, 100))}
       >
-        Advance upload
+        {t("routesUiPreviewDisplay.advanceUpload")}
       </Button>{" "}
-      <Button onClick={() => setValue(0)}>Reset upload</Button>
+      <Button onClick={() => setValue(0)}>{t("routesUiPreviewDisplay.resetUpload")}</Button>
     </>
   );
 }
@@ -72,13 +84,13 @@ export function MeterDemo() {
   return (
     <>
       <Meter.Root value={value} min={0} max={100}>
-        <Meter.Label>Example storage usage</Meter.Label> <Meter.Value />
+        <Meter.Label>{t("routesUiPreviewDisplay.exampleStorageUsage")}</Meter.Label> <Meter.Value />
         <Meter.Track>
           <Meter.Indicator />
         </Meter.Track>
       </Meter.Root>
       <Button onClick={() => setValue((current) => (current + 10) % 110)}>
-        Change storage usage
+        {t("routesUiPreviewDisplay.changeStorageUsage")}
       </Button>
     </>
   );
@@ -89,13 +101,18 @@ export function ScrollAreaDemo() {
     <ScrollArea.Root data-preview="scroll-area">
       <ScrollArea.Viewport
         data-preview="scroll-viewport"
-        aria-label="Example directory"
+        aria-label={t("routesUiPreviewDisplay.exampleDirectory")}
         tabIndex={0}
       >
         <ScrollArea.Content>
           <ol>
             {Array.from({ length: 20 }, (_, index) => (
-              <li key={index}>Example directory member {index + 1}</li>
+              <li key={index}>
+                <LocalizedMessage
+                  id="routesUiPreviewDisplay.exampleDirectoryMember"
+                  values={{ value1: index + 1 }}
+                />
+              </li>
             ))}
           </ol>
         </ScrollArea.Content>
@@ -111,9 +128,9 @@ export function ScrollAreaDemo() {
 export function SeparatorDemo() {
   return (
     <>
-      <p>Profile section</p>
+      <p>{t("routesUiPreviewDisplay.profileSection")}</p>
       <Separator />
-      <p>Security section</p>
+      <p>{t("routesUiPreviewDisplay.securitySection")}</p>
     </>
   );
 }
@@ -123,22 +140,35 @@ export function ToggleDemo() {
   return (
     <>
       <Toggle pressed={pressed} onPressedChange={setPressed}>
-        Pin example item
+        {t("routesUiPreviewDisplay.pinExampleItem")}
       </Toggle>
-      <p role="status">{pressed ? "Item pinned" : "Item unpinned"}</p>
+      <p role="status">
+        {pressed
+          ? t("routesUiPreviewDisplay.itemPinned")
+          : t("routesUiPreviewDisplay.itemUnpinned")}
+      </p>
     </>
   );
 }
 
 export function ToggleGroupDemo() {
-  const [value, setValue] = useState<string[]>(["List"]);
+  const [value, setValue] = useState<string[]>([t("routesUiPreviewDisplay.list")]);
   return (
     <>
-      <ToggleGroup value={value} onValueChange={setValue} aria-label="Directory view">
-        <Toggle value="List">List</Toggle>
-        <Toggle value="Grid">Grid</Toggle>
+      <ToggleGroup
+        value={value}
+        onValueChange={setValue}
+        aria-label={t("routesUiPreviewDisplay.directoryView")}
+      >
+        <Toggle value="List">{t("routesUiPreviewDisplay.list")}</Toggle>
+        <Toggle value="Grid">{t("routesUiPreviewDisplay.grid")}</Toggle>
       </ToggleGroup>
-      <p role="status">View: {value.join(", ") || "None"}</p>
+      <p role="status">
+        <LocalizedMessage
+          id="routesUiPreviewDisplay.view"
+          values={{ value1: value.join(", ") || t("common.none") }}
+        />
+      </p>
     </>
   );
 }

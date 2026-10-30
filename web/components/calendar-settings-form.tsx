@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState, type ReactNode } from "react";
 import { useBlocker } from "react-router";
 import { Button } from "./ui";
@@ -30,7 +31,7 @@ export function CalendarSettingsForm({
   dirty,
   onSave,
   onReset,
-  label = "Save changes",
+  label = t("common.saveChanges"),
 }: {
   children: ReactNode;
   dirty: boolean;
@@ -68,30 +69,34 @@ export function CalendarSettingsForm({
         <CalendarNotice error={action.error} />
         <div className="calendar-settings-save">
           <span role="status">
-            {action.busy ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}
+            {action.busy
+              ? t("common.saving")
+              : dirty
+                ? t("componentsCalendarSettingsForm.unsavedChanges")
+                : t("componentsCalendarSettingsForm.allChangesSaved")}
           </span>
           <Button variant="ghost" disabled={!dirty || action.busy} onClick={onReset}>
-            Reset changes
+            {t("componentsCalendarSettingsForm.resetChanges")}
           </Button>
           <Button variant="primary" type="submit" disabled={!dirty || action.busy}>
-            {action.busy ? "Saving…" : label}
+            {action.busy ? t("common.saving") : label}
           </Button>
         </div>
       </form>
       {blocker.state === "blocked" && (
         <CalendarModal
-          title="Save changes before leaving?"
-          description="This page has unsaved changes."
+          title={t("componentsCalendarSettingsForm.saveChangesBeforeLeaving")}
+          description={t("componentsCalendarSettingsForm.thisPageHasUnsavedChanges")}
           onClose={() => blocker.reset()}
           busy={action.busy}
         >
           <CalendarNotice error={action.error} />
           <div className="calendar-dialog-actions">
             <Button variant="ghost" disabled={action.busy} onClick={() => blocker.reset()}>
-              Keep editing
+              {t("componentsCalendarSettingsForm.keepEditing")}
             </Button>
             <Button disabled={action.busy} onClick={() => blocker.proceed()}>
-              Discard changes
+              {t("componentsCalendarSettingsForm.discardChanges")}
             </Button>
             <Button
               variant="primary"
@@ -102,7 +107,7 @@ export function CalendarSettingsForm({
                 });
               }}
             >
-              Save and leave
+              {t("componentsCalendarSettingsForm.saveAndLeave")}
             </Button>
           </div>
         </CalendarModal>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { Button, CheckboxControl, Icon, Input, SearchField, SelectControl } from "./ui";
@@ -33,7 +34,7 @@ export function CalendarMiniMonth({ onSelect }: { onSelect?: () => void }) {
     today = todayIn(calendar.zone);
   const selectedWeek = startOfWeek(calendar.date, weekStart);
   return (
-    <section className="calendar-mini" aria-label="Choose a date">
+    <section className="calendar-mini" aria-label={t("componentsCalendarChrome.chooseADate")}>
       <div className="calendar-mini-heading">
         <strong>{dateLabel(first, { month: "long", year: "numeric" }, locale)}</strong>
         <div>
@@ -41,13 +42,13 @@ export function CalendarMiniMonth({ onSelect }: { onSelect?: () => void }) {
             icon="chevron"
             className="calendar-previous"
             size="sm"
-            label="Previous mini-calendar month"
+            label={t("componentsCalendarChrome.previousMiniCalendarMonth")}
             onClick={() => setMonth(civilDate(first).subtract({ months: 1 }).toString())}
           />
           <CalendarIconButton
             icon="chevron"
             size="sm"
-            label="Next mini-calendar month"
+            label={t("componentsCalendarChrome.nextMiniCalendarMonth")}
             onClick={() => setMonth(civilDate(first).add({ months: 1 }).toString())}
           />
         </div>
@@ -126,7 +127,7 @@ export function CalendarSettingsButton({ onNavigate }: { onNavigate?: () => void
   return (
     <CalendarIconButton
       icon="settings"
-      label="Calendar settings"
+      label={t("componentsCalendarChrome.calendarSettings")}
       nativeButton={false}
       render={<NavLink to="/calendar/settings" onClick={onNavigate} />}
     />
@@ -154,7 +155,7 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
         {add && calendar.can("calendars.create") && (
           <CalendarIconButton
             icon="plus"
-            label="Create a calendar"
+            label={t("componentsCalendarChrome.createACalendar")}
             size="sm"
             onClick={() => calendar.setSettings("new")}
           />
@@ -181,7 +182,7 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
             <CalendarIconButton
               icon="more"
               size="sm"
-              label={`Settings for ${cal.name}`}
+              label={t("componentsCalendarChrome.settingsFor", { name: cal.name })}
               onClick={() => {
                 navigate(`/calendar/settings/calendars/${cal.id}`);
                 onNavigate?.();
@@ -192,9 +193,9 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
       })}
       {!calendars.length && (
         <p className="calendar-sidebar-empty">
-          {title === "My calendars"
-            ? "Your calendars will appear here."
-            : "Calendars shared with you appear here."}
+          {add
+            ? t("componentsCalendarChrome.yourCalendarsWillAppearHere")
+            : t("componentsCalendarChrome.calendarsSharedWithYouAppearHere")}
         </p>
       )}
     </section>
@@ -213,14 +214,14 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
           }}
         >
           <Icon name="plus" width="19" height="19" />
-          New
+          {t("componentsCalendarChrome.new")}
           <Icon name="down" width="12" height="12" />
         </Button>
       </div>
       <CalendarMiniMonth onSelect={onNavigate} />
       <div className="calendar-sidebar-calendars">
-        {section("My calendars", own, true)}
-        {section("Other calendars", other)}
+        {section(t("componentsCalendarChrome.myCalendars"), own, true)}
+        {section(t("componentsCalendarChrome.otherCalendars"), other)}
       </div>
     </div>
   );
@@ -253,7 +254,7 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
     <header className="workspace-topbar calendar-topbar">
       <CalendarIconButton
         icon="menu"
-        label="Toggle calendar navigation"
+        label={t("componentsCalendarChrome.toggleCalendarNavigation")}
         aria-expanded={mobile ? menu : !calendar.sidebarCollapsed}
         onClick={() =>
           mobile ? setMenu(true) : calendar.setSidebarCollapsed(!calendar.sidebarCollapsed)
@@ -262,7 +263,7 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
       <WorkspaceNavigationDrawer
         open={menu}
         onOpenChange={setMenu}
-        title="Calendar"
+        title={t("componentsCalendarChrome.calendar")}
         account={mobileAccount}
         actions={<CalendarSettingsButton onNavigate={() => setMenu(false)} />}
       >
@@ -274,32 +275,32 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
             className="calendar-today-button"
             onClick={() => calendar.navigate(todayIn(calendar.zone))}
           >
-            Today
+            {t("componentsCalendarChrome.today")}
           </Button>
           <div className="calendar-period-navigation">
             <CalendarIconButton
               icon="chevron"
               className="calendar-previous"
-              label="Previous period"
+              label={t("componentsCalendarChrome.previousPeriod")}
               onClick={() => calendar.step(-1)}
             />
             <CalendarIconButton
               icon="chevron"
-              label="Next period"
+              label={t("componentsCalendarChrome.nextPeriod")}
               onClick={() => calendar.step(1)}
             />
           </div>
           <h1 className="calendar-period-title" aria-live="polite">
-            {calendar.query ? "Search results" : heading}
+            {calendar.query ? t("componentsCalendarChrome.searchResults") : heading}
           </h1>
         </>
       ) : !active ? (
         <div className="calendar-period-title">
           {location.pathname.startsWith("/calendar/settings")
-            ? "Calendar settings"
+            ? t("componentsCalendarChrome.calendarSettings")
             : location.pathname.endsWith("trash")
-              ? "Trash"
-              : "Shared calendars"}
+              ? t("componentsCalendarChrome.trash")
+              : t("componentsCalendarChrome.sharedCalendars")}
         </div>
       ) : null}
       {active && searchOpen && (
@@ -315,8 +316,8 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
           <Input
             ref={searchInput}
             variant="integrated"
-            aria-label="Search events"
-            placeholder="Search events"
+            aria-label={t("componentsCalendarChrome.searchEvents")}
+            placeholder={t("componentsCalendarChrome.searchEvents")}
             value={query}
             maxLength={255}
             onChange={(event) => setQuery(event.target.value)}
@@ -326,7 +327,7 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
           />
           <CalendarIconButton
             icon="close"
-            label="Close search"
+            label={t("componentsCalendarChrome.closeSearch")}
             onClick={() => setSearchOpen(false)}
           />
         </SearchField>
@@ -335,7 +336,8 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
         {active && !searchOpen && (
           <CalendarIconButton
             icon="search"
-            label="Search events"
+            className="calendar-search-button"
+            label={t("componentsCalendarChrome.searchEvents")}
             onClick={() => setSearchOpen(true)}
           />
         )}
@@ -343,7 +345,7 @@ export function CalendarTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
           <SelectControl
             className="calendar-view-select"
             variant="outline"
-            aria-label="Calendar view"
+            aria-label={t("componentsCalendarChrome.calendarView")}
             value={calendar.view}
             onValueChange={(view) => calendar.navigate(calendar.date, view as CalendarView)}
             options={calendarViews}

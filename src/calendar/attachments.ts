@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { now, uuid, type AppEnv } from "../auth/types";
 import type { CalendarContext, Event } from "./types";
@@ -37,10 +38,10 @@ export function webUrl(value: unknown) {
   try {
     url = new URL(raw);
   } catch {
-    fail(400, "INVALID_URL", "Invalid attachment URL");
+    fail(400, "INVALID_URL", t("calendarAttachments.invalidAttachmentUrl"));
   }
   if (!["https:", "http:"].includes(url.protocol) || url.username || url.password)
-    fail(400, "INVALID_URL", "Attachment URLs must use HTTP or HTTPS");
+    fail(400, "INVALID_URL", t("calendarAttachments.attachmentUrlsMustUseHttpOrHttps"));
   return url.href;
 }
 export async function attachmentRows(c: CalendarContext, event: Event, key = "") {
@@ -98,7 +99,8 @@ const root = "/calendars/:calendarId/events/:eventId";
 async function target(c: CalendarContext, edit = false) {
   const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), edit ? 3 : 1),
     event = await requireEvent(c, cal, identifier(c.req.param("eventId")), edit);
-  if (!canSeeDetails(event, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
+  if (!canSeeDetails(event, cal))
+    fail(404, "EVENT_NOT_FOUND", t("calendarAttachments.eventNotFound"));
   return { cal, event };
 }
 routes.get(root + "/attachments", async (c) => {
@@ -124,21 +126,24 @@ routes.post(root + "/attachments", async (c) => {
     id = uuid();
   await attendanceDetails(c, cal, event, key);
   if ((data.drive_item_id === undefined) === (data.url === undefined))
-    fail(400, "INVALID_ATTACHMENT", "Choose Drive item or URL");
+    fail(400, "INVALID_ATTACHMENT", t("calendarAttachments.chooseDriveItemOrUrl"));
   const item =
     data.drive_item_id === undefined
       ? null
       : await requireItem(c as unknown as DriveContext, identifier(data.drive_item_id));
-  if (item && item.kind !== "file") fail(400, "INVALID_ATTACHMENT", "Only files can be attached");
+  if (item && item.kind !== "file")
+    fail(400, "INVALID_ATTACHMENT", t("calendarAttachments.onlyFilesCanBeAttached"));
   if ((await attachmentRows(c, event, key)).length >= 20)
-    fail(422, "TOO_MANY_ATTACHMENTS", "At most 20 attachments are allowed");
+    fail(422, "TOO_MANY_ATTACHMENTS", t("calendarAttachments.atMost20AttachmentsAreAllowed"));
   const value = {
       id,
       scope_id: selected.id,
       drive_item_id: item?.id ?? null,
       url: item ? null : webUrl(data.url),
       title:
-        data.title === undefined ? (item?.name ?? "Attachment") : text(data.title, "title", 255),
+        data.title === undefined
+          ? (item?.name ?? t("calendarAttachments.attachment"))
+          : text(data.title, "title", 255),
       mime_type:
         data.mime_type === undefined
           ? "application/octet-stream"
@@ -198,7 +203,7 @@ routes.delete(root + "/attachments/:attachmentId", async (c) => {
     value = (await attachmentRows(c, event, c.req.query("occurrence_key") ?? "")).find(
       (value) => value.id === id,
     );
-  if (!value) fail(404, "ATTACHMENT_NOT_FOUND", "Attachment not found");
+  if (!value) fail(404, "ATTACHMENT_NOT_FOUND", t("calendarAttachments.attachmentNotFound"));
   await attendanceDetails(c, cal, event, c.req.query("occurrence_key") ?? "");
   const notices = await prepareDeliveries(
     c,

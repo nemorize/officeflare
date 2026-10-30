@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { api, ApiError, errorMessage } from "./api";
 import type { ApiOptions } from "./api-client";
 import { MailOperation } from "./mail-helpers";
@@ -105,18 +106,18 @@ export interface CalendarBootstrap {
   capabilities: Record<string, unknown>;
 }
 export const calendarColors = [
-  { value: "#68747d", label: "Graphite" },
-  { value: "#648678", label: "Sage" },
-  { value: "#887d72", label: "Stone" },
-  { value: "#747992", label: "Slate" },
-  { value: "#a17670", label: "Clay" },
-  { value: "#897a95", label: "Mauve" },
+  { value: "#68747d", label: t("libCalendar.graphite") },
+  { value: "#648678", label: t("libCalendar.sage") },
+  { value: "#887d72", label: t("libCalendar.stone") },
+  { value: "#747992", label: t("libCalendar.slate") },
+  { value: "#a17670", label: t("libCalendar.clay") },
+  { value: "#897a95", label: t("libCalendar.mauve") },
 ];
 export const calendarViews: { value: CalendarView; label: string }[] = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "agenda", label: "Schedule" },
+  { value: "day", label: t("libCalendar.day") },
+  { value: "week", label: t("libCalendar.week") },
+  { value: "month", label: t("libCalendar.month") },
+  { value: "agenda", label: t("libCalendar.schedule") },
 ];
 export const calendarRank = (cal?: CalendarRecord) =>
   cal
@@ -132,7 +133,7 @@ export const eventPath = (event: Pick<CalendarEvent, "calendar_id" | "id">) =>
   `/calendars/${encodeURIComponent(event.calendar_id)}/events/${encodeURIComponent(event.id)}`;
 export const calendarFailure = (error: unknown) =>
   error instanceof ApiError && error.status === 412
-    ? "This item changed while you were editing. Reload the latest version and try again."
+    ? t("libCalendar.thisItemChangedWhileYouWereEditingReloadThe")
     : error instanceof Error && !(error instanceof ApiError) && error.name !== "TypeError"
       ? error.message
       : errorMessage(error);

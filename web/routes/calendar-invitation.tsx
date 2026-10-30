@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { useParams } from "react-router";
 import { Button, Icon, useNotifications } from "../components/ui";
@@ -46,7 +47,7 @@ export function CalendarInvitationPage() {
         },
       });
       setRevision((old) => old + 1);
-      notify.success("Your response has been saved.");
+      notify.success(t("routesCalendarInvitation.yourResponseHasBeenSaved"));
     });
   const download = () =>
     action.run(async () => {
@@ -63,16 +64,16 @@ export function CalendarInvitationPage() {
       <header className="account-page-header">
         <span className="calendar-invitation-eyebrow">
           <Icon name="calendar" />
-          Calendar invitation
+          {t("routesCalendarInvitation.calendarInvitation")}
         </span>
-        <h1>{value?.event.title ?? "You're invited"}</h1>
+        <h1>{value?.event.title ?? t("routesCalendarInvitation.youReInvited")}</h1>
       </header>
       <section className="account-panel calendar-invitation-card">
         <CalendarNotice error={resource.error || action.error} />
         {resource.loading && !value ? (
-          <LoadingSkeleton kind="reader" label="Opening invitation…" />
+          <LoadingSkeleton kind="reader" label={t("routesCalendarInvitation.openingInvitation")} />
         ) : value?.is_revoked ? (
-          <p>This invitation is no longer available.</p>
+          <p>{t("routesCalendarInvitation.thisInvitationIsNoLongerAvailable")}</p>
         ) : (
           value && (
             <>
@@ -81,7 +82,9 @@ export function CalendarInvitationPage() {
                 <div>
                   {eventDateLabel(value.event, zone)}
                   <small>
-                    {eventTimeLabel(value.event, zone)} · {zone.replaceAll("_", " ")}
+                    {eventTimeLabel(value.event, zone)}
+                    {t("routesCalendarInvitation.text")}
+                    {zone.replaceAll("_", " ")}
                   </small>
                 </div>
               </div>
@@ -102,21 +105,21 @@ export function CalendarInvitationPage() {
                   <Icon name="user" />
                   <div>
                     {value.event.organizer.email_address}
-                    <small>Organizer</small>
+                    <small>{t("routesCalendarInvitation.organizer")}</small>
                   </div>
                 </div>
               )}
               <CalendarAttachmentList attachments={value.attachments ?? []} />
               <div className="calendar-invitation-response">
-                <h2>Will you be attending?</h2>
+                <h2>{t("routesCalendarInvitation.willYouBeAttending")}</h2>
                 {!!value.event.recurrence?.length && !value.attendee.occurrence_key && (
-                  <p>Your response applies to the entire series.</p>
+                  <p>{t("routesCalendarInvitation.yourResponseAppliesToTheEntireSeries")}</p>
                 )}
                 <div>
                   {[
-                    ["accepted", "Yes"],
-                    ["tentative", "Maybe"],
-                    ["declined", "No"],
+                    ["accepted", t("common.yes")],
+                    ["tentative", t("routesCalendarInvitation.maybe")],
+                    ["declined", t("common.no")],
                   ].map(([status, label]) => (
                     <Button
                       key={status}
@@ -139,12 +142,16 @@ export function CalendarInvitationPage() {
                 }}
               >
                 <Icon name="download" />
-                Download calendar invitation (.ics)
+                {t("routesCalendarInvitation.downloadCalendarInvitationIcs")}
               </Button>
             </>
           )
         )}
-        {resource.error && <Button onClick={() => setRevision((old) => old + 1)}>Try again</Button>}
+        {resource.error && (
+          <Button onClick={() => setRevision((old) => old + 1)}>
+            {t("routesCalendarInvitation.tryAgain")}
+          </Button>
+        )}
       </section>
     </section>
   );

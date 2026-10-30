@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { inboxExcludedFolders } from "./ui-query";
 import { DurableObject } from "cloudflare:workers";
 import schema from "./partition.sql";
@@ -38,7 +39,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       "SELECT * FROM partition_identity WHERE id=1",
     );
     if (existing && (existing.mailbox_id !== mailboxId || existing.partition_id !== partitionId))
-      fail(409, "Partition identity mismatch");
+      fail(409, t("mailPartition.partitionIdentityMismatch"));
     this.sql.exec("INSERT OR IGNORE INTO partition_identity VALUES(1,?,?)", mailboxId, partitionId);
   }
   state() {
@@ -253,7 +254,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     const existing = this.receipt(operationId);
     if (existing) {
       if (existing.request_hash !== requestHash)
-        fail(409, "Idempotency key reused with different request");
+        fail(409, t("mailPartition.idempotencyKeyReusedWithDifferentRequest"));
       return existing.resource_id;
     }
     this.ctx.storage.transactionSync(() => {
@@ -283,7 +284,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       messageId,
       actorId,
     );
-    if (!message) fail(404, "Message not found");
+    if (!message) fail(404, t("mailPartition.messageNotFound"));
     return {
       ...message,
       recipients: rows<{ kind: string; email_address: string }>(
@@ -546,11 +547,11 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (["inbox", "archive"].includes(changes.folder_id ?? "") && changes.is_spam === undefined)
       changes.is_spam = 0;
     const message = this.get(messageId, actorId);
-    if (message.version !== version) fail(409, "Message version changed");
+    if (message.version !== version) fail(409, t("mailPartition.messageVersionChanged"));
     if (message.draft && changes.folder_id && changes.folder_id !== "drafts")
-      fail(409, "Drafts must be submitted or discarded");
+      fail(409, t("mailPartition.draftsMustBeSubmittedOrDiscarded"));
     const keys = Object.keys(changes) as (keyof typeof changes)[];
-    if (!keys.length) fail(400, "No changes supplied");
+    if (!keys.length) fail(400, t("mailPartition.noChangesSupplied"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE messages SET " +
@@ -588,7 +589,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         );
         if (previous) {
           if (previous.request_hash !== requestHash)
-            fail(409, "Idempotency key reused with different request");
+            fail(409, t("mailPartition.idempotencyKeyReusedWithDifferentRequest"));
           return JSON.parse(previous.result_json) as {
             id: string;
             success: true;
@@ -620,7 +621,7 @@ export class MailPartitionDO extends DurableObject<Env> {
             error:
               error instanceof Error
                 ? error.message.replace(/^MAIL:\d{3}:/, "")
-                : "Operation failed",
+                : t("mailPartition.operationFailed"),
           };
         }
       });
@@ -646,8 +647,9 @@ export class MailPartitionDO extends DurableObject<Env> {
     },
   ) {
     const message = this.get(messageId, actorId);
-    if (!message.draft || message.draft.state !== "editable") fail(409, "Draft is not editable");
-    if (message.draft.version !== version) fail(409, "Draft version changed");
+    if (!message.draft || message.draft.state !== "editable")
+      fail(409, t("mailPartition.draftIsNotEditable"));
+    if (message.draft.version !== version) fail(409, t("mailPartition.draftVersionChanged"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE messages SET subject=?,body_r2_key=?,snippet=?,reply_to_address=?,version=version+1,updated_at=? WHERE id=?",
@@ -724,7 +726,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     const existing = row<Submission>(this.sql, "SELECT * FROM submissions WHERE id=?", value.id);
     if (existing) {
       if (existing.request_hash !== value.request_hash)
-        fail(409, "Idempotency key reused with different request");
+        fail(409, t("mailPartition.idempotencyKeyReusedWithDifferentRequest"));
       return existing;
     }
     const message = this.get(value.message_id, value.actor_id);
@@ -733,7 +735,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       message.draft.state !== "editable" ||
       message.draft.version !== value.draft_version
     )
-      fail(409, "Draft version changed or submitted");
+      fail(409, t("mailPartition.draftVersionChangedOrSubmitted"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "INSERT INTO submissions(id,message_id,actor_id,actor_auth_version,api_key_id,address_id,provider,connection_id,request_hash,draft_version,snapshot_r2_key,status,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -805,7 +807,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   submission(submissionId: string) {
     return (
       row<Submission>(this.sql, "SELECT * FROM submissions WHERE id=?", submissionId) ??
-      fail(404, "Submission not found")
+      fail(404, t("mailPartition.submissionNotFound"))
     );
   }
   submissionView(submissionId: string, actorId: string) {
@@ -863,7 +865,8 @@ export class MailPartitionDO extends DurableObject<Env> {
     // A user may cancel an uncertain send and reopen its draft. A late receipt
     // must not turn that canceled submission back into a sent message.
     if (job.status === "canceled") return false;
-    if (!["processing", "unknown"].includes(job.status)) fail(409, "Submission is not processing");
+    if (!["processing", "unknown"].includes(job.status))
+      fail(409, t("mailPartition.submissionIsNotProcessing"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE submissions SET status='accepted',provider_message_id=?,lease_until=NULL,error_code=NULL,updated_at=? WHERE id=?",
@@ -927,7 +930,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     this.submissionView(submissionId, actorId);
     const job = this.submission(submissionId);
     if (!["scheduled", "queued", "retry_wait", "unknown"].includes(job.status))
-      fail(409, "Submission cannot be canceled after processing starts");
+      fail(409, t("mailPartition.submissionCannotBeCanceledAfterProcessingStarts"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE submissions SET status='canceled',updated_at=? WHERE id=?",
@@ -943,9 +946,10 @@ export class MailPartitionDO extends DurableObject<Env> {
     this.submissionView(submissionId, actorId);
     const job = this.submission(submissionId),
       message = this.get(job.message_id, actorId);
-    if (job.status !== "failed") fail(409, "Only known failed submissions may be retried");
+    if (job.status !== "failed")
+      fail(409, t("mailPartition.onlyKnownFailedSubmissionsMayBeRetried"));
     if (message.draft?.version !== job.draft_version || message.draft.state !== "editable")
-      fail(409, "Draft changed; create a new submission");
+      fail(409, t("mailPartition.draftChangedCreateANewSubmission"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
         "UPDATE submissions SET status='queued',scheduled_at=?,error_code=NULL,updated_at=? WHERE id=?",
@@ -976,7 +980,7 @@ export class MailPartitionDO extends DurableObject<Env> {
       job.connection_id !== event.connection_id ||
       job.provider_message_id !== event.provider_message_id
     )
-      fail(409, "Delivery event does not match submission");
+      fail(409, t("mailPartition.deliveryEventDoesNotMatchSubmission"));
     if (
       row(
         this.sql,
@@ -1020,7 +1024,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         messageId,
       )
     )
-      fail(409, "Message has an active or uncertain submission");
+      fail(409, t("mailPartition.messageHasAnActiveOrUncertainSubmission"));
     this.removeIndex(messageId);
     const keys = [
       message.body_r2_key,
@@ -1050,7 +1054,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   purge(messageId: string, actorId: string, draft = false) {
     const message = this.get(messageId, actorId);
     if (draft ? !message.draft : !["trash", "spam"].includes(message.folder_id))
-      fail(409, "Permanent deletion is allowed only for trash, spam or drafts");
+      fail(409, t("mailPartition.permanentDeletionIsAllowedOnlyForTrashSpamOr"));
     this.ctx.storage.transactionSync(() => this.erase(messageId));
   }
   async rebuildIndex(messageId: string, text: string) {

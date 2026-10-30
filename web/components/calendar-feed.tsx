@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Button, CheckboxControl, Input, useNotifications } from "./ui";
 import {
@@ -26,7 +28,7 @@ interface Feed {
   warnings: string[];
 }
 const stamp = (value: number | null) =>
-  value ? new Date(value * 1000).toLocaleString() : "Not yet";
+  value ? new Date(value * 1000).toLocaleString() : t("componentsCalendarFeed.notYet");
 export function CalendarFeedDialog({
   cal: initial,
   onClose,
@@ -79,7 +81,9 @@ export function CalendarFeedDialog({
           setCal(result.calendar);
           setUrl("");
           calendar.refresh(true);
-          notify.success("External calendar registered. Its first sync is queued.");
+          notify.success(
+            t("componentsCalendarFeed.externalCalendarRegisteredItsFirstSyncIsQueued"),
+          );
         } catch (error) {
           if (error instanceof ApiError && error.status < 500) operation.current.complete();
           throw error;
@@ -106,13 +110,13 @@ export function CalendarFeedDialog({
           setEnabled(null);
           setRevision((value) => value + 1);
         }
-        notify.success("External calendar settings saved.");
+        notify.success(t("componentsCalendarFeed.externalCalendarSettingsSaved"));
       }
     });
   const connectionFields = (
     <div className="calendar-settings-fields">
       <CalendarField
-        label="Calendar name"
+        label={t("componentsCalendarFeed.calendarName")}
         required
         maxLength={255}
         value={name}
@@ -120,17 +124,27 @@ export function CalendarFeedDialog({
         onChange={(event) => setName(event.target.value)}
       />
       <CalendarField
-        label={cal ? "Replace subscription URL" : "Subscription URL"}
+        label={
+          cal
+            ? t("componentsCalendarFeed.replaceSubscriptionUrl")
+            : t("componentsCalendarFeed.subscriptionUrl")
+        }
         hint={
           cal
-            ? `Source: ${feed?.source_host ?? "Loading…"}. Leave blank to keep the saved URL.`
-            : "Paste a public or secret .ics subscription link from your calendar provider. HTTPS and webcal links are supported."
+            ? t("componentsCalendarFeed.sourceLeaveBlankToKeepTheSavedUrl", {
+                value1: feed?.source_host ?? t("common.loading"),
+              })
+            : t("componentsCalendarFeed.pasteAPublicOrSecretIcsSubscriptionLinkFrom")
         }
       >
         <Input
           type="url"
-          aria-label={cal ? "Replace subscription URL" : "Subscription URL"}
-          placeholder="https://calendar.example.com/calendar.ics"
+          aria-label={
+            cal
+              ? t("componentsCalendarFeed.replaceSubscriptionUrl")
+              : t("componentsCalendarFeed.subscriptionUrl")
+          }
+          placeholder={t("componentsCalendarFeed.httpsCalendarExampleComCalendarIcs")}
           value={url}
           autoComplete="off"
           spellCheck={false}
@@ -142,9 +156,7 @@ export function CalendarFeedDialog({
       </CalendarField>
       {!cal && <CalendarTimeZoneField value={zone} onChange={setZone} />}
       <p className="calendar-import-hint">
-        Officeflare checks for updates every hour. You can also refresh manually, at most once every
-        five minutes. This is one-way sync: edit events in the original calendar. No provider
-        account sign-in is required. Secret URLs are stored encrypted.
+        {t("componentsCalendarFeed.officeflareChecksForUpdatesEveryHourYouCanAlso")}
       </p>
       {cal && feed && (
         <label className="calendar-check-label">
@@ -153,15 +165,19 @@ export function CalendarFeedDialog({
             disabled={action.busy}
             onCheckedChange={setEnabled}
           />
-          Automatically synchronize this calendar
+          {t("componentsCalendarFeed.automaticallySynchronizeThisCalendar")}
         </label>
       )}
     </div>
   );
   return (
     <CalendarModal
-      title={cal ? "External calendar" : "Subscribe to a calendar"}
-      description="Read-only sync from an iCalendar URL. Changes made at the source appear here automatically."
+      title={
+        cal
+          ? t("componentsCalendarFeed.externalCalendar")
+          : t("componentsCalendarFeed.subscribeToACalendar")
+      }
+      description={t("componentsCalendarFeed.readOnlySyncFromAnIcalendarUrlChangesMade")}
       onClose={onClose}
       busy={action.busy}
       className="calendar-feed-modal"
@@ -174,59 +190,74 @@ export function CalendarFeedDialog({
       >
         {cal ? (
           <details className="calendar-feed-connection">
-            <summary>Connection settings · {cal.name}</summary>
+            <summary>
+              <LocalizedMessage
+                id="componentsCalendarFeed.connectionSettings"
+                values={{ name: cal.name }}
+              />
+            </summary>
             {connectionFields}
           </details>
         ) : (
           connectionFields
         )}
         {cal && (
-          <section className="calendar-feed-status" aria-label="Synchronization status">
-            <p className="calendar-import-hint">{feed?.source_host} · Checks every hour</p>
+          <section
+            className="calendar-feed-status"
+            aria-label={t("componentsCalendarFeed.synchronizationStatus")}
+          >
+            <p className="calendar-import-hint">
+              <LocalizedMessage
+                id="componentsCalendarFeed.checksEveryHour"
+                values={{ source_host: feed?.source_host }}
+              />
+            </p>
             <p role="status">
               <strong>
                 {feed
                   ? {
-                      pending: "Waiting to synchronize",
-                      syncing: "Synchronizing…",
-                      healthy: "Up to date",
-                      error: "Sync needs attention",
-                      paused: "Sync paused",
+                      pending: t("componentsCalendarFeed.waitingToSynchronize"),
+                      syncing: t("componentsCalendarFeed.synchronizing"),
+                      healthy: t("componentsCalendarFeed.upToDate"),
+                      error: t("componentsCalendarFeed.syncNeedsAttention"),
+                      paused: t("componentsCalendarFeed.syncPaused"),
                     }[feed.status]
-                  : "Loading sync status…"}
+                  : t("componentsCalendarFeed.loadingSyncStatus")}
               </strong>
             </p>
             {feed && (
               <>
                 <dl>
                   <div>
-                    <dt>Last checked</dt>
+                    <dt>{t("componentsCalendarFeed.lastChecked")}</dt>
                     <dd>{stamp(feed.last_attempt_at)}</dd>
                   </div>
                   <div>
-                    <dt>Last successful sync</dt>
+                    <dt>{t("componentsCalendarFeed.lastSuccessfulSync")}</dt>
                     <dd>{stamp(feed.last_success_at)}</dd>
                   </div>
                   <div>
-                    <dt>Next check</dt>
-                    <dd>{feed.enabled ? stamp(feed.next_sync_at) : "Paused"}</dd>
+                    <dt>{t("componentsCalendarFeed.nextCheck")}</dt>
+                    <dd>
+                      {feed.enabled ? stamp(feed.next_sync_at) : t("componentsCalendarFeed.paused")}
+                    </dd>
                   </div>
                   <div>
-                    <dt>Events</dt>
+                    <dt>{t("componentsCalendarFeed.events")}</dt>
                     <dd>{feed.event_count}</dd>
                   </div>
                 </dl>
                 <CalendarNotice error={feed.error_message ?? ""} />
                 {feed.error_message && (
                   <p className="calendar-import-hint">
-                    Previously synchronized events stay available. Officeflare retries
-                    automatically. If access was revoked, replace the URL in Connection settings and
-                    save to reconnect.
+                    {t(
+                      "componentsCalendarFeed.previouslySynchronizedEventsStayAvailableOfficeflareRetriesAutomaticallyIf",
+                    )}
                   </p>
                 )}
                 {!!feed.warnings.length && (
                   <details>
-                    <summary>Sync notes</summary>
+                    <summary>{t("componentsCalendarFeed.syncNotes")}</summary>
                     {feed.warnings.map((warning) => (
                       <p key={warning}>{warning}</p>
                     ))}
@@ -242,11 +273,11 @@ export function CalendarFeedDialog({
                         body: { version: feed.version },
                       });
                       setRevision((value) => value + 1);
-                      notify.info("Calendar refresh queued.");
+                      notify.info(t("componentsCalendarFeed.calendarRefreshQueued"));
                     });
                   }}
                 >
-                  Refresh now
+                  {t("componentsCalendarFeed.refreshNow")}
                 </Button>
               </>
             )}
@@ -257,10 +288,7 @@ export function CalendarFeedDialog({
           <div className="calendar-feed-disconnect">
             {disconnect ? (
               <>
-                <p>
-                  Disconnect this calendar and remove it from your view? Its events remain in the
-                  original calendar.
-                </p>
+                <p>{t("componentsCalendarFeed.disconnectThisCalendarAndRemoveItFromYourView")}</p>
                 <Button
                   variant="danger"
                   size="sm"
@@ -271,12 +299,12 @@ export function CalendarFeedDialog({
                         method: "DELETE",
                       });
                       calendar.refresh(true);
-                      notify.success("External calendar disconnected.");
+                      notify.success(t("componentsCalendarFeed.externalCalendarDisconnected"));
                       onClose();
                     });
                   }}
                 >
-                  Disconnect calendar
+                  {t("componentsCalendarFeed.disconnectCalendar")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -284,7 +312,7 @@ export function CalendarFeedDialog({
                   disabled={action.busy}
                   onClick={() => setDisconnect(false)}
                 >
-                  Keep calendar
+                  {t("componentsCalendarFeed.keepCalendar")}
                 </Button>
               </>
             ) : (
@@ -294,21 +322,25 @@ export function CalendarFeedDialog({
                 disabled={action.busy}
                 onClick={() => setDisconnect(true)}
               >
-                Disconnect calendar
+                {t("componentsCalendarFeed.disconnectCalendar")}
               </Button>
             )}
           </div>
         )}
         <div className="calendar-dialog-actions">
           <Button variant="ghost" disabled={action.busy} onClick={onClose}>
-            {cal ? "Done" : "Cancel"}
+            {cal ? t("common.done") : t("common.cancel")}
           </Button>
           <Button
             variant="primary"
             type="submit"
             disabled={action.busy || !name.trim() || (!cal && !url.trim()) || (!!cal && !feed)}
           >
-            {action.busy ? "Saving…" : cal ? "Save" : "Subscribe"}
+            {action.busy
+              ? t("common.saving")
+              : cal
+                ? t("common.save")
+                : t("componentsCalendarFeed.subscribe")}
           </Button>
         </div>
       </form>

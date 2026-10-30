@@ -1,3 +1,5 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -61,10 +63,17 @@ export function DriveDetails({
   }, [item.id, item.description]);
   const small = useDriveSmallScreen();
   const content = (
-    <aside className="drive-details" aria-label={`Details for ${item.name}`}>
+    <aside
+      className="drive-details"
+      aria-label={t("componentsDriveDetails.detailsFor", { name: item.name })}
+    >
       <header>
-        <h2>File information</h2>
-        <DriveIconButton icon="close" label="Close file information" onClick={onClose} />
+        <h2>{t("componentsDriveDetails.fileInformation")}</h2>
+        <DriveIconButton
+          icon="close"
+          label={t("componentsDriveDetails.closeFileInformation")}
+          onClick={onClose}
+        />
       </header>
       <div className="drive-details-identity">
         <DriveFileIcon item={item} large />
@@ -72,12 +81,17 @@ export function DriveDetails({
         <span>{fileKind(item).label}</span>
       </div>
       <Tabs.Root value={tab} onValueChange={(value) => setTab(String(value))}>
-        <Tabs.List className="drive-details-tabs" aria-label="File information sections">
-          <Tabs.Tab value="details">Details</Tabs.Tab>
-          <Tabs.Tab value="activity">Activity</Tabs.Tab>
-          {!item.trashed_at && <Tabs.Tab value="comments">Comments</Tabs.Tab>}
+        <Tabs.List
+          className="drive-details-tabs"
+          aria-label={t("componentsDriveDetails.fileInformationSections")}
+        >
+          <Tabs.Tab value="details">{t("componentsDriveDetails.details")}</Tabs.Tab>
+          <Tabs.Tab value="activity">{t("componentsDriveDetails.activity")}</Tabs.Tab>
+          {!item.trashed_at && (
+            <Tabs.Tab value="comments">{t("componentsDriveDetails.comments")}</Tabs.Tab>
+          )}
           {item.kind === "file" && !item.trashed_at && (
-            <Tabs.Tab value="versions">Versions</Tabs.Tab>
+            <Tabs.Tab value="versions">{t("componentsDriveDetails.versions")}</Tabs.Tab>
           )}
         </Tabs.List>
         <Tabs.Panel value="details">
@@ -85,54 +99,58 @@ export function DriveDetails({
             {!item.trashed_at && (
               <Button size="sm" onClick={onOpen}>
                 <Icon name={item.kind === "folder" ? "folder" : "eye"} />
-                {item.kind === "folder" ? "Open folder" : "Preview"}
+                {item.kind === "folder"
+                  ? t("componentsDriveDetails.openFolder")
+                  : t("componentsDriveDetails.preview")}
               </Button>
             )}
             {item.effective_role === "owner" && !item.trashed_at && (
               <Button size="sm" onClick={onShare}>
                 <Icon name="users" />
-                Share
+                {t("componentsDriveDetails.share")}
               </Button>
             )}
           </div>
           <dl className="drive-metadata">
-            <dt>Owner</dt>
+            <dt>{t("componentsDriveDetails.owner")}</dt>
             <dd>{item.owner?.display_name || item.owner?.email_address || "—"}</dd>
-            <dt>Your access</dt>
-            <dd className="drive-capitalize">{item.effective_role ?? "Viewer"}</dd>
-            <dt>Type</dt>
+            <dt>{t("componentsDriveDetails.yourAccess")}</dt>
+            <dd className="drive-capitalize">
+              {item.effective_role ?? t("componentsDriveDetails.viewer")}
+            </dd>
+            <dt>{t("componentsDriveDetails.type")}</dt>
             <dd>{fileKind(item).label}</dd>
             {item.kind === "file" && (
               <>
-                <dt>Size</dt>
+                <dt>{t("componentsDriveDetails.size")}</dt>
                 <dd>{formatBytes(driveSize(item))}</dd>
               </>
             )}
-            <dt>Created</dt>
+            <dt>{t("componentsDriveDetails.created")}</dt>
             <dd>{driveDate(item.created_at, true)}</dd>
-            <dt>Modified</dt>
+            <dt>{t("componentsDriveDetails.modified")}</dt>
             <dd>{driveDate(item.updated_at, true)}</dd>
             {item.trashed_at && (
               <>
-                <dt>Trashed</dt>
+                <dt>{t("componentsDriveDetails.trashed")}</dt>
                 <dd>{driveDate(item.trashed_at, true)}</dd>
               </>
             )}
           </dl>
           <Field.Root className="drive-field">
-            <Field.Label>Description</Field.Label>
+            <Field.Label>{t("componentsDriveDetails.description")}</Field.Label>
             <Textarea
               rows={4}
               maxLength={2000}
               value={description}
               readOnly={!canEdit(item) || !!item.trashed_at}
-              placeholder="Add a description"
+              placeholder={t("componentsDriveDetails.addADescription")}
               onChange={(event) => setDescription(event.target.value)}
             />
             <Field.Description>
               {canEdit(item) && !item.trashed_at
-                ? "Visible to people who can access this item."
-                : "Provided by the owner."}
+                ? t("componentsDriveDetails.visibleToPeopleWhoCanAccessThisItem")
+                : t("componentsDriveDetails.providedByTheOwner")}
             </Field.Description>
           </Field.Root>
           {canEdit(item) && !item.trashed_at && description !== item.description && (
@@ -147,19 +165,19 @@ export function DriveDetails({
                     body: { version: item.version, description },
                   });
                   drive.refresh();
-                  notify.success("Description saved.");
+                  notify.success(t("componentsDriveDetails.descriptionSaved"));
                 })
               }
             >
-              Save description
+              {t("componentsDriveDetails.saveDescription")}
             </Button>
           )}
           <DriveNotice error={action.error} />
           <p className="drive-details-note">
             <Icon name="shield" />
             {item.kind === "folder"
-              ? "Sharing a folder grants access to its contents."
-              : "Activity and previous versions stay with this file."}
+              ? t("componentsDriveDetails.sharingAFolderGrantsAccessToItsContents")
+              : t("componentsDriveDetails.activityAndPreviousVersionsStayWithThisFile")}
           </p>
         </Tabs.Panel>
         <Tabs.Panel value="activity">
@@ -187,9 +205,11 @@ export function DriveDetails({
         className="drive-details-mobile"
         viewportProps={{ className: "drive-details-viewport" }}
       >
-        <Dialog.Title className="visually-hidden">File information</Dialog.Title>
+        <Dialog.Title className="visually-hidden">
+          {t("componentsDriveDetails.fileInformation")}
+        </Dialog.Title>
         <Dialog.Description className="visually-hidden">
-          Details, activity, comments and previous file versions.
+          {t("componentsDriveDetails.detailsActivityCommentsAndPreviousFileVersions")}
         </Dialog.Description>
         {content}
       </DialogPopup>
@@ -206,38 +226,38 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
       drive.revision,
     );
   const labels: Record<string, string> = {
-    folder_created: "Created a folder",
-    file_created: "Uploaded a file",
-    metadata_updated: "Updated file information",
-    moved: "Moved this item",
-    trashed: "Moved this item to trash",
-    restored: "Restored this item",
-    content_updated: "Uploaded a new version",
-    version_restored: "Restored a previous version",
-    version_deleted: "Deleted a previous version",
-    permission_granted: "Granted account access",
-    permission_revoked: "Removed account access",
-    link_created: "Created a public link",
-    link_updated: "Updated a public link",
-    link_revoked: "Revoked a public link",
-    previewed: "Previewed this file",
-    downloaded: "Downloaded this file",
-    public_download: "Accessed a file through a public link",
-    comment_created: "Added a comment",
-    comment_updated: "Edited a comment",
-    comment_resolved: "Changed comment resolution",
-    comment_deleted: "Deleted a comment",
-    copied: "Copied this item",
-    ownership_transferred: "Transferred ownership",
-    access_requested: "Requested access",
-    access_approved: "Approved an access request",
-    access_denied: "Declined an access request",
+    folder_created: t("componentsDriveDetails.createdAFolder"),
+    file_created: t("componentsDriveDetails.uploadedAFile"),
+    metadata_updated: t("componentsDriveDetails.updatedFileInformation"),
+    moved: t("componentsDriveDetails.movedThisItem"),
+    trashed: t("componentsDriveDetails.movedThisItemToTrash"),
+    restored: t("componentsDriveDetails.restoredThisItem"),
+    content_updated: t("componentsDriveDetails.uploadedANewVersion"),
+    version_restored: t("componentsDriveDetails.restoredAPreviousVersion"),
+    version_deleted: t("componentsDriveDetails.deletedAPreviousVersion"),
+    permission_granted: t("componentsDriveDetails.grantedAccountAccess"),
+    permission_revoked: t("componentsDriveDetails.removedAccountAccess"),
+    link_created: t("componentsDriveDetails.createdAPublicLink"),
+    link_updated: t("componentsDriveDetails.updatedAPublicLink"),
+    link_revoked: t("componentsDriveDetails.revokedAPublicLink"),
+    previewed: t("componentsDriveDetails.previewedThisFile"),
+    downloaded: t("componentsDriveDetails.downloadedThisFile"),
+    public_download: t("componentsDriveDetails.accessedAFileThroughAPublicLink"),
+    comment_created: t("componentsDriveDetails.addedAComment"),
+    comment_updated: t("componentsDriveDetails.editedAComment"),
+    comment_resolved: t("componentsDriveDetails.changedCommentResolution"),
+    comment_deleted: t("componentsDriveDetails.deletedAComment"),
+    copied: t("componentsDriveDetails.copiedThisItem"),
+    ownership_transferred: t("componentsDriveDetails.transferredOwnership"),
+    access_requested: t("componentsDriveDetails.requestedAccess"),
+    access_approved: t("componentsDriveDetails.approvedAnAccessRequest"),
+    access_denied: t("componentsDriveDetails.declinedAnAccessRequest"),
   };
   return (
     <div className="drive-activity">
       <DriveState loading={events.loading} error={events.error} retry={events.reload} />
       {!events.loading && !events.error && !events.items.length && (
-        <p className="drive-muted">No activity yet.</p>
+        <p className="drive-muted">{t("componentsDriveDetails.noActivityYet")}</p>
       )}
       {events.items.map((event) => (
         <div className="drive-activity-event" key={event.seq}>
@@ -256,9 +276,12 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
           </span>
           <div>
             <strong>
-              {event.actor_name || (event.link_id ? "Public link visitor" : "Workspace account")}
+              {event.actor_name ||
+                (event.link_id
+                  ? t("componentsDriveDetails.publicLinkVisitor")
+                  : t("componentsDriveDetails.workspaceAccount"))}
             </strong>
-            <p>{labels[event.action] || event.action.replaceAll("_", " ")}</p>
+            <p>{labels[event.action] || enumLabel(event.action)}</p>
             <time dateTime={new Date(event.created_at * 1000).toISOString()}>
               {driveDate(event.created_at, true)}
             </time>
@@ -267,7 +290,7 @@ function DriveActivityPanel({ item }: { item: DriveItem }) {
       ))}
       {events.next && (
         <Button size="sm" disabled={events.more} onClick={() => void events.loadMore()}>
-          {events.more ? "Loading…" : "Load earlier activity"}
+          {events.more ? t("common.loading") : t("componentsDriveDetails.loadEarlierActivity")}
         </Button>
       )}
     </div>
@@ -303,11 +326,11 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
     <div className="drive-comments">
       <DriveSelect
         value={filter}
-        label="Comment filter"
+        label={t("componentsDriveDetails.commentFilter")}
         options={[
-          { value: "all", label: "All comments" },
-          { value: "open", label: "Open threads" },
-          { value: "resolved", label: "Resolved threads" },
+          { value: "all", label: t("componentsDriveDetails.allComments") },
+          { value: "open", label: t("componentsDriveDetails.openThreads") },
+          { value: "resolved", label: t("componentsDriveDetails.resolvedThreads") },
         ]}
         onChange={setFilter}
       />
@@ -315,7 +338,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
       {!comments.loading && !roots.length && (
         <div className="drive-panel-empty">
           <Icon name="mail" width="28" height="28" />
-          <p>No comments here yet.</p>
+          <p>{t("componentsDriveDetails.noCommentsHereYet")}</p>
         </div>
       )}
       {roots.map((root) => (
@@ -327,7 +350,9 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                 key={comment.id}
               >
                 <div>
-                  <strong>{comment.author_name || "Workspace account"}</strong>
+                  <strong>
+                    {comment.author_name || t("componentsDriveDetails.workspaceAccount")}
+                  </strong>
                   <time>{driveDate(comment.created_at, true)}</time>
                 </div>
                 <p>{comment.body}</p>
@@ -342,7 +367,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                         setBody("");
                       }}
                     >
-                      Reply
+                      {t("componentsDriveDetails.reply")}
                     </Button>
                   )}
                   {!comment.parent_id && canEdit(item) && canComment(item) && (
@@ -362,7 +387,9 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                         )
                       }
                     >
-                      {comment.resolved ? "Reopen" : "Resolve"}
+                      {comment.resolved
+                        ? t("componentsDriveDetails.reopen")
+                        : t("componentsDriveDetails.resolve")}
                     </Button>
                   )}
                   {comment.author_user_id === account.user?.id && canComment(item) && (
@@ -376,11 +403,11 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                           setBody(comment.body);
                         }}
                       >
-                        Edit
+                        {t("common.edit")}
                       </Button>
                       <DriveIconButton
                         icon="trash"
-                        label="Delete comment"
+                        label={t("componentsDriveDetails.deleteComment")}
                         disabled={action.busy}
                         onClick={() =>
                           mutate(() =>
@@ -396,7 +423,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                   {comment.resolved && (
                     <span>
                       <Icon name="check" />
-                      Resolved
+                      {t("componentsDriveDetails.resolved")}
                     </span>
                   )}
                 </div>
@@ -407,7 +434,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
       ))}
       {comments.next && (
         <Button disabled={comments.more} onClick={() => void comments.loadMore()}>
-          Load more comments
+          {t("componentsDriveDetails.loadMoreComments")}
         </Button>
       )}
       {canComment(item) && (
@@ -428,7 +455,11 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
         >
           <Field.Root className="drive-field">
             <Field.Label>
-              {edit ? "Edit comment" : parent ? "Reply to thread" : "Add a comment"}
+              {edit
+                ? t("componentsDriveDetails.editComment")
+                : parent
+                  ? t("componentsDriveDetails.replyToThread")
+                  : t("componentsDriveDetails.addAComment")}
             </Field.Label>
             <Textarea
               rows={3}
@@ -436,7 +467,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
               onChange={(event) => setBody(event.target.value)}
               maxLength={5000}
               required
-              placeholder="Write a comment…"
+              placeholder={t("componentsDriveDetails.writeAComment")}
             />
           </Field.Root>
           <div>
@@ -449,7 +480,7 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
                   setBody("");
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             )}
             <Button
@@ -458,13 +489,15 @@ function DriveCommentsPanel({ item }: { item: DriveItem }) {
               variant="primary"
               disabled={action.busy || !body.trim()}
             >
-              {edit ? "Save" : "Post"}
+              {edit ? t("common.save") : t("componentsDriveDetails.post")}
             </Button>
           </div>
         </form>
       )}
       {!canComment(item) && (
-        <p className="drive-muted">You need commenter access to join the conversation.</p>
+        <p className="drive-muted">
+          {t("componentsDriveDetails.youNeedCommenterAccessToJoinTheConversation")}
+        </p>
       )}
       <DriveNotice error={action.error} />
     </div>
@@ -488,18 +521,26 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
       {canEdit(item) && (
         <Button onClick={() => drive.chooseFiles(false, item)}>
           <Icon name="upload" />
-          Upload new version
+          {t("componentsDriveDetails.uploadNewVersion")}
         </Button>
       )}
-      <p className="drive-muted">Previous versions use your storage quota.</p>
+      <p className="drive-muted">
+        {t("componentsDriveDetails.previousVersionsUseYourStorageQuota")}
+      </p>
       <DriveState loading={versions.loading} error={versions.error} retry={versions.reload} />
       {versions.items.map((version) => (
         <div className="drive-version" key={version.id}>
           <Icon name="file" />
           <div>
-            <strong>{version.current ? "Current version" : "Previous version"}</strong>
+            <strong>
+              {version.current
+                ? t("componentsDriveDetails.currentVersion")
+                : t("componentsDriveDetails.previousVersion")}
+            </strong>
             <span>
-              {driveDate(version.created_at, true)} · {formatBytes(version.size)}
+              {driveDate(version.created_at, true)}
+              {t("componentsDriveDetails.text")}
+              {formatBytes(version.size)}
             </span>
             <div>
               <Button
@@ -515,7 +556,7 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
                   )
                 }
               >
-                Download
+                {t("componentsDriveDetails.download")}
               </Button>
               {!version.current && canEdit(item) && (
                 <Button
@@ -523,13 +564,13 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
                   variant="ghost"
                   onClick={() => setConfirm({ version, deleting: false })}
                 >
-                  Restore
+                  {t("componentsDriveDetails.restore")}
                 </Button>
               )}
               {!version.current && item.effective_role === "owner" && canEdit(item) && (
                 <DriveIconButton
                   icon="trash"
-                  label="Delete previous version"
+                  label={t("componentsDriveDetails.deletePreviousVersion")}
                   onClick={() => setConfirm({ version, deleting: true })}
                 />
               )}
@@ -540,19 +581,27 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
       ))}
       {versions.next && (
         <Button disabled={versions.more} onClick={() => void versions.loadMore()}>
-          Load more versions
+          {t("componentsDriveDetails.loadMoreVersions")}
         </Button>
       )}
       <DriveNotice error={action.error} />
       {confirm && (
         <DriveConfirmDialog
-          title={confirm.deleting ? "Delete this version?" : "Restore this version?"}
+          title={
+            confirm.deleting
+              ? t("componentsDriveDetails.deleteThisVersion")
+              : t("componentsDriveDetails.restoreThisVersion")
+          }
           description={
             confirm.deleting
-              ? "This previous file version will be permanently deleted."
-              : "This version becomes the current file content. The existing version is kept in history."
+              ? t("componentsDriveDetails.thisPreviousFileVersionWillBePermanentlyDeleted")
+              : t("componentsDriveDetails.thisVersionBecomesTheCurrentFileContentTheExisting")
           }
-          confirm={confirm.deleting ? "Delete version" : "Restore version"}
+          confirm={
+            confirm.deleting
+              ? t("componentsDriveDetails.deleteVersion")
+              : t("componentsDriveDetails.restoreVersion")
+          }
           destructive={confirm.deleting}
           onClose={() => setConfirm(null)}
           action={async () => {
@@ -565,7 +614,11 @@ function DriveVersionsPanel({ item }: { item: DriveItem }) {
               },
             );
             drive.refresh();
-            notify.success(confirm.deleting ? "Version deleted." : "Version restored.");
+            notify.success(
+              confirm.deleting
+                ? t("componentsDriveDetails.versionDeleted")
+                : t("componentsDriveDetails.versionRestored"),
+            );
           }}
         />
       )}

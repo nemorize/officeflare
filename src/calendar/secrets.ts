@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Buffer } from "node:buffer";
 import type { CalendarEnv } from "./types";
 interface Envelope {
@@ -14,7 +15,7 @@ async function encryptionKey(env: CalendarEnv, version?: number) {
   const selected = version ?? ring.active_version,
     value = ring.keys[selected];
   if (!value || !/^[A-Za-z0-9_-]{43}$/.test(value))
-    throw new Error("Invalid calendar encryption key");
+    throw new Error(t("calendarSecrets.invalidCalendarEncryptionKey"));
   return {
     version: selected,
     key: await crypto.subtle.importKey("raw", Buffer.from(value, "base64url"), "AES-GCM", false, [

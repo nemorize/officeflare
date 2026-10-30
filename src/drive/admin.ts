@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { body } from "../auth/input";
 import { now, type AppEnv } from "../auth/types";
@@ -41,7 +42,7 @@ async function item(c: DriveContext) {
     "SELECT * FROM drive_items WHERE id=? AND purged_at IS NULL",
     identifier(c.req.param("itemId")),
   );
-  if (!value) fail(404, "Drive item not found");
+  if (!value) fail(404, t("driveAdmin.driveItemNotFound"));
   return value;
 }
 async function page<T extends { page_id: string }>(
@@ -103,7 +104,7 @@ adminDrive.patch("/settings", requirePermission("admin.drive.settings.manage"), 
   const data = await body(c, ["version", "reason", ...keys]),
     before = await settings(c.env),
     next: DriveSettings = { ...before };
-  if (!keys.some((key) => data[key] !== undefined)) fail(400, "No settings supplied");
+  if (!keys.some((key) => data[key] !== undefined)) fail(400, t("driveAdmin.noSettingsSupplied"));
   for (const key of keys)
     if (data[key] !== undefined) {
       if (key.endsWith("enabled") || key.endsWith("required")) next[key] = +bool(data[key], key);
@@ -158,7 +159,7 @@ adminDrive.get("/accounts", requirePermission("admin.drive.accounts.read"), asyn
     args: Bind[] = [],
     state = c.req.query("state") ?? "all";
   if (!["all", "enabled", "disabled", "deleted", "over_quota"].includes(state))
-    fail(400, "Invalid account filter");
+    fail(400, t("driveAdmin.invalidAccountFilter"));
   let extra = "";
   if (query) {
     extra += " AND (u.email_address LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\')";
@@ -181,7 +182,7 @@ adminDrive.get("/accounts", requirePermission("admin.drive.accounts.read"), asyn
 adminDrive.get("/accounts/:userId", requirePermission("admin.drive.accounts.read"), async (c) => {
   const user = identifier(c.req.param("userId")),
     account = await first(c.env, accountSelect + " AND u.id=?", user);
-  if (!account) fail(404, "User not found");
+  if (!account) fail(404, t("driveAdmin.userNotFound"));
   const grants = await rows<{ permission_key: string }>(
     c.env,
     "SELECT DISTINCT rp.permission_key FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=?",
@@ -210,16 +211,16 @@ adminDrive.patch(
     const user = identifier(c.req.param("userId")),
       data = await body(c, ["version", "quota_override_bytes", "status", "reason"]);
     const exists = await first(c.env, "SELECT id FROM users WHERE id=?", user);
-    if (!exists) fail(404, "User not found");
+    if (!exists) fail(404, t("driveAdmin.userNotFound"));
     const before = await first<Record<string, unknown>>(
       c.env,
       "SELECT * FROM drive_accounts WHERE user_id=?",
       user,
     );
     if (expected(data) !== (before?.version ?? 0))
-      fail(412, "Drive account changed. Reload and try again.");
+      fail(412, t("driveAdmin.driveAccountChangedReloadAndTryAgain"));
     if (data.quota_override_bytes === undefined && data.status === undefined)
-      fail(400, "No account changes supplied");
+      fail(400, t("driveAdmin.noAccountChangesSupplied"));
     const override =
       data.quota_override_bytes === undefined
         ? (before?.quota_override_bytes ?? null)
@@ -228,7 +229,7 @@ adminDrive.patch(
           : integer(data.quota_override_bytes, "quota_override_bytes");
     const state = data.status ?? before?.status ?? "active";
     if (!["active", "read_only", "suspended"].includes(String(state)))
-      fail(400, "Invalid Drive status");
+      fail(400, t("driveAdmin.invalidDriveStatus"));
     const policy = await settings(c.env),
       quota = override === null ? policy.default_quota_bytes : (override as number);
     await adminMutate(
@@ -260,8 +261,8 @@ adminDrive.patch(
           operation,
           proof,
           [user],
-          "Drive account updated",
-          "An administrator updated your Drive storage limit or availability.",
+          t("driveAdmin.driveAccountUpdated"),
+          t("driveAdmin.anAdministratorUpdatedYourDriveStorageLimitOrAvailability"),
         ),
       ],
       {
@@ -289,7 +290,7 @@ adminDrive.post(
       "SELECT id,size FROM drive_uploads WHERE owner_user_id=? AND status NOT IN ('completed','cancelled')",
       user,
     );
-    if (!pending.length) fail(409, "There are no unfinished uploads to cancel");
+    if (!pending.length) fail(409, t("driveAdmin.thereAreNoUnfinishedUploadsToCancel"));
     await adminMutate(
       c,
       "admin.drive.accounts.manage",
@@ -337,7 +338,8 @@ adminDrive.get("/items", requirePermission("admin.drive.items.read"), async (c) 
     owner = c.req.query("owner") ? identifier(c.req.query("owner"), "owner") : "",
     state = c.req.query("state") ?? "active",
     args: Bind[] = [];
-  if (!["active", "trash", "all"].includes(state)) fail(400, "Invalid inventory filter");
+  if (!["active", "trash", "all"].includes(state))
+    fail(400, t("driveAdmin.invalidInventoryFilter"));
   let filters = "d.purged_at IS NULL";
   if (state === "active") filters += ` AND ${cleanPath("d.id")}`;
   if (state === "trash") filters += ` AND NOT (${cleanPath("d.id")})`;
@@ -367,7 +369,7 @@ adminDrive.get("/sharing", requirePermission("admin.drive.sharing.read"), async 
     state = c.req.query("state") ?? "active",
     args: Bind[] = [];
   if (!["links", "grants"].includes(kind) || !["active", "all"].includes(state))
-    fail(400, "Invalid sharing filter");
+    fail(400, t("driveAdmin.invalidSharingFilter"));
   let filters = "d.purged_at IS NULL";
   if (owner) {
     filters += " AND d.owner_user_id=?";
@@ -411,14 +413,15 @@ adminDrive.post(
       recipient = identifier(data.user_id, "user_id"),
       granted = role(data.role),
       expires = expiry(data.expires_at);
-    if (current.version !== expected(data)) fail(412, "Drive item changed. Reload and try again.");
-    if (recipient === current.owner_user_id) fail(400, "Owner access cannot be changed");
+    if (current.version !== expected(data))
+      fail(412, t("driveAdmin.driveItemChangedReloadAndTryAgain"));
+    if (recipient === current.owner_user_id) fail(400, t("driveAdmin.ownerAccessCannotBeChanged"));
     const eligible = condition(
       `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${activeUser("u")} AND ${driveEnabled("u")})`,
       recipient,
     );
     if (!(await first(c.env, `SELECT 1 WHERE ${eligible.sql}`, ...eligible.args)))
-      fail(400, "Recipient must have active Drive access");
+      fail(400, t("driveAdmin.recipientMustHaveActiveDriveAccess"));
     const before = await first(
       c.env,
       "SELECT role,expires_at FROM drive_permissions WHERE item_id=? AND user_id=?",
@@ -467,8 +470,8 @@ adminDrive.post(
           operation,
           proof,
           [recipient],
-          "Drive access updated",
-          "An administrator updated your access to a Drive item.",
+          t("driveAdmin.driveAccessUpdated"),
+          t("driveAdmin.anAdministratorUpdatedYourAccessToADriveItem"),
         ),
       ],
       {
@@ -499,8 +502,7 @@ adminDrive.delete(
       current.id,
       recipient,
     );
-    if (!before)
-      fail(404, "Direct grant not found; inherited access must be changed on its source folder");
+    if (!before) fail(404, t("driveAdmin.directGrantNotFoundInheritedAccessMustBeChanged"));
     await adminMutate(
       c,
       "admin.drive.sharing.manage",
@@ -544,8 +546,8 @@ adminDrive.delete(
           operation,
           proof,
           [recipient],
-          "Drive access updated",
-          "An administrator revoked a Drive sharing grant.",
+          t("driveAdmin.driveAccessUpdated"),
+          t("driveAdmin.anAdministratorRevokedADriveSharingGrant"),
         ),
       ],
       {
@@ -615,7 +617,7 @@ for (const action of ["restore", "purge"] as const)
       const data = await body(c, ["version", "reason"]),
         current = await item(c);
       if (!current.trashed_at)
-        fail(409, "Select the trashed folder itself, or an item directly in trash");
+        fail(409, t("driveAdmin.selectTheTrashedFolderItselfOrAnItemDirectly"));
       const checks = [
         condition(
           "EXISTS(SELECT 1 FROM drive_items WHERE id=? AND version=? AND trashed_at IS NOT NULL AND purged_at IS NULL)",
@@ -674,10 +676,10 @@ adminDrive.get("/activity", requirePermission("admin.drive.audit.read"), async (
     action = text(c.req.query("action") ?? "", "action", 100),
     kind = c.req.query("kind") ?? "all",
     itemId = c.req.query("item") ? identifier(c.req.query("item")) : "";
-  if (!["all", "admin", "items"].includes(kind)) fail(400, "Invalid audit filter");
+  if (!["all", "admin", "items"].includes(kind)) fail(400, t("driveAdmin.invalidAuditFilter"));
   const from = c.req.query("from") ? integer(Number(c.req.query("from")), "from") : 0,
     to = c.req.query("to") ? integer(Number(c.req.query("to")), "to") : Number.MAX_SAFE_INTEGER;
-  if (from > to) fail(400, "Invalid audit date range");
+  if (from > to) fail(400, t("driveAdmin.invalidAuditDateRange"));
   const scope = JSON.stringify([
       "admin.activity",
       query,

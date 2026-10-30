@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import type { Calendar, CalendarContext, Event } from "./types";
@@ -15,7 +16,7 @@ async function published(c: CalendarContext) {
       "SELECT granted_by,role FROM calendar_acl WHERE calendar_id=? AND scope_type='public' AND scope_key='workspace' AND granted_by IS NOT NULL AND (expires_at IS NULL OR expires_at>unixepoch())",
       id,
     );
-  if (!grant) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+  if (!grant) fail(404, "CALENDAR_NOT_FOUND", t("calendarPublishing.calendarNotFound"));
   const access = calendarAccess(grant.granted_by, "cal", 5),
     allowed = permission(grant.granted_by, "calendar.sharing.external"),
     cal = await first<Calendar>(
@@ -26,7 +27,7 @@ async function published(c: CalendarContext) {
       ...access.args,
       ...allowed.args,
     );
-  if (!cal) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+  if (!cal) fail(404, "CALENDAR_NOT_FOUND", t("calendarPublishing.calendarNotFound"));
   return {
     cal,
     role: grant.role,
@@ -62,7 +63,8 @@ publishingRoutes.get("/public/calendars/:calendarId/events", async (c) => {
       new Date((range.max + 172800) * 1000).toISOString().slice(0, 10),
       new Date((range.min - 172800) * 1000).toISOString().slice(0, 10),
     );
-  if (events.length > 200) fail(422, "TOO_MANY_EVENTS", "Narrow the published calendar scope");
+  if (events.length > 200)
+    fail(422, "TOO_MANY_EVENTS", t("calendarPublishing.narrowThePublishedCalendarScope"));
   const overrides = await loadOverrides(
       c,
       events.map((value) => value.id),
@@ -78,7 +80,8 @@ publishingRoutes.get("/public/calendars/:calendarId/events", async (c) => {
         ),
       )
       .filter((value) => role === "reader" || value.event.transparency === "busy");
-  if (values.length > 500) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
+  if (values.length > 500)
+    fail(422, "TOO_MANY_OCCURRENCES", t("calendarPublishing.narrowTheDateRange"));
   return c.json({
     events: values
       .slice(0, pageLimit(c))

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now, uuid } from "../auth/types";
 import { first, identity, itemCondition, requireItem, statement } from "./access";
 import { fail, identifier } from "./input";
@@ -17,16 +18,17 @@ const disposition = (name: string, inline: boolean) =>
 function range(header: string | undefined, size: number) {
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(header);
-  if (!match || (!match[1] && !match[2]) || size === 0) fail(416, "Invalid byte range");
+  if (!match || (!match[1] && !match[2]) || size === 0)
+    fail(416, t("driveContent.invalidByteRange"));
   if (!match[1]) {
     const suffix = Number(match[2]);
-    if (!Number.isSafeInteger(suffix) || suffix <= 0) fail(416, "Invalid byte range");
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) fail(416, t("driveContent.invalidByteRange"));
     return { offset: Math.max(0, size - suffix), length: Math.min(size, suffix) };
   }
   const offset = Number(match[1]),
     end = match[2] ? Number(match[2]) : size - 1;
   if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(end) || offset >= size || end < offset)
-    fail(416, "Invalid byte range");
+    fail(416, t("driveContent.invalidByteRange"));
   return { offset, length: Math.min(size - 1, end) - offset + 1 };
 }
 export async function content(
@@ -36,7 +38,7 @@ export async function content(
   linkId: string | null = null,
   preview = false,
 ) {
-  if (item.kind !== "file") fail(400, "Folders have no file content");
+  if (item.kind !== "file") fail(400, t("driveContent.foldersHaveNoFileContent"));
   const versionId = c.req.query("version_id")
     ? identifier(c.req.query("version_id"), "version_id")
     : item.current_version_id;
@@ -46,12 +48,12 @@ export async function content(
     versionId,
     item.id,
   );
-  if (!version) fail(404, "File version not found");
+  if (!version) fail(404, t("driveContent.fileVersionNotFound"));
   if (preview && !previewTypes.has(version.content_type))
-    fail(400, "This file type does not support inline preview");
+    fail(400, t("driveContent.thisFileTypeDoesNotSupportInlinePreview"));
   const object = await c.env.DRIVE_BUCKET.head(version.blob_key);
   if (!object || object.size !== version.size || object.etag !== version.etag)
-    fail(503, "File content is unavailable");
+    fail(503, t("driveContent.fileContentIsUnavailable"));
   const headers = new Headers({
     "Cache-Control": "private, no-store",
     ETag: object.httpEtag,
@@ -60,7 +62,7 @@ export async function content(
     "Content-Disposition": disposition(item.name, preview),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'self'",
+    "Content-Security-Policy": t("driveContent.sandboxDefaultSrcNoneFrameAncestorsSelf"),
     "Last-Modified": new Date(version.created_at * 1000).toUTCString(),
   });
   let requestedRange: { offset: number; length: number } | null;
@@ -83,7 +85,7 @@ export async function content(
           requestedRange ? { range: requestedRange } : undefined,
         );
   if (c.req.method !== "HEAD" && (!body || !("body" in body)))
-    fail(503, "File content is unavailable");
+    fail(503, t("driveContent.fileContentIsUnavailable"));
   // Recheck session/ACL or link after R2 I/O, immediately before exposing bytes.
   const allowed = await first(
     c.env,
@@ -92,7 +94,7 @@ export async function content(
     version.id,
     item.id,
   );
-  if (!allowed) fail(404, "File not found");
+  if (!allowed) fail(404, t("driveContent.fileNotFound"));
   if (
     (c.req.header("if-none-match") ?? "")
       .split(",")
@@ -113,7 +115,7 @@ export async function content(
       item.id,
       ...check.args,
     ).run();
-    if (logged.meta.changes !== 1) fail(404, "File not found");
+    if (logged.meta.changes !== 1) fail(404, t("driveContent.fileNotFound"));
   }
   headers.set("Content-Length", String(requestedRange?.length ?? version.size));
   if (requestedRange)

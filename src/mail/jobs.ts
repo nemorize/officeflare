@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { processDataJob } from "./data";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { hash } from "./input";
@@ -63,14 +64,14 @@ export async function sendSubmission(
       job.address_id,
     );
     if (selected.provider !== job.provider || selected.connection_id !== job.connection_id)
-      fail(409, "Sending provider connection changed");
+      fail(409, t("mailJobs.sendingProviderConnectionChanged"));
     providerConnection = selected;
     const object = await env.MAIL_BUCKET.get(job.snapshot_r2_key);
-    if (!object) fail(409, "Submission snapshot is unavailable");
+    if (!object) fail(409, t("mailJobs.submissionSnapshotIsUnavailable"));
     snapshot = await object.json<SubmissionSnapshot>();
     // Clean up already queued snapshots created before mode-based sending was removed.
     delete snapshot.headers["X-Officeflare-Sent-On-Behalf-Of"];
-    if (snapshot.from !== selected.email_address) fail(409, "Sending address changed");
+    if (snapshot.from !== selected.email_address) fail(409, t("mailJobs.sendingAddressChanged"));
     validateMessageSize(
       snapshot,
       sendingLimits(selected.provider, selected.max_send_bytes).max_send_bytes,
@@ -207,7 +208,7 @@ async function delivery(env: Env, event: DeliveryTask) {
     }
   }
   // Delivery can arrive before the provider ID has been committed.
-  fail(503, "Delivery correlation is pending");
+  fail(503, t("mailJobs.deliveryCorrelationIsPending"));
 }
 async function rememberDelivery(
   env: Env,
@@ -230,7 +231,7 @@ async function rememberDelivery(
   );
 }
 export function normalizeTask(value: unknown): MailTask {
-  if (!value || typeof value !== "object") fail(400, "Invalid mail task");
+  if (!value || typeof value !== "object") fail(400, t("mailJobs.invalidMailTask"));
   const event = value as Record<string, unknown>;
   if (typeof event.kind === "string") return value as MailTask;
   if (typeof event.type === "string" && event.type.startsWith("cf.email.sending.message.")) {
@@ -244,12 +245,12 @@ export function normalizeTask(value: unknown): MailTask {
       typeof payload.sender !== "string" ||
       typeof payload.recipient !== "string"
     )
-      fail(400, "Invalid Cloudflare delivery event");
+      fail(400, t("mailJobs.invalidCloudflareDeliveryEvent"));
     const status = event.type.split(".").at(-1)!;
     if (!["delivered", "deferred", "bounced", "failed", "rejected", "complained"].includes(status))
-      fail(400, "Unsupported delivery event");
+      fail(400, t("mailJobs.unsupportedDeliveryEvent"));
     const timestamp = Date.parse(String(metadata.eventTimestamp));
-    if (!Number.isFinite(timestamp)) fail(400, "Invalid event timestamp");
+    if (!Number.isFinite(timestamp)) fail(400, t("mailJobs.invalidEventTimestamp"));
     return {
       kind: "delivery",
       provider: "cloudflare",
@@ -262,7 +263,7 @@ export function normalizeTask(value: unknown): MailTask {
       event_at: Math.floor(timestamp / 1000),
     };
   }
-  fail(400, "Unsupported mail task");
+  fail(400, t("mailJobs.unsupportedMailTask"));
 }
 export async function processTask(env: Env, value: unknown) {
   const task = normalizeTask(value);
@@ -300,7 +301,7 @@ export async function processTask(env: Env, value: unknown) {
       await deliverWebhook(env, task.mailbox_id, task.partition_id, task.reference_id);
       break;
     default:
-      fail(400, "Unsupported mail task");
+      fail(400, t("mailJobs.unsupportedMailTask"));
   }
 }
 export async function consume(batch: MessageBatch, env: Env) {

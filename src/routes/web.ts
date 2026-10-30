@@ -1,8 +1,9 @@
 import { html } from "hono/html";
+import { locale } from "../../shared/i18n/index.ts";
 
 export function renderPage(title: string) {
   return html`<!doctype html>
-    <html lang="en">
+    <html lang="${locale}">
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

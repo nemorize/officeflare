@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useMemo, memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { mailViewOptions, mailGrouped, folderMoveLeavesMailView } from "../../src/mail/ui-query";
@@ -40,7 +42,7 @@ export function MailReady({ children, read = true }: { children: ReactNode; read
           <span className="skeleton-avatar" />
           <span className="skeleton-line skeleton-short" />
         </div>
-        <LoadingSkeleton kind="list" label="Loading your mailbox…" rows={6} />
+        <LoadingSkeleton kind="list" label={t("routesMail.loadingYourMailbox")} rows={6} />
       </div>
     );
   if (!mail.box)
@@ -51,22 +53,22 @@ export function MailReady({ children, read = true }: { children: ReactNode; read
         </span>
         <h1>
           {mail.loading
-            ? "Loading your mailbox…"
+            ? t("routesMail.loadingYourMailbox")
             : mail.error
-              ? "Mailbox unavailable"
-              : "Your mail starts here"}
+              ? t("routesMail.mailboxUnavailable")
+              : t("routesMail.yourMailStartsHere")}
         </h1>
         <MailNotice error={mail.error} />
         <p>
           {mail.boxes.length
-            ? "Choose an available mailbox to continue."
-            : "Ask your administrator to enable Mail and set your address."}
+            ? t("routesMail.chooseAnAvailableMailboxToContinue")
+            : t("routesMail.askYourAdministratorToEnableMailAndSetYour")}
         </p>
         <div className="mail-actions">
-          <Button onClick={mail.refreshBoxes}>Refresh mailboxes</Button>
+          <Button onClick={mail.refreshBoxes}>{t("routesMail.refreshMailboxes")}</Button>
           {access.permissions.includes("admin.users.read") && (
             <Button nativeButton={false} render={<Link to="/console/users" />}>
-              Manage users
+              {t("routesMail.manageUsers")}
             </Button>
           )}
         </div>
@@ -76,11 +78,11 @@ export function MailReady({ children, read = true }: { children: ReactNode; read
     return (
       <section className="mail-empty-state">
         <Icon name="shield" />
-        <h1>Mailbox content is restricted</h1>
-        <p>Your permissions do not include reading these messages.</p>
+        <h1>{t("routesMail.mailboxContentIsRestricted")}</h1>
+        <p>{t("routesMail.yourPermissionsDoNotIncludeReadingTheseMessages")}</p>
         {mail.box.access?.manage && (
           <Button nativeButton={false} render={<Link to={mail.href("/mail/settings")} />}>
-            Manage sharing
+            {t("routesMail.manageSharing")}
           </Button>
         )}
       </section>
@@ -110,19 +112,19 @@ export function MailPage() {
   const section = folder ? "folder" : (pathname.split("/")[2] ?? "inbox"),
     query = params.get("q") ?? "";
   const title = folder
-    ? (mail.folders.find((f) => f.id === folder)?.name ?? "Folder")
+    ? (mail.folders.find((f) => f.id === folder)?.name ?? t("routesMail.folder"))
     : ({
-        inbox: "Inbox",
-        drafts: "Drafts",
-        sent: "Sent",
-        archive: "Archive",
-        spam: "Spam",
-        trash: "Trash",
-        starred: "Starred",
-        snoozed: "Snoozed",
-        all: "All mail",
-        scheduled: "Outbox",
-      }[section] ?? "Inbox");
+        inbox: t("routesMail.inbox"),
+        drafts: t("routesMail.drafts"),
+        sent: t("routesMail.sent"),
+        archive: t("routesMail.archive"),
+        spam: t("routesMail.spam"),
+        trash: t("routesMail.trash"),
+        starred: t("routesMail.starred"),
+        snoozed: t("routesMail.snoozed"),
+        all: t("routesMail.allMail"),
+        scheduled: t("routesMail.outbox"),
+      }[section] ?? t("routesMail.inbox"));
   return (
     <MailReady>
       <MailList
@@ -135,7 +137,7 @@ export function MailPage() {
       {mail.box?.access?.write && !mail.composing && (
         <Button className="mail-mobile-compose" variant="primary" onClick={() => mail.compose()}>
           <Icon name="plus" />
-          Compose
+          {t("routesMail.compose")}
         </Button>
       )}
     </MailReady>
@@ -323,10 +325,10 @@ function MailList({
       if (successful.length)
         mail.feedback(
           changes.folder_id === "trash"
-            ? "Moved to trash"
+            ? t("routesMail.movedToTrash")
             : changes.folder_id === "archive"
-              ? "Conversation archived"
-              : "Mailbox updated",
+              ? t("routesMail.conversationArchived")
+              : t("routesMail.mailboxUpdated"),
           async () => {
             const targets = successful.map(({ before, message }) => {
               const restore: Record<string, unknown> = {};
@@ -354,9 +356,7 @@ function MailList({
                 finish();
               }
               if (restored.results.some((item) => !item.success))
-                throw new Error(
-                  "Some messages changed since this action and could not be restored.",
-                );
+                throw new Error(t("routesMail.someMessagesChangedSinceThisActionAndCouldNot"));
             }
           },
         );
@@ -364,7 +364,9 @@ function MailList({
         open(null);
       if (failures.length)
         throw new Error(
-          `${failures.length} messages could not be updated. Review the selected conversations and try again.`,
+          t("routesMail.messagesCouldNotBeUpdatedReviewTheSelectedConversations", {
+            length: failures.length,
+          }),
         );
     } catch (error) {
       // An uncertain result is reconciled from the server; rollback touches only this action.
@@ -497,7 +499,7 @@ function MailList({
                   const pending = message.submissions.find((submission) =>
                     cancelableSubmission(submission.status),
                   );
-                  if (!pending) throw new Error("Send is no longer pending");
+                  if (!pending) throw new Error(t("routesMail.sendIsNoLongerPending"));
                   await api(`${path}/submissions/${pending.id}/cancel`, {
                     method: "POST",
                   });
@@ -509,18 +511,18 @@ function MailList({
               setSelected([]);
               if (failed)
                 throw new Error(
-                  `${failed} sends could not be canceled. They may already be processing.`,
+                  t("routesMail.sendsCouldNotBeCanceledTheyMayAlreadyBe", { failed: failed }),
                 );
               mail.feedback(
                 rows.some((row) => row.submission_status === "unknown")
-                  ? "Drafts reopened. A message with unknown acceptance may already have been sent."
-                  : "Pending sends canceled. Messages moved to Drafts.",
+                  ? t("routesMail.draftsReopenedAMessageWithUnknownAcceptanceMayAlready")
+                  : t("routesMail.pendingSendsCanceledMessagesMovedToDrafts"),
               );
             });
           }}
         >
           <Icon name="close" />
-          Cancel send
+          {t("routesMail.cancelSend")}
         </Button>
         {messageActions && <MailMenu>{messageActions}</MailMenu>}
       </>
@@ -528,14 +530,16 @@ function MailList({
       <>
         <MailIconButton
           icon="archive"
-          label="Archive"
+          label={t("routesMail.archive")}
           disabled={!canWrite || action.busy || rows.some((row) => !!row.draft_owner_id)}
           onClick={() => run(rows, { folder_id: "archive" })}
         />
         <MailIconButton
           icon="trash"
           label={
-            rows.every((row) => row.draft_state === "editable") ? "Discard drafts" : "Move to trash"
+            rows.every((row) => row.draft_state === "editable")
+              ? t("routesMail.discardDrafts")
+              : t("routesMail.moveToTrash")
           }
           disabled={
             !canWrite ||
@@ -553,11 +557,13 @@ function MailList({
           <>
             <MailIconButton
               icon="mail"
-              label={rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
+              label={
+                rows.every((m) => m.is_read) ? t("routesMail.markUnread") : t("routesMail.markRead")
+              }
               disabled={!canWrite || action.busy}
               onClick={() => run(rows, { is_read: !rows.every((m) => m.is_read) })}
             />
-            <MailMenu label="Move to folder" icon="folder">
+            <MailMenu label={t("routesMail.moveToFolder")} icon="folder">
               {mail.folders
                 .filter((f) => !["drafts", "sent"].includes(f.system_key ?? ""))
                 .map((f) => (
@@ -571,11 +577,11 @@ function MailList({
                   </Menu.Item>
                 ))}
             </MailMenu>
-            <MailMenu label="Snooze" icon="clock">
+            <MailMenu label={t("routesMail.snooze")} icon="clock">
               {[
-                ["Later today", 3 * 3600],
-                ["Tomorrow", 24 * 3600],
-                ["Next week", 7 * 86400],
+                [t("routesMail.laterToday"), 3 * 3600],
+                [t("routesMail.tomorrow"), 24 * 3600],
+                [t("routesMail.nextWeek"), 7 * 86400],
               ].map(([label, seconds]) => (
                 <Menu.Item
                   key={label}
@@ -594,7 +600,7 @@ function MailList({
                   disabled={!canWrite || action.busy}
                   onClick={() => run(rows, { snoozed_until: null })}
                 >
-                  Unsnooze
+                  {t("routesMail.unsnooze")}
                 </Menu.Item>
               )}
             </MailMenu>
@@ -609,13 +615,15 @@ function MailList({
                   onClick={() => run(rows, { is_read: !rows.every((m) => m.is_read) })}
                 >
                   <Icon name="mail" />
-                  {rows.every((m) => m.is_read) ? "Mark unread" : "Mark read"}
+                  {rows.every((m) => m.is_read)
+                    ? t("routesMail.markUnread")
+                    : t("routesMail.markRead")}
                 </Menu.Item>
               )}
               <Menu.SubmenuRoot>
                 <Menu.SubmenuTrigger>
                   <Icon name="folder" />
-                  Move to folder
+                  {t("routesMail.moveToFolder")}
                   <Icon name="chevron" />
                 </Menu.SubmenuTrigger>
                 <MenuPopup className="mail-action-menu">
@@ -638,14 +646,14 @@ function MailList({
               <Menu.SubmenuRoot>
                 <Menu.SubmenuTrigger>
                   <Icon name="clock" />
-                  Snooze
+                  {t("routesMail.snooze")}
                   <Icon name="chevron" />
                 </Menu.SubmenuTrigger>
                 <MenuPopup className="mail-action-menu">
                   {[
-                    ["Later today", 3 * 3600],
-                    ["Tomorrow", 24 * 3600],
-                    ["Next week", 7 * 86400],
+                    [t("routesMail.laterToday"), 3 * 3600],
+                    [t("routesMail.tomorrow"), 24 * 3600],
+                    [t("routesMail.nextWeek"), 7 * 86400],
                   ].map(([label, seconds]) => (
                     <Menu.Item
                       key={label}
@@ -666,7 +674,7 @@ function MailList({
                       disabled={!canWrite || action.busy}
                       onClick={() => run(rows, { snoozed_until: null })}
                     >
-                      Unsnooze
+                      {t("routesMail.unsnooze")}
                     </Menu.Item>
                   )}
                 </MenuPopup>
@@ -679,19 +687,19 @@ function MailList({
             disabled={!canWrite || action.busy}
             onClick={() => run(rows, { is_starred: true })}
           >
-            Add star
+            {t("routesMail.addStar")}
           </Menu.Item>
           <Menu.Item
             disabled={!canWrite || action.busy}
             onClick={() => run(rows, { is_starred: false })}
           >
-            Remove star
+            {t("routesMail.removeStar")}
           </Menu.Item>
           <Menu.Item
             disabled={!canWrite || action.busy || rows.some((row) => !!row.draft_owner_id)}
             onClick={() => run(rows, { folder_id: "spam", is_spam: true })}
           >
-            Report spam
+            {t("routesMail.reportSpam")}
           </Menu.Item>
           {messageActions && (
             <>
@@ -711,7 +719,7 @@ function MailList({
     >
       <section
         className="mail-list-pane"
-        aria-label={`${title} messages`}
+        aria-label={t("routesMail.messages2", { title: title })}
         onKeyDown={(event) => {
           if (
             event.key === "Escape" &&
@@ -732,7 +740,7 @@ function MailList({
           {(!mobile || selecting) && (
             <MailCheckbox
               hitArea
-              aria-label="Select all messages on this page"
+              aria-label={t("routesMail.selectAllMessagesOnThisPage")}
               checked={messages.length > 0 && selected.length === messages.length}
               indeterminate={selected.length > 0 && selected.length < messages.length}
               disabled={!canWrite || !messages.length}
@@ -741,22 +749,26 @@ function MailList({
           )}
           {selecting ? (
             <span className="mail-selection-count" role="status">
-              {selected.length ? `${selected.length} selected` : "Select messages"}
+              {selected.length
+                ? t("routesMail.selected", { length: selected.length })
+                : t("routesMail.selectMessages")}
             </span>
           ) : selected.length ? (
             <>
-              <span className="mail-selection-count">{selected.length} selected</span>
+              <span className="mail-selection-count">
+                <LocalizedMessage id="routesMail.selected" values={{ length: selected.length }} />
+              </span>
               <div className="mail-toolbar-actions">{actions(selectedRows)}</div>
             </>
           ) : (
             <>
               <MailIconButton
                 icon="refresh"
-                label="Refresh messages"
+                label={t("routesMail.refreshMessages")}
                 disabled={resource.loading}
                 onClick={() => mail.refresh()}
               />
-              <h1>{query ? "Search results" : title}</h1>
+              <h1>{query ? t("routesMail.searchResults") : title}</h1>
             </>
           )}
           <div className="mail-toolbar-spacer" />
@@ -765,7 +777,9 @@ function MailList({
               ref={selectionButton}
               variant="ghost"
               size="touch"
-              aria-label={selecting ? "Exit selection mode" : "Select messages"}
+              aria-label={
+                selecting ? t("routesMail.exitSelectionMode") : t("routesMail.selectMessages")
+              }
               aria-pressed={selecting}
               disabled={!messages.length && !selecting}
               onClick={() => {
@@ -773,7 +787,7 @@ function MailList({
                 else setSelectionMode(true);
               }}
             >
-              {selecting ? "Done" : "Select"}
+              {selecting ? t("common.done") : t("routesMail.select")}
             </Button>
           )}
           {!selecting && (
@@ -783,7 +797,7 @@ function MailList({
               </span>
               <MailIconButton
                 icon="back"
-                label="Previous page"
+                label={t("routesMail.previousPage")}
                 disabled={page === 0 || resource.loading}
                 onClick={() => {
                   setPage(page - 1);
@@ -793,7 +807,7 @@ function MailList({
               />
               <MailIconButton
                 icon="arrow"
-                label="Next page"
+                label={t("routesMail.nextPage")}
                 disabled={!resource.data?.next_cursor || resource.loading}
                 onClick={() => {
                   setPages([...pages.slice(0, page + 1), resource.data!.next_cursor]);
@@ -807,9 +821,7 @@ function MailList({
         </div>
         {section === "scheduled" && !query && (
           <p className="mail-outbox-hint">
-            Scheduled and sending messages stay here until sending is confirmed. Open a message to
-            check its status. An unknown outcome may mean it was already sent; check before sending
-            another copy.
+            {t("routesMail.scheduledAndSendingMessagesStayHereUntilSendingIs")}
           </p>
         )}
         {query && (
@@ -832,7 +844,9 @@ function MailList({
                 <Icon name="close" width="12" height="12" />
               </Button>
             ))}
-            <span>in {mail.box!.name}</span>
+            <span>
+              <LocalizedMessage id="routesMail.in" values={{ name: mail.box!.name }} />
+            </span>
           </div>
         )}
         <MailNotice error={action.error} />
@@ -872,17 +886,17 @@ function MailList({
               </span>
               <h2>
                 {query
-                  ? "No matching messages"
+                  ? t("routesMail.noMatchingMessages")
                   : section === "inbox"
-                    ? "You're all caught up"
-                    : `${title} is empty`}
+                    ? t("routesMail.youReAllCaughtUp")
+                    : t("routesMail.isEmpty", { title: title })}
               </h2>
               <p>
                 {query
-                  ? "Try a different search or remove a filter."
+                  ? t("routesMail.tryADifferentSearchOrRemoveAFilter")
                   : section === "drafts"
-                    ? "Your drafts are saved here automatically."
-                    : "Messages will appear here when you need them."}
+                    ? t("routesMail.yourDraftsAreSavedHereAutomatically")
+                    : t("routesMail.messagesWillAppearHereWhenYouNeedThem")}
               </p>
             </div>
           )}
@@ -891,7 +905,7 @@ function MailList({
           <div
             className="mail-mobile-selection-actions"
             role="toolbar"
-            aria-label="Selected message actions"
+            aria-label={t("routesMail.selectedMessageActions")}
           >
             {actions(selectedRows)}
           </div>
@@ -920,9 +934,9 @@ function MailList({
       )}
       <Confirm
         open={discard}
-        title="Discard selected drafts?"
-        description="The selected drafts and attachments will be permanently removed."
-        label="Discard drafts"
+        title={t("routesMail.discardSelectedDrafts")}
+        description={t("routesMail.theSelectedDraftsAndAttachmentsWillBePermanentlyRemoved")}
+        label={t("routesMail.discardDrafts")}
         destructive
         onClose={() => setDiscard(false)}
         onConfirm={async () => {
@@ -938,7 +952,9 @@ function MailList({
           mail.refresh();
           if (failed.length)
             throw new Error(
-              `${failed.length} drafts could not be discarded. Check the selected drafts and try again.`,
+              t("routesMail.draftsCouldNotBeDiscardedCheckTheSelectedDrafts", {
+                length: failed.length,
+              }),
             );
         }}
       />
@@ -994,7 +1010,9 @@ const MailMessageRow = memo(function MailMessageRow({
       {(!mobile || selecting) && (
         <MailCheckbox
           hitArea
-          aria-label={`Select ${message.subject || "Untitled message"}`}
+          aria-label={t("routesMail.select2", {
+            value1: message.subject || t("routesMail.untitledMessage"),
+          })}
           checked={checked}
           disabled={!canWrite}
           onCheckedChange={() => handlers.select(message.id)}
@@ -1005,7 +1023,7 @@ const MailMessageRow = memo(function MailMessageRow({
           data-size="icon"
           data-variant="star"
           className="mail-star"
-          aria-label={message.is_starred ? "Remove star" : "Add star"}
+          aria-label={message.is_starred ? t("routesMail.removeStar") : t("routesMail.addStar")}
           pressed={!!message.is_starred}
           disabled={!canWrite || busy}
           onPressedChange={() => handlers.run([message], { is_starred: !message.is_starred })}
@@ -1026,14 +1044,21 @@ const MailMessageRow = memo(function MailMessageRow({
         <span className="mail-row-sender">
           {message.draft_state === "editable" ? (
             <>
-              <em>Draft</em> {message.recipient_summary || "No recipients"}
+              <em>{t("routesMail.draft")}</em>{" "}
+              {message.recipient_summary || t("routesMail.noRecipients")}
             </>
           ) : section === "sent" || section === "scheduled" ? (
-            message.recipient_summary || "No recipients"
+            message.recipient_summary || t("routesMail.noRecipients")
           ) : (
-            message.participants || message.from_address || "Me"
+            message.participants || message.from_address || t("routesMail.me")
           )}
-          {(message.message_count ?? 0) > 1 && <small> ({message.message_count})</small>}
+          {(message.message_count ?? 0) > 1 && (
+            <small>
+              {t("routesMail.text")}
+              {message.message_count}
+              {t("routesMail.text2")}
+            </small>
+          )}
         </span>
         <span className="mail-row-content">
           {section === "scheduled" && message.submission_status && (
@@ -1041,8 +1066,11 @@ const MailMessageRow = memo(function MailMessageRow({
               {submissionLabel(message.submission_status)}
             </span>
           )}
-          <strong>{message.subject || "(No subject)"}</strong>
-          <span className="mail-row-snippet"> — {message.snippet || "No preview"}</span>
+          <strong>{message.subject || t("routesMail.noSubject")}</strong>
+          <span className="mail-row-snippet">
+            {t("routesMail.text3")}
+            {message.snippet || t("routesMail.noPreview")}
+          </span>
         </span>
         <span className="mail-row-indicators">
           {!!message.has_attachments && <Icon name="attachment" />}
@@ -1072,19 +1100,19 @@ const MailMessageRow = memo(function MailMessageRow({
         <div className="mail-row-quick-actions">
           <MailIconButton
             icon="archive"
-            label="Archive conversation"
+            label={t("routesMail.archiveConversation")}
             disabled={!canWrite || busy}
             onClick={() => handlers.run([message], { folder_id: "archive" })}
           />
           <MailIconButton
             icon="trash"
-            label="Delete conversation"
+            label={t("routesMail.deleteConversation")}
             disabled={!canWrite || busy}
             onClick={() => handlers.run([message], { folder_id: "trash" })}
           />
           <MailIconButton
             icon="mail"
-            label={message.is_read ? "Mark unread" : "Mark read"}
+            label={message.is_read ? t("routesMail.markUnread") : t("routesMail.markRead")}
             disabled={!canWrite || busy}
             onClick={() => handlers.run([message], { is_read: !message.is_read })}
           />

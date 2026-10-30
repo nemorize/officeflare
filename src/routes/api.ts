@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -58,7 +59,7 @@ api.use("*", async (c, next) => {
   return bodyLimit({
     maxSize,
     onError: () => {
-      throw new HTTPException(413, { message: "Request body is too large" });
+      throw new HTTPException(413, { message: t("routesApi.requestBodyIsTooLarge") });
     },
   })(c, next);
 });
@@ -82,6 +83,6 @@ api.route("/users", userRoleRoutes);
 api.route("/users", users);
 
 // Register JSON API routes above this fallback to keep unknown API paths out of the web UI.
-api.all("*", (c) => c.json({ error: "Not found" }, 404));
+api.all("*", (c) => c.json({ error: t("routesApi.notFound") }, 404));
 
 export default api;

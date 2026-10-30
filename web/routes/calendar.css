@@ -1958,7 +1958,7 @@
   .calendar-topbar-actions {
     gap: 1px;
   }
-  .calendar-topbar-actions > button[aria-label="Search events"] {
+  .calendar-topbar-actions > .calendar-search-button {
     display: none;
   }
   .calendar-view-select {

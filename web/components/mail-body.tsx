@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMailCache } from "./mail-resource-context";
 import { api } from "../lib/api";
@@ -122,7 +125,8 @@ export const MailHtml = memo(
                   const blob = snapshot.data as Blob;
                   if (controller.signal.aborted) return;
                   loadedBytes += blob.size;
-                  if (loadedBytes > 20 * 1024 ** 2) throw new Error("Mail image budget exceeded");
+                  if (loadedBytes > 20 * 1024 ** 2)
+                    throw new Error(t("componentsMailBody.mailImageBudgetExceeded"));
                   // Opaque sandbox origins cannot read the parent's partitioned blob URLs.
                   const embedded = await embeddedMailImage(blob);
                   replacements.set(source, embedded);
@@ -137,12 +141,10 @@ export const MailHtml = memo(
           if (next < sources.length && !controller.signal.aborted) failures++;
           if (resourceSignal.aborted && !controller.signal.aborted) failures++;
           if (controller.signal.aborted) return;
-          if (failures)
-            setError(
-              "Some images or styles could not be loaded. The rest of the message is available.",
-            );
+          if (failures) setError(t("componentsMailBody.someImagesOrStylesCouldNotBeLoadedThe"));
         } catch {
-          if (!controller.signal.aborted) setError("The formatted message could not be loaded.");
+          if (!controller.signal.aborted)
+            setError(t("componentsMailBody.theFormattedMessageCouldNotBeLoaded"));
         }
       })();
       return () => {
@@ -163,14 +165,14 @@ export const MailHtml = memo(
         <MailNotice error={error} />
         {error && (
           <Button variant="ghost" size="sm" onClick={() => setAttempt((value) => value + 1)}>
-            Retry loading content
+            {t("componentsMailBody.retryLoadingContent")}
           </Button>
         )}
         <iframe
           ref={frame}
           style={{ height }}
           className="mail-html-frame"
-          title="Formatted email body"
+          title={t("componentsMailBody.formattedEmailBody")}
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
           srcDoc={document}
@@ -215,29 +217,39 @@ export function SendStatus({ submission }: { submission: Submission }) {
           {submissionLabel(value.status)}
         </strong>
         <p>
-          {value.provider} · {value.connection_id} · {value.attempt_count} attempt(s)
+          <LocalizedMessage
+            id="componentsMailBody.attemptS"
+            values={{
+              provider: value.provider,
+              connection_id: value.connection_id,
+              attempt_count: value.attempt_count,
+            }}
+          />
         </p>
         {value.status === "scheduled" && <p>{mailDate(value.scheduled_at)}</p>}
         {value.error_code && <p>{mailErrorDescription(value.error_code)}</p>}
         {value.status === "accepted" && (
-          <small>Provider acceptance does not confirm delivery to every recipient.</small>
+          <small>
+            {t("componentsMailBody.providerAcceptanceDoesNotConfirmDeliveryToEveryRecipient")}
+          </small>
         )}
         {value.status === "unknown" && (
           <small>
-            The provider may have accepted this message. Canceling reopens the draft, but cannot
-            recall an email already accepted by the provider.
+            {t("componentsMailBody.theProviderMayHaveAcceptedThisMessageCancelingReopens")}
           </small>
         )}
         {value.recipients?.map((recipient) => (
           <p key={recipient.email_address}>
-            {recipient.email_address} · {recipient.status}
+            {recipient.email_address}
+            {t("componentsMailBody.text")}
+            {enumLabel(recipient.status)}
           </p>
         ))}
       </div>
       <div className="mail-actions">
         {value.status === "unknown" && (
           <Button size="sm" disabled={resource.loading} onClick={resource.reload}>
-            Check status
+            {t("componentsMailBody.checkStatus")}
           </Button>
         )}
         {cancelableSubmission(value.status) && (
@@ -253,13 +265,13 @@ export function SendStatus({ submission }: { submission: Submission }) {
                 mail.refresh();
                 mail.feedback(
                   value.status === "unknown"
-                    ? "Draft reopened. The provider may already have accepted this email."
-                    : "Send canceled. Draft reopened.",
+                    ? t("componentsMailBody.draftReopenedTheProviderMayAlreadyHaveAcceptedThis")
+                    : t("componentsMailBody.sendCanceledDraftReopened"),
                 );
               });
             }}
           >
-            Cancel send
+            {t("componentsMailBody.cancelSend")}
           </Button>
         )}
         {retryableSubmission(value.status) && (
@@ -276,7 +288,7 @@ export function SendStatus({ submission }: { submission: Submission }) {
               });
             }}
           >
-            Retry send
+            {t("componentsMailBody.retrySend")}
           </Button>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now } from "../auth/types";
 import { permissionClosure, type Permission } from "../authorization/permissions";
 import type { Bind, Calendar, CalendarContext, CalendarEnv, Condition, Event, Role } from "./types";
@@ -109,7 +110,7 @@ export async function resolveCalendar(c: CalendarContext, id: string) {
       c.get("identity").user.id,
     );
   }
-  if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+  if (!value) fail(404, "CALENDAR_NOT_FOUND", t("calendarAccess.calendarNotFound"));
   return value.calendar_id;
 }
 export async function requireCalendar(c: CalendarContext, id: string, min = 1, trash = false) {
@@ -117,12 +118,12 @@ export async function requireCalendar(c: CalendarContext, id: string, min = 1, t
     value = (await calendars(c, trash)).find(
       (cal) => cal.id === resolved && rank[cal.effective_role] >= min,
     );
-  if (!value) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+  if (!value) fail(404, "CALENDAR_NOT_FOUND", t("calendarAccess.calendarNotFound"));
   if ((min === 3 || min === 4) && value.kind === "external")
     fail(
       403,
       "READ_ONLY_CALENDAR",
-      "External calendars are read-only. Edit events at their source.",
+      t("calendarAccess.externalCalendarsAreReadOnlyEditEventsAtTheir"),
     );
   return value;
 }
@@ -167,7 +168,7 @@ export async function requireEvent(
         (privateEvent(value, cal) && rank[cal.effective_role] < 4) ||
         value.authority !== "native"))
   )
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+    fail(404, "EVENT_NOT_FOUND", t("calendarAccess.eventNotFound"));
   return value;
 }
 export function eventCondition(

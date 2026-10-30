@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 export interface DriveSettings {
   default_quota_bytes: number;
   max_file_bytes: number;
@@ -100,31 +101,35 @@ export interface AdminPage<T> {
   next_cursor: string | null;
 }
 export const driveConsolePages = [
-  { page: "overview", label: "Overview", permission: "admin.drive.accounts.read" },
-  { page: "accounts", label: "Accounts & storage", permission: "admin.drive.accounts.read" },
-  { page: "items", label: "Files & trash", permission: "admin.drive.items.read" },
-  { page: "sharing", label: "Sharing", permission: "admin.drive.sharing.read" },
-  { page: "settings", label: "Policies", permission: "admin.drive.settings.read" },
-  { page: "activity", label: "Audit log", permission: "admin.drive.audit.read" },
+  { page: "overview", label: t("libDriveAdmin.overview"), permission: "admin.drive.accounts.read" },
+  {
+    page: "accounts",
+    label: t("libDriveAdmin.accountsStorage"),
+    permission: "admin.drive.accounts.read",
+  },
+  { page: "items", label: t("libDriveAdmin.filesTrash"), permission: "admin.drive.items.read" },
+  { page: "sharing", label: t("libDriveAdmin.sharing"), permission: "admin.drive.sharing.read" },
+  { page: "settings", label: t("libDriveAdmin.policies"), permission: "admin.drive.settings.read" },
+  { page: "activity", label: t("libDriveAdmin.auditLog"), permission: "admin.drive.audit.read" },
 ] as const;
 export const accountAvailability = (account: DriveAccount) =>
   account.deleted_at
-    ? "Deleted account"
+    ? t("libDriveAdmin.deletedAccount")
     : account.disabled_at
-      ? "Disabled account"
+      ? t("libDriveAdmin.disabledAccount")
       : account.password_reset_required
-        ? "Password change required"
+        ? t("libDriveAdmin.passwordChangeRequired")
         : !account.role_has_drive
-          ? "No Drive role"
+          ? t("libDriveAdmin.noDriveRole")
           : account.status === "suspended"
-            ? "Drive suspended"
+            ? t("libDriveAdmin.driveSuspended")
             : account.status === "read_only"
-              ? "Read only"
-              : "Active";
+              ? t("libDriveAdmin.readOnly")
+              : t("common.active");
 export const GIB = 1024 ** 3;
 export function storageBytes(value: string) {
   const bytes = Number(value) * GIB;
   if (!value.trim() || !Number.isSafeInteger(bytes) || bytes < 0)
-    throw new Error("Enter a valid storage amount in GiB.");
+    throw new Error(t("libDriveAdmin.enterAValidStorageAmountInGib"));
   return bytes;
 }

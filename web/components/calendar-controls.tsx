@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Button, Dialog, DialogPopup, Field, Input, type IconProps } from "./ui";
 import { MailIconButton } from "./mail-controls";
@@ -52,7 +53,12 @@ export function CalendarModal({
       <DialogPopup data-ui-theme="neutral" className={`calendar-modal ${className}`}>
         <div className="calendar-modal-heading">
           <Dialog.Title>{title}</Dialog.Title>
-          <CalendarIconButton icon="close" label="Close dialog" onClick={onClose} disabled={busy} />
+          <CalendarIconButton
+            icon="close"
+            label={t("componentsCalendarControls.closeDialog")}
+            onClick={onClose}
+            disabled={busy}
+          />
         </div>
         <Dialog.Description
           className={description ? "calendar-modal-description" : "visually-hidden"}

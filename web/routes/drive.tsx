@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { Fragment, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
@@ -54,6 +56,7 @@ import {
   type DriveItem,
 } from "../lib/drive";
 import "./drive.css";
+import { readDriveLayout, saveDriveLayout } from "../lib/drive-settings";
 
 type ItemAction =
   | "open"
@@ -84,13 +87,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     kind = params.get("kind") ?? "",
     sort = params.get("sort") ?? (view === "recent" ? "updated_at" : "name"),
     order = params.get("order") ?? (view === "recent" ? "desc" : "asc");
-  const [layout, setLayout] = useState<"list" | "grid">(() => {
-    try {
-      return localStorage.getItem("officeflare.drive.layout") === "grid" ? "grid" : "list";
-    } catch {
-      return "list";
-    }
-  });
+  const [layout, setLayout] = useState(readDriveLayout);
   const folderResource = useDriveResource<{ item: DriveItem }>(
     folder ? `/api/drive/items/${folder}` : null,
     drive.revision,
@@ -154,21 +151,21 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         (folderResource.data.item.actions?.create ?? canEdit(folderResource.data.item))
       : view === "my" && !searching);
   const title = searching
-    ? "Search results"
+    ? t("routesDrive.searchResults")
     : (folderResource.data?.item.name ??
       ({
-        my: "My drive",
-        shared: "Shared with me",
-        recent: "Recent",
-        starred: "Starred",
-        trash: "Trash",
+        my: t("routesDrive.myDrive"),
+        shared: t("routesDrive.sharedWithMe"),
+        recent: t("routesDrive.recent"),
+        starred: t("routesDrive.starred"),
+        trash: t("routesDrive.trash"),
       }[view] ||
-        "Folder"));
+        t("routesDrive.folder")));
   useEffect(() => {
     drive.setTarget({ parent: folder, writable });
   }, [folder, writable, drive.setTarget]);
   useEffect(() => {
-    document.title = `${title} · Drive · Officeflare`;
+    document.title = t("routesDrive.driveOfficeflare", { title: title });
   }, [title]);
   useEffect(() => {
     if (!mobile) setSelectionMode(false);
@@ -225,7 +222,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     if (next === "list" || next === "grid") {
       setLayout(next);
       try {
-        localStorage.setItem("officeflare.drive.layout", next);
+        saveDriveLayout(next);
       } catch {
         /* Preference is optional. */
       }
@@ -304,9 +301,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         drive.refresh();
         if (done)
           notify.success(
-            name === "star"
-              ? "Starred items updated."
-              : `${done} ${done === 1 ? "item" : "items"} restored.`,
+            name === "star" ? t("routesDrive.starredItemsUpdated") : plural("drive.restored", done),
           );
       }
       if (failures.length) throw new Error(failures.join("\n"));
@@ -345,7 +340,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
     setDragging(false);
     dragDepth.current = 0;
     if (writable) drive.enqueue(Array.from(event.dataTransfer.files), folder);
-    else notify.info("Open a folder you can edit to upload files.");
+    else notify.info(t("routesDrive.openAFolderYouCanEditToUploadFiles"));
   };
   const onDrag = (event: DragEvent) => {
     if (!Array.from(event.dataTransfer.types).includes("Files")) return;
@@ -380,9 +375,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       }
     drive.refresh();
     if (done)
-      notify.success(
-        `${done} ${done === 1 ? "item" : "items"} ${dialog.type === "delete" ? "permanently deleted" : "moved to trash"}.`,
-      );
+      notify.success(plural(dialog.type === "delete" ? "drive.deleted" : "drive.trashed", done));
     if (failures.length) throw new Error(failures.join("\n"));
     setSelection(new Set());
   };
@@ -402,7 +395,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
         <header className="drive-page-header">
           <div>
             {folder && (
-              <nav aria-label="Folder path" className="drive-breadcrumbs">
+              <nav aria-label={t("routesDrive.folderPath")} className="drive-breadcrumbs">
                 <Link
                   to={
                     folderResource.data?.item.effective_role === "owner"
@@ -411,8 +404,8 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   }
                 >
                   {folderResource.data?.item.effective_role === "owner"
-                    ? "My drive"
-                    : "Shared with me"}
+                    ? t("routesDrive.myDrive")
+                    : t("routesDrive.sharedWithMe")}
                 </Link>
                 {breadcrumbs.slice(0, -1).map((item) => (
                   <span key={item.id}>
@@ -435,12 +428,12 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                       searchFields.type),
                   searchFields.scope !== "all" &&
                     driveSearchScopes.find((option) => option.value === searchFields.scope)?.label,
-                  searchFields.owner && `Owner: ${searchFields.owner}`,
-                  searchFields.after && `From ${searchFields.after}`,
-                  searchFields.before && `Through ${searchFields.before}`,
+                  searchFields.owner && t("routesDrive.owner", { owner: searchFields.owner }),
+                  searchFields.after && t("routesDrive.from", { after: searchFields.after }),
+                  searchFields.before && t("routesDrive.through", { before: searchFields.before }),
                 ]
                   .filter(Boolean)
-                  .join(" · ") || "All accessible files"}
+                  .join(" · ") || t("routesDrive.allAccessibleFiles")}
               </p>
             )}
           </div>
@@ -452,16 +445,16 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <Button
                 mobileIcon
                 className="drive-folder-share"
-                aria-label="Share folder"
+                aria-label={t("routesDrive.shareFolder")}
                 onClick={() => operate("share", [folderResource.data!.item])}
               >
                 <Icon name="users" />
-                <span className="drive-share-folder-label">Share folder</span>
+                <span className="drive-share-folder-label">{t("routesDrive.shareFolder")}</span>
               </Button>
             )}
             <DriveIconButton
               icon="refresh"
-              label="Refresh files"
+              label={t("routesDrive.refreshFiles")}
               onClick={drive.refresh}
               disabled={collection.loading}
             />
@@ -470,7 +463,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 ref={selectionButton}
                 variant="ghost"
                 size="touch"
-                aria-label={selecting ? "Exit selection mode" : "Select files"}
+                aria-label={
+                  selecting ? t("routesDrive.exitSelectionMode") : t("routesDrive.selectFiles")
+                }
                 aria-pressed={selecting}
                 disabled={!collection.items.length && !selecting}
                 onClick={() => {
@@ -478,12 +473,16 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   else setSelectionMode(true);
                 }}
               >
-                {selecting ? "Done" : "Select"}
+                {selecting ? t("common.done") : t("routesDrive.select")}
               </Button>
             ) : (
               <DriveIconButton
                 icon="sidebar"
-                label={detailsOpen ? "Hide file information" : "Show file information"}
+                label={
+                  detailsOpen
+                    ? t("routesDrive.hideFileInformation")
+                    : t("routesDrive.showFileInformation")
+                }
                 aria-pressed={detailsOpen}
                 disabled={!selectedId}
                 onClick={() => setDetailsOpen(!detailsOpen)}
@@ -495,8 +494,14 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           <div className="drive-trash-notice">
             <Icon name="trash" />
             <span>
-              Items in trash are automatically deleted after{" "}
-              {drive.capabilities?.trash_retention_days ?? "the configured number of"} days.
+              <LocalizedMessage
+                id="routesDrive.itemsInTrashAreAutomaticallyDeletedAfterDays"
+                values={{
+                  value1:
+                    drive.capabilities?.trash_retention_days ??
+                    t("routesDrive.theConfiguredNumberOf"),
+                }}
+              />
             </span>
           </div>
         )}
@@ -507,42 +512,45 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           >
             <div className="drive-filters">
               <DriveSelect
-                label="Filter by type"
+                label={t("routesDrive.filterByType")}
                 value={kind || "all"}
                 onChange={(value) => changeFilter("kind", value === "all" ? "" : value)}
                 options={[
-                  { value: "all", label: "All types" },
-                  { value: "folder", label: "Folders" },
-                  { value: "file", label: "Files" },
+                  { value: "all", label: t("routesDrive.allTypes") },
+                  { value: "folder", label: t("routesDrive.folders") },
+                  { value: "file", label: t("routesDrive.files") },
                 ]}
               />
               {kind && (
                 <Button variant="ghost" size="sm" onClick={() => changeFilter("kind", "")}>
-                  Clear
+                  {t("common.clear")}
                   <Icon name="close" width="12" height="12" />
                 </Button>
               )}
             </div>
             <div className="drive-view-options">
               <Menu.Root>
-                <Menu.Trigger render={<Button variant="ghost" size="sm" />} aria-label="Sort files">
+                <Menu.Trigger
+                  render={<Button variant="ghost" size="sm" />}
+                  aria-label={t("routesDrive.sortFiles")}
+                >
                   <Icon name="sort" />
                   <span>
                     {sort === "name"
-                      ? "Name"
+                      ? t("common.name")
                       : sort === "size"
-                        ? "Size"
+                        ? t("routesDrive.size")
                         : view === "recent" && !params.has("sort")
-                          ? "Last opened"
-                          : "Last modified"}
+                          ? t("routesDrive.lastOpened")
+                          : t("routesDrive.lastModified")}
                   </span>
                   <Icon name="down" width="12" height="12" />
                 </Menu.Trigger>
                 <MenuPopup data-ui-theme="neutral" positionerProps={{ align: "end" }}>
                   {[
-                    { value: "name", label: "Name" },
-                    { value: "updated_at", label: "Last modified" },
-                    { value: "size", label: "File size" },
+                    { value: "name", label: t("common.name") },
+                    { value: "updated_at", label: t("routesDrive.lastModified") },
+                    { value: "size", label: t("routesDrive.fileSize") },
                   ].map((option) => (
                     <Menu.Item
                       key={option.value}
@@ -562,7 +570,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     }}
                   >
                     <Icon name="sort" />
-                    {order === "asc" ? "Switch to descending" : "Switch to ascending"}
+                    {order === "asc"
+                      ? t("routesDrive.switchToDescending")
+                      : t("routesDrive.switchToAscending")}
                   </Menu.Item>
                 </MenuPopup>
               </Menu.Root>
@@ -570,12 +580,12 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                 value={[layout]}
                 onValueChange={chooseLayout}
                 className="drive-layout-toggle"
-                aria-label="File view"
+                aria-label={t("routesDrive.fileView")}
               >
-                <Toggle value="list" data-size="icon" aria-label="List view">
+                <Toggle value="list" data-size="icon" aria-label={t("routesDrive.listView")}>
                   <Icon name="list" />
                 </Toggle>
-                <Toggle value="grid" data-size="icon" aria-label="Grid view">
+                <Toggle value="grid" data-size="icon" aria-label={t("routesDrive.gridView")}>
                   <Icon name="grid" />
                 </Toggle>
               </ToggleGroup>
@@ -585,21 +595,27 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             <div
               className="drive-selection-toolbar"
               role="toolbar"
-              aria-label="Selected file actions"
+              aria-label={t("routesDrive.selectedFileActions")}
             >
               <DriveIconButton
                 icon="close"
-                label="Clear selection"
+                label={t("routesDrive.clearSelection")}
                 onClick={() => {
                   setSelection(new Set());
                   if (mobile) selectionButton.current?.focus();
                 }}
               />
-              <strong>{selection.size} selected</strong>
+              <strong>
+                <LocalizedMessage id="routesDrive.selected" values={{ size: selection.size }} />
+              </strong>
               {mobile && selectedId && (
                 <DriveIconButton
                   icon="sidebar"
-                  label={detailsOpen ? "Hide file information" : "Show file information"}
+                  label={
+                    detailsOpen
+                      ? t("routesDrive.hideFileInformation")
+                      : t("routesDrive.showFileInformation")
+                  }
                   aria-pressed={detailsOpen}
                   onClick={() => setDetailsOpen(!detailsOpen)}
                 />
@@ -613,7 +629,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     disabled={!selected.every((item) => item.actions?.update !== false)}
                   >
                     <Icon name="undo" />
-                    Restore
+                    {t("routesDrive.restore")}
                   </Button>
                   <Button
                     variant="danger"
@@ -622,7 +638,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     disabled={!selected.every((item) => item.actions?.delete !== false)}
                   >
                     <Icon name="trash" />
-                    Delete forever
+                    {t("routesDrive.deleteForever")}
                   </Button>
                 </>
               ) : (
@@ -630,33 +646,33 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   {selected.length === 1 && selected[0]!.effective_role === "owner" && (
                     <DriveIconButton
                       icon="users"
-                      label="Share selected item"
+                      label={t("routesDrive.shareSelectedItem")}
                       onClick={() => operate("share", selected)}
                     />
                   )}
                   <DriveIconButton
                     icon="star"
-                    label="Toggle starred"
+                    label={t("routesDrive.toggleStarred")}
                     disabled={action.busy}
                     onClick={() => operate("star", selected)}
                   />
                   {selected.every(canEdit) && (
                     <DriveIconButton
                       icon="move"
-                      label="Move selected items"
+                      label={t("routesDrive.moveSelectedItems")}
                       onClick={() => operate("move", selected)}
                     />
                   )}
                   <DriveIconButton
                     icon="copy"
-                    label="Copy selected items"
+                    label={t("routesDrive.copySelectedItems")}
                     disabled={!selected.every((item) => item.actions?.copy !== false)}
                     onClick={() => operate("copy", selected)}
                   />
                   {selected.length === 1 && selected[0]!.kind === "file" && (
                     <DriveIconButton
                       icon="download"
-                      label="Download selected file"
+                      label={t("routesDrive.downloadSelectedFile")}
                       disabled={action.busy || selected[0]?.actions?.download === false}
                       onClick={() => operate("download", selected)}
                     />
@@ -667,13 +683,13 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                   ) && (
                     <DriveIconButton
                       icon="trash"
-                      label="Move selected items to trash"
+                      label={t("routesDrive.moveSelectedItemsToTrash")}
                       onClick={() => operate("trash", selected)}
                     />
                   )}
                 </>
               )}
-              <span className="drive-selection-hint">Esc to clear</span>
+              <span className="drive-selection-hint">{t("routesDrive.escToClear")}</span>
             </div>
           )}
         </div>
@@ -714,41 +730,43 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             </div>
             <h2>
               {searching
-                ? "No matching files"
+                ? t("routesDrive.noMatchingFiles")
                 : view === "shared"
-                  ? "Shared files appear here"
+                  ? t("routesDrive.sharedFilesAppearHere")
                   : view === "recent"
-                    ? "Your recent files appear here"
+                    ? t("routesDrive.yourRecentFilesAppearHere")
                     : view === "starred"
-                      ? "Keep your favorites close"
+                      ? t("routesDrive.keepYourFavoritesClose")
                       : view === "trash"
-                        ? "Your trash is empty"
+                        ? t("routesDrive.yourTrashIsEmpty")
                         : kind
-                          ? "No items of this type"
-                          : "A place for everything"}
+                          ? t("routesDrive.noItemsOfThisType")
+                          : t("routesDrive.aPlaceForEverything")}
             </h2>
             <p>
               {searching
-                ? "Try a different name or clear your filters."
+                ? t("routesDrive.tryADifferentNameOrClearYourFilters")
                 : view === "shared"
-                  ? "Files and folders shared with your account will appear here."
+                  ? t("routesDrive.filesAndFoldersSharedWithYourAccountWillAppear")
                   : view === "recent"
-                    ? "Open or preview a file to find it here later."
+                    ? t("routesDrive.openOrPreviewAFileToFindItHere")
                     : view === "starred"
-                      ? "Add a star to files and folders you use often."
+                      ? t("routesDrive.addAStarToFilesAndFoldersYouUse")
                       : view === "trash"
-                        ? "Items you delete can be restored here for 30 days."
+                        ? t("routesDrive.itemsYouDeleteCanBeRestoredHereFor30")
                         : kind
-                          ? "Choose another type to see more files."
-                          : "Upload your files or create a folder to get started."}
+                          ? t("routesDrive.chooseAnotherTypeToSeeMoreFiles")
+                          : t("routesDrive.uploadYourFilesOrCreateAFolderToGet")}
             </p>
             {writable && !kind && (
               <Button variant="primary" onClick={() => drive.chooseFiles()}>
                 <Icon name="upload" />
-                Upload files
+                {t("routesDrive.uploadFiles")}
               </Button>
             )}
-            {searching && <Button onClick={() => navigate("/drive")}>Clear search</Button>}
+            {searching && (
+              <Button onClick={() => navigate("/drive")}>{t("routesDrive.clearSearch")}</Button>
+            )}
           </div>
         )}
         {!collection.loading && !!collection.items.length && (
@@ -757,7 +775,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               <div
                 className="drive-file-grid"
                 role="grid"
-                aria-label={`${title} files`}
+                aria-label={t("routesDrive.files2", { title: title })}
                 aria-multiselectable="true"
               >
                 <div className="drive-table-header" role="row">
@@ -765,7 +783,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                     <div role="columnheader">
                       <DriveCheckbox
                         hitArea
-                        aria-label="Select all loaded items"
+                        aria-label={t("routesDrive.selectAllLoadedItems")}
                         checked={selection.size === collection.items.length && !!selection.size}
                         indeterminate={
                           selection.size > 0 && selection.size < collection.items.length
@@ -778,18 +796,20 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                       />
                     </div>
                   )}
-                  <div role="columnheader">Name</div>
+                  <div role="columnheader">{t("common.name")}</div>
                   <div role="columnheader" className="drive-column-owner">
-                    Owner
+                    {t("routesDrive.owner2")}
                   </div>
                   <div role="columnheader">
-                    {view === "trash" ? "Date deleted" : "Last modified"}
+                    {view === "trash"
+                      ? t("routesDrive.dateDeleted")
+                      : t("routesDrive.lastModified")}
                   </div>
                   <div role="columnheader" className="drive-column-size">
-                    File size
+                    {t("routesDrive.fileSize")}
                   </div>
                   <div role="columnheader">
-                    <span className="visually-hidden">Actions</span>
+                    <span className="visually-hidden">{t("common.actions")}</span>
                   </div>
                 </div>
                 {collection.items.map((item, index) => (
@@ -799,7 +819,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                       index > 0 &&
                       collection.items[index - 1]?.kind === "folder" && (
                         <div className="drive-grid-section-label" role="presentation">
-                          Files
+                          {t("routesDrive.files")}
                         </div>
                       )}
                     <ContextMenu.Root>
@@ -850,7 +870,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                           <div className="drive-row-select" role="gridcell">
                             <DriveCheckbox
                               hitArea
-                              aria-label={`Select ${item.name}`}
+                              aria-label={t("routesDrive.select2", { name: item.name })}
                               checked={selection.has(item.id)}
                               onCheckedChange={(checked) => {
                                 if (mobile) setSelectionMode(true);
@@ -932,15 +952,17 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
               </div>
               <footer className="drive-list-footer">
                 <span>
-                  {collection.items.length} {collection.items.length === 1 ? "item" : "items"}
-                  {collection.next ? " loaded" : ""}
+                  {plural(
+                    collection.next ? "counts.loadedItems" : "counts.items",
+                    collection.items.length,
+                  )}
                 </span>
-                <span>Single click to select · Double click to open</span>
+                <span>{t("routesDrive.singleClickToSelectDoubleClickToOpen")}</span>
               </footer>
               {collection.next && (
                 <div className="drive-load-more">
                   <Button onClick={() => void collection.loadMore()} disabled={collection.more}>
-                    {collection.more ? "Loading…" : "Load more files"}
+                    {collection.more ? t("common.loading") : t("routesDrive.loadMoreFiles")}
                   </Button>
                 </div>
               )}
@@ -963,7 +985,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             <aside className="drive-details">
               <DriveIconButton
                 icon="close"
-                label="Close file information"
+                label={t("routesDrive.closeFileInformation")}
                 onClick={() => setDetailsOpen(false)}
               />
               <DriveState
@@ -980,13 +1002,15 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           <Icon name="upload" width="44" height="44" />
           <strong>
             {writable
-              ? `Drop files to upload${folder ? ` to ${title}` : ""}`
-              : "Open a writable folder to upload"}
+              ? t("routesDrive.dropFilesToUpload", {
+                  value1: folder ? t("routesDrive.to", { title: title }) : "",
+                })
+              : t("routesDrive.openAWritableFolderToUpload")}
           </strong>
           <span>
             {writable
-              ? "Files are stored securely in your workspace."
-              : "You can upload in My drive or a folder you can edit."}
+              ? t("routesDrive.filesAreStoredSecurelyInYourWorkspace")
+              : t("routesDrive.youCanUploadInMyDriveOrAFolder")}
           </span>
         </div>
       )}
@@ -1032,9 +1056,17 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       )}
       {(dialog?.type === "trash" || dialog?.type === "delete") && (
         <DriveConfirmDialog
-          title={dialog.type === "delete" ? "Delete forever?" : "Move to trash?"}
-          description={`${dialog.items.length === 1 ? `“${dialog.items[0]!.name}”` : `${dialog.items.length} selected items`}${dialog.items.some((item) => item.kind === "folder") ? " and any folder contents" : ""} ${dialog.type === "delete" ? "will be permanently deleted. This cannot be undone." : "will be moved to trash. You can restore them within 30 days."}`}
-          confirm={dialog.type === "delete" ? "Delete forever" : "Move to trash"}
+          title={
+            dialog.type === "delete"
+              ? t("routesDrive.deleteForever2")
+              : t("routesDrive.moveToTrash")
+          }
+          description={`${dialog.items.length === 1 ? `“${dialog.items[0]!.name}”` : t("routesDrive.selectedItems", { length: dialog.items.length })}${dialog.items.some((item) => item.kind === "folder") ? t("routesDrive.andAnyFolderContents") : ""} ${dialog.type === "delete" ? t("routesDrive.willBePermanentlyDeletedThisCannotBeUndone") : t("routesDrive.willBeMovedToTrashYouCanRestoreThem")}`}
+          confirm={
+            dialog.type === "delete"
+              ? t("routesDrive.deleteForever")
+              : t("routesDrive.moveToTrash2")
+          }
           destructive
           onClose={() => setDialog(null)}
           action={trashOperation}
@@ -1056,7 +1088,7 @@ function DriveItemMenu({
     <Menu.Root>
       <Menu.Trigger
         render={<Button size="icon" variant="ghost" />}
-        aria-label={`Actions for ${item.name}`}
+        aria-label={t("routesDrive.actionsFor", { name: item.name })}
       >
         <Icon name="more" />
       </Menu.Trigger>
@@ -1083,11 +1115,11 @@ function DriveMenuItems({
     <>
       <Item disabled={item.actions?.update === false} onClick={() => onAction("restore")}>
         <Icon name="undo" />
-        Restore
+        {t("routesDrive.restore")}
       </Item>
       <Item onClick={() => onAction("details")}>
         <Icon name="info" />
-        File information
+        {t("routesDrive.fileInformation")}
       </Item>
       <Separator />
       <Item
@@ -1096,25 +1128,25 @@ function DriveMenuItems({
         onClick={() => onAction("delete")}
       >
         <Icon name="trash" />
-        Delete forever
+        {t("routesDrive.deleteForever")}
       </Item>
     </>
   ) : (
     <>
       <Item onClick={() => onAction("open")}>
         <Icon name={item.kind === "folder" ? "folder" : "eye"} />
-        {item.kind === "folder" ? "Open folder" : "Preview"}
+        {item.kind === "folder" ? t("routesDrive.openFolder") : t("routesDrive.preview")}
       </Item>
       {item.effective_role === "owner" && (
         <Item onClick={() => onAction("share")}>
           <Icon name="users" />
-          Share
+          {t("routesDrive.share")}
         </Item>
       )}
       {item.kind === "file" && item.actions?.download !== false && (
         <Item onClick={() => onAction("download")}>
           <Icon name="download" />
-          Download
+          {t("routesDrive.download")}
         </Item>
       )}
       <Separator />
@@ -1122,25 +1154,25 @@ function DriveMenuItems({
         <>
           <Item onClick={() => onAction("rename")}>
             <Icon name="edit" />
-            Rename
+            {t("routesDrive.rename")}
           </Item>
           <Item onClick={() => onAction("move")}>
             <Icon name="move" />
-            Move to
+            {t("routesDrive.moveTo")}
           </Item>
         </>
       )}
       <Item disabled={item.actions?.copy === false} onClick={() => onAction("copy")}>
         <Icon name="copy" />
-        Make a copy
+        {t("routesDrive.makeACopy")}
       </Item>
       <Item onClick={() => onAction("star")}>
         <Icon name="star" />
-        {item.starred ? "Remove from starred" : "Add to starred"}
+        {item.starred ? t("routesDrive.removeFromStarred") : t("routesDrive.addToStarred")}
       </Item>
       <Item onClick={() => onAction("details")}>
         <Icon name="info" />
-        File information
+        {t("routesDrive.fileInformation")}
       </Item>
       {item.effective_role === "owner" && (
         <>
@@ -1151,7 +1183,7 @@ function DriveMenuItems({
             onClick={() => onAction("trash")}
           >
             <Icon name="trash" />
-            Move to trash
+            {t("routesDrive.moveToTrash2")}
           </Item>
         </>
       )}
@@ -1178,10 +1210,10 @@ export function DriveLinkedItemPage() {
       <DriveState loading={resource.loading} error={resource.error} retry={resource.reload} />
       {resource.error && (
         <div className="drive-access-request-form">
-          <h2>Request access</h2>
-          <p>The owner can give your account access to this item.</p>
+          <h2>{t("routesDrive.requestAccess")}</h2>
+          <p>{t("routesDrive.theOwnerCanGiveYourAccountAccessToThis")}</p>
           {sent ? (
-            <p role="status">If this item is available, the owner will receive your request.</p>
+            <p role="status">{t("routesDrive.ifThisItemIsAvailableTheOwnerWillReceive")}</p>
           ) : (
             <form
               onSubmit={(event) => {
@@ -1196,28 +1228,28 @@ export function DriveLinkedItemPage() {
               }}
             >
               <DriveSelect
-                label="Requested access"
+                label={t("routesDrive.requestedAccess")}
                 value={role}
                 options={[
-                  { value: "viewer", label: "Viewer" },
-                  { value: "commenter", label: "Commenter" },
-                  { value: "editor", label: "Editor" },
+                  { value: "viewer", label: t("routesDrive.viewer") },
+                  { value: "commenter", label: t("routesDrive.commenter") },
+                  { value: "editor", label: t("routesDrive.editor") },
                 ]}
                 onChange={setRole}
               />
               <DriveField
-                label="Message (optional)"
+                label={t("routesDrive.messageOptional")}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 maxLength={1000}
               />
               <Button variant="primary" type="submit" disabled={action.busy}>
-                Request access
+                {t("routesDrive.requestAccess")}
               </Button>
             </form>
           )}
           <DriveNotice error={action.error} />
-          <Link to="/drive">Return to My drive</Link>
+          <Link to="/drive">{t("routesDrive.returnToMyDrive")}</Link>
         </div>
       )}
     </section>

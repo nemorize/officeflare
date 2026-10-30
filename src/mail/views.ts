@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
 import { fail, type MailActor, type MessageQuery, type ThreadRow } from "./types";
@@ -22,7 +23,8 @@ export async function queryThreads(
   await authorize(env, actor, mailboxId, "read");
   const entries = await mailbox(env, mailboxId).partitions();
   const targets = selected ? entries.filter((p) => selected.includes(p.id)) : entries;
-  if (selected && targets.length !== selected.length) fail(400, "Invalid cursor partitions");
+  if (selected && targets.length !== selected.length)
+    fail(400, t("mailViews.invalidCursorPartitions"));
   // A single partition already has complete conversation totals.
   if (targets.length === 1)
     return {

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import sanitizeHtml from "sanitize-html";
 import { now, uuid } from "../auth/types";
 import type { Bind, Calendar, CalendarContext, Copy, Event, Occurrence, Override } from "./types";
@@ -66,7 +67,7 @@ export function writeEvent(data: Record<string, unknown>, cal: Calendar, existin
           trashed_at: null,
         };
   if ("event_type" in data && data.event_type !== "default")
-    fail(422, "FEATURE_UNAVAILABLE", "This event type is not available yet");
+    fail(422, "FEATURE_UNAVAILABLE", t("calendarEventData.thisEventTypeIsNotAvailableYet"));
   if ("title" in data) result.title = text(data.title, "title", 1024, true);
   if ("description_html" in data)
     result.description_html =
@@ -110,13 +111,13 @@ export function writeEvent(data: Record<string, unknown>, cal: Calendar, existin
       if (key in value) {
         const n = (value as Record<string, unknown>)[key];
         if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max)
-          fail(400, "INVALID_INPUT", `Invalid ${key}`);
+          fail(400, "INVALID_INPUT", t("calendarEventData.invalid", { key: key }));
       }
     result.location_json = JSON.stringify(value);
   }
   if ("start" in data || "end" in data || !existing) {
     if (!("start" in data) || !("end" in data))
-      fail(400, "INVALID_INPUT", "start and end must be supplied together");
+      fail(400, "INVALID_INPUT", t("calendarEventData.startAndEndMustBeSuppliedTogether"));
     Object.assign(result, times(data.start, data.end, cal.time_zone));
   }
   if ("visibility" in data)
@@ -131,7 +132,7 @@ export function writeEvent(data: Record<string, unknown>, cal: Calendar, existin
       fail(
         422,
         "FEATURE_UNAVAILABLE",
-        "Guest event editing and invitation forwarding are not available yet",
+        t("calendarEventData.guestEventEditingAndInvitationForwardingAreNotAvailable"),
       );
     result.guest_permissions_json = JSON.stringify(value);
   }
@@ -141,8 +142,8 @@ export function writeEvent(data: Record<string, unknown>, cal: Calendar, existin
         ? {}
         : jsonObject(data.shared_properties, "shared_properties");
     for (const [key, item] of Object.entries(value)) {
-      text(key, "property key", 128);
-      text(item, "property value", 1024, true);
+      text(key, t("calendarEventData.propertyKey"), 128);
+      text(item, t("calendarEventData.propertyValue"), 1024, true);
     }
     result.shared_properties_json = JSON.stringify(value);
   }
@@ -158,7 +159,7 @@ export function writeEvent(data: Record<string, unknown>, cal: Calendar, existin
 }
 export function overridePatch(data: Record<string, unknown>, effective: Event, cal: Calendar) {
   if ("recurrence" in data)
-    fail(400, "INVALID_INPUT", "A single occurrence cannot change recurrence");
+    fail(400, "INVALID_INPUT", t("calendarEventData.aSingleOccurrenceCannotChangeRecurrence"));
   const parsed = writeEvent(data, cal, effective),
     patch: Record<string, Bind> = {};
   const map: Record<string, string> = {
@@ -221,7 +222,7 @@ export function eventDto(event: Event, cal: Calendar, occurrence?: Occurrence, c
       calendar_id: cal.id,
       event_type: event.event_type,
       status: event.status,
-      title: details ? event.title : "Busy",
+      title: details ? event.title : t("calendarEventData.busy"),
       start: endpoint(event, "start"),
       end: endpoint(event, "end"),
       version: event.version,

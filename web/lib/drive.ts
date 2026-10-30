@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { ApiOptions } from "./api-client";
 
 export type DriveRole = "owner" | "editor" | "commenter" | "viewer";
@@ -121,9 +122,9 @@ export const canComment = (item: DriveItem) =>
     item.effective_role === "editor" ||
     item.effective_role === "commenter");
 export function formatBytes(value: number) {
-  if (!value) return "0 B";
+  if (!value) return t("libDrive.0B");
   const unit = Math.min(4, Math.floor(Math.log(Math.max(1, value)) / Math.log(1024)));
-  return `${new Intl.NumberFormat("en", { maximumFractionDigits: unit ? 1 : 0 }).format(value / 1024 ** unit)} ${["B", "KB", "MB", "GB", "TB"][unit]}`;
+  return `${new Intl.NumberFormat("en", { maximumFractionDigits: unit ? 1 : 0 }).format(value / 1024 ** unit)} ${[t("libDrive.b"), t("libDrive.kb"), t("libDrive.mb"), t("libDrive.gb"), t("libDrive.tb")][unit]}`;
 }
 export function driveDate(value: number, full = false) {
   return new Intl.DateTimeFormat(
@@ -135,17 +136,21 @@ export function driveDate(value: number, full = false) {
 }
 export function fileKind(item: DriveItem) {
   const type = driveType(item);
-  if (item.kind === "folder") return { label: "Folder", icon: "folder" as const, tone: "folder" };
-  if (type.startsWith("image/")) return { label: "Image", icon: "image" as const, tone: "image" };
-  if (type === "application/pdf") return { label: "PDF", icon: "file" as const, tone: "pdf" };
+  if (item.kind === "folder")
+    return { label: t("libDrive.folder"), icon: "folder" as const, tone: "folder" };
+  if (type.startsWith("image/"))
+    return { label: t("libDrive.image"), icon: "image" as const, tone: "image" };
+  if (type === "application/pdf")
+    return { label: t("libDrive.pdf"), icon: "file" as const, tone: "pdf" };
   if (/spreadsheet|csv|excel/.test(type))
-    return { label: "Spreadsheet", icon: "table" as const, tone: "sheet" };
+    return { label: t("libDrive.spreadsheet"), icon: "table" as const, tone: "sheet" };
   if (type.startsWith("text/"))
-    return { label: "Text document", icon: "file" as const, tone: "text" };
+    return { label: t("libDrive.textDocument"), icon: "file" as const, tone: "text" };
   if (/zip|compressed|archive/.test(type))
-    return { label: "Archive", icon: "archive" as const, tone: "archive" };
-  if (type.startsWith("video/")) return { label: "Video", icon: "image" as const, tone: "video" };
-  return { label: "File", icon: "file" as const, tone: "file" };
+    return { label: t("libDrive.archive"), icon: "archive" as const, tone: "archive" };
+  if (type.startsWith("video/"))
+    return { label: t("libDrive.video"), icon: "image" as const, tone: "video" };
+  return { label: t("libDrive.file"), icon: "file" as const, tone: "file" };
 }
 export const previewKind = (item: DriveItem) => {
   if (driveSize(item) > 20 * 1024 * 1024) return null;
@@ -183,7 +188,7 @@ export function driveLocation(path: string) {
   };
 }
 export function publicShareUrl(token: string, origin: string) {
-  if (!/^ofd_[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Invalid share token.");
+  if (!/^ofd_[A-Za-z0-9_-]{43}$/.test(token)) throw new Error(t("libDrive.invalidShareToken"));
   return `${origin}/share/drive/${token}`;
 }
 export interface UploadSession {
@@ -275,7 +280,7 @@ export function folderPaths(files: { webkitRelativePath: string }[]) {
   for (const file of files) {
     const segments = file.webkitRelativePath.split("/").filter(Boolean);
     if (segments.some((segment) => segment === "." || segment === ".."))
-      throw new Error("Invalid folder path.");
+      throw new Error(t("libDrive.invalidFolderPath"));
     for (let count = 1; count < segments.length; count++)
       paths.add(segments.slice(0, count).join("/"));
   }

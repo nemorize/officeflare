@@ -1,3 +1,5 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { t } from "../../shared/i18n/index.ts";
 import { useMemo, useRef } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import {
@@ -42,9 +44,14 @@ export function CalendarSettingsPage() {
       {!calendar.data ? (
         <>
           {calendar.loading ? (
-            <LoadingSkeleton kind="form" label="Loading calendar settings…" />
+            <LoadingSkeleton
+              kind="form"
+              label={t("routesCalendarSettings.loadingCalendarSettings")}
+            />
           ) : (
-            <Button onClick={() => calendar.refresh(true)}>Try again</Button>
+            <Button onClick={() => calendar.refresh(true)}>
+              {t("routesCalendarSettings.tryAgain")}
+            </Button>
           )}
         </>
       ) : page === "events" ? (
@@ -108,21 +115,21 @@ function GeneralPreferences() {
           display_options: { ...prefs.display_options, show_weekends },
         });
         draft.replace(generalValues(saved));
-        notify.success("Calendar preferences saved.");
+        notify.success(t("routesCalendarSettings.calendarPreferencesSaved"));
       }}
     >
       <SettingsSection
-        title="Language & region"
-        description="These preferences apply to your account on every device. Date and time labels follow the selected regional format."
+        title={t("routesCalendarSettings.languageRegion")}
+        description={t("routesCalendarSettings.thesePreferencesApplyToYourAccountOnEveryDevice")}
       >
         <div className="settings-form-grid">
           <CalendarTimeZoneField
             value={value.time_zone}
             onChange={(next) => update("time_zone", next)}
           />
-          <CalendarField label="Regional format">
+          <CalendarField label={t("routesCalendarSettings.regionalFormat")}>
             <SelectControl
-              aria-label="Regional format"
+              aria-label={t("routesCalendarSettings.regionalFormat")}
               value={value.locale}
               onValueChange={(next) => {
                 if (formats.some((format) => format.value === next)) update("locale", next);
@@ -133,13 +140,13 @@ function GeneralPreferences() {
         </div>
       </SettingsSection>
       <SettingsSection
-        title="Calendar display"
-        description="Keep using your last view, or choose a view to use whenever you open Calendar."
+        title={t("routesCalendarSettings.calendarDisplay")}
+        description={t("routesCalendarSettings.keepUsingYourLastViewOrChooseAView")}
       >
         <div className="settings-form-grid">
-          <CalendarField label="Start view">
+          <CalendarField label={t("routesCalendarSettings.startView")}>
             <SelectControl
-              aria-label="Start view"
+              aria-label={t("routesCalendarSettings.startView")}
               value={value.remember_view ? "last" : value.default_view}
               onValueChange={(next) => {
                 if (next === "last") update("remember_view", true);
@@ -150,22 +157,25 @@ function GeneralPreferences() {
                     default_view: next as typeof old.default_view,
                   }));
               }}
-              options={[{ value: "last", label: "Last used view" }, ...calendarViews]}
+              options={[
+                { value: "last", label: t("routesCalendarSettings.lastUsedView") },
+                ...calendarViews,
+              ]}
             />
           </CalendarField>
-          <CalendarField label="Start week on">
+          <CalendarField label={t("routesCalendarSettings.startWeekOn")}>
             <SelectControl
-              aria-label="Start week on"
+              aria-label={t("routesCalendarSettings.startWeekOn")}
               value={String(value.week_start)}
               onValueChange={(next) => update("week_start", Number(next))}
               options={[
-                "Sunday",
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
+                t("routesCalendarSettings.sunday"),
+                t("routesCalendarSettings.monday"),
+                t("routesCalendarSettings.tuesday"),
+                t("routesCalendarSettings.wednesday"),
+                t("routesCalendarSettings.thursday"),
+                t("routesCalendarSettings.friday"),
+                t("routesCalendarSettings.saturday"),
               ].map((label, value) => ({ value: String(value), label }))}
             />
           </CalendarField>
@@ -175,7 +185,7 @@ function GeneralPreferences() {
             checked={value.show_weekends}
             onCheckedChange={(next) => update("show_weekends", next)}
           />
-          Show weekends
+          {t("routesCalendarSettings.showWeekends")}
         </label>
       </SettingsSection>
     </CalendarSettingsForm>
@@ -210,17 +220,17 @@ function EventPreferences() {
           display_options: { ...prefs.display_options, show_declined },
         });
         draft.replace(eventValues(saved));
-        notify.success("Event preferences saved.");
+        notify.success(t("routesCalendarSettings.eventPreferencesSaved"));
       }}
     >
       <SettingsSection
-        title="New events"
-        description="Defaults for new events you create. Existing events keep their current settings."
+        title={t("routesCalendarSettings.newEvents")}
+        description={t("routesCalendarSettings.defaultsForNewEventsYouCreateExistingEventsKeep")}
       >
         <div className="settings-form-grid">
-          <CalendarField label="Default calendar">
+          <CalendarField label={t("routesCalendarSettings.defaultCalendar")}>
             <SelectControl
-              aria-label="Default calendar"
+              aria-label={t("routesCalendarSettings.defaultCalendar")}
               value={value.default_calendar_id ?? "primary"}
               onValueChange={(next) =>
                 setValue((old) => ({
@@ -229,49 +239,59 @@ function EventPreferences() {
                 }))
               }
               options={[
-                { value: "primary", label: "My primary calendar" },
+                { value: "primary", label: t("routesCalendarSettings.myPrimaryCalendar") },
                 ...destinations.map((cal) => ({ value: cal.id, label: cal.name })),
                 ...(value.default_calendar_id &&
                 !destinations.some((cal) => cal.id === value.default_calendar_id)
                   ? [
                       {
                         value: value.default_calendar_id,
-                        label: "Unavailable calendar (using primary)",
+                        label: t("routesCalendarSettings.unavailableCalendarUsingPrimary"),
                       },
                     ]
                   : []),
               ]}
             />
           </CalendarField>
-          <CalendarField label="Default event duration">
+          <CalendarField label={t("routesCalendarSettings.defaultEventDuration")}>
             <SelectControl
-              aria-label="Default event duration"
+              aria-label={t("routesCalendarSettings.defaultEventDuration")}
               value={String(value.default_duration_minutes)}
               onValueChange={(next) =>
                 setValue((old) => ({ ...old, default_duration_minutes: Number(next) }))
               }
               options={[...new Set([15, 30, 45, 60, 90, 120, value.default_duration_minutes])]
                 .sort((a, b) => a - b)
-                .map((value) => ({ value: String(value), label: `${value} minutes` }))}
+                .map((value) => ({
+                  value: String(value),
+                  label: t("routesCalendarSettings.minutes", { value: value }),
+                }))}
             />
           </CalendarField>
         </div>
       </SettingsSection>
       <SettingsSection
-        title="Invitations"
-        description="Choose when invitations appear in your calendar. Invitation notifications remain available in the notification center."
+        title={t("routesCalendarSettings.invitations")}
+        description={t(
+          "routesCalendarSettings.chooseWhenInvitationsAppearInYourCalendarInvitationNotifications",
+        )}
       >
         <div className="settings-form-grid">
-          <CalendarField label="Add invitations">
+          <CalendarField label={t("routesCalendarSettings.addInvitations")}>
             <SelectControl
-              aria-label="Add invitations"
+              aria-label={t("routesCalendarSettings.addInvitations")}
               value={value.invitation_policy}
               onValueChange={(next) => setValue((old) => ({ ...old, invitation_policy: next }))}
               options={[
-                { value: "all", label: "Automatically" },
-                { value: "on_response", label: "After I respond" },
+                { value: "all", label: t("routesCalendarSettings.automatically") },
+                { value: "on_response", label: t("routesCalendarSettings.afterIRespond") },
                 ...(value.invitation_policy === "known_senders"
-                  ? [{ value: "known_senders", label: "From known senders" }]
+                  ? [
+                      {
+                        value: "known_senders",
+                        label: t("routesCalendarSettings.fromKnownSenders"),
+                      },
+                    ]
                   : []),
               ]}
             />
@@ -282,7 +302,7 @@ function EventPreferences() {
             checked={value.show_declined}
             onCheckedChange={(next) => setValue((old) => ({ ...old, show_declined: next }))}
           />
-          Show declined events
+          {t("routesCalendarSettings.showDeclinedEvents")}
         </label>
       </SettingsSection>
     </CalendarSettingsForm>
@@ -299,20 +319,20 @@ function CalendarManagement() {
       <CalendarDetails key={cal.id} cal={cal} />
     ) : (
       <>
-        <p>This calendar is no longer available.</p>
-        <Link to="/calendar/settings/calendars">Back to calendars</Link>
+        <p>{t("routesCalendarSettings.thisCalendarIsNoLongerAvailable")}</p>
+        <Link to="/calendar/settings/calendars">{t("routesCalendarSettings.backToCalendars")}</Link>
       </>
     );
   }
   return (
     <SettingsSection
-      title="Your calendars"
-      description="Manage calendars you own and calendars shared with you. Display preferences affect only your account."
+      title={t("routesCalendarSettings.yourCalendars")}
+      description={t("routesCalendarSettings.manageCalendarsYouOwnAndCalendarsSharedWithYou")}
       action={
         calendar.can("calendars.create") && (
           <Button onClick={() => calendar.setSettings("new")}>
             <Icon name="plus" />
-            Create calendar
+            {t("routesCalendarSettings.createCalendar")}
           </Button>
         )
       }
@@ -326,18 +346,18 @@ function CalendarManagement() {
                 <strong>{sub?.name_override ?? cal.name}</strong>
                 <p>
                   {cal.kind === "external"
-                    ? "External subscription · Read only"
+                    ? t("routesCalendarSettings.externalSubscriptionReadOnly")
                     : cal.is_primary
-                      ? "Primary calendar"
-                      : cal.effective_role.replaceAll("_", " ")}
-                  {sub?.hidden ? " · Hidden" : ""}
+                      ? t("routesCalendarSettings.primaryCalendar")
+                      : enumLabel(cal.effective_role)}
+                  {sub?.hidden ? t("routesCalendarSettings.hidden") : ""}
                 </p>
               </div>
               <Button
                 nativeButton={false}
                 render={<Link to={`/calendar/settings/calendars/${cal.id}`} />}
               >
-                Manage
+                {t("routesCalendarSettings.manage")}
               </Button>
             </div>
           );
@@ -370,7 +390,7 @@ function CalendarDetails({ cal }: { cal: CalendarRecord }) {
   return (
     <>
       <Link className="calendar-settings-back" to="/calendar/settings/calendars">
-        ← All calendars
+        {t("routesCalendarSettings.allCalendars")}
       </Link>
       <CalendarSettingsForm
         dirty={draft.dirty}
@@ -423,33 +443,33 @@ function CalendarDetails({ cal }: { cal: CalendarRecord }) {
             }));
           draft.replace({ ...value, name: latest.name });
           calendar.refresh(true);
-          notify.success("Calendar settings saved.");
+          notify.success(t("routesCalendarSettings.calendarSettingsSaved"));
         }}
       >
         <SettingsSection
-          title="Display preferences"
-          description="Only you see changes to the display name, color, visibility and order."
+          title={t("routesCalendarSettings.displayPreferences")}
+          description={t("routesCalendarSettings.onlyYouSeeChangesToTheDisplayNameColor")}
         >
           <div className="settings-form-grid">
             <CalendarField
-              label="Display name"
+              label={t("routesCalendarSettings.displayName")}
               value={value.name_override}
               placeholder={cal.name}
               maxLength={255}
               onChange={(event) => update("name_override", event.target.value)}
             />
             <CalendarField
-              label="Sort order"
-              hint="Lower numbers appear first."
+              label={t("routesCalendarSettings.sortOrder")}
+              hint={t("routesCalendarSettings.lowerNumbersAppearFirst")}
               type="number"
               min={-1000000}
               max={1000000}
               value={value.sort_order}
               onChange={(event) => update("sort_order", Number(event.target.value))}
             />
-            <CalendarField label="Color">
+            <CalendarField label={t("routesCalendarSettings.color")}>
               <SelectControl
-                aria-label="Calendar color"
+                aria-label={t("routesCalendarSettings.calendarColor")}
                 value={value.color}
                 onValueChange={(next) => update("color", next)}
                 options={[
@@ -466,27 +486,27 @@ function CalendarDetails({ cal }: { cal: CalendarRecord }) {
               checked={value.selected}
               onCheckedChange={(next) => update("selected", next)}
             />
-            Show events in my calendar
+            {t("routesCalendarSettings.showEventsInMyCalendar")}
           </label>
           <label className="calendar-check-label">
             <CheckboxControl
               checked={value.hidden}
               onCheckedChange={(next) => update("hidden", next)}
             />
-            Hide from my sidebar
+            {t("routesCalendarSettings.hideFromMySidebar")}
           </label>
         </SettingsSection>
         <SettingsSection
-          title="Calendar details"
+          title={t("routesCalendarSettings.calendarDetails")}
           description={
             editable
-              ? "Changes here apply to everyone who uses this calendar."
-              : "The calendar owner manages these details."
+              ? t("routesCalendarSettings.changesHereApplyToEveryoneWhoUsesThisCalendar")
+              : t("routesCalendarSettings.theCalendarOwnerManagesTheseDetails")
           }
         >
           <div className="settings-form-grid">
             <CalendarField
-              label="Calendar name"
+              label={t("routesCalendarSettings.calendarName")}
               required
               maxLength={255}
               disabled={!editable}
@@ -499,9 +519,9 @@ function CalendarDetails({ cal }: { cal: CalendarRecord }) {
               onChange={(next) => update("time_zone", next)}
             />
           </div>
-          <CalendarField label="Description">
+          <CalendarField label={t("routesCalendarSettings.description")}>
             <Textarea
-              aria-label="Calendar description"
+              aria-label={t("routesCalendarSettings.calendarDescription")}
               rows={3}
               maxLength={10000}
               disabled={!editable}
@@ -513,18 +533,20 @@ function CalendarDetails({ cal }: { cal: CalendarRecord }) {
       </CalendarSettingsForm>
       {calendarRank(cal) >= 5 && cal.kind !== "external" && (
         <SettingsSection
-          title="Sharing & access"
-          description="Changes to sharing apply to everyone who uses this calendar."
+          title={t("routesCalendarSettings.sharingAccess")}
+          description={t("routesCalendarSettings.changesToSharingApplyToEveryoneWhoUsesThis")}
         >
           <CalendarAccessSettings cal={cal} />
         </SettingsSection>
       )}
       {cal.kind === "external" && calendarRank(cal) >= 6 && (
         <SettingsSection
-          title="External calendar"
-          description="Events are synchronized from their source and cannot be edited here."
+          title={t("routesCalendarSettings.externalCalendar")}
+          description={t("routesCalendarSettings.eventsAreSynchronizedFromTheirSourceAndCannotBe")}
         >
-          <Button onClick={() => calendar.setSettings(cal.id)}>Manage connection</Button>
+          <Button onClick={() => calendar.setSettings(cal.id)}>
+            {t("routesCalendarSettings.manageConnection")}
+          </Button>
         </SettingsSection>
       )}
     </>
@@ -537,13 +559,13 @@ function IntegrationsData() {
   return (
     <>
       <SettingsSection
-        title="External calendars"
-        description="Subscribe to an iCalendar URL. Updates flow from the source into Officeflare."
+        title={t("routesCalendarSettings.externalCalendars")}
+        description={t("routesCalendarSettings.subscribeToAnIcalendarUrlUpdatesFlowFromThe")}
         action={
           calendar.can("calendars.create") && (
             <Button onClick={() => calendar.setSettings("subscribe")}>
               <Icon name="plus" />
-              Subscribe by URL
+              {t("routesCalendarSettings.subscribeByUrl")}
             </Button>
           )
         }
@@ -553,29 +575,32 @@ function IntegrationsData() {
             <div className="settings-record" key={cal.id}>
               <div>
                 <strong>{cal.name}</strong>
-                <p>Read-only iCalendar subscription</p>
+                <p>{t("routesCalendarSettings.readOnlyIcalendarSubscription")}</p>
               </div>
               {calendarRank(cal) >= 6 ? (
                 <Button onClick={() => calendar.setSettings(cal.id)}>
-                  Connection & sync status
+                  {t("routesCalendarSettings.connectionSyncStatus")}
                 </Button>
               ) : (
-                <span className="settings-hint">Managed by the owner</span>
+                <span className="settings-hint">
+                  {t("routesCalendarSettings.managedByTheOwner")}
+                </span>
               )}
             </div>
           ))
         ) : (
-          <p className="settings-hint">No external calendars connected.</p>
+          <p className="settings-hint">
+            {t("routesCalendarSettings.noExternalCalendarsConnected")}
+          </p>
         )}
       </SettingsSection>
       <SettingsSection
-        title="Import events"
-        description="Preview an ICS file, choose a destination calendar and review the import results."
+        title={t("routesCalendarSettings.importEvents")}
+        description={t("routesCalendarSettings.previewAnIcsFileChooseADestinationCalendarAnd")}
       >
         <div className="calendar-settings-import-content">
           <p className="settings-hint">
-            Imports keep existing event UIDs from being added twice. Guests and reminders are not
-            imported, and invitations are not sent.
+            {t("routesCalendarSettings.importsKeepExistingEventUidsFromBeingAddedTwice")}
           </p>
           <Button
             disabled={
@@ -584,7 +609,7 @@ function IntegrationsData() {
             onClick={() => calendar.setSettings("import")}
           >
             <Icon name="upload" />
-            Import ICS file
+            {t("routesCalendarSettings.importIcsFile")}
           </Button>
         </div>
       </SettingsSection>

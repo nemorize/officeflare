@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   createContext,
   useCallback,
@@ -83,7 +84,7 @@ function useCachedCalendar<T>(
 }
 export function useCalendar() {
   const context = useContext(CalendarContext);
-  if (!context) throw new Error("CalendarProvider is required");
+  if (!context) throw new Error(t("componentsCalendarContext.calendarproviderIsRequired"));
   return context;
 }
 export function CalendarProvider({ children }: { children: ReactNode }) {
@@ -256,7 +257,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         })
         .catch((failure) => {
           if (!controller.signal.aborted)
-            notify.error(`Unable to sync calendar view. ${calendarFailure(failure)}`);
+            notify.error(
+              t("componentsCalendarContext.unableToSyncCalendarView", {
+                calendarFailure: calendarFailure(failure),
+              }),
+            );
         });
     }
     const value = new URLSearchParams(params);
@@ -286,7 +291,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const toggleCalendar = async (id: string, selected: boolean) => {
     if (!data || selecting.current.has(id)) return;
     if (selected && !selectedIds.includes(id) && selectedIds.length >= 50) {
-      notify.info("You can display up to 50 calendars at once.");
+      notify.info(t("componentsCalendarContext.youCanDisplayUpTo50CalendarsAtOnce"));
       return;
     }
     selecting.current.add(id);

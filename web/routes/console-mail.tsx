@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "../lib/api";
@@ -47,12 +49,14 @@ function Domains() {
   const providerName = (provider: string | null | undefined) =>
     provider
       ? (resource.data?.providers.find((entry) => entry.provider === provider)?.label ?? provider)
-      : "No provider";
+      : t("routesConsoleMail.noProvider");
   return (
     <>
       <ConsolePageHeader
-        title="Mail domains"
-        description="Configure common domains, delivery providers and inbound routing."
+        title={t("routesConsoleMail.mailDomains")}
+        description={t(
+          "routesConsoleMail.configureCommonDomainsDeliveryProvidersAndInboundRouting",
+        )}
       >
         {manage && (
           <Button
@@ -60,7 +64,7 @@ function Domains() {
             render={<Link to="/console/mail/domains/new" />}
             variant="primary"
           >
-            Register domain
+            {t("routesConsoleMail.registerDomain")}
           </Button>
         )}
       </ConsolePageHeader>
@@ -75,38 +79,52 @@ function Domains() {
             <h2>
               <span>{domain.name}</span>
               {!!domain.is_default && (
-                <span className="mail-badge mail-domain-default">Default</span>
+                <span className="mail-badge mail-domain-default">
+                  {t("routesConsoleMail.default")}
+                </span>
               )}
             </h2>
             <p>
               <span className="mail-badge">
-                Receive {domain.inbound_enabled ? "enabled" : "disabled"}
+                <LocalizedMessage
+                  id="routesConsoleMail.receive"
+                  values={{
+                    value1: domain.inbound_enabled ? t("common.enabled") : t("common.disabled"),
+                  }}
+                />
               </span>
               <span className="mail-badge">
-                Send {domain.outbound_enabled ? "enabled" : "disabled"}
+                <LocalizedMessage
+                  id="routesConsoleMail.send"
+                  values={{
+                    value1: domain.outbound_enabled ? t("common.enabled") : t("common.disabled"),
+                  }}
+                />
               </span>
             </p>
             <p className="mail-hint">
-              Receiving: {providerName(domain.inbound_provider)} · Sending:{" "}
-              {providerName(domain.outbound_provider)}
+              <LocalizedMessage
+                id="routesConsoleMail.receivingSending"
+                values={{
+                  providerName: providerName(domain.inbound_provider),
+                  value2: providerName(domain.outbound_provider),
+                }}
+              />
             </p>
             <Button
               nativeButton={false}
               render={<Link to={`/console/mail/domains/${encodeURIComponent(domain.id)}`} />}
               size="sm"
             >
-              {manage ? "Configure domain" : "View domain"}
+              {manage ? t("routesConsoleMail.configureDomain") : t("routesConsoleMail.viewDomain")}
             </Button>
           </article>
         ))}
       </div>
       {resource.data && !resource.data.domains.length && (
         <div className="mail-empty">
-          <h2>No mail domains registered</h2>
-          <p>
-            Register a domain and configure Cloudflare delivery. User and shared addresses are
-            managed with their accounts.
-          </p>
+          <h2>{t("routesConsoleMail.noMailDomainsRegistered")}</h2>
+          <p>{t("routesConsoleMail.registerADomainAndConfigureCloudflareDeliveryUserAnd")}</p>
         </div>
       )}
     </>
@@ -139,11 +157,17 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
   return (
     <section className="account-page console-page console-detail-page mail-console-page">
       <Link to="/console/mail/domains" className="console-back">
-        ← Mail domains
+        {t("routesConsoleMail.mailDomains2")}
       </Link>
       <ConsolePageHeader
-        title={creating ? "Register mail domain" : (domain?.name ?? "Mail domain")}
-        description="Configure the shared domain, delivery providers and inbound routing."
+        title={
+          creating
+            ? t("routesConsoleMail.registerMailDomain")
+            : (domain?.name ?? t("routesConsoleMail.mailDomain"))
+        }
+        description={t(
+          "routesConsoleMail.configureTheSharedDomainDeliveryProvidersAndInboundRouting",
+        )}
       />
       <MailState
         loading={resource.loading && !resource.data}
@@ -151,7 +175,7 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
         retry={resource.reload}
       />
       {resource.data && !creating && !domain && (
-        <MailNotice error="This mail domain could not be found." />
+        <MailNotice error={t("routesConsoleMail.thisMailDomainCouldNotBeFound")} />
       )}
       {resource.data && (creating || domain) && (
         <>
@@ -176,7 +200,11 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
                 : !!domain?.is_default
             }
             onSaved={(domainId) => {
-              notify.success(creating ? "Domain registered." : "Domain settings saved.");
+              notify.success(
+                creating
+                  ? t("routesConsoleMail.domainRegistered")
+                  : t("routesConsoleMail.domainSettingsSaved"),
+              );
               if (creating) navigate(`/console/mail/domains/${encodeURIComponent(domainId)}`);
               else resource.reload();
               providerConnections.reload();
@@ -185,24 +213,26 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
           {domain && (
             <>
               <MailSection
-                title="Addresses"
-                description="Manage personal addresses with users and team addresses with shared mailboxes."
+                title={t("routesConsoleMail.addresses")}
+                description={t(
+                  "routesConsoleMail.managePersonalAddressesWithUsersAndTeamAddressesWith",
+                )}
               >
                 <div className="mail-actions">
                   {permissions.includes("admin.users.read") && (
                     <Button nativeButton={false} render={<Link to="/console/users" />}>
-                      Manage users
+                      {t("routesConsoleMail.manageUsers")}
                     </Button>
                   )}
                   {permissions.includes("admin.mail.mailboxes.read") && (
                     <Button nativeButton={false} render={<Link to="/console/mail/mailboxes" />}>
-                      Shared mailboxes
+                      {t("routesConsoleMail.sharedMailboxes")}
                     </Button>
                   )}
                 </div>
               </MailSection>
               <details className="console-role-summary">
-                <summary>Advanced inbound routing</summary>
+                <summary>{t("routesConsoleMail.advancedInboundRouting")}</summary>
                 <MailRules
                   path={`/api/mail/domains/${domain.id}/rules`}
                   routing
@@ -311,9 +341,9 @@ function DomainEditor({
   ]);
   const providerName = (provider: string) =>
     providers.find((entry) => entry.provider === provider)?.label ??
-    (provider === "cloudflare" ? "Cloudflare" : provider);
+    (provider === "cloudflare" ? t("routesConsoleMail.cloudflare") : provider);
   const providerOptions = (direction: "receive" | "send", selected: string) => [
-    { value: "", label: "No provider" },
+    { value: "", label: t("routesConsoleMail.noProvider") },
     ...providers
       .filter((provider) => provider.capabilities[direction])
       .map((provider) => ({ value: provider.provider, label: providerName(provider.provider) })),
@@ -321,7 +351,12 @@ function DomainEditor({
     !providers.some(
       (provider) => provider.provider === selected && provider.capabilities[direction],
     )
-      ? [{ value: selected, label: `${providerName(selected)} (unsupported)` }]
+      ? [
+          {
+            value: selected,
+            label: t("routesConsoleMail.unsupported", { providerName: providerName(selected) }),
+          },
+        ]
       : []),
   ];
   const submit = async () => {
@@ -336,7 +371,7 @@ function DomainEditor({
         (outbound === "cloudflare" ? (selectedProvider?.default_connection_id ?? null) : null))
       : null;
     if (receive && !inboundId)
-      throw new Error("Choose a configured provider for each enabled direction.");
+      throw new Error(t("routesConsoleMail.chooseAConfiguredProviderForEachEnabledDirection"));
     if (
       outbound &&
       selectedProvider &&
@@ -344,11 +379,9 @@ function DomainEditor({
       (selectedProvider.config_fields.length || selectedProvider.secret_fields.length)
     ) {
       if (providerConnectionsLoading)
-        throw new Error("Provider connections are still loading. Try again in a moment.");
+        throw new Error(t("routesConsoleMail.providerConnectionsAreStillLoadingTryAgainInA"));
       if (providerConnectionsError)
-        throw new Error(
-          "Could not load provider connections. Reload the page before saving provider settings.",
-        );
+        throw new Error(t("routesConsoleMail.couldNotLoadProviderConnectionsReloadThePageBefore"));
       const secretUpdates = Object.fromEntries(
         selectedProvider.secret_fields
           .filter((field) => providerSecrets[field.key]?.trim())
@@ -357,12 +390,12 @@ function DomainEditor({
       const secretsEntered = Object.keys(secretUpdates).length > 0;
       if (outboundId && !selectedConnection)
         throw new Error(
-          "Could not load the selected sending provider connection. Reload the page before saving.",
+          t("routesConsoleMail.couldNotLoadTheSelectedSendingProviderConnectionReload"),
         );
       if (!outboundId) {
         if (send && !providerConnectionEnabled)
           throw new Error(
-            "Enable this provider connection before enabling sending for the domain.",
+            t("routesConsoleMail.enableThisProviderConnectionBeforeEnablingSendingForThe"),
           );
         const result = await api<{ connection: ProviderConnection }>(
           "/api/mail/provider-connections",
@@ -370,7 +403,7 @@ function DomainEditor({
             method: "POST",
             body: {
               provider: selectedProvider.provider,
-              name: `${name || "Mail domain"} · ${selectedProvider.label}`,
+              name: `${name || t("routesConsoleMail.mailDomain")} · ${selectedProvider.label}`,
               enabled: providerConnectionEnabled,
               config: providerConfig,
               ...(secretsEntered ? { secrets: secretUpdates } : {}),
@@ -386,7 +419,7 @@ function DomainEditor({
       } else if (selectedConnection) {
         if (send && !providerConnectionEnabled)
           throw new Error(
-            "Enable this provider connection before enabling sending for the domain.",
+            t("routesConsoleMail.enableThisProviderConnectionBeforeEnablingSendingForThe"),
           );
         if (
           providerConfigDirty ||
@@ -399,7 +432,7 @@ function DomainEditor({
               method: "PATCH",
               body: {
                 version: selectedConnection.version,
-                name: `${name || "Mail domain"} · ${providerName(selectedProvider.provider)}`,
+                name: `${name || t("routesConsoleMail.mailDomain")} · ${providerName(selectedProvider.provider)}`,
                 enabled: providerConnectionEnabled,
                 config: providerConfig,
                 ...(secretsEntered ? { secrets: secretUpdates } : {}),
@@ -414,11 +447,9 @@ function DomainEditor({
       }
     }
     if (outbound && !outboundId)
-      throw new Error(
-        "Add credentials for this sending provider before assigning it to the domain.",
-      );
+      throw new Error(t("routesConsoleMail.addCredentialsForThisSendingProviderBeforeAssigningIt"));
     if (send && !outboundId)
-      throw new Error("Choose a configured provider for each enabled direction.");
+      throw new Error(t("routesConsoleMail.chooseAConfiguredProviderForEachEnabledDirection"));
     const result = await api<{ domain: Domain }>(
       `/api/mail/domains${existing ? `/${existing.id}` : ""}`,
       {
@@ -444,8 +475,8 @@ function DomainEditor({
   };
   return (
     <MailSection
-      title="Domain settings"
-      description="Provider configuration and delivery settings apply to this domain."
+      title={t("routesConsoleMail.domainSettings")}
+      description={t("routesConsoleMail.providerConfigurationAndDeliverySettingsApplyToThisDomain")}
     >
       <MailForm
         className="mail-form"
@@ -456,8 +487,8 @@ function DomainEditor({
       >
         <MailFieldset disabled={action.busy || !canManage}>
           <MailInput
-            label="Domain"
-            placeholder="example.com"
+            label={t("routesConsoleMail.domain")}
+            placeholder={t("routesConsoleMail.exampleCom")}
             required
             disabled={!!existing}
             value={name}
@@ -465,7 +496,7 @@ function DomainEditor({
             onChange={(event) => setName(event.target.value)}
           />
           <div className="mail-form-grid">
-            <MailField label="Receiving provider">
+            <MailField label={t("routesConsoleMail.receivingProvider")}>
               <MailSelect
                 value={inbound}
                 onValueChange={(value) => {
@@ -475,7 +506,7 @@ function DomainEditor({
                 options={providerOptions("receive", inbound)}
               />
             </MailField>
-            <MailField label="Sending provider">
+            <MailField label={t("routesConsoleMail.sendingProvider")}>
               <MailSelect
                 value={outbound}
                 onValueChange={(value) => {
@@ -517,8 +548,7 @@ function DomainEditor({
               <>
                 {!canManageProviders ? (
                   <p className="mail-hint">
-                    Your role needs the “Manage sending providers” permission to configure this
-                    domain’s sender.
+                    {t("routesConsoleMail.yourRoleNeedsTheManageSendingProvidersPermissionTo")}
                   </p>
                 ) : providerConnectionsLoading ? (
                   <MailState loading error="" kind="form" />
@@ -543,9 +573,9 @@ function DomainEditor({
                               value,
                               label:
                                 value === "tls"
-                                  ? "TLS (port 465)"
+                                  ? t("routesConsoleMail.tlsPort465")
                                   : value === "starttls"
-                                    ? "STARTTLS (port 587)"
+                                    ? t("routesConsoleMail.starttlsPort587")
                                     : value,
                             }))}
                           />
@@ -577,7 +607,7 @@ function DomainEditor({
                             hint={field.help}
                             required={!!field.required && !saved}
                             disabled={!enabled}
-                            placeholder={saved ? "Enter to change" : ""}
+                            placeholder={saved ? t("routesConsoleMail.enterToChange") : ""}
                             type="password"
                             autoComplete="new-password"
                             value={providerSecrets[field.key] ?? ""}
@@ -607,7 +637,7 @@ function DomainEditor({
                                     }));
                                 }}
                               >
-                                Change
+                                {t("routesConsoleMail.change")}
                               </Check>
                             </div>
                           )}
@@ -622,7 +652,7 @@ function DomainEditor({
                           setProviderConfigDirty(true);
                         }}
                       >
-                        Sending provider connection enabled
+                        {t("routesConsoleMail.sendingProviderConnectionEnabled")}
                       </Check>
                     )}
                   </>
@@ -630,11 +660,13 @@ function DomainEditor({
               </>
             )}
           <MailInput
-            label="Maximum message size (MiB)"
+            label={t("routesConsoleMail.maximumMessageSizeMib")}
             hint={
               providerMaximum
-                ? `Provider maximum: ${providerMaximum / 1024 ** 2} MiB. Leave empty to use that maximum. Includes the body, images and encoded attachments.`
-                : "Choose a sending provider to set a message size limit."
+                ? t("routesConsoleMail.providerMaximumMibLeaveEmptyToUseThatMaximum", {
+                    value1: providerMaximum / 1024 ** 2,
+                  })
+                : t("routesConsoleMail.chooseASendingProviderToSetAMessageSize")
             }
             type="number"
             min={1 / 1024 ** 2}
@@ -646,27 +678,27 @@ function DomainEditor({
             onChange={(event) => setSendLimit(event.target.value)}
           />
           <Check checked={isDefault} onChange={setDefault}>
-            Use as the default domain for new user addresses
+            {t("routesConsoleMail.useAsTheDefaultDomainForNewUserAddresses")}
           </Check>
           <Check checked={receive} onChange={setReceive} disabled={!inbound}>
-            Enable receiving
+            {t("routesConsoleMail.enableReceiving")}
           </Check>
           <Check checked={send} onChange={setSend} disabled={!outbound}>
-            Enable sending
+            {t("routesConsoleMail.enableSending")}
           </Check>
           <Check checked={plus} onChange={setPlus}>
-            Enable plus addressing (name+tag@example.com)
+            {t("routesConsoleMail.enablePlusAddressingNameTagExampleCom")}
           </Check>
           {existing && (
             <MailField
-              label="Catch-all mailbox"
-              hint="Unmatched recipients in this domain are delivered to the selected mailbox."
+              label={t("routesConsoleMail.catchAllMailbox")}
+              hint={t("routesConsoleMail.unmatchedRecipientsInThisDomainAreDeliveredToThe")}
             >
               <MailSelect
                 value={catchAll}
                 onValueChange={setCatchAll}
                 options={[
-                  { value: "", label: "No catch-all" },
+                  { value: "", label: t("routesConsoleMail.noCatchAll") },
                   ...(catchAll && !boxes.some((box) => box.id === catchAll)
                     ? [{ value: catchAll, label: catchAll }]
                     : []),
@@ -686,14 +718,18 @@ function DomainEditor({
               disabled={action.busy}
               render={<Link to="/console/mail/domains" />}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
               variant="primary"
               disabled={action.busy || (canManageProviders && providerConnectionsLoading)}
             >
-              {action.busy ? "Saving…" : existing ? "Save domain" : "Register domain"}
+              {action.busy
+                ? t("common.saving")
+                : existing
+                  ? t("routesConsoleMail.saveDomain")
+                  : t("routesConsoleMail.registerDomain")}
             </Button>
           </div>
         )}

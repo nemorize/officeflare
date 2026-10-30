@@ -13,5 +13,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["web/**/*.ts", "web/**/*.tsx", "vite.config.ts"]
+  "include": ["web/**/*.ts", "web/**/*.tsx", "shared/**/*.ts", "vite.config.ts"]
 }

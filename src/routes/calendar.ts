@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../auth/types";
@@ -185,7 +186,7 @@ calendar.get("/bootstrap", async (c) => {
 calendar.get("/people", requirePermission("calendar.sharing.internal"), async (c) => {
   const query = (c.req.query("q") ?? "").trim().toLowerCase();
   if (query.length < 2) return c.json({ people: [] });
-  if (query.length > 255) fail(400, "INVALID_INPUT", "Search is too long");
+  if (query.length > 255) fail(400, "INVALID_INPUT", t("routesCalendar.searchIsTooLong"));
   return c.json({
     people: await rows(
       c.env,
@@ -207,7 +208,7 @@ calendar.get("/changes", async (c) => {
     after = token ? Number(await readCursor(c.env, user.id, scope, token)) : 0,
     limit = pageLimit(c);
   if (!Number.isSafeInteger(after) || after < 0)
-    fail(400, "INVALID_CURSOR", "Invalid change cursor");
+    fail(400, "INVALID_CURSOR", t("routesCalendar.invalidChangeCursor"));
   const values = await rows<{
       seq: number;
       calendar_id: string | null;

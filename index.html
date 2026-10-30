@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{i18n:locale}}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,12 +14,12 @@
         document.querySelector('meta[name="color-scheme"]').setAttribute("content", scheme);
       })();
     </script>
-    <meta name="description" content="Sign in to your Officeflare workspace." />
-    <title>Sign in · Officeflare</title>
+    <meta name="description" content="{{i18n:shell.description}}" />
+    <title>{{i18n:shell.title}}</title>
   </head>
   <body>
     <div id="root"></div>
-    <noscript>Enable JavaScript in your browser to use Officeflare.</noscript>
+    <noscript>{{i18n:shell.enableJavaScript}}</noscript>
     <script type="module" src="/web/main.tsx"></script>
   </body>
 </html>
