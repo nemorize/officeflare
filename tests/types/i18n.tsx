@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { en } from "../../shared/i18n/en.ts";
+import { ko } from "../../shared/i18n/ko.ts";
+import { ja } from "../../shared/i18n/ja.ts";
 import { defineMessages, defineTranslations } from "../../shared/i18n/resource.ts";
 import {
   isMessageKey,
@@ -29,7 +31,9 @@ const translated = defineTranslations(source, {
 defineTranslations(en, { ...en, "workspace.navigation": "{name} 탐색" });
 const literal: "Save" = source.plain;
 const localizedLiteral: "저장" = translated.plain;
-void [literal, localizedLiteral];
+const koreanLiteral: "저장" = ko["common.save"];
+const japaneseLiteral: "保存" = ja["common.save"];
+void [literal, localizedLiteral, koreanLiteral, japaneseLiteral];
 
 const numberMessage = { greeting: 123 };
 // @ts-expect-error Resource values must be strings.
