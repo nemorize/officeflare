@@ -147,10 +147,12 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
         title="Weekly working hours"
         description="Find a time uses these hours when the working-hours filter is enabled. They do not automatically block your calendar."
       >
-        <CalendarTimeZoneField
-          value={value.time_zone}
-          onChange={(time_zone) => setValue((old) => ({ ...old, time_zone }))}
-        />
+        <div className="calendar-working-time-zone">
+          <CalendarTimeZoneField
+            value={value.time_zone}
+            onChange={(time_zone) => setValue((old) => ({ ...old, time_zone }))}
+          />
+        </div>
         <div className="calendar-working-days">
           {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(
             (label, index) => {

@@ -284,9 +284,6 @@ function EventPreferences() {
           />
           Show declined events
         </label>
-        <p className="settings-hint">
-          <Link to="/profile/notifications">Manage notification delivery</Link>
-        </p>
       </SettingsSection>
     </CalendarSettingsForm>
   );
@@ -575,19 +572,21 @@ function IntegrationsData() {
         title="Import events"
         description="Preview an ICS file, choose a destination calendar and review the import results."
       >
-        <p className="settings-hint">
-          Imports keep existing event UIDs from being added twice. Guests and reminders are not
-          imported, and invitations are not sent.
-        </p>
-        <Button
-          disabled={
-            !calendar.can("events.create") || !calendar.data!.calendars.some(calendarWritable)
-          }
-          onClick={() => calendar.setSettings("import")}
-        >
-          <Icon name="upload" />
-          Import ICS file
-        </Button>
+        <div className="calendar-settings-import-content">
+          <p className="settings-hint">
+            Imports keep existing event UIDs from being added twice. Guests and reminders are not
+            imported, and invitations are not sent.
+          </p>
+          <Button
+            disabled={
+              !calendar.can("events.create") || !calendar.data!.calendars.some(calendarWritable)
+            }
+            onClick={() => calendar.setSettings("import")}
+          >
+            <Icon name="upload" />
+            Import ICS file
+          </Button>
+        </div>
       </SettingsSection>
     </>
   );
