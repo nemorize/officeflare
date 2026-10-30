@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import type { MessageSizeBreakdown } from "../../src/mail/size";
 import { bytes } from "../lib/mail";
 import { Button, Icon, Popover, PopoverPopup } from "./ui";
@@ -24,7 +26,16 @@ export function MailMessageSize({
         : percentage >= 90
           ? "near"
           : "normal";
-  const label = `Message size: ${bytes(size.total)}${maximum > 0 ? ` of ${bytes(maximum)}, ${percentLabel} used` : ", sending limit unavailable"}`;
+  const label = t("componentsMailMessageSize.messageSize", {
+    bytes: bytes(size.total),
+    value2:
+      percentLabel !== null
+        ? t("componentsMailMessageSize.ofUsed", {
+            bytes: bytes(maximum),
+            percentLabel: percentLabel,
+          })
+        : t("componentsMailMessageSize.sendingLimitUnavailable"),
+  });
 
   return (
     <Popover.Root>
@@ -72,29 +83,49 @@ export function MailMessageSize({
         initialFocus={false}
       >
         <header className="mail-size-heading">
-          <Popover.Title>Message size</Popover.Title>
+          <Popover.Title>{t("componentsMailMessageSize.messageSize2")}</Popover.Title>
           <Popover.Close
-            render={<Button size="icon" variant="ghost" aria-label="Close message size details" />}
+            render={
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={t("componentsMailMessageSize.closeMessageSizeDetails")}
+              />
+            }
           >
             <Icon name="close" />
           </Popover.Close>
         </header>
-        <Popover.Description>Estimated sending size</Popover.Description>
+        <Popover.Description>
+          {t("componentsMailMessageSize.estimatedSendingSize")}
+        </Popover.Description>
         <div className="mail-size-summary">
           <strong>
             {bytes(size.total)}
-            {maximum > 0 && <span> / {bytes(maximum)}</span>}
+            {maximum > 0 && (
+              <span>
+                {t("componentsMailMessageSize.text")}
+                {bytes(maximum)}
+              </span>
+            )}
           </strong>
-          {percentLabel && <span className="mail-size-percentage">{percentLabel} used</span>}
+          {percentLabel && (
+            <span className="mail-size-percentage">
+              <LocalizedMessage
+                id="componentsMailMessageSize.used"
+                values={{ percentLabel: percentLabel }}
+              />
+            </span>
+          )}
         </div>
         <dl className="mail-size-breakdown">
           {(
             [
-              ["Subject", size.subject],
-              ["Body", size.body],
-              ["Images", size.images],
-              ["Attachments", size.attachments],
-              ["Headers & formatting", size.headers],
+              [t("componentsMailMessageSize.subject"), size.subject],
+              [t("componentsMailMessageSize.body"), size.body],
+              [t("componentsMailMessageSize.images"), size.images],
+              [t("componentsMailMessageSize.attachments"), size.attachments],
+              [t("componentsMailMessageSize.headersFormatting"), size.headers],
             ] as const
           ).map(([name, value]) => (
             <div key={name}>
@@ -104,9 +135,18 @@ export function MailMessageSize({
           ))}
         </dl>
         {uploadMaximum > 0 && (
-          <p className="mail-size-note">Per file limit: {bytes(uploadMaximum)}</p>
+          <p className="mail-size-note">
+            <LocalizedMessage
+              id="componentsMailMessageSize.perFileLimit"
+              values={{ bytes: bytes(uploadMaximum) }}
+            />
+          </p>
         )}
-        {maximum <= 0 && <p className="mail-size-note">Sending limit unavailable.</p>}
+        {maximum <= 0 && (
+          <p className="mail-size-note">
+            {t("componentsMailMessageSize.sendingLimitUnavailable2")}
+          </p>
+        )}
       </PopoverPopup>
     </Popover.Root>
   );

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 import { Button, Drawer, DrawerPopup, Icon, OfficeflareMark } from "./ui";
@@ -45,7 +46,7 @@ export function WorkspaceNavigationDrawer({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Close navigation"
+                aria-label={t("componentsWorkspaceNavigation.closeNavigation")}
                 onClick={() => onOpenChange(false)}
               >
                 <Icon name="close" />
@@ -53,11 +54,16 @@ export function WorkspaceNavigationDrawer({
             </div>
           </div>
           <Drawer.Description className="visually-hidden">
-            Choose an application or a page.
+            {t("componentsWorkspaceNavigation.chooseAnApplicationOrAPage")}
           </Drawer.Description>
           <div className="workspace-drawer-apps">
-            <nav aria-label="Applications">
-              <NavLink to="/" aria-label="Officeflare home" end onClick={() => onOpenChange(false)}>
+            <nav aria-label={t("componentsWorkspaceNavigation.applications")}>
+              <NavLink
+                to="/"
+                aria-label={t("componentsWorkspaceNavigation.officeflareHome")}
+                end
+                onClick={() => onOpenChange(false)}
+              >
                 <OfficeflareMark />
               </NavLink>
               {workspaceApps
@@ -76,8 +82,8 @@ export function WorkspaceNavigationDrawer({
               {permissions.includes("console.access") && (
                 <NavLink
                   to="/console"
-                  aria-label="Console"
-                  title="Console"
+                  aria-label={t("componentsWorkspaceNavigation.console")}
+                  title={t("componentsWorkspaceNavigation.console")}
                   onClick={() => onOpenChange(false)}
                 >
                   <Icon name="console" />

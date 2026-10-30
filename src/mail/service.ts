@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { incomingRoute } from "./routing";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { putStream } from "./objects";
@@ -39,7 +40,7 @@ export const bodyKey = (mailboxId: string, messageId: string, revision: string) 
   "bodies/" + mailboxId + "/" + messageId + "/" + revision + ".json";
 export async function readBody(env: Env, key: string): Promise<MailBody> {
   const object = await env.MAIL_BUCKET.get(key);
-  if (!object) fail(503, "Mail body is unavailable");
+  if (!object) fail(503, t("mailService.mailBodyIsUnavailable"));
   const body = await object.json<MailBody>();
   if (body.compose_state) {
     // Old saved drafts may contain a mode; it no longer participates in sending.
@@ -115,7 +116,7 @@ export async function getMessage(
 }
 export async function belongs(env: Env, mailboxId: string, partitionId: string) {
   if (!(await mailbox(env, mailboxId).partitions()).some((p) => p.id === partitionId))
-    fail(404, "Mail resource not found");
+    fail(404, t("mailService.mailResourceNotFound"));
 }
 export async function queryMessages(
   env: Env,
@@ -127,7 +128,8 @@ export async function queryMessages(
   await authorize(env, actor, mailboxId, "read");
   const entries = await mailbox(env, mailboxId).partitions();
   const targets = selected ? entries.filter((p) => selected.includes(p.id)) : entries;
-  if (selected && targets.length !== selected.length) fail(400, "Invalid cursor partitions");
+  if (selected && targets.length !== selected.length)
+    fail(400, t("mailService.invalidCursorPartitions"));
   const result: MessageRow[] = [];
   // Bound outgoing concurrency; failures abort instead of silently presenting incomplete search results.
   for (let start = 0; start < targets.length; start += 4) {
@@ -164,7 +166,7 @@ export async function createDraft(
     cc = recipients(data.cc, "cc"),
     bcc = recipients(data.bcc, "bcc"),
     replyTo = replyToAddress(data.reply_to);
-  if (to.length + cc.length + bcc.length > 50) fail(400, "Too many recipients");
+  if (to.length + cc.length + bcc.length > 50) fail(400, t("mailService.tooManyRecipients"));
   const operation = actor.user_id + ":draft:" + key;
   const partitionId = await mailbox(env, mailboxId).allocate(operation);
   const resourceId = partitionId + "." + (await stableUuid(operation)),
@@ -185,7 +187,7 @@ export async function createDraft(
   const existing = await partition(env, partitionId).receipt(operation);
   if (existing) {
     if (existing.request_hash !== requestHash)
-      fail(409, "Idempotency key reused with different request");
+      fail(409, t("mailService.idempotencyKeyReusedWithDifferentRequest"));
     await scheduleOutbox(env, mailboxId, partitionId);
     return getMessage(env, actor, mailboxId, existing.resource_id);
   }
@@ -220,13 +222,13 @@ export async function createDraft(
       data.attachment_ids !== undefined &&
       (!Array.isArray(data.attachment_ids) || data.attachment_ids.length > 32)
     )
-      fail(400, "Invalid attachment_ids");
+      fail(400, t("mailService.invalidAttachmentIds"));
     for (const uploadId of (data.attachment_ids ?? []) as unknown[]) {
       const upload = await env.MAIL_BUCKET.get(
         "uploads/" + mailboxId + "/" + actor.user_id + "/" + text(uploadId, "attachment_id", 36),
       );
       if (!upload || Number(upload.customMetadata?.expires_at ?? 0) < epoch())
-        fail(400, "Upload is missing or expired");
+        fail(400, t("mailService.uploadIsMissingOrExpired"));
       const fileId = id(),
         r2Key = "attachments/" + mailboxId + "/" + resourceId + "/" + fileId;
       createdKeys.push(r2Key);
@@ -312,9 +314,9 @@ export async function submitDraft(
     (data.provider !== undefined && data.provider !== address.provider) ||
     (data.connection_id !== undefined && data.connection_id !== address.connection_id)
   )
-    fail(409, "Provider or connection does not match sending domain");
+    fail(409, t("mailService.providerOrConnectionDoesNotMatchSendingDomain"));
   const version = Number(data.version);
-  if (!Number.isSafeInteger(version) || version < 1) fail(400, "Invalid version");
+  if (!Number.isSafeInteger(version) || version < 1) fail(400, t("mailService.invalidVersion"));
   const scheduledAt =
     data.scheduled_at === undefined
       ? epoch() + integer(data.undo_window ?? 0, "undo_window", 0, 30)
@@ -324,7 +326,7 @@ export async function submitDraft(
     scheduledAt < epoch() - 60 ||
     scheduledAt > epoch() + 366 * 86400
   )
-    fail(400, "Invalid scheduled_at");
+    fail(400, t("mailService.invalidScheduledAt"));
   const requestHash = await hash(
     JSON.stringify({
       resourceId,
@@ -349,20 +351,21 @@ export async function submitDraft(
     existing = await store.findSubmission(submissionId);
   if (existing) {
     if (existing.request_hash !== requestHash)
-      fail(409, "Idempotency key reused with different request");
+      fail(409, t("mailService.idempotencyKeyReusedWithDifferentRequest"));
     await scheduleOutbox(env, mailboxId, locator(resourceId));
     return existing;
   }
   const message = await store.get(resourceId, actor.user_id),
     content = await readBody(env, message.body_r2_key);
   if (!message.draft || message.draft.version !== version || message.draft.state !== "editable")
-    fail(409, "Draft is not editable or version changed");
+    fail(409, t("mailService.draftIsNotEditableOrVersionChanged"));
   const select = (kind: string) =>
     message.recipients.filter((r) => r.kind === kind).map((r) => r.email_address);
   const to = select("to"),
     cc = select("cc"),
     bcc = select("bcc");
-  if (!to.length && !cc.length && !bcc.length) fail(400, "At least one recipient is required");
+  if (!to.length && !cc.length && !bcc.length)
+    fail(400, t("mailService.atLeastOneRecipientIsRequired"));
   const referencedImages = inlineContentIds(content.html),
     attachments = message.attachments.filter(
       (file) =>
@@ -443,9 +446,9 @@ export async function ingest(env: Env, task: InboundTask) {
     "SELECT status FROM mail_mailboxes WHERE id=?",
     task.mailbox_id,
   );
-  if (state?.status !== "active") fail(409, "Destination mailbox is not active");
+  if (state?.status !== "active") fail(409, t("mailService.destinationMailboxIsNotActive"));
   const raw = await env.MAIL_BUCKET.get(task.raw_r2_key);
-  if (!raw) fail(503, "Inbound original is unavailable");
+  if (!raw) fail(503, t("mailService.inboundOriginalIsUnavailable"));
   const parsed = await PostalMime.parse(await raw.arrayBuffer(), {
     maxNestingDepth: 32,
     maxHeadersSize: 256 * 1024,
@@ -578,7 +581,9 @@ export async function ingest(env: Env, task: InboundTask) {
           owner,
           task.mailbox_id,
           {
-            subject: String(settings.auto_reply_subject || "Re: " + subject),
+            subject: String(
+              settings.auto_reply_subject || t("mailService.replySubject", { subject }),
+            ),
             text: String(settings.auto_reply_text),
             to: [from],
             reply_to_message_id: resourceId,
@@ -606,7 +611,7 @@ export async function ingest(env: Env, task: InboundTask) {
 export async function receive(message: ForwardableEmailMessage, env: Env) {
   const route = await incomingRoute(env, message);
   if (route?.action === "reject") {
-    message.setReject(route.reject_reason ?? "Rejected by domain policy");
+    message.setReject(route.reject_reason ?? t("mailService.rejectedByDomainPolicy"));
     return;
   }
   if (route?.action === "forward") {
@@ -615,11 +620,11 @@ export async function receive(message: ForwardableEmailMessage, env: Env) {
   }
   const target = await resolveRecipient(env, message.to);
   if (!target) {
-    message.setReject("Recipient is not available");
+    message.setReject(t("mailService.recipientIsNotAvailable"));
     return;
   }
   if (message.rawSize > 25 * 1024 * 1024) {
-    message.setReject("Message is too large");
+    message.setReject(t("mailService.messageIsTooLarge"));
     return;
   }
   const task: InboundTask = {

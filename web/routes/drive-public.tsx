@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button, Icon, OfficeflareMark, Toggle, ToggleGroup } from "../components/ui";
@@ -52,7 +54,7 @@ export function PublicDrivePage() {
         headers: password ? { "X-Drive-Link-Password": password } : {},
       });
       if (!response.ok) {
-        let message = "Unable to open this shared item.";
+        let message = t("routesDrivePublic.unableToOpenThisSharedItem");
         try {
           const body = (await response.json()) as { error: string };
           if (response.status < 500) message = body.error;
@@ -73,7 +75,7 @@ export function PublicDrivePage() {
     setTrail([]);
     setItems([]);
     setPreview(null);
-    document.title = "Shared with you · Officeflare";
+    document.title = t("routesDrivePublic.sharedWithYouOfficeflare");
     const referrer = document.createElement("meta");
     referrer.name = "referrer";
     referrer.content = "no-referrer";
@@ -96,7 +98,7 @@ export function PublicDrivePage() {
           setNeedsPassword(false);
           setPasswordError("");
           setLoading(false);
-          document.title = `${data.item.name} · Shared · Officeflare`;
+          document.title = t("routesDrivePublic.sharedOfficeflare", { name: data.item.name });
         }
       })
       .catch((failure) => {
@@ -104,12 +106,12 @@ export function PublicDrivePage() {
         setLoading(false);
         if (failure instanceof ApiError && failure.status === 403) {
           setNeedsPassword(true);
-          setPasswordError(password ? "That password did not work. Try again." : "");
+          setPasswordError(password ? t("routesDrivePublic.thatPasswordDidNotWorkTryAgain") : "");
         } else {
           setNeedsPassword(false);
           setError(
             failure instanceof ApiError && failure.status === 404
-              ? "This link has expired, was revoked, or is no longer available."
+              ? t("routesDrivePublic.thisLinkHasExpiredWasRevokedOrIsNo")
               : driveFailure(failure),
           );
         }
@@ -175,9 +177,10 @@ export function PublicDrivePage() {
       <header className="drive-public-topbar">
         <Link to="/" className="drive-public-brand">
           <OfficeflareMark />
-          Officeflare<span className="drive-muted">/ Shared files</span>
+          {t("common.officeflare")}
+          <span className="drive-muted">{t("routesDrivePublic.sharedFiles")}</span>
         </Link>
-        <Link to="/login">Sign in to workspace</Link>
+        <Link to="/login">{t("routesDrivePublic.signInToWorkspace")}</Link>
       </header>
       <section className="drive-public-frame">
         {needsPassword ? (
@@ -185,8 +188,8 @@ export function PublicDrivePage() {
             <span className="drive-link-symbol" style={{ margin: "0 auto" }}>
               <Icon name="shield" width="26" height="26" />
             </span>
-            <h1>This link is protected</h1>
-            <p>Enter the password provided by the owner to view the shared files.</p>
+            <h1>{t("routesDrivePublic.thisLinkIsProtected")}</h1>
+            <p>{t("routesDrivePublic.enterThePasswordProvidedByTheOwnerToView")}</p>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -195,7 +198,7 @@ export function PublicDrivePage() {
               }}
             >
               <DriveField
-                label="Link password"
+                label={t("routesDrivePublic.linkPassword")}
                 type="password"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -206,7 +209,7 @@ export function PublicDrivePage() {
               />
               <DriveNotice error={passwordError} />
               <Button type="submit" variant="primary" disabled={loading || !draft}>
-                {loading ? "Checking…" : "Open shared files"}
+                {loading ? t("routesDrivePublic.checking") : t("routesDrivePublic.openSharedFiles")}
                 <Icon name="arrow" />
               </Button>
             </form>
@@ -214,39 +217,52 @@ export function PublicDrivePage() {
         ) : !root ? (
           <div className="drive-state">
             <Icon name={error ? "link" : "drive"} width="40" height="40" />
-            <h2>{loading ? "Opening shared files…" : "Link unavailable"}</h2>
+            <h2>
+              {loading
+                ? t("routesDrivePublic.openingSharedFiles")
+                : t("routesDrivePublic.linkUnavailable")}
+            </h2>
             <p role={error ? "alert" : "status"}>
-              {error || "Checking access to this share link."}
+              {error || t("routesDrivePublic.checkingAccessToThisShareLink")}
             </p>
-            {error && <Button onClick={() => setAttempt((value) => value + 1)}>Try again</Button>}
+            {error && (
+              <Button onClick={() => setAttempt((value) => value + 1)}>
+                {t("routesDrivePublic.tryAgain")}
+              </Button>
+            )}
           </div>
         ) : root.kind === "file" ? (
           <div className="drive-public-file">
             <DriveFileIcon item={root} large />
             <h1>{root.name}</h1>
             <p>
-              {fileKind(root).label} · {formatBytes(driveSize(root))}
+              {fileKind(root).label}
+              {t("routesDrivePublic.text")}
+              {formatBytes(driveSize(root))}
             </p>
             <div>
               <Button onClick={() => setPreview(root)}>
                 <Icon name="eye" />
-                View file
+                {t("routesDrivePublic.viewFile")}
               </Button>
               {allow && (
                 <Button variant="primary" onClick={() => download(root)}>
                   <Icon name="download" />
-                  Download
+                  {t("routesDrivePublic.download")}
                 </Button>
               )}
             </div>
-            {!allow && <p>Preview and downloads are disabled by the owner.</p>}
+            {!allow && <p>{t("routesDrivePublic.previewAndDownloadsAreDisabledByTheOwner")}</p>}
             <DriveNotice error={error} />
           </div>
         ) : (
           <div className="drive-content-pane">
             <header className="drive-page-header">
               <div>
-                <nav className="drive-breadcrumbs" aria-label="Shared folder path">
+                <nav
+                  className="drive-breadcrumbs"
+                  aria-label={t("routesDrivePublic.sharedFolderPath")}
+                >
                   {trail.map((item, index) => (
                     <span key={item.id}>
                       {index > 0 && <Icon name="chevron" width="12" height="12" />}
@@ -268,44 +284,53 @@ export function PublicDrivePage() {
                   if (values[0]) setLayout(values[0]);
                 }}
                 className="drive-layout-toggle"
-                aria-label="Shared file view"
+                aria-label={t("routesDrivePublic.sharedFileView")}
               >
-                <Toggle value="list" data-size="icon" aria-label="List view">
+                <Toggle value="list" data-size="icon" aria-label={t("routesDrivePublic.listView")}>
                   <Icon name="list" />
                 </Toggle>
-                <Toggle value="grid" data-size="icon" aria-label="Grid view">
+                <Toggle value="grid" data-size="icon" aria-label={t("routesDrivePublic.gridView")}>
                   <Icon name="grid" />
                 </Toggle>
               </ToggleGroup>
             </header>
             <div className="drive-public-viewer-note">
               <Icon name="eye" />
-              Shared with you · View only
-              {!allow && " · Preview and downloads disabled"}
-              {expires && ` · Expires ${driveDate(expires)}`}
+              <LocalizedMessage
+                id="routesDrivePublic.sharedWithYouViewOnly"
+                values={{
+                  value1: !allow && t("routesDrivePublic.previewAndDownloadsDisabled"),
+                  value2:
+                    expires && t("routesDrivePublic.expires", { driveDate: driveDate(expires) }),
+                }}
+              />
             </div>
             <div className={`drive-public-table drive-layout-${layout}`}>
               {loading && (
                 <p className="drive-state" role="status">
-                  Loading shared files…
+                  {t("routesDrivePublic.loadingSharedFiles")}
                 </p>
               )}
               <DriveNotice error={error} />
               {!loading && !items.length && !error && (
                 <div className="drive-empty">
                   <Icon name="folder" width="46" height="46" />
-                  <h2>This folder is empty</h2>
-                  <p>Files added by the owner will appear here.</p>
+                  <h2>{t("routesDrivePublic.thisFolderIsEmpty")}</h2>
+                  <p>{t("routesDrivePublic.filesAddedByTheOwnerWillAppearHere")}</p>
                 </div>
               )}
               {!!items.length && (
-                <div role="grid" className="drive-file-grid" aria-label="Shared files">
+                <div
+                  role="grid"
+                  className="drive-file-grid"
+                  aria-label={t("routesDrivePublic.sharedFiles2")}
+                >
                   <div className="drive-table-header" role="row">
-                    <div role="columnheader">Name</div>
-                    <div role="columnheader">Last modified</div>
-                    <div role="columnheader">File size</div>
+                    <div role="columnheader">{t("common.name")}</div>
+                    <div role="columnheader">{t("routesDrivePublic.lastModified")}</div>
+                    <div role="columnheader">{t("routesDrivePublic.fileSize")}</div>
                     <div role="columnheader">
-                      <span className="visually-hidden">Download</span>
+                      <span className="visually-hidden">{t("routesDrivePublic.download")}</span>
                     </div>
                   </div>
                   {items.map((item) => (
@@ -347,7 +372,7 @@ export function PublicDrivePage() {
                         {allow && item.kind === "file" && (
                           <DriveIconButton
                             icon="download"
-                            label={`Download ${item.name}`}
+                            label={t("routesDrivePublic.download2", { name: item.name })}
                             onClick={() => download(item)}
                           />
                         )}
@@ -359,7 +384,7 @@ export function PublicDrivePage() {
               {cursor && (
                 <div className="drive-load-more">
                   <Button disabled={more} onClick={() => void loadMore()}>
-                    {more ? "Loading…" : "Load more files"}
+                    {more ? t("common.loading") : t("routesDrivePublic.loadMoreFiles")}
                   </Button>
                 </div>
               )}
@@ -367,8 +392,16 @@ export function PublicDrivePage() {
           </div>
         )}
         <footer className="drive-public-footer">
-          <Icon name="shield" width="11" height="11" /> Shared securely with Officeflare
-          {root && root.kind === "file" && expires ? ` · Expires ${driveDate(expires)}` : ""}
+          <Icon name="shield" width="11" height="11" />
+          <LocalizedMessage
+            id="routesDrivePublic.sharedSecurelyWithOfficeflare"
+            values={{
+              value1:
+                root && root.kind === "file" && expires
+                  ? t("routesDrivePublic.expires", { driveDate: driveDate(expires) })
+                  : "",
+            }}
+          />
         </footer>
       </section>
       {preview && (

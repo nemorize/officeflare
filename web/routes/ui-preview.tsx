@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import {
@@ -23,64 +25,108 @@ interface Example {
 
 const groups: { name: string; examples: Example[] }[] = [
   {
-    name: "Form controls",
+    name: t("routesUiPreview.formControls"),
     examples: [
-      { name: "Autocomplete", slug: "autocomplete", component: Forms.AutocompleteDemo },
-      { name: "Checkbox", slug: "checkbox", component: Forms.CheckboxDemo },
-      { name: "Checkbox Group", slug: "checkbox-group", component: Forms.CheckboxGroupDemo },
-      { name: "Combobox", slug: "combobox", component: Forms.ComboboxDemo },
-      { name: "Field", slug: "field", component: Forms.FieldDemo },
-      { name: "Fieldset", slug: "fieldset", component: Forms.FieldsetDemo },
-      { name: "Form", slug: "form", component: Forms.FormDemo },
-      { name: "Input", slug: "input", component: Forms.InputDemo },
-      { name: "Number Field", slug: "number-field", component: Forms.NumberFieldDemo },
-      { name: "OTP Field", slug: "otp-field", component: Forms.OTPFieldDemo },
-      { name: "Radio Group", slug: "radio-group", component: Forms.RadioGroupDemo },
-      { name: "Select", slug: "select", component: Forms.SelectDemo },
-      { name: "Slider", slug: "slider", component: Forms.SliderDemo },
-      { name: "Switch", slug: "switch", component: Forms.SwitchDemo },
-    ],
-  },
-  {
-    name: "Popups and notifications",
-    examples: [
-      { name: "Alert Dialog", slug: "alert-dialog", component: Popups.AlertDialogDemo },
-      { name: "Context Menu", slug: "context-menu", component: Popups.ContextMenuDemo },
-      { name: "Dialog", slug: "dialog", component: Popups.DialogDemo },
-      { name: "Drawer", slug: "drawer", component: Popups.DrawerDemo },
-      { name: "Menu", slug: "menu", component: Popups.MenuDemo },
-      { name: "Popover", slug: "popover", component: Popups.PopoverDemo },
-      { name: "Preview Card", slug: "preview-card", component: Popups.PreviewCardDemo },
-      { name: "Toast", slug: "toast", component: Popups.ToastDemo },
-      { name: "Tooltip", slug: "tooltip", component: Popups.TooltipDemo },
-    ],
-  },
-  {
-    name: "Navigation and disclosure",
-    examples: [
-      { name: "Accordion", slug: "accordion", component: Navigation.AccordionDemo },
-      { name: "Collapsible", slug: "collapsible", component: Navigation.CollapsibleDemo },
-      { name: "Menubar", slug: "menubar", component: Navigation.MenubarDemo },
       {
-        name: "Navigation Menu",
+        name: t("routesUiPreview.autocomplete"),
+        slug: "autocomplete",
+        component: Forms.AutocompleteDemo,
+      },
+      { name: t("routesUiPreview.checkbox"), slug: "checkbox", component: Forms.CheckboxDemo },
+      {
+        name: t("routesUiPreview.checkboxGroup"),
+        slug: "checkbox-group",
+        component: Forms.CheckboxGroupDemo,
+      },
+      { name: t("routesUiPreview.combobox"), slug: "combobox", component: Forms.ComboboxDemo },
+      { name: t("routesUiPreview.field"), slug: "field", component: Forms.FieldDemo },
+      { name: t("routesUiPreview.fieldset"), slug: "fieldset", component: Forms.FieldsetDemo },
+      { name: t("routesUiPreview.form"), slug: "form", component: Forms.FormDemo },
+      { name: t("routesUiPreview.input"), slug: "input", component: Forms.InputDemo },
+      {
+        name: t("routesUiPreview.numberField"),
+        slug: "number-field",
+        component: Forms.NumberFieldDemo,
+      },
+      { name: t("routesUiPreview.otpField"), slug: "otp-field", component: Forms.OTPFieldDemo },
+      {
+        name: t("routesUiPreview.radioGroup"),
+        slug: "radio-group",
+        component: Forms.RadioGroupDemo,
+      },
+      { name: t("routesUiPreview.select"), slug: "select", component: Forms.SelectDemo },
+      { name: t("routesUiPreview.slider"), slug: "slider", component: Forms.SliderDemo },
+      { name: t("routesUiPreview.switch"), slug: "switch", component: Forms.SwitchDemo },
+    ],
+  },
+  {
+    name: t("routesUiPreview.popupsAndNotifications"),
+    examples: [
+      {
+        name: t("routesUiPreview.alertDialog"),
+        slug: "alert-dialog",
+        component: Popups.AlertDialogDemo,
+      },
+      {
+        name: t("routesUiPreview.contextMenu"),
+        slug: "context-menu",
+        component: Popups.ContextMenuDemo,
+      },
+      { name: t("routesUiPreview.dialog"), slug: "dialog", component: Popups.DialogDemo },
+      { name: t("routesUiPreview.drawer"), slug: "drawer", component: Popups.DrawerDemo },
+      { name: t("routesUiPreview.menu"), slug: "menu", component: Popups.MenuDemo },
+      { name: t("routesUiPreview.popover"), slug: "popover", component: Popups.PopoverDemo },
+      {
+        name: t("routesUiPreview.previewCard"),
+        slug: "preview-card",
+        component: Popups.PreviewCardDemo,
+      },
+      { name: t("routesUiPreview.toast"), slug: "toast", component: Popups.ToastDemo },
+      { name: t("routesUiPreview.tooltip"), slug: "tooltip", component: Popups.TooltipDemo },
+    ],
+  },
+  {
+    name: t("routesUiPreview.navigationAndDisclosure"),
+    examples: [
+      {
+        name: t("routesUiPreview.accordion"),
+        slug: "accordion",
+        component: Navigation.AccordionDemo,
+      },
+      {
+        name: t("routesUiPreview.collapsible"),
+        slug: "collapsible",
+        component: Navigation.CollapsibleDemo,
+      },
+      { name: t("routesUiPreview.menubar"), slug: "menubar", component: Navigation.MenubarDemo },
+      {
+        name: t("routesUiPreview.navigationMenu"),
         slug: "navigation-menu",
         component: Navigation.NavigationMenuDemo,
       },
-      { name: "Tabs", slug: "tabs", component: Navigation.TabsDemo },
-      { name: "Toolbar", slug: "toolbar", component: Navigation.ToolbarDemo },
+      { name: t("routesUiPreview.tabs"), slug: "tabs", component: Navigation.TabsDemo },
+      { name: t("routesUiPreview.toolbar"), slug: "toolbar", component: Navigation.ToolbarDemo },
     ],
   },
   {
-    name: "Actions and display",
+    name: t("routesUiPreview.actionsAndDisplay"),
     examples: [
-      { name: "Avatar", slug: "avatar", component: Display.AvatarDemo },
-      { name: "Button", slug: "button", component: Display.ButtonDemo },
-      { name: "Meter", slug: "meter", component: Display.MeterDemo },
-      { name: "Progress", slug: "progress", component: Display.ProgressDemo },
-      { name: "Scroll Area", slug: "scroll-area", component: Display.ScrollAreaDemo },
-      { name: "Separator", slug: "separator", component: Display.SeparatorDemo },
-      { name: "Toggle", slug: "toggle", component: Display.ToggleDemo },
-      { name: "Toggle Group", slug: "toggle-group", component: Display.ToggleGroupDemo },
+      { name: t("routesUiPreview.avatar"), slug: "avatar", component: Display.AvatarDemo },
+      { name: t("routesUiPreview.button"), slug: "button", component: Display.ButtonDemo },
+      { name: t("routesUiPreview.meter"), slug: "meter", component: Display.MeterDemo },
+      { name: t("routesUiPreview.progress"), slug: "progress", component: Display.ProgressDemo },
+      {
+        name: t("routesUiPreview.scrollArea"),
+        slug: "scroll-area",
+        component: Display.ScrollAreaDemo,
+      },
+      { name: t("routesUiPreview.separator"), slug: "separator", component: Display.SeparatorDemo },
+      { name: t("routesUiPreview.toggle"), slug: "toggle", component: Display.ToggleDemo },
+      {
+        name: t("routesUiPreview.toggleGroup"),
+        slug: "toggle-group",
+        component: Display.ToggleGroupDemo,
+      },
     ],
   },
 ];
@@ -89,7 +135,7 @@ const total = groups.reduce((count, group) => count + group.examples.length, 0);
 
 const groupIcons = ["controls", "layers", "navigation", "circle"] as const;
 const categoryItems = [
-  { value: "all", label: "All components" },
+  { value: "all", label: t("routesUiPreview.allComponents") },
   ...groups.map(({ name }) => ({ value: name, label: name })),
 ];
 
@@ -110,14 +156,19 @@ function ComponentSearch({
       <Icon name="search" />
       <Input
         variant="integrated"
-        aria-label="Search components"
+        aria-label={t("routesUiPreview.searchComponents")}
         name={mobile ? "component-search-mobile" : "component-search"}
         value={query}
         onValueChange={onChange}
-        placeholder="Search components"
+        placeholder={t("routesUiPreview.searchComponents")}
       />
       {query && (
-        <Button size="icon" variant="ghost" onClick={() => onChange("")} aria-label="Clear search">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => onChange("")}
+          aria-label={t("routesUiPreview.clearSearch")}
+        >
           <Icon name="close" width="13" height="13" />
         </Button>
       )}
@@ -143,14 +194,17 @@ export default function UIPreviewPage() {
   const visibleCount = visibleGroups.reduce((count, group) => count + group.examples.length, 0);
 
   useEffect(() => {
-    document.title = "UI components · Officeflare";
+    document.title = t("routesUiPreview.uiComponentsOfficeflare");
     document.querySelector(".gallery-workspace")?.scrollTo({ top: 0, behavior: "instant" });
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries.find((candidate) => candidate.isIntersecting);
         if (entry) setActive(entry.target.id.replace("demo-", ""));
       },
-      { root: document.querySelector(".gallery-workspace"), rootMargin: "-100px 0px -65% 0px" },
+      {
+        root: document.querySelector(".gallery-workspace"),
+        rootMargin: t("routesUiPreview.100px0px650px"),
+      },
     );
     document.querySelectorAll(".component-example").forEach((element) => observer.observe(element));
     return () => observer.disconnect();
@@ -158,14 +212,18 @@ export default function UIPreviewPage() {
 
   return (
     <div className="gallery-shell">
-      <aside className="gallery-rail" aria-label="Library categories">
-        <a href="#gallery-main" className="gallery-mark" aria-label="Officeflare component library">
+      <aside className="gallery-rail" aria-label={t("routesUiPreview.libraryCategories")}>
+        <a
+          href="#gallery-main"
+          className="gallery-mark"
+          aria-label={t("routesUiPreview.officeflareComponentLibrary")}
+        >
           <OfficeflareMark />
         </a>
         <Button
           variant="ghost"
           size="icon"
-          aria-label="All components"
+          aria-label={t("routesUiPreview.allComponents")}
           aria-pressed={category === "all"}
           onClick={() => setCategory("all")}
         >
@@ -183,7 +241,11 @@ export default function UIPreviewPage() {
             <Icon name={groupIcons[index]!} />
           </Button>
         ))}
-        <Link to="/login" className="gallery-rail-account" aria-label="Go to sign in">
+        <Link
+          to="/login"
+          className="gallery-rail-account"
+          aria-label={t("routesUiPreview.goToSignIn")}
+        >
           <Icon name="user" />
         </Link>
       </aside>
@@ -191,11 +253,12 @@ export default function UIPreviewPage() {
         <aside className="gallery-sidebar">
           <div className="gallery-sidebar-header">
             <div className="gallery-sidebar-title">
-              Components<span className="gallery-count">{total}</span>
+              {t("routesUiPreview.components")}
+              <span className="gallery-count">{total}</span>
             </div>
             <ComponentSearch query={query} onChange={setQuery} />
           </div>
-          <nav aria-label="Component examples" className="gallery-nav">
+          <nav aria-label={t("routesUiPreview.componentExamples")} className="gallery-nav">
             {visibleGroups.map((group) => (
               <div className="gallery-nav-group" key={group.name}>
                 <h2>{group.name}</h2>
@@ -211,40 +274,47 @@ export default function UIPreviewPage() {
                 ))}
               </div>
             ))}
-            {visibleCount === 0 && <p className="gallery-sidebar-empty">No matching components</p>}
+            {visibleCount === 0 && (
+              <p className="gallery-sidebar-empty">{t("routesUiPreview.noMatchingComponents")}</p>
+            )}
           </nav>
           <div className="gallery-sidebar-footer">
             <Icon name="code" />
-            <span>Officeflare UI</span>
+            <span>{t("routesUiPreview.officeflareUi")}</span>
           </div>
         </aside>
         <div className="gallery-workspace">
           <header className="gallery-topbar">
             <div className="gallery-breadcrumb">
-              <span>Officeflare</span>
+              <span>{t("common.officeflare")}</span>
               <Icon name="chevron" width="12" height="12" />
-              <span>Component library</span>
+              <span>{t("routesUiPreview.componentLibrary")}</span>
             </div>
             <Link to="/login" className="gallery-sign-in">
-              Go to sign in
+              {t("routesUiPreview.goToSignIn")}
               <Icon name="arrow" width="14" height="14" />
             </Link>
           </header>
           <main className="gallery-main" id="gallery-main">
             <div className="gallery-intro">
-              <h1>UI components</h1>
-              <p>Common building blocks for a consistent workspace.</p>
+              <h1>{t("routesUiPreview.uiComponents")}</h1>
+              <p>{t("routesUiPreview.commonBuildingBlocksForAConsistentWorkspace")}</p>
             </div>
             <div className="gallery-filter-bar">
               <p role="status">
-                Showing {visibleCount} of {total} components
+                <LocalizedMessage
+                  id="routesUiPreview.showingOfComponents"
+                  values={{ visibleCount: visibleCount, total: total }}
+                />
               </p>
               <Select.Root
                 items={categoryItems}
                 value={category}
                 onValueChange={(value) => setCategory(value ?? "all")}
               >
-                <Select.Label className="visually-hidden">Component category</Select.Label>
+                <Select.Label className="visually-hidden">
+                  {t("routesUiPreview.componentCategory")}
+                </Select.Label>
                 <Select.Trigger>
                   <Select.Value />
                 </Select.Trigger>
@@ -278,8 +348,8 @@ export default function UIPreviewPage() {
                           href={`https://base-ui.com/react/components/${slug}`}
                           target="_blank"
                           rel="noreferrer"
-                          aria-label={`${name} documentation`}
-                          title={`${name} documentation`}
+                          aria-label={t("routesUiPreview.documentation", { name: name })}
+                          title={t("routesUiPreview.documentation", { name: name })}
                         >
                           <Icon name="external" width="13" height="13" />
                         </a>
@@ -295,20 +365,21 @@ export default function UIPreviewPage() {
             {visibleCount === 0 && (
               <div className="gallery-empty">
                 <Icon name="search" width="24" height="24" />
-                <h2>No components match your search.</h2>
-                <p>Try a different name or reset the filters.</p>
+                <h2>{t("routesUiPreview.noComponentsMatchYourSearch")}</h2>
+                <p>{t("routesUiPreview.tryADifferentNameOrResetTheFilters")}</p>
                 <Button
                   onClick={() => {
                     setQuery("");
                     setCategory("all");
                   }}
                 >
-                  Reset filters
+                  {t("routesUiPreview.resetFilters")}
                 </Button>
               </div>
             )}
             <footer className="gallery-content-footer">
-              Officeflare component library<span>Built with Base UI</span>
+              {t("routesUiPreview.officeflareComponentLibrary")}
+              <span>{t("routesUiPreview.builtWithBaseUi")}</span>
             </footer>
           </main>
         </div>

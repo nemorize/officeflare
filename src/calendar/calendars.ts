@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../auth/types";
@@ -37,7 +38,7 @@ async function participantLifecycle(
     fail(
       422,
       "TOO_MANY_ATTENDEES",
-      "Cancel participating events individually before trashing this calendar",
+      t("calendarCalendars.cancelParticipatingEventsIndividuallyBeforeTrashingThisCalendar"),
     );
   const snapshot = condition(
     "NOT EXISTS(SELECT 1 FROM calendar_events e WHERE e.organizer_calendar_id=? AND e.trashed_at IS NULL AND e.status<>'cancelled' AND EXISTS(SELECT 1 FROM calendar_event_attendees a JOIN calendar_event_scopes s ON s.id=a.scope_id WHERE s.event_id=e.id AND a.removed_at IS NULL) AND NOT EXISTS(SELECT 1 FROM json_each(?) v WHERE json_extract(v.value,'$.id')=e.id AND json_extract(v.value,'$.version')=e.version))",
@@ -53,11 +54,7 @@ async function participantLifecycle(
     const attendees = await allAttendees(c, event.id);
     count += attendees.length;
     if (count > 100)
-      fail(
-        422,
-        "TOO_MANY_ATTENDEES",
-        "At most 100 recipients can be changed in one calendar operation",
-      );
+      fail(422, "TOO_MANY_ATTENDEES", t("calendarCalendars.atMost100RecipientsCanBeChangedInOne"));
     const value = {
       ...event,
       version: event.version + 1,
@@ -142,7 +139,7 @@ export async function ensurePrimary(c: CalendarContext) {
             id,
             data_owner_user_id: user.id,
             kind: "personal",
-            name: "My calendar",
+            name: t("calendarCalendars.myCalendar"),
             time_zone: pref?.time_zone ?? "UTC",
             created_at: stamp,
             updated_at: stamp,
@@ -185,7 +182,8 @@ export async function preferences(c: CalendarContext) {
       typeof prefDefaults & { user_id: string; created_at: number; updated_at: number }
     >(c.env, "SELECT * FROM calendar_preferences WHERE user_id=?", c.get("identity").user.id);
   }
-  if (!value) fail(404, "PREFERENCES_NOT_FOUND", "Calendar preferences not found");
+  if (!value)
+    fail(404, "PREFERENCES_NOT_FOUND", t("calendarCalendars.calendarPreferencesNotFound"));
   const { default_reminders_json, display_options_json, ...rest } = value;
   return {
     ...rest,
@@ -251,7 +249,7 @@ routes.patch("/preferences", async (c) => {
     try {
       Intl.getCanonicalLocales(locale);
     } catch {
-      fail(400, "INVALID_INPUT", "Invalid locale");
+      fail(400, "INVALID_INPUT", t("calendarCalendars.invalidLocale"));
     }
     values.locale = locale;
   }
@@ -455,7 +453,8 @@ routes.patch("/calendars/:calendarId", async (c) => {
 routes.delete("/calendars/:calendarId", async (c) => {
   const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 6),
     version = expectedVersion(c);
-  if (cal.is_primary) fail(409, "PRIMARY_CALENDAR", "The primary calendar cannot be deleted");
+  if (cal.is_primary)
+    fail(409, "PRIMARY_CALENDAR", t("calendarCalendars.thePrimaryCalendarCannotBeDeleted"));
   const participants = await participantLifecycle(c, cal, "cancel");
   await mutate(c, {
     operation: "calendar.trash",
@@ -483,7 +482,7 @@ routes.post("/calendars/:calendarId/restore", async (c) => {
   const data = await body(c, ["version"]),
     version = expectedVersion(c, data),
     cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 6, true);
-  if (!cal.trashed_at) fail(409, "NOT_TRASHED", "Calendar is not in trash");
+  if (!cal.trashed_at) fail(409, "NOT_TRASHED", t("calendarCalendars.calendarIsNotInTrash"));
   const participants = await participantLifecycle(c, cal, "update");
   await mutate(c, {
     operation: "calendar.restore",
@@ -528,7 +527,7 @@ routes.on(["PUT", "PATCH"], "/subscriptions/:calendarId", async (c) => {
     cal.id,
   );
   if (!old && c.req.method === "PATCH")
-    fail(404, "SUBSCRIPTION_NOT_FOUND", "Subscription not found");
+    fail(404, "SUBSCRIPTION_NOT_FOUND", t("calendarCalendars.subscriptionNotFound"));
   const version = old ? expectedVersion(c, data) : 0,
     values: Record<string, string | number | null> = {
       version: version + 1,
@@ -589,7 +588,11 @@ routes.delete("/subscriptions/:calendarId", async (c) => {
     version = expectedVersion(c),
     user = c.get("identity").user.id;
   if (cal.is_primary)
-    fail(409, "PRIMARY_CALENDAR", "The primary calendar subscription cannot be removed");
+    fail(
+      409,
+      "PRIMARY_CALENDAR",
+      t("calendarCalendars.thePrimaryCalendarSubscriptionCannotBeRemoved"),
+    );
   await mutate(c, {
     operation: "subscription.remove",
     request: { id: cal.id, version },

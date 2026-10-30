@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useLocation } from "react-router";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -324,7 +325,7 @@ export function MailComposer({
           });
     const recipients = { to: valid(to), cc: valid(cc), bcc: valid(bcc) };
     if (Object.values(recipients).flat().length > 50)
-      throw new Error("A message can have at most 50 recipients.");
+      throw new Error(t("componentsMailComposer.aMessageCanHaveAtMost50Recipients"));
     let replyToAddress: string | null = null;
     if (replyTo.trim()) {
       try {
@@ -332,7 +333,8 @@ export function MailComposer({
         if (addresses.length !== 1 || /[,;\r\n]/.test(replyTo)) throw new Error();
         replyToAddress = addresses[0]!;
       } catch {
-        if (strict) throw new Error("Enter a single valid Reply-To email address.");
+        if (strict)
+          throw new Error(t("componentsMailComposer.enterASingleValidReplyToEmailAddress"));
       }
     }
     return {
@@ -354,7 +356,7 @@ export function MailComposer({
     }
   }
   async function saveDraft(): Promise<MessageDetail> {
-    if (!ready) throw new Error("Wait for the draft to finish loading.");
+    if (!ready) throw new Error(t("componentsMailComposer.waitForTheDraftToFinishLoading"));
     if (draft && !dirty) return draft;
     const savedGeneration = generation.current,
       savedFiles = files;
@@ -363,7 +365,7 @@ export function MailComposer({
     if (draft) {
       if (draft.draft?.state !== "editable")
         throw new Error(
-          "This draft has already been submitted. Cancel its pending send before editing.",
+          t("componentsMailComposer.thisDraftHasAlreadyBeenSubmittedCancelItsPending"),
         );
       if (pendingEdit.current) {
         const latest = (await api<{ message: MessageDetail }>(`${path}/drafts/${draft.id}`))
@@ -375,7 +377,7 @@ export function MailComposer({
           result = { message: latest };
         else if (latest.draft?.version !== pendingEdit.current.version)
           throw new Error(
-            "This draft changed in another request. Copy your changes and reopen the saved draft before continuing.",
+            t("componentsMailComposer.thisDraftChangedInAnotherRequestCopyYourChanges"),
           );
         else result = await patchDraft(draft.id);
       } else {
@@ -526,13 +528,15 @@ export function MailComposer({
     }
   }
   async function send() {
-    if (imageUploading) throw new Error("Wait for the image upload to finish.");
+    if (imageUploading) throw new Error(t("componentsMailComposer.waitForTheImageUploadToFinish"));
     if (!pendingSend.current) {
       const recipients = values(true);
       if (!recipients.to.length && !recipients.cc.length && !recipients.bcc.length)
-        throw new Error("Add at least one recipient.");
+        throw new Error(t("componentsMailComposer.addAtLeastOneRecipient"));
       if (!sender || !canSend)
-        throw new Error("Choose an available sending address. Your mailbox needs send permission.");
+        throw new Error(
+          t("componentsMailComposer.chooseAnAvailableSendingAddressYourMailboxNeedsSend"),
+        );
       const scheduledAt = scheduledTime(schedule),
         message = await save();
       const savedHtml = storedEditorHtml(message.body.html, mailboxId, message.attachments);
@@ -560,7 +564,10 @@ export function MailComposer({
       });
       if (size > maximum)
         throw new Error(
-          `Message is approximately ${bytes(size)}; this sending address allows ${bytes(maximum)} including encoded attachments and body.`,
+          t(
+            "componentsMailComposer.messageIsApproximatelyThisSendingAddressAllowsIncludingEncoded",
+            { bytes: bytes(size), value2: bytes(maximum) },
+          ),
         );
       pendingSend.current = {
         id: message.id,
@@ -590,17 +597,21 @@ export function MailComposer({
       mail.refresh();
       if (result.submission.status === "scheduled" && !schedule)
         mail.feedback(
-          "Sending message…",
+          t("componentsMailComposer.sendingMessage"),
           async () => {
             await api(`${path}/submissions/${result.submission.id}/cancel`, { method: "POST" });
             mail.refresh();
             mail.compose(pending.id);
           },
-          "Undo",
+          t("componentsMailComposer.undo"),
           Math.max(0, result.submission.scheduled_at * 1000 - Date.now()),
         );
       else
-        mail.feedback(schedule ? "Message scheduled" : submissionLabel(result.submission.status));
+        mail.feedback(
+          schedule
+            ? t("componentsMailComposer.messageScheduled")
+            : submissionLabel(result.submission.status),
+        );
       onClose();
     } catch (failure) {
       setUnknown(true);
@@ -615,11 +626,14 @@ export function MailComposer({
   async function upload(selected: FileList | null) {
     if (!selected?.length) return;
     if (files.length + selected.length > 32)
-      throw new Error("A draft can have at most 32 attachments.");
+      throw new Error(t("componentsMailComposer.aDraftCanHaveAtMost32Attachments"));
     for (const file of [...selected]) {
       if (!file.size || file.size > uploadMaximum)
         throw new Error(
-          `${file.name}: choose a non-empty file up to ${bytes(uploadMaximum)}. The body and other attachments share the message limit.`,
+          t("componentsMailComposer.chooseANonEmptyFileUpToTheBody", {
+            name: file.name,
+            bytes: bytes(uploadMaximum),
+          }),
         );
       const result = await api<{ upload: Attachment }>(path + "/uploads", {
         method: "POST",
@@ -704,12 +718,14 @@ export function MailComposer({
     unknown ||
     (!!draft && draft.draft?.state !== "editable");
   const fullSize = expanded && !minimized;
-  const collapseLabel = minimized ? "Restore composer" : "Minimize composer";
+  const collapseLabel = minimized
+    ? t("componentsMailComposer.restoreComposer")
+    : t("componentsMailComposer.minimizeComposer");
   const content = (
     <section
       ref={surface}
       className={`${!docked && inlineHost ? "mail-compose-inline" : "mail-compose-window"}${minimized ? " is-minimized" : ""}${fullSize ? " is-expanded" : ""}`}
-      aria-label="Compose message"
+      aria-label={t("componentsMailComposer.composeMessage")}
     >
       <div className="mail-compose-titlebar">
         <Tooltip.Root>
@@ -726,7 +742,13 @@ export function MailComposer({
             }
           >
             <Icon name="down" className="mail-compose-chevron" />
-            <span>{!docked ? "Reply" : draftId ? "Edit draft" : "New message"}</span>
+            <span>
+              {!docked
+                ? t("componentsMailComposer.reply")
+                : draftId
+                  ? t("componentsMailComposer.editDraft")
+                  : t("componentsMailComposer.newMessage")}
+            </span>
           </Tooltip.Trigger>
           <TooltipPopup>{collapseLabel}</TooltipPopup>
         </Tooltip.Root>
@@ -734,10 +756,10 @@ export function MailComposer({
           icon={fullSize ? "shrink" : "expand"}
           label={
             fullSize
-              ? "Restore default size"
+              ? t("componentsMailComposer.restoreDefaultSize")
               : !docked
-                ? "Open in compose window"
-                : "Expand composer"
+                ? t("componentsMailComposer.openInComposeWindow")
+                : t("componentsMailComposer.expandComposer")
           }
           disabled={imageUploading}
           onClick={() => {
@@ -748,7 +770,7 @@ export function MailComposer({
         />
         <MailIconButton
           icon="close"
-          label="Save and close draft"
+          label={t("componentsMailComposer.saveAndCloseDraft")}
           disabled={action.busy || closing || imageUploading}
           onClick={() => {
             void close();
@@ -775,7 +797,7 @@ export function MailComposer({
             >
               <MailFieldset disabled={locked}>
                 <div className="mail-compose-sender">
-                  <MailField label="From">
+                  <MailField label={t("componentsMailComposer.from")}>
                     <MailSelect
                       variant="integrated"
                       disabled={!sendingAddresses.length}
@@ -789,8 +811,8 @@ export function MailComposer({
                           value: "",
                           label:
                             addresses.data && !sendingAddresses.length
-                              ? "No sending address is available."
-                              : "Select sending address",
+                              ? t("componentsMailComposer.noSendingAddressIsAvailable")
+                              : t("componentsMailComposer.selectSendingAddress"),
                         },
                         ...sendingAddresses.map((address) => ({
                           value: address.id,
@@ -802,7 +824,7 @@ export function MailComposer({
                 </div>
                 <MailNotice error={addresses.error} />
                 <RecipientField
-                  label="To"
+                  label={t("componentsMailComposer.to")}
                   value={to}
                   onChange={(value) => {
                     setTo(value);
@@ -816,7 +838,7 @@ export function MailComposer({
                         variant="ghost"
                         onClick={() => setIncludeCc(true)}
                       >
-                        Cc / Bcc
+                        {t("componentsMailComposer.ccBcc")}
                       </Button>
                     ) : undefined
                   }
@@ -824,7 +846,7 @@ export function MailComposer({
                 {includeCc ? (
                   <>
                     <RecipientField
-                      label="Cc"
+                      label={t("componentsMailComposer.cc")}
                       value={cc}
                       onChange={(value) => {
                         setCc(value);
@@ -832,7 +854,7 @@ export function MailComposer({
                       }}
                     />
                     <RecipientField
-                      label="Bcc"
+                      label={t("componentsMailComposer.bcc")}
                       value={bcc}
                       onChange={(value) => {
                         setBcc(value);
@@ -841,12 +863,12 @@ export function MailComposer({
                     />
                     <MailInput
                       variant="integrated"
-                      label="Reply-To"
+                      label={t("componentsMailComposer.replyTo")}
                       type="email"
                       inputMode="email"
                       autoComplete="off"
                       maxLength={254}
-                      placeholder="Same as From"
+                      placeholder={t("componentsMailComposer.sameAsFrom")}
                       value={replyTo}
                       onChange={(event) => {
                         setReplyTo(event.target.value);
@@ -857,7 +879,7 @@ export function MailComposer({
                 ) : null}
                 <MailInput
                   variant="integrated"
-                  label="Subject"
+                  label={t("componentsMailComposer.subject")}
                   value={subject}
                   maxLength={998}
                   onChange={(event) => {
@@ -893,11 +915,13 @@ export function MailComposer({
                         mark();
                       }}
                     >
-                      {includeQuote ? "Remove quoted message" : "Include quoted message"}
+                      {includeQuote
+                        ? t("componentsMailComposer.removeQuotedMessage")
+                        : t("componentsMailComposer.includeQuotedMessage")}
                     </Button>
                     {includeQuote && (
                       <details className="mail-quoted-body">
-                        <summary>Quoted message</summary>
+                        <summary>{t("componentsMailComposer.quotedMessage")}</summary>
                         {draft.body.quoted_body.html ? (
                           <MailHtml
                             message={draft}
@@ -922,18 +946,20 @@ export function MailComposer({
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Remove ${file.filename}`}
+                          aria-label={t("componentsMailComposer.remove", {
+                            filename: file.filename,
+                          })}
                           onClick={() => {
                             setFiles(files.filter((item) => item.id !== file.id));
                             mark();
                           }}
                         >
-                          ×
+                          {t("componentsMailComposer.text")}
                         </Button>
                       </div>
                     ))}
                 </div>
-                <MailField label="Attach files">
+                <MailField label={t("componentsMailComposer.attachFiles")}>
                   <MailFileInput
                     multiple
                     onChange={(event) => {
@@ -944,14 +970,18 @@ export function MailComposer({
                   />
                 </MailField>
                 {tooLarge && (
-                  <MailNotice error="This message exceeds the selected sending address’s size limit. Remove attachments or shorten the message." />
+                  <MailNotice
+                    error={t(
+                      "componentsMailComposer.thisMessageExceedsTheSelectedSendingAddressSSize",
+                    )}
+                  />
                 )}
                 {scheduleOpen && (
                   <div className="mail-schedule-panel">
                     <div className="mail-schedule-presets">
                       {[
-                        ["Tomorrow", 24],
-                        ["Next week", 168],
+                        [t("componentsMailComposer.tomorrow"), 24],
+                        [t("componentsMailComposer.nextWeek"), 168],
                       ].map(([label, hours]) => (
                         <Button
                           key={label}
@@ -971,8 +1001,8 @@ export function MailComposer({
                       ))}
                     </div>
                     <MailInput
-                      label="Send at"
-                      hint="Uses your local timezone."
+                      label={t("componentsMailComposer.sendAt")}
+                      hint={t("componentsMailComposer.usesYourLocalTimezone")}
                       type="datetime-local"
                       value={schedule}
                       onChange={(event) => {
@@ -989,7 +1019,7 @@ export function MailComposer({
                           mark();
                         }}
                       >
-                        Remove schedule
+                        {t("componentsMailComposer.removeSchedule")}
                       </Button>
                     )}
                   </div>
@@ -998,7 +1028,7 @@ export function MailComposer({
               <MailNotice error={action.error} />
               {unknown && (
                 <p className="mail-hint" role="status">
-                  The server response was lost. Retry the same request to check its outcome.
+                  {t("componentsMailComposer.theServerResponseWasLostRetryTheSameRequest")}
                 </p>
               )}
               <div className="mail-compose-footer">
@@ -1016,23 +1046,33 @@ export function MailComposer({
                     }
                   >
                     {pendingSend.current
-                      ? "Check send outcome"
+                      ? t("componentsMailComposer.checkSendOutcome")
                       : schedule
-                        ? "Schedule send"
-                        : "Send"}
+                        ? t("componentsMailComposer.scheduleSend")
+                        : t("componentsMailComposer.send")}
                     <Icon name="arrow" />
                   </Button>
-                  <MailMenu variant="primary" icon="down" label="More send options">
+                  <MailMenu
+                    variant="primary"
+                    icon="down"
+                    label={t("componentsMailComposer.moreSendOptions")}
+                  >
                     <Menu.Item
                       disabled={locked || action.busy}
                       onClick={() => setScheduleOpen(!scheduleOpen)}
                     >
-                      Schedule send
+                      {t("componentsMailComposer.scheduleSend")}
                     </Menu.Item>
                   </MailMenu>
                 </ButtonGroup>
                 <span className="mail-save-status" role="status">
-                  {autosaving ? "Saving…" : dirty ? "Unsaved changes" : draft ? "Draft saved" : ""}
+                  {autosaving
+                    ? t("common.saving")
+                    : dirty
+                      ? t("componentsMailComposer.unsavedChanges")
+                      : draft
+                        ? t("componentsMailComposer.draftSaved")
+                        : ""}
                 </span>
                 {unknown && !pendingSend.current && (
                   <Button
@@ -1045,7 +1085,7 @@ export function MailComposer({
                       });
                     }}
                   >
-                    Check save outcome
+                    {t("componentsMailComposer.checkSaveOutcome")}
                   </Button>
                 )}
                 <div className="mail-compose-tools">
@@ -1056,7 +1096,7 @@ export function MailComposer({
                   />
                   <MailIconButton
                     icon="trash"
-                    label="Discard draft"
+                    label={t("componentsMailComposer.discardDraft")}
                     disabled={action.busy || imageUploading || draft?.draft?.state === "submitted"}
                     onClick={() => setDeleteDraft(true)}
                   />
@@ -1068,9 +1108,9 @@ export function MailComposer({
       )}
       <Confirm
         open={deleteDraft}
-        title="Discard this draft?"
-        description="The draft and its attachments will be permanently removed."
-        label="Discard draft"
+        title={t("componentsMailComposer.discardThisDraft")}
+        description={t("componentsMailComposer.theDraftAndItsAttachmentsWillBePermanentlyRemoved")}
+        label={t("componentsMailComposer.discardDraft")}
         destructive
         onClose={() => setDeleteDraft(false)}
         onConfirm={async () => {
@@ -1082,15 +1122,19 @@ export function MailComposer({
       />
       <Confirm
         open={discard}
-        title={unknown ? "Close with an unknown request outcome?" : "Discard unsaved changes?"}
+        title={
+          unknown
+            ? t("componentsMailComposer.closeWithAnUnknownRequestOutcome")
+            : t("componentsMailComposer.discardUnsavedChanges")
+        }
         description={
           unknown
-            ? "The request may already have succeeded. Check Drafts and the message’s send status before composing another send."
+            ? t("componentsMailComposer.theRequestMayAlreadyHaveSucceededCheckDraftsAnd")
             : draft
-              ? "Your last saved draft remains in Drafts. Changes since the last save will be lost."
-              : "This message has not been saved."
+              ? t("componentsMailComposer.yourLastSavedDraftRemainsInDraftsChangesSince")
+              : t("componentsMailComposer.thisMessageHasNotBeenSaved")
         }
-        label="Close composer"
+        label={t("componentsMailComposer.closeComposer")}
         destructive
         onClose={() => setDiscard(false)}
         onConfirm={async () => onClose()}

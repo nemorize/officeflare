@@ -1,15 +1,15 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { t } from "../../shared/i18n/index.ts";
+import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useMail } from "./mail-context";
-import { ConsolePageHeader } from "./console-shared";
-import { Tabs } from "./ui";
+import { SettingsLayout } from "./settings-layout";
 
 const pages = [
-  ["/mail/settings", "General"],
-  ["/mail/rules", "Rules & blocking"],
-  ["/mail/integrations", "Integrations"],
-  ["/mail/data", "Import & backup"],
-  ["/mail/activity", "Activity & storage"],
+  { path: "/mail/settings", name: t("componentsMailSettingsNav.general") },
+  { path: "/mail/rules", name: t("componentsMailSettingsNav.rulesBlocking") },
+  { path: "/mail/integrations", name: t("componentsMailSettingsNav.integrations") },
+  { path: "/mail/data", name: t("componentsMailSettingsNav.importBackup") },
+  { path: "/mail/activity", name: t("componentsMailSettingsNav.activityStorage") },
 ] as const;
 
 export function MailSettingsLayout({
@@ -26,31 +26,19 @@ export function MailSettingsLayout({
   const mail = useMail(),
     { pathname } = useLocation(),
     navigate = useNavigate(),
-    nav = useRef<HTMLDivElement>(null),
-    selected = pages.find(([route]) => route === pathname)?.[0] ?? "/mail/settings";
-  useEffect(() => {
-    nav.current?.querySelector("[data-active]")?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [selected]);
+    selected = pages.find((page) => page.path === pathname)?.path ?? "/mail/settings";
   return (
-    <>
-      <ConsolePageHeader title={title} description={description}>
-        {actions}
-      </ConsolePageHeader>
-      <Tabs.Root value={selected} onValueChange={(route) => navigate(mail.href(route))}>
-        <div ref={nav} className="mail-settings-nav">
-          <Tabs.List aria-label="Mail settings sections">
-            {pages.map(([route, label]) => (
-              <Tabs.Tab key={route} value={route}>
-                {label}
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
-        </div>
-        <Tabs.Panel value={selected}>{children}</Tabs.Panel>
-      </Tabs.Root>
-    </>
+    <SettingsLayout
+      title={title}
+      description={description}
+      actions={actions}
+      pages={pages}
+      selected={selected}
+      onNavigate={(route) => navigate(mail.href(route))}
+      navigationLabel={t("componentsMailSettingsNav.mailSettingsSections")}
+      navigationClassName="mail-settings-nav"
+    >
+      {children}
+    </SettingsLayout>
   );
 }

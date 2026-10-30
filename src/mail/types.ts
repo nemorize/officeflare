@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { AppEnv } from "../auth/types";
 
 export type MailAction = "read" | "write" | "send" | "manage";
@@ -244,7 +245,7 @@ export function locator(value: string) {
     /^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/.exec(
       value,
     );
-  if (!match) fail(400, "Invalid mail resource ID");
+  if (!match) fail(400, t("mailTypes.invalidMailResourceId"));
   return match[1]!;
 }
 export function fail(status: number, message: string): never {

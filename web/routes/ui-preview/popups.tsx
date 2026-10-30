@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n/index.ts";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -24,14 +25,17 @@ import {
 export function DialogDemo() {
   return (
     <Dialog.Root>
-      <Dialog.Trigger render={<Button />}>Open dialog</Dialog.Trigger>
+      <Dialog.Trigger render={<Button />}>{t("routesUiPreviewPopups.openDialog")}</Dialog.Trigger>
       <DialogPopup portalProps={{ keepMounted: true }}>
-        <Dialog.Title>Example dialog</Dialog.Title>
+        <Dialog.Title>{t("routesUiPreviewPopups.exampleDialog")}</Dialog.Title>
         <Dialog.Description>
-          Tab stays in this dialog. Escape closes it and restores focus.
+          {t("routesUiPreviewPopups.tabStaysInThisDialogEscapeClosesItAnd")}
         </Dialog.Description>
-        <TextField label="Dialog display name" name="preview-dialog-name" />
-        <Dialog.Close render={<Button />}>Close dialog</Dialog.Close>
+        <TextField
+          label={t("routesUiPreviewPopups.dialogDisplayName")}
+          name="preview-dialog-name"
+        />
+        <Dialog.Close render={<Button />}>{t("routesUiPreviewPopups.closeDialog")}</Dialog.Close>
       </DialogPopup>
     </Dialog.Root>
   );
@@ -42,18 +46,20 @@ export function AlertDialogDemo() {
   return (
     <>
       <AlertDialog.Root>
-        <AlertDialog.Trigger render={<Button />}>Open confirmation</AlertDialog.Trigger>
+        <AlertDialog.Trigger render={<Button />}>
+          {t("routesUiPreviewPopups.openConfirmation")}
+        </AlertDialog.Trigger>
         <AlertDialogPopup>
-          <AlertDialog.Title>Confirm preview action</AlertDialog.Title>
+          <AlertDialog.Title>{t("routesUiPreviewPopups.confirmPreviewAction")}</AlertDialog.Title>
           <AlertDialog.Description>
-            This example only updates local demo state.
+            {t("routesUiPreviewPopups.thisExampleOnlyUpdatesLocalDemoState")}
           </AlertDialog.Description>
-          <AlertDialog.Close render={<Button />}>Cancel</AlertDialog.Close>{" "}
+          <AlertDialog.Close render={<Button />}>{t("common.cancel")}</AlertDialog.Close>{" "}
           <AlertDialog.Close
             render={<Button variant="primary" />}
-            onClick={() => setResult("Preview action confirmed")}
+            onClick={() => setResult(t("routesUiPreviewPopups.previewActionConfirmed"))}
           >
-            Confirm
+            {t("routesUiPreviewPopups.confirm")}
           </AlertDialog.Close>
         </AlertDialogPopup>
       </AlertDialog.Root>
@@ -66,12 +72,14 @@ export function DrawerDemo() {
   return (
     <Drawer.Provider>
       <Drawer.Root swipeDirection="down">
-        <Drawer.Trigger render={<Button />}>Open drawer</Drawer.Trigger>
+        <Drawer.Trigger render={<Button />}>{t("routesUiPreviewPopups.openDrawer")}</Drawer.Trigger>
         <DrawerPopup>
-          <Drawer.Title>Example drawer</Drawer.Title>
-          <Drawer.Description>Swipe down to dismiss, or use the close button.</Drawer.Description>
-          <p>Selectable drawer content.</p>
-          <Drawer.Close render={<Button />}>Close drawer</Drawer.Close>
+          <Drawer.Title>{t("routesUiPreviewPopups.exampleDrawer")}</Drawer.Title>
+          <Drawer.Description>
+            {t("routesUiPreviewPopups.swipeDownToDismissOrUseTheCloseButton")}
+          </Drawer.Description>
+          <p>{t("routesUiPreviewPopups.selectableDrawerContent")}</p>
+          <Drawer.Close render={<Button />}>{t("routesUiPreviewPopups.closeDrawer")}</Drawer.Close>
         </DrawerPopup>
       </Drawer.Root>
     </Drawer.Provider>
@@ -81,13 +89,15 @@ export function DrawerDemo() {
 export function PopoverDemo() {
   return (
     <Popover.Root>
-      <Popover.Trigger render={<Button />}>Open popover</Popover.Trigger>
+      <Popover.Trigger render={<Button />}>
+        {t("routesUiPreviewPopups.openPopover")}
+      </Popover.Trigger>
       <PopoverPopup>
-        <Popover.Title>Example popover</Popover.Title>
+        <Popover.Title>{t("routesUiPreviewPopups.examplePopover")}</Popover.Title>
         <Popover.Description>
-          Supplementary information with accessible content.
+          {t("routesUiPreviewPopups.supplementaryInformationWithAccessibleContent")}
         </Popover.Description>
-        <Popover.Close render={<Button />}>Close popover</Popover.Close>
+        <Popover.Close render={<Button />}>{t("routesUiPreviewPopups.closePopover")}</Popover.Close>
       </PopoverPopup>
     </Popover.Root>
   );
@@ -98,10 +108,14 @@ export function MenuDemo() {
   return (
     <>
       <Menu.Root>
-        <Menu.Trigger render={<Button />}>Open actions</Menu.Trigger>
+        <Menu.Trigger render={<Button />}>{t("routesUiPreviewPopups.openActions")}</Menu.Trigger>
         <MenuPopup>
-          <Menu.Item onClick={() => setResult("First action selected")}>First action</Menu.Item>
-          <Menu.Item onClick={() => setResult("Second action selected")}>Second action</Menu.Item>
+          <Menu.Item onClick={() => setResult(t("routesUiPreviewPopups.firstActionSelected"))}>
+            {t("routesUiPreviewPopups.firstAction")}
+          </Menu.Item>
+          <Menu.Item onClick={() => setResult(t("routesUiPreviewPopups.secondActionSelected"))}>
+            {t("routesUiPreviewPopups.secondAction")}
+          </Menu.Item>
         </MenuPopup>
       </Menu.Root>
       <p role="status">{result}</p>
@@ -111,21 +125,27 @@ export function MenuDemo() {
 
 export function ContextMenuDemo() {
   const [result, setResult] = useState("");
-  const copy = () => setResult("Preview item copied");
+  const copy = () => setResult(t("routesUiPreviewPopups.previewItemCopied"));
   return (
     <>
       <ContextMenu.Root>
         <ContextMenu.Trigger render={<Button />} onClick={copy}>
-          Preview item: click to copy, or right-click for actions
+          {t("routesUiPreviewPopups.previewItemClickToCopyOrRightClickFor")}
         </ContextMenu.Trigger>
         <ContextMenuPopup>
-          <ContextMenu.Item onClick={copy}>Copy preview item</ContextMenu.Item>
-          <ContextMenu.Item onClick={() => setResult("Preview item renamed")}>
-            Rename preview item
+          <ContextMenu.Item onClick={copy}>
+            {t("routesUiPreviewPopups.copyPreviewItem")}
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            onClick={() => setResult(t("routesUiPreviewPopups.previewItemRenamed"))}
+          >
+            {t("routesUiPreviewPopups.renamePreviewItem")}
           </ContextMenu.Item>
         </ContextMenuPopup>
       </ContextMenu.Root>
-      <Button onClick={() => setResult("Preview item renamed")}>Rename preview item</Button>
+      <Button onClick={() => setResult(t("routesUiPreviewPopups.previewItemRenamed"))}>
+        {t("routesUiPreviewPopups.renamePreviewItem")}
+      </Button>
       <p role="status">{result}</p>
     </>
   );
@@ -136,15 +156,17 @@ export function PreviewCardDemo() {
     <>
       <PreviewCard.Root>
         <PreviewCard.Trigger href="#preview-card-details">
-          Preview sample member
+          {t("routesUiPreviewPopups.previewSampleMember")}
         </PreviewCard.Trigger>
         <PreviewCardPopup>
           <PreviewCard.Viewport>
-            <p>Alex Morgan — example member, available in the directory.</p>
+            <p>{t("routesUiPreviewPopups.alexMorganExampleMemberAvailableInTheDirectory")}</p>
           </PreviewCard.Viewport>
         </PreviewCardPopup>
       </PreviewCard.Root>
-      <p id="preview-card-details">Alex Morgan — example member, available in the directory.</p>
+      <p id="preview-card-details">
+        {t("routesUiPreviewPopups.alexMorganExampleMemberAvailableInTheDirectory")}
+      </p>
     </>
   );
 }
@@ -153,12 +175,12 @@ export function TooltipDemo() {
   return (
     <>
       <Tooltip.Root>
-        <Tooltip.Trigger render={<Button />} aria-label="Help">
-          Help
+        <Tooltip.Trigger render={<Button />} aria-label={t("routesUiPreviewPopups.help")}>
+          {t("routesUiPreviewPopups.help")}
         </Tooltip.Trigger>
-        <TooltipPopup>Help</TooltipPopup>
+        <TooltipPopup>{t("routesUiPreviewPopups.help")}</TooltipPopup>
       </Tooltip.Root>
-      <p>The button has an accessible name even when its tooltip is closed.</p>
+      <p>{t("routesUiPreviewPopups.theButtonHasAnAccessibleNameEvenWhenIts")}</p>
     </>
   );
 }
@@ -170,36 +192,39 @@ function ToastContents() {
       <Button
         onClick={() =>
           manager.add({
-            title: "Preview notification",
-            description: "Dismiss this example notification.",
+            title: t("routesUiPreviewPopups.previewNotification"),
+            description: t("routesUiPreviewPopups.dismissThisExampleNotification"),
             timeout: 0,
           })
         }
       >
-        Show notification
+        {t("routesUiPreviewPopups.showNotification")}
       </Button>
       <Button
         variant="danger"
         onClick={() =>
           manager.add({
-            title: "Unable to save changes",
-            description: "Try again in a moment.",
+            title: t("routesUiPreviewPopups.unableToSaveChanges"),
+            description: t("routesUiPreviewPopups.tryAgainInAMoment"),
             type: "error",
             timeout: 0,
           })
         }
       >
-        Show error notification
+        {t("routesUiPreviewPopups.showErrorNotification")}
       </Button>
       <Toast.Portal>
-        <Toast.Viewport data-ui="toast-viewport">
+        <Toast.Viewport aria-label={t("common.notifications")} data-ui="toast-viewport">
           {manager.toasts.map((toast) => (
             <Toast.Root key={toast.id} toast={toast}>
               <Toast.Content>
                 <Toast.Title />
                 <Toast.Description />
-                <Toast.Close render={<Button />} aria-label="Dismiss notification">
-                  Dismiss
+                <Toast.Close
+                  render={<Button />}
+                  aria-label={t("routesUiPreviewPopups.dismissNotification")}
+                >
+                  {t("routesUiPreviewPopups.dismiss")}
                 </Toast.Close>
               </Toast.Content>
             </Toast.Root>

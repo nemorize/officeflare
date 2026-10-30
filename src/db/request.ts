@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { RequestPerformance } from "../observability/performance";
 
 /** Share one primary-first session across ORM and raw SQL within this request. */
@@ -20,7 +21,7 @@ export function requestDatabase(binding: D1Database, trace: RequestPerformance):
                 const row = result.results[0] ?? null;
                 if (args[0] !== undefined && row) {
                   if (!(String(args[0]) in row))
-                    throw new Error(`D1_COLUMN_NOTFOUND: Column not found`);
+                    throw new Error(t("dbRequest.d1ColumnNotfoundColumnNotFound"));
                   return row[String(args[0])];
                 }
                 return row;

@@ -1,18 +1,19 @@
+import { t } from "../../shared/i18n/index.ts";
 export const driveSearchTypes = [
-  { value: "", label: "All types" },
-  { value: "folder", label: "Folders" },
-  { value: "file", label: "Files" },
-  { value: "application/pdf", label: "PDFs" },
-  { value: "image/*", label: "Images" },
-  { value: "video/*", label: "Videos" },
-  { value: "audio/*", label: "Audio" },
-  { value: "text/*", label: "Text files" },
+  { value: "", label: t("libDriveSearch.allTypes") },
+  { value: "folder", label: t("libDriveSearch.folders") },
+  { value: "file", label: t("libDriveSearch.files") },
+  { value: "application/pdf", label: t("libDriveSearch.pdfs") },
+  { value: "image/*", label: t("libDriveSearch.images") },
+  { value: "video/*", label: t("libDriveSearch.videos") },
+  { value: "audio/*", label: t("libDriveSearch.audio") },
+  { value: "text/*", label: t("libDriveSearch.textFiles") },
 ];
 export const driveSearchScopes = [
-  { value: "all", label: "All accessible files" },
-  { value: "my", label: "My drive" },
-  { value: "shared", label: "Shared with me" },
-  { value: "starred", label: "Starred" },
+  { value: "all", label: t("libDriveSearch.allAccessibleFiles") },
+  { value: "my", label: t("libDriveSearch.myDrive") },
+  { value: "shared", label: t("libDriveSearch.sharedWithMe") },
+  { value: "starred", label: t("libDriveSearch.starred") },
 ];
 export interface DriveSearchFields {
   q: string;

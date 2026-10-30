@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useLocation, useNavigate } from "react-router";
 import type { ReactNode } from "react";
 import { SettingsLayout } from "./settings-layout";
@@ -16,12 +17,14 @@ export function CalendarSettingsLayout({ children }: { children: ReactNode }) {
     <div className="calendar-settings-scroll">
       <div className="account-page settings-page">
         <SettingsLayout
-          title="Calendar settings"
-          description="Manage your calendar preferences, sharing, working hours and connected calendars."
+          title={t("componentsCalendarSettingsLayout.calendarSettings")}
+          description={t(
+            "componentsCalendarSettingsLayout.manageYourCalendarPreferencesSharingWorkingHoursAndConnected",
+          )}
           pages={calendarSettingsPages}
           selected={selected}
           onNavigate={navigate}
-          navigationLabel="Calendar settings sections"
+          navigationLabel={t("componentsCalendarSettingsLayout.calendarSettingsSections")}
         >
           {children}
         </SettingsLayout>

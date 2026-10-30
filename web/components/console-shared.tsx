@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertDialog,
@@ -15,7 +16,7 @@ import "./console-shared.css";
 
 export const adminDate = (timestamp: number | null) =>
   timestamp === null
-    ? "Never"
+    ? t("common.never")
     : new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 export function ConsolePageHeader({
   title,
@@ -95,7 +96,7 @@ export function ResourceState({
   loading,
   error,
   kind = "section",
-  label = "Loading…",
+  label = t("common.loading"),
   rows = 3,
 }: {
   loading: boolean;
@@ -165,7 +166,7 @@ export function Confirm({
         {children}
         <div className="account-actions">
           <Button disabled={busy} onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant={destructive ? "danger" : "primary"}
@@ -174,7 +175,7 @@ export function Confirm({
               void confirm();
             }}
           >
-            {busy ? "Saving…" : label}
+            {busy ? t("common.saving") : label}
           </Button>
         </div>
       </AlertDialogPopup>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useRef, useState, type FormEvent } from "react";
 import {
   Button,
@@ -53,7 +54,7 @@ export function SecurityPage() {
 
   async function change(grant: Grant) {
     if (grant.expires_at * 1000 <= Date.now())
-      throw new Error("Verification expired. Enter your current password and try again.");
+      throw new Error(t("routesSecurity.verificationExpiredEnterYourCurrentPasswordAndTryAgain"));
     const tokens = await api<Session>("/api/me/password", {
       method: "PUT",
       token: grant.reauthentication_token,
@@ -66,7 +67,7 @@ export function SecurityPage() {
     setChallenge(null);
     setCode("");
     setDialogError("");
-    notify.success("Your password has been changed. Other sessions have been signed out.");
+    notify.success(t("routesSecurity.yourPasswordHasBeenChangedOtherSessionsHaveBeen"));
     await reload().catch(() => {});
   }
 
@@ -77,7 +78,7 @@ export function SecurityPage() {
     try {
       validatePassword(password, confirmation);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Check your password.");
+      setError(failure instanceof Error ? failure.message : t("routesSecurity.checkYourPassword"));
       return;
     }
     inFlight.current = true;
@@ -98,7 +99,7 @@ export function SecurityPage() {
       } else await change(result);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 401)
-        setError("Check your current password and try again.");
+        setError(t("routesSecurity.checkYourCurrentPasswordAndTryAgain"));
       else
         notify.error(
           failure instanceof SessionStorageError ? failure.message : errorMessage(failure),
@@ -114,7 +115,7 @@ export function SecurityPage() {
     if (!challenge || inFlight.current) return;
     if (challenge.expires_at * 1000 <= Date.now()) {
       cancelVerification();
-      setError("Verification expired. Enter your current password and try again.");
+      setError(t("routesSecurity.verificationExpiredEnterYourCurrentPasswordAndTryAgain"));
       return;
     }
     inFlight.current = true;
@@ -129,9 +130,7 @@ export function SecurityPage() {
       await change(grant);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 401)
-        setDialogError(
-          "The code is incorrect or verification has expired. Check the code and try again.",
-        );
+        setDialogError(t("routesSecurity.theCodeIsIncorrectOrVerificationHasExpiredCheck"));
       else
         notify.error(
           failure instanceof SessionStorageError ? failure.message : errorMessage(failure),
@@ -145,33 +144,33 @@ export function SecurityPage() {
   return (
     <section className="account-page">
       <header className="account-page-header">
-        <h1>Security</h1>
-        <p>Keep your account secure.</p>
+        <h1>{t("routesSecurity.security")}</h1>
+        <p>{t("routesSecurity.keepYourAccountSecure")}</p>
       </header>
       <section className="account-panel">
         <div className="account-panel-header">
-          <h2>Password</h2>
-          <p>Use 15–128 characters. Changing your password signs out other sessions.</p>
+          <h2>{t("common.password")}</h2>
+          <p>{t("routesSecurity.use15128CharactersChangingYourPasswordSignsOut")}</p>
         </div>
         <Form onSubmit={submit} aria-busy={busy}>
           <Fieldset.Root disabled={busy}>
             <PasswordField
               id="current-password"
-              label="Current password"
+              label={t("routesSecurity.currentPassword")}
               value={currentPassword}
               onChange={setCurrentPassword}
               autoComplete="current-password"
             />
             <PasswordField
               id="account-new-password"
-              label="New password"
+              label={t("routesSecurity.newPassword")}
               value={password}
               onChange={setPassword}
               autoComplete="new-password"
             />
             <PasswordField
               id="account-confirm-password"
-              label="Confirm new password"
+              label={t("routesSecurity.confirmNewPassword")}
               value={confirmation}
               onChange={setConfirmation}
               autoComplete="new-password"
@@ -185,7 +184,7 @@ export function SecurityPage() {
           )}
           <div className="account-actions">
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "Verifying…" : "Change password"}
+              {busy ? t("routesSecurity.verifying") : t("routesSecurity.changePassword")}
             </Button>
           </div>
         </Form>
@@ -198,11 +197,11 @@ export function SecurityPage() {
         }}
       >
         <DialogPopup>
-          <Dialog.Title>Verify your identity</Dialog.Title>
+          <Dialog.Title>{t("routesSecurity.verifyYourIdentity")}</Dialog.Title>
           <Dialog.Description>
             {recovery
-              ? "Enter a saved recovery code to change your password."
-              : "Enter a code from your authenticator app to change your password."}
+              ? t("routesSecurity.enterASavedRecoveryCodeToChangeYourPassword")
+              : t("routesSecurity.enterACodeFromYourAuthenticatorAppToChange")}
           </Dialog.Description>
           <Form onSubmit={verify} className="account-dialog-form" aria-busy={busy}>
             <Fieldset.Root disabled={busy}>
@@ -210,7 +209,7 @@ export function SecurityPage() {
                 <Select.Root
                   items={challenge.methods.map((item, index) => ({
                     value: item.id,
-                    label: item.name || `Authenticator app ${index + 1}`,
+                    label: item.name || t("routesSecurity.authenticatorApp", { value1: index + 1 }),
                   }))}
                   value={method}
                   onValueChange={(value) => {
@@ -219,7 +218,7 @@ export function SecurityPage() {
                     setDialogError("");
                   }}
                 >
-                  <Select.Label>Authentication method</Select.Label>
+                  <Select.Label>{t("routesSecurity.authenticationMethod")}</Select.Label>
                   <Select.Trigger>
                     <Select.Value />
                   </Select.Trigger>
@@ -228,7 +227,8 @@ export function SecurityPage() {
                       {challenge.methods.map((item, index) => (
                         <Select.Item key={item.id} value={item.id}>
                           <Select.ItemText>
-                            {item.name || `Authenticator app ${index + 1}`}
+                            {item.name ||
+                              t("routesSecurity.authenticatorApp", { value1: index + 1 })}
                           </Select.ItemText>
                         </Select.Item>
                       ))}
@@ -238,7 +238,11 @@ export function SecurityPage() {
               )}
               <TextField
                 key={recovery ? "recovery" : "authenticator"}
-                label={recovery ? "Recovery code" : "Authentication code"}
+                label={
+                  recovery
+                    ? t("routesSecurity.recoveryCode")
+                    : t("routesSecurity.authenticationCode")
+                }
                 name="code"
                 autoComplete="one-time-code"
                 inputMode={recovery ? "text" : "numeric"}
@@ -263,15 +267,19 @@ export function SecurityPage() {
                     setDialogError("");
                   }}
                 >
-                  {recovery ? "Use an authenticator code" : "Use a recovery code"}
+                  {recovery
+                    ? t("routesSecurity.useAnAuthenticatorCode")
+                    : t("routesSecurity.useARecoveryCode")}
                 </Button>
               )}
               <div className="account-actions">
                 <Button type="button" onClick={cancelVerification}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" variant="primary">
-                  {busy ? "Verifying…" : "Verify and change password"}
+                  {busy
+                    ? t("routesSecurity.verifying")
+                    : t("routesSecurity.verifyAndChangePassword")}
                 </Button>
               </div>
             </Fieldset.Root>

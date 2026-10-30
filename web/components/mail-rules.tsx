@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { type Condition, type Folder, type MailRule, type RuleAction } from "../lib/mail";
@@ -32,13 +35,19 @@ export function MailRules({
     [deleting, setDeleting] = useState<MailRule | null>(null);
   return (
     <MailSection
-      title={routing ? "Inbound routing rules" : "Inbox rules"}
+      title={
+        routing ? t("componentsMailRules.inboundRoutingRules") : t("componentsMailRules.inboxRules")
+      }
       description={
         routing
-          ? "Conditions must all match. Higher priorities run first. Forward destinations must be verified in Cloudflare."
-          : "Conditions must all match. Rules run from highest to lowest priority and are shared by the mailbox."
+          ? t("componentsMailRules.conditionsMustAllMatchHigherPrioritiesRunFirstForward")
+          : t("componentsMailRules.conditionsMustAllMatchRulesRunFromHighestTo")
       }
-      action={canManage && <Button onClick={() => setEditing("new")}>Add rule</Button>}
+      action={
+        canManage && (
+          <Button onClick={() => setEditing("new")}>{t("componentsMailRules.addRule")}</Button>
+        )
+      }
     >
       <MailState
         loading={resource.loading && !resource.data}
@@ -46,7 +55,7 @@ export function MailRules({
         retry={resource.reload}
       />
       {!resource.loading && !resource.data?.rules.length && (
-        <p className="mail-hint">No rules configured.</p>
+        <p className="mail-hint">{t("componentsMailRules.noRulesConfigured")}</p>
       )}
       <div className="mail-record-list">
         {resource.data?.rules.map((rule) => (
@@ -54,19 +63,26 @@ export function MailRules({
             <div>
               <strong>{rule.name}</strong>
               <p>
-                <span className="mail-badge">{rule.enabled ? "Enabled" : "Disabled"}</span> Priority{" "}
-                {rule.priority}
-                {routing && ` · ${rule.action}`}
+                <span className="mail-badge">
+                  {rule.enabled ? t("common.enabled") : t("common.disabled")}
+                </span>
+                <LocalizedMessage
+                  id="componentsMailRules.priority"
+                  values={{
+                    priority: rule.priority,
+                    value2: routing && ` · ${enumLabel(rule.action)}`,
+                  }}
+                />
               </p>
               <RuleSummary rule={rule} folders={folders} />
             </div>
             {canManage && (
               <div className="mail-actions">
                 <Button size="sm" onClick={() => setEditing(rule)}>
-                  Edit
+                  {t("common.edit")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setDeleting(rule)}>
-                  Delete
+                  {t("common.delete")}
                 </Button>
               </div>
             )}
@@ -86,9 +102,11 @@ export function MailRules({
       )}
       <Confirm
         open={!!deleting}
-        title="Delete rule?"
-        description={`“${deleting?.name ?? ""}” will stop applying to incoming mail.`}
-        label="Delete rule"
+        title={t("componentsMailRules.deleteRule")}
+        description={t("componentsMailRules.willStopApplyingToIncomingMail", {
+          value1: deleting?.name ?? "",
+        })}
+        label={t("componentsMailRules.deleteRule2")}
         destructive
         onClose={() => setDeleting(null)}
         onConfirm={async () => {
@@ -109,12 +127,12 @@ function RuleSummary({ rule, folders }: { rule: MailRule; folders: Folder[] }) {
           .map((condition) => `${condition.field} ${condition.operator} “${condition.value}”`)
           .join(" · ")}
         {actions.length
-          ? ` → ${actions.map((action) => (action.type === "move" ? `Move to ${folders.find((folder) => folder.id === action.folder_id)?.name ?? action.folder_id}` : action.type)).join(", ")}`
+          ? ` → ${actions.map((action) => (action.type === "move" ? t("componentsMailRules.moveTo", { value1: folders.find((folder) => folder.id === action.folder_id)?.name ?? action.folder_id ?? t("componentsMailRules.folder") }) : action.type)).join(", ")}`
           : ""}
       </p>
     );
   } catch {
-    return <p className="mail-hint">Unable to display rule details.</p>;
+    return <p className="mail-hint">{t("componentsMailRules.unableToDisplayRuleDetails")}</p>;
   }
 }
 function RuleEditor({
@@ -156,11 +174,11 @@ function RuleEditor({
   return (
     <MailModal
       open
-      title={existing ? "Edit rule" : "New rule"}
+      title={existing ? t("componentsMailRules.editRule") : t("componentsMailRules.newRule")}
       description={
         routing
-          ? "Route matching mail before it reaches a mailbox."
-          : "Apply actions to incoming messages that match every condition."
+          ? t("componentsMailRules.routeMatchingMailBeforeItReachesAMailbox")
+          : t("componentsMailRules.applyActionsToIncomingMessagesThatMatchEveryCondition")
       }
       onClose={onClose}
       busy={action.busy}
@@ -200,14 +218,14 @@ function RuleEditor({
         <MailFieldset disabled={action.busy}>
           <div className="mail-form-grid">
             <MailInput
-              label="Rule name"
+              label={t("componentsMailRules.ruleName")}
               value={name}
               maxLength={100}
               required
               onChange={(event) => setName(event.target.value)}
             />
             <MailInput
-              label="Priority"
+              label={t("componentsMailRules.priority2")}
               type="number"
               min={-1000}
               max={1000}
@@ -217,13 +235,13 @@ function RuleEditor({
             />
           </div>
           <Check checked={enabled} onChange={setEnabled}>
-            Enable rule
+            {t("componentsMailRules.enableRule")}
           </Check>
-          <h3>When all of these match</h3>
+          <h3>{t("componentsMailRules.whenAllOfTheseMatch")}</h3>
           <div className="mail-rule-conditions">
             {conditions.map((condition, index) => (
               <div className="mail-rule-row" key={index}>
-                <MailField label={`Field ${index + 1}`}>
+                <MailField label={t("componentsMailRules.field", { value1: index + 1 })}>
                   <MailSelect
                     value={condition.field}
                     onValueChange={(nextValue) => updateCondition(index, { field: nextValue })}
@@ -235,17 +253,17 @@ function RuleEditor({
                         value: field,
                         label:
                           field === "from"
-                            ? "Sender"
+                            ? t("componentsMailRules.sender")
                             : field === "to"
-                              ? "Recipient"
+                              ? t("componentsMailRules.recipient")
                               : field === "subject"
-                                ? "Subject"
-                                : "Body",
+                                ? t("componentsMailRules.subject")
+                                : t("componentsMailRules.body"),
                       })) || []),
                     ]}
                   />
                 </MailField>
-                <MailField label="Match">
+                <MailField label={t("componentsMailRules.match")}>
                   <MailSelect
                     value={condition.operator}
                     onValueChange={(nextValue) => updateCondition(index, { operator: nextValue })}
@@ -254,16 +272,16 @@ function RuleEditor({
                         value: operator,
                         label:
                           operator === "prefix"
-                            ? "Starts with"
+                            ? t("componentsMailRules.startsWith")
                             : operator === "suffix"
-                              ? "Ends with"
+                              ? t("componentsMailRules.endsWith")
                               : operator,
                       })) || []),
                     ]}
                   />
                 </MailField>
                 <MailInput
-                  label="Value"
+                  label={t("componentsMailRules.value")}
                   value={condition.value}
                   required
                   maxLength={1000}
@@ -272,11 +290,11 @@ function RuleEditor({
                 <Button
                   size="icon"
                   variant="ghost"
-                  aria-label={`Remove condition ${index + 1}`}
+                  aria-label={t("componentsMailRules.removeCondition", { value1: index + 1 })}
                   disabled={conditions.length === 1}
                   onClick={() => setConditions(conditions.filter((_, i) => i !== index))}
                 >
-                  ×
+                  {t("componentsMailRules.text")}
                 </Button>
               </div>
             ))}
@@ -288,25 +306,25 @@ function RuleEditor({
               setConditions([...conditions, { field: "subject", operator: "contains", value: "" }])
             }
           >
-            Add condition
+            {t("componentsMailRules.addCondition")}
           </Button>
-          <h3>Then</h3>
+          <h3>{t("componentsMailRules.then")}</h3>
           {routing ? (
             <>
-              <MailField label="Routing action">
+              <MailField label={t("componentsMailRules.routingAction")}>
                 <MailSelect
                   value={routingAction}
                   onValueChange={(nextValue) => setRoutingAction(nextValue)}
                   options={[
-                    { value: "store", label: "Store in mailbox" },
-                    { value: "forward", label: "Forward to verified address" },
-                    { value: "reject", label: "Reject message" },
+                    { value: "store", label: t("componentsMailRules.storeInMailbox") },
+                    { value: "forward", label: t("componentsMailRules.forwardToVerifiedAddress") },
+                    { value: "reject", label: t("componentsMailRules.rejectMessage") },
                   ]}
                 />
               </MailField>
               {routingAction === "forward" && (
                 <MailInput
-                  label="Verified forwarding address"
+                  label={t("componentsMailRules.verifiedForwardingAddress")}
                   type="email"
                   value={forwardTo}
                   required
@@ -315,7 +333,7 @@ function RuleEditor({
               )}
               {routingAction === "reject" && (
                 <MailInput
-                  label="Rejection reason (optional)"
+                  label={t("componentsMailRules.rejectionReasonOptional")}
                   maxLength={200}
                   value={rejectReason}
                   onChange={(event) => setRejectReason(event.target.value)}
@@ -326,7 +344,7 @@ function RuleEditor({
             <>
               {actions.map((value, index) => (
                 <div className="mail-rule-action" key={index}>
-                  <MailField label={`Action ${index + 1}`}>
+                  <MailField label={t("componentsMailRules.action", { value1: index + 1 })}>
                     <MailSelect
                       value={value.type}
                       onValueChange={(nextValue) =>
@@ -342,15 +360,15 @@ function RuleEditor({
                         )
                       }
                       options={[
-                        { value: "move", label: "Move to folder" },
-                        { value: "star", label: "Star" },
-                        { value: "read", label: "Mark read" },
-                        { value: "spam", label: "Mark spam" },
+                        { value: "move", label: t("componentsMailRules.moveToFolder") },
+                        { value: "star", label: t("componentsMailRules.star") },
+                        { value: "read", label: t("componentsMailRules.markRead") },
+                        { value: "spam", label: t("componentsMailRules.markSpam") },
                       ]}
                     />
                   </MailField>
                   {value.type === "move" && (
-                    <MailField label="Folder">
+                    <MailField label={t("componentsMailRules.folder")}>
                       <MailSelect
                         value={value.folder_id}
                         onValueChange={(nextValue) =>
@@ -373,11 +391,11 @@ function RuleEditor({
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Remove action ${index + 1}`}
+                    aria-label={t("componentsMailRules.removeAction", { value1: index + 1 })}
                     disabled={actions.length === 1}
                     onClick={() => setActions(actions.filter((_, i) => i !== index))}
                   >
-                    ×
+                    {t("componentsMailRules.text")}
                   </Button>
                 </div>
               ))}
@@ -386,7 +404,7 @@ function RuleEditor({
                 disabled={actions.length >= 10}
                 onClick={() => setActions([...actions, { type: "read" }])}
               >
-                Add action
+                {t("componentsMailRules.addAction")}
               </Button>
             </>
           )}
@@ -394,10 +412,10 @@ function RuleEditor({
         <MailNotice error={action.error} />
         <div className="mail-actions">
           <Button onClick={onClose} disabled={action.busy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={action.busy}>
-            {action.busy ? "Saving…" : "Save rule"}
+            {action.busy ? t("common.saving") : t("componentsMailRules.saveRule")}
           </Button>
         </div>
       </MailForm>

@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Button, CheckboxControl, Icon, Input, SelectControl, useNotifications } from "./ui";
@@ -62,9 +65,9 @@ export function CalendarShareLinks({
   const copy = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      notify.success("Link copied.");
+      notify.success(t("componentsCalendarCollaboration.linkCopied"));
     } catch {
-      notify.info("Select and copy the link below.");
+      notify.info(t("componentsCalendarCollaboration.selectAndCopyTheLinkBelow"));
     }
   };
   const create = () =>
@@ -88,7 +91,7 @@ export function CalendarShareLinks({
         setUrls((old) => ({ ...old, [result.link.id]: result.link.url }));
         setPassword("");
         setRevision((old) => old + 1);
-        notify.success("Share link created.");
+        notify.success(t("componentsCalendarCollaboration.shareLinkCreated"));
       } catch (failure) {
         if (failure instanceof ApiError && failure.status < 500) operation.current.complete();
         throw failure;
@@ -97,10 +100,20 @@ export function CalendarShareLinks({
   return (
     <section className="calendar-link-settings">
       <p>
-        Anyone with a link can view the fields you choose.
-        {event && " A registration link also lets external guests join."}
+        <LocalizedMessage
+          id="componentsCalendarCollaboration.anyoneWithALinkCanViewTheFieldsYou"
+          values={{
+            value1:
+              event &&
+              t("componentsCalendarCollaboration.aRegistrationLinkAlsoLetsExternalGuestsJoin"),
+          }}
+        />
       </p>
-      {!event && <p className="calendar-field-hint">Private events appear as busy.</p>}
+      {!event && (
+        <p className="calendar-field-hint">
+          {t("componentsCalendarCollaboration.privateEventsAppearAsBusy")}
+        </p>
+      )}
       {calendar.can("sharing.external") && (
         <form
           className="calendar-settings-fields"
@@ -111,20 +124,20 @@ export function CalendarShareLinks({
         >
           <div className="calendar-two-fields">
             {event && (
-              <CalendarField label="Link type">
+              <CalendarField label={t("componentsCalendarCollaboration.linkType")}>
                 <SelectControl
-                  aria-label="Link type"
+                  aria-label={t("componentsCalendarCollaboration.linkType")}
                   value={mode}
                   onValueChange={setMode}
                   options={[
-                    { value: "view", label: "View event" },
-                    { value: "join", label: "View & register" },
+                    { value: "view", label: t("componentsCalendarCollaboration.viewEvent") },
+                    { value: "join", label: t("componentsCalendarCollaboration.viewRegister") },
                   ]}
                 />
               </CalendarField>
             )}
             <CalendarField
-              label="Expires on"
+              label={t("componentsCalendarCollaboration.expiresOn")}
               type="date"
               value={expiry}
               min={todayIn(calendar.zone)}
@@ -133,23 +146,23 @@ export function CalendarShareLinks({
             />
           </div>
           <CalendarField
-            label="Password (optional)"
+            label={t("componentsCalendarCollaboration.passwordOptional")}
             type="password"
             autoComplete="new-password"
             value={password}
             minLength={8}
             maxLength={128}
-            placeholder="At least 8 characters"
+            placeholder={t("componentsCalendarCollaboration.atLeast8Characters")}
             onChange={(event) => setPassword(event.target.value)}
           />
           <fieldset className="calendar-shared-fields">
-            <legend>Visible information</legend>
+            <legend>{t("componentsCalendarCollaboration.visibleInformation")}</legend>
             {[
-              ["title", "Title"],
-              ["location", "Location"],
-              ["description_html", "Description"],
-              ["organizer", "Organizer"],
-              ["attachments", "Attachments"],
+              ["title", t("componentsCalendarCollaboration.title")],
+              ["location", t("componentsCalendarCollaboration.location")],
+              ["description_html", t("componentsCalendarCollaboration.description")],
+              ["organizer", t("componentsCalendarCollaboration.organizer")],
+              ["attachments", t("componentsCalendarCollaboration.attachments")],
             ].map(([value, label]) => (
               <label key={value}>
                 <CheckboxControl
@@ -166,12 +179,14 @@ export function CalendarShareLinks({
           </fieldset>
           <label className="calendar-check-label">
             <CheckboxControl checked={ics} onCheckedChange={setIcs} />
-            Allow calendar file (.ics) downloads
+            {t("componentsCalendarCollaboration.allowCalendarFileIcsDownloads")}
           </label>
           <div>
             <Button type="submit" disabled={action.busy || !fields.length}>
               <Icon name="link" />
-              {action.busy ? "Creating…" : "Create share link"}
+              {action.busy
+                ? t("common.creating")
+                : t("componentsCalendarCollaboration.createShareLink")}
             </Button>
           </div>
         </form>
@@ -185,13 +200,22 @@ export function CalendarShareLinks({
           >
             <div>
               <Icon name={link.password_protected ? "shield" : "link"} />
-              <strong>{link.mode === "join" ? "Registration link" : "View link"}</strong>
+              <strong>
+                {link.mode === "join"
+                  ? t("componentsCalendarCollaboration.registrationLink")
+                  : t("componentsCalendarCollaboration.viewLink")}
+              </strong>
               <span>
                 {link.revoked_at
-                  ? "Revoked"
+                  ? t("common.revoked")
                   : link.expires_at * 1000 < Date.now()
-                    ? "Expired"
-                    : `Expires ${dateLabel(new Date(link.expires_at * 1000).toISOString().slice(0, 10), { month: "short", day: "numeric" })}`}
+                    ? t("common.expired")
+                    : t("componentsCalendarCollaboration.expires", {
+                        dateLabel: dateLabel(
+                          new Date(link.expires_at * 1000).toISOString().slice(0, 10),
+                          { month: "short", day: "numeric" },
+                        ),
+                      })}
               </span>
             </div>
             {!link.revoked_at && (
@@ -205,7 +229,7 @@ export function CalendarShareLinks({
                       }}
                     >
                       <Icon name="copy" />
-                      Copy link
+                      {t("componentsCalendarCollaboration.copyLink")}
                     </Button>
                   ) : (
                     calendar.can("sharing.external") && (
@@ -227,7 +251,9 @@ export function CalendarShareLinks({
                               setUrls((old) => ({ ...old, [link.id]: result.link.url }));
                               setRevision((old) => old + 1);
                               notify.success(
-                                "Link replaced. The previous link has stopped working.",
+                                t(
+                                  "componentsCalendarCollaboration.linkReplacedThePreviousLinkHasStoppedWorking",
+                                ),
                               );
                             } catch (failure) {
                               if (failure instanceof ApiError && failure.status < 500)
@@ -237,7 +263,7 @@ export function CalendarShareLinks({
                           });
                         }}
                       >
-                        Replace & get link
+                        {t("componentsCalendarCollaboration.replaceGetLink")}
                       </Button>
                     )
                   )}
@@ -256,16 +282,16 @@ export function CalendarShareLinks({
                           return next;
                         });
                         setRevision((old) => old + 1);
-                        notify.success("Share link revoked.");
+                        notify.success(t("componentsCalendarCollaboration.shareLinkRevoked"));
                       });
                     }}
                   >
-                    Revoke
+                    {t("componentsCalendarCollaboration.revoke")}
                   </Button>
                 </div>
                 {urls[link.id] && (
                   <Input
-                    aria-label="Share link URL"
+                    aria-label={t("componentsCalendarCollaboration.shareLinkUrl")}
                     readOnly
                     value={urls[link.id]}
                     onFocus={(event) => event.currentTarget.select()}
@@ -277,8 +303,7 @@ export function CalendarShareLinks({
         ))}
       </div>
       <p className="calendar-field-hint">
-        Save a new link when you create it. To retrieve an existing link, replace it; the previous
-        URL will stop working.
+        {t("componentsCalendarCollaboration.saveANewLinkWhenYouCreateItTo")}
       </p>
       <CalendarNotice error={action.error || links.error} />
     </section>
@@ -293,13 +318,13 @@ function CalendarDrivePicker({
   onClose: () => void;
 }) {
   const [path, setPath] = useState<{ id: string; name: string }[]>([
-    { id: "root", name: "My drive" },
+    { id: "root", name: t("componentsCalendarCollaboration.myDrive") },
   ]);
   const parent = path.at(-1)!.id;
   return (
     <CalendarModal
-      title="Attach from Drive"
-      description="Guests need permission to open the selected file."
+      title={t("componentsCalendarCollaboration.attachFromDrive")}
+      description={t("componentsCalendarCollaboration.guestsNeedPermissionToOpenTheSelectedFile")}
       onClose={onClose}
       className="calendar-drive-picker"
     >
@@ -392,7 +417,9 @@ function DriveFolderPage({
   return (
     <>
       <div className="calendar-drive-files">
-        {!data && !error && <LoadingSkeleton label="Loading files…" />}
+        {!data && !error && (
+          <LoadingSkeleton label={t("componentsCalendarCollaboration.loadingFiles")} />
+        )}
         {data?.items.map((item) => (
           <button
             type="button"
@@ -404,12 +431,16 @@ function DriveFolderPage({
             <Icon name={item.kind === "folder" ? "chevron" : "plus"} />
           </button>
         ))}
-        {data && !data.items.length && <p>This folder is empty.</p>}
+        {data && !data.items.length && (
+          <p>{t("componentsCalendarCollaboration.thisFolderIsEmpty")}</p>
+        )}
       </div>
       <CalendarNotice error={error} />
       <div className="calendar-dialog-actions">
-        {onPrevious && <Button onClick={onPrevious}>Previous</Button>}
-        {data?.next_cursor && <Button onClick={() => onNext(data.next_cursor!)}>Next</Button>}
+        {onPrevious && <Button onClick={onPrevious}>{t("common.previous")}</Button>}
+        {data?.next_cursor && (
+          <Button onClick={() => onNext(data.next_cursor!)}>{t("common.next")}</Button>
+        )}
       </div>
     </>
   );
@@ -440,8 +471,9 @@ function CalendarGuests({
   return (
     <section className="calendar-guests">
       <p>
-        Workspace members receive a notification. External guests receive an email with a calendar
-        file when the organizer has a sendable personal mailbox.
+        {t(
+          "componentsCalendarCollaboration.workspaceMembersReceiveANotificationExternalGuestsReceiveAn",
+        )}
       </p>
       <div className="calendar-guest-list">
         {resource.data?.attendees.map((attendee) => (
@@ -460,13 +492,13 @@ function CalendarGuests({
               <strong>{attendee.display_name || attendee.email_address}</strong>
               <small>{attendee.email_address}</small>
             </div>
-            <span className="calendar-small-tag">
-              {attendee.response_status.replaceAll("_", " ")}
-            </span>
+            <span className="calendar-small-tag">{enumLabel(attendee.response_status)}</span>
             {canInvite && (
               <CalendarIconButton
                 icon="close"
-                label={`Remove ${attendee.email_address}`}
+                label={t("componentsCalendarCollaboration.remove", {
+                  email_address: attendee.email_address,
+                })}
                 disabled={action.busy}
                 onClick={() => {
                   void action.run(async () => {
@@ -483,7 +515,7 @@ function CalendarGuests({
         ))}
       </div>
       {resource.data && !resource.data.attendees.length && (
-        <p className="calendar-field-hint">No guests yet.</p>
+        <p className="calendar-field-hint">{t("componentsCalendarCollaboration.noGuestsYet")}</p>
       )}
       {canInvite && (
         <form
@@ -505,7 +537,7 @@ function CalendarGuests({
                 operation.current.complete();
                 setGuests("");
                 reload();
-                notify.success("Guests invited.");
+                notify.success(t("componentsCalendarCollaboration.guestsInvited"));
               } catch (failure) {
                 if (failure instanceof ApiError && failure.status < 500)
                   operation.current.complete();
@@ -514,10 +546,14 @@ function CalendarGuests({
             });
           }}
         >
-          <RecipientField label="Add guests" value={guests} onChange={setGuests} />
+          <RecipientField
+            label={t("componentsCalendarCollaboration.addGuests")}
+            value={guests}
+            onChange={setGuests}
+          />
           <Button type="submit" disabled={action.busy || !guests.trim()}>
             <Icon name="plus" />
-            Invite
+            {t("componentsCalendarCollaboration.invite")}
           </Button>
         </form>
       )}
@@ -574,7 +610,7 @@ function CalendarAttachments({
     });
   return (
     <section className="calendar-attachments">
-      <p>Add a link or an existing Drive file to this event.</p>
+      <p>{t("componentsCalendarCollaboration.addALinkOrAnExistingDriveFileTo")}</p>
       <CalendarAttachmentList
         attachments={resource.data?.attachments ?? []}
         remove={
@@ -602,16 +638,16 @@ function CalendarAttachments({
             }}
           >
             <CalendarField
-              label="Link"
+              label={t("componentsCalendarCollaboration.link")}
               type="url"
               required
-              placeholder="https://…"
+              placeholder={t("componentsCalendarCollaboration.https")}
               value={url}
               maxLength={2048}
               onChange={(event) => setUrl(event.target.value)}
             />
             <CalendarField
-              label="Title (optional)"
+              label={t("componentsCalendarCollaboration.titleOptional")}
               value={title}
               maxLength={255}
               onChange={(event) => setTitle(event.target.value)}
@@ -619,17 +655,19 @@ function CalendarAttachments({
             <div className="calendar-link-actions">
               <Button type="submit" disabled={action.busy || !url}>
                 <Icon name="link" />
-                Add link
+                {t("componentsCalendarCollaboration.addLink")}
               </Button>
               {access.permissions.includes("drive.access") && (
                 <Button disabled={action.busy} onClick={() => setDrive(true)}>
                   <Icon name="drive" />
-                  From Drive
+                  {t("componentsCalendarCollaboration.fromDrive")}
                 </Button>
               )}
             </div>
           </form>
-          <p className="calendar-field-hint">Drive files keep their existing access permissions.</p>
+          <p className="calendar-field-hint">
+            {t("componentsCalendarCollaboration.driveFilesKeepTheirExistingAccessPermissions")}
+          </p>
         </>
       )}
       <CalendarNotice error={action.error || resource.error} />
@@ -659,21 +697,25 @@ export function CalendarAttachmentList({
         <div key={item.id}>
           <Icon name={item.drive_item_id ? "drive" : "link"} />
           {item.unavailable ? (
-            <span>File unavailable</span>
+            <span>{t("componentsCalendarCollaboration.fileUnavailable")}</span>
           ) : item.drive_item_id ? (
-            <Link to={`/drive/items/${item.drive_item_id}`}>{item.title || "Drive file"}</Link>
+            <Link to={`/drive/items/${item.drive_item_id}`}>
+              {item.title || t("componentsCalendarCollaboration.driveFile")}
+            </Link>
           ) : item.url ? (
             <a href={item.url} target="_blank" rel="noopener noreferrer">
               {item.title || item.url}
               <Icon name="external" width="12" height="12" />
             </a>
           ) : (
-            <span>{item.title || "Attachment"}</span>
+            <span>{item.title || t("componentsCalendarCollaboration.attachment")}</span>
           )}
           {remove && (
             <CalendarIconButton
               icon="close"
-              label={`Remove ${item.title || "attachment"}`}
+              label={t("componentsCalendarCollaboration.remove2", {
+                value1: item.title || t("componentsCalendarCollaboration.attachment"),
+              })}
               disabled={busy}
               onClick={() => remove(item)}
             />
@@ -706,18 +748,22 @@ export function CalendarCollaborationDialog({
   return (
     <CalendarModal
       title={event.title}
-      description="Guests, attachments and external sharing."
+      description={t("componentsCalendarCollaboration.guestsAttachmentsAndExternalSharing")}
       onClose={onClose}
       className="calendar-collaboration-modal"
     >
-      <div className="calendar-editor-tabs" role="tablist" aria-label="Event collaboration">
+      <div
+        className="calendar-editor-tabs"
+        role="tablist"
+        aria-label={t("componentsCalendarCollaboration.eventCollaboration")}
+      >
         {[
-          { value: "guests", label: "Guests" },
-          { value: "attachments", label: "Attachments" },
+          { value: "guests", label: t("componentsCalendarCollaboration.guests") },
+          { value: "attachments", label: t("componentsCalendarCollaboration.attachments") },
           ...(manager
             ? [
-                { value: "sharing", label: "Sharing" },
-                { value: "registration", label: "Registration" },
+                { value: "sharing", label: t("componentsCalendarCollaboration.sharing") },
+                { value: "registration", label: t("componentsCalendarCollaboration.registration") },
               ]
             : []),
         ].map((value) => (
@@ -734,19 +780,19 @@ export function CalendarCollaborationDialog({
       {!!master.data?.event.recurrence?.length && event.occurrence_key && (
         <div className="calendar-collaboration-scope">
           <SelectControl
-            aria-label="Manage guests, attachments and links for"
+            aria-label={t("componentsCalendarCollaboration.manageGuestsAttachmentsAndLinksFor")}
             value={occurrence}
             onValueChange={setOccurrence}
             options={[
-              { value: "all", label: "Entire series" },
-              { value: "single", label: "This event only" },
+              { value: "all", label: t("componentsCalendarCollaboration.entireSeries") },
+              { value: "single", label: t("componentsCalendarCollaboration.thisEventOnly") },
             ]}
           />
         </div>
       )}
       {!master.data ? (
         <>
-          <LoadingSkeleton label="Loading event…" />
+          <LoadingSkeleton label={t("componentsCalendarCollaboration.loadingEvent")} />
           <CalendarNotice error={master.error} />
         </>
       ) : (

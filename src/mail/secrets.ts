@@ -1,16 +1,18 @@
+import { t } from "../../shared/i18n/index.ts";
 import { fail } from "./types";
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const decode = (value: string) =>
   Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0));
 async function key(env: Env) {
-  if (!env.MAIL_ENCRYPTION_KEY) fail(503, "MAIL_ENCRYPTION_KEY must be configured for webhooks");
+  if (!env.MAIL_ENCRYPTION_KEY)
+    fail(503, t("mailSecrets.mailEncryptionKeyMustBeConfiguredForWebhooks"));
   let bytes: Uint8Array;
   try {
     bytes = decode(env.MAIL_ENCRYPTION_KEY);
   } catch {
-    fail(503, "Invalid mail encryption key");
+    fail(503, t("mailSecrets.invalidMailEncryptionKey"));
   }
-  if (bytes.length !== 32) fail(503, "Invalid mail encryption key");
+  if (bytes.length !== 32) fail(503, t("mailSecrets.invalidMailEncryptionKey"));
   return crypto.subtle.importKey("raw", bytes as Uint8Array<ArrayBuffer>, "AES-GCM", false, [
     "encrypt",
     "decrypt",

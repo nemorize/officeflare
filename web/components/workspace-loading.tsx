@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Button, OfficeflareMark, Progress } from "./ui";
 
 export function WorkspaceLoading({
@@ -18,7 +19,7 @@ export function WorkspaceLoading({
         <OfficeflareMark className="workspace-loading-symbol" />
         <Progress.Root
           value={null}
-          aria-label="Loading Officeflare"
+          aria-label={t("componentsWorkspaceLoading.loadingOfficeflare")}
           className="workspace-loading-progress"
         >
           <Progress.Track>
@@ -28,7 +29,9 @@ export function WorkspaceLoading({
         {error && (
           <div className="workspace-loading-error" role="alert">
             <p>{error}</p>
-            {onRetry && <Button onClick={onRetry}>Try again</Button>}
+            {onRetry && (
+              <Button onClick={onRetry}>{t("componentsWorkspaceLoading.tryAgain")}</Button>
+            )}
           </div>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAccount } from "./account-context";
 import { useSession } from "../lib/session";
@@ -64,7 +65,7 @@ export function DrivePersonAvatar({
     (own ? account.user?.display_name || account.user?.email_address : null) ||
     person?.display_name ||
     person?.email_address ||
-    "U";
+    t("componentsDriveOwner.u");
   const version = person?.profile_image_version;
   const [photo, setPhoto] = useState<{
     cache: typeof cache;
@@ -106,7 +107,7 @@ export function DriveOwner({ item }: { item: DriveItem }) {
     (own ? account.user?.display_name || account.user?.email_address : null) ||
     item.owner?.display_name ||
     item.owner?.email_address ||
-    "Shared account";
+    t("componentsDriveOwner.sharedAccount");
   const person = item.owner ?? { id: item.owner_user_id, display_name: name, email_address: "" };
   return (
     <>

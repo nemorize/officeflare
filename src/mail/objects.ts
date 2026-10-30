@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { fail } from "./types";
 // Hono's body-limit stream no longer carries workerd's internal known-length marker.
 export async function putStream(
@@ -8,7 +9,7 @@ export async function putStream(
   length?: number,
   maximum = 26 * 1024 * 1024,
 ) {
-  if (length !== undefined && length > maximum) fail(413, "Mail object is too large");
+  if (length !== undefined && length > maximum) fail(413, t("mailObjects.mailObjectIsTooLarge"));
   if (length !== undefined && Number.isSafeInteger(length) && length > 0) {
     const fixed = new FixedLengthStream(length);
     const results = await Promise.allSettled([
@@ -29,7 +30,7 @@ export async function putStream(
     total += result.value.byteLength;
     if (total > maximum) {
       await reader.cancel();
-      fail(413, "Mail object is too large");
+      fail(413, t("mailObjects.mailObjectIsTooLarge"));
     }
     chunks.push(result.value);
   }

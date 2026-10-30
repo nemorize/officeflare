@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
 import {
@@ -27,21 +28,36 @@ export const driveAdminPermissions = Object.keys(permissionCatalog).filter((key)
   key.startsWith("admin.drive."),
 );
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [
-  { path: "/console/users", name: "Users", icon: "users", permissions: ["admin.users.read"] },
-  { path: "/console/roles", name: "Roles", icon: "shield", permissions: ["admin.roles.read"] },
+  {
+    path: "/console/users",
+    name: t("libConsole.users"),
+    icon: "users",
+    permissions: ["admin.users.read"],
+  },
+  {
+    path: "/console/roles",
+    name: t("libConsole.roles"),
+    icon: "shield",
+    permissions: ["admin.roles.read"],
+  },
   {
     path: "/console/mail/domains",
-    name: "Mail domains",
+    name: t("libConsole.mailDomains"),
     icon: "mail",
     permissions: ["admin.mail.domains.read"],
   },
   {
     path: "/console/mail/mailboxes",
-    name: "Shared mailboxes",
+    name: t("libConsole.sharedMailboxes"),
     icon: "inbox",
     permissions: ["admin.mail.mailboxes.read"],
   },
-  { path: "/console/drive", name: "Drive", icon: "drive", permissions: driveAdminPermissions },
+  {
+    path: "/console/drive",
+    name: t("libConsole.drive"),
+    icon: "drive",
+    permissions: driveAdminPermissions,
+  },
 ];
 export const consoleMenu = (permissions: readonly string[]) =>
   permissions.includes("console.access")
@@ -55,21 +71,21 @@ export const canGrant = (permissions: readonly string[], grants: readonly string
 export const managedPermissions = (permissions: readonly string[]) =>
   permissions.filter(isPermission);
 export const roleTemplates = [
-  { key: "mail-user", label: "Mail user", permissions: ["mail.access"] },
-  { key: "drive-user", label: "Drive user", permissions: [...driveUserPermissions] },
+  { key: "mail-user", label: t("libConsole.mailUser"), permissions: ["mail.access"] },
+  { key: "drive-user", label: t("libConsole.driveUser"), permissions: [...driveUserPermissions] },
   {
     key: "drive-reader",
-    label: "Drive read-only user",
+    label: t("libConsole.driveReadOnlyUser"),
     permissions: ["drive.access", "drive.files.download"],
   },
   {
     key: "drive-manager",
-    label: "Drive manager",
+    label: t("libConsole.driveManager"),
     permissions: permissionClosure(driveAdminPermissions),
   },
   {
     key: "drive-auditor",
-    label: "Drive auditor",
+    label: t("libConsole.driveAuditor"),
     permissions: permissionClosure([
       "admin.drive.accounts.read",
       "admin.drive.items.read",
@@ -79,17 +95,17 @@ export const roleTemplates = [
   },
   {
     key: "account-viewer",
-    label: "Account viewer",
+    label: t("libConsole.accountViewer"),
     permissions: permissionClosure(["admin.users.read"]),
   },
   {
     key: "account-support",
-    label: "Account support",
+    label: t("libConsole.accountSupport"),
     permissions: permissionClosure(["mail.access", "admin.users.credentials.reset"]),
   },
   {
     key: "access-manager",
-    label: "Access manager",
+    label: t("libConsole.accessManager"),
     permissions: permissionClosure([
       "admin.roles.create",
       "admin.roles.update",
@@ -158,23 +174,31 @@ export function userChanges(
     name = values.name.trim() || null,
     email = values.email.trim().toLowerCase();
   if ([...(name ?? "")].length > 200)
-    throw new Error("Display name must contain at most 200 characters.");
+    throw new Error(t("libConsole.displayNameMustContainAtMost200Characters"));
   if (name !== user.display_name) {
-    require("admin.users.profile.update", "You do not have permission to update user profiles.");
+    require("admin.users.profile.update", t(
+      "libConsole.youDoNotHavePermissionToUpdateUserProfiles",
+    ));
     changes.display_name = name;
   }
   if (email !== user.email_address) {
-    require("admin.users.email.update", "You do not have permission to change email addresses.");
+    require("admin.users.email.update", t(
+      "libConsole.youDoNotHavePermissionToChangeEmailAddresses",
+    ));
     changes.email_address = email;
   }
   if (values.disabled !== (user.disabled_at !== null)) {
-    require("admin.users.status.update", "You do not have permission to change account status.");
+    require("admin.users.status.update", t(
+      "libConsole.youDoNotHavePermissionToChangeAccountStatus",
+    ));
     if (values.disabled && user.id === currentUserId)
-      throw new Error("You cannot disable your own account.");
+      throw new Error(t("libConsole.youCannotDisableYourOwnAccount"));
     changes.disabled = values.disabled;
   }
   if (values.passwordReset !== user.password_reset_required) {
-    require("admin.users.credentials.reset", "You do not have permission to reset user credentials.");
+    require("admin.users.credentials.reset", t(
+      "libConsole.youDoNotHavePermissionToResetUserCredentials",
+    ));
     changes.password_reset_required = values.passwordReset;
   }
   return changes;
@@ -186,18 +210,19 @@ export function rolePayload(
   existing?: Role,
 ) {
   const label = values.label.trim();
-  if (!label || label.length > 100) throw new Error("Enter a role name with up to 100 characters.");
+  if (!label || label.length > 100)
+    throw new Error(t("libConsole.enterARoleNameWithUpTo100Characters"));
   if (values.description.length > 1000)
-    throw new Error("Description must contain at most 1000 characters.");
+    throw new Error(t("libConsole.descriptionMustContainAtMost1000Characters"));
   if (!existing && !/^[a-z][a-z0-9_-]{0,63}$/.test(values.key))
-    throw new Error(
-      "Use a lowercase role key starting with a letter, with up to 64 letters, numbers, hyphens or underscores.",
-    );
-  if (existing?.is_system) throw new Error("System roles cannot be modified.");
-  if (values.permissions.some((key) => !isPermission(key))) throw new Error("Unknown permission.");
+    throw new Error(t("libConsole.useALowercaseRoleKeyStartingWithALetter"));
+  if (existing?.is_system) throw new Error(t("libConsole.systemRolesCannotBeModified"));
+  if (values.permissions.some((key) => !isPermission(key)))
+    throw new Error(t("libConsole.unknownPermission"));
   const permissions = [...new Set(values.permissions)],
     missing = missingPrerequisites(permissions);
-  if (missing.length) throw new Error(`Missing required permissions: ${missing.join(", ")}`);
+  if (missing.length)
+    throw new Error(t("libConsole.missingRequiredPermissions", { join: missing.join(", ") }));
   return {
     label,
     description: values.description.trim() || null,
@@ -219,7 +244,7 @@ export async function allRoles(
     for (const role of result.roles) roles.set(role.id, role);
     cursor = result.next_cursor;
     if (cursor && cursors.has(cursor))
-      throw new Error("Unable to load all roles. Refresh and try again.");
+      throw new Error(t("libConsole.unableToLoadAllRolesRefreshAndTryAgain"));
     if (cursor) cursors.add(cursor);
   } while (cursor);
   return [...roles.values()];

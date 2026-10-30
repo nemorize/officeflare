@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAccess } from "./console-access";
@@ -44,7 +46,7 @@ export function MailAddressField({
   onDomainChange,
   onLocalChange,
   disabled,
-  label = "Email address",
+  label = t("componentsUserMail.emailAddress"),
 }: {
   domains: UserMailDomain[];
   domainId: string;
@@ -60,7 +62,7 @@ export function MailAddressField({
       <div className="mail-form-grid">
         <MailInput
           label={label}
-          placeholder="name"
+          placeholder={t("componentsUserMail.name")}
           value={local}
           required
           maxLength={64}
@@ -68,17 +70,17 @@ export function MailAddressField({
           disabled={disabled}
           onChange={(event) => onLocalChange(event.target.value)}
         />
-        <MailField label="Domain">
+        <MailField label={t("componentsUserMail.domain")}>
           <MailSelect
             required
             value={domainId}
             disabled={disabled}
             onValueChange={onDomainChange}
             options={[
-              { value: "", label: "Select domain" },
+              { value: "", label: t("componentsUserMail.selectDomain") },
               ...domains.map((entry) => ({
                 value: entry.id,
-                label: `@${entry.name}${entry.is_default ? " · Default" : ""}`,
+                label: `@${entry.name}${entry.is_default ? t("componentsUserMail.default") : ""}`,
               })),
             ]}
           />
@@ -86,7 +88,9 @@ export function MailAddressField({
       </div>
       {local && domain && (
         <p className="mail-hint">
-          {local.trim()}@{domain.name}
+          {local.trim()}
+          {t("componentsUserMail.text")}
+          {domain.name}
         </p>
       )}
     </div>
@@ -96,13 +100,17 @@ export function DomainSetupLink() {
   const permissions = useAccess().permissions;
   return (
     <p className="mail-hint">
-      Register a mail domain to assign workspace addresses.
-      {permissions.includes("admin.mail.domains.manage") && (
-        <>
-          {" "}
-          <Link to="/console/mail/domains/new">Register domain →</Link>
-        </>
-      )}
+      <LocalizedMessage
+        id="componentsUserMail.registerAMailDomainToAssignWorkspaceAddresses"
+        values={{
+          value1: permissions.includes("admin.mail.domains.manage") && (
+            <>
+              {" "}
+              <Link to="/console/mail/domains/new">{t("componentsUserMail.registerDomain")}</Link>
+            </>
+          ),
+        }}
+      />
     </p>
   );
 }
@@ -141,8 +149,8 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
   };
   return (
     <MailSection
-      title="Personal mail"
-      description="This user's address, mailbox and aliases are managed together."
+      title={t("componentsUserMail.personalMail")}
+      description={t("componentsUserMail.thisUserSAddressMailboxAndAliasesAreManaged")}
     >
       <MailState
         loading={(resource.loading && !mail) || (domains.loading && !domains.data)}
@@ -158,18 +166,20 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
             <div>
               <strong>
                 {primary?.email_address ??
-                  (mail.mail_enabled ? "Mail address not set" : "Mail is not enabled")}
+                  (mail.mail_enabled
+                    ? t("componentsUserMail.mailAddressNotSet")
+                    : t("componentsUserMail.mailIsNotEnabled"))}
               </strong>
               <p className="mail-hint">
                 {!mail.mail_enabled
                   ? box
-                    ? "Mail is not enabled. Stored mail is retained."
-                    : "Enable personal mail to set this user’s address and mailbox."
+                    ? t("componentsUserMail.mailIsNotEnabledStoredMailIsRetained")
+                    : t("componentsUserMail.enablePersonalMailToSetThisUserSAddress")
                   : box
-                    ? `${box.status === "active" ? "Personal mailbox ready" : box.status === "provisioning" ? "Preparing personal mailbox…" : "Personal mailbox disabled"}${user.disabled_at ? " · Account disabled" : user.password_reset_required ? " · Waiting for first sign-in" : ""}`
+                    ? `${box.status === "active" ? t("componentsUserMail.personalMailboxReady") : box.status === "provisioning" ? t("componentsUserMail.preparingPersonalMailbox") : t("componentsUserMail.personalMailboxDisabled")}${user.disabled_at ? t("componentsUserMail.accountDisabled") : user.password_reset_required ? t("componentsUserMail.waitingForFirstSignIn") : ""}`
                     : mail.mail_enabled
-                      ? "Set an address to prepare this user's personal mailbox."
-                      : "Assign a role with Mail access to give this user a personal mailbox."}
+                      ? t("componentsUserMail.setAnAddressToPrepareThisUserSPersonal")
+                      : t("componentsUserMail.assignARoleWithMailAccessToGiveThis")}
               </p>
             </div>
             {(mail.mail_enabled || mail.enable_role) &&
@@ -178,22 +188,22 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
               !!domains.data?.domains.length && (
                 <Button onClick={start}>
                   {!mail.mail_enabled
-                    ? "Enable personal mail"
+                    ? t("componentsUserMail.enablePersonalMail")
                     : primary
-                      ? "Change address"
-                      : "Set up mail"}
+                      ? t("componentsUserMail.changeAddress")
+                      : t("componentsUserMail.setUpMail")}
                 </Button>
               )}
           </div>
           {!mail.mail_enabled && permissions.includes("admin.users.roles.read") && (
             <p className="mail-hint">
-              <a href="#user-roles">Manage this user's roles →</a>
+              <a href="#user-roles">{t("componentsUserMail.manageThisUserSRoles")}</a>
             </p>
           )}
           {mail.mail_enabled && domains.data && !domains.data.domains.length && <DomainSetupLink />}
           {mail.mail_enabled && box?.status === "provisioning" && (
             <Button size="sm" disabled={resource.loading} onClick={resource.reload}>
-              Retry preparation
+              {t("componentsUserMail.retryPreparation")}
             </Button>
           )}
           {(mail.mail_enabled || mail.enable_role) && editing && (
@@ -212,7 +222,7 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
                   });
                   setEditing(false);
                   resource.reload();
-                  notify.success("Personal mail saved.");
+                  notify.success(t("componentsUserMail.personalMailSaved"));
                   window.dispatchEvent(new Event("officeflare:mail-access-changed"));
                   window.dispatchEvent(new Event("officeflare:user-mail-changed"));
                 });
@@ -228,22 +238,25 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
                 />
                 {!mail.mail_enabled && (
                   <p className="mail-hint">
-                    Saving also assigns the {mail.enable_role?.label} role so this user can use
-                    their personal mail.
+                    <LocalizedMessage
+                      id="componentsUserMail.savingAlsoAssignsTheRoleSoThisUserCan"
+                      values={{ label: mail.enable_role?.label }}
+                    />
                   </p>
                 )}
                 {primary && (
                   <p className="mail-hint">
-                    The previous address stays as an alias. Sign-in email remains{" "}
-                    {user.email_address}.
+                    {t("componentsUserMail.thePreviousAddressStaysAsAnAliasSignIn", {
+                      email_address: user.email_address,
+                    })}
                   </p>
                 )}
                 <div className="mail-actions">
                   <Button disabled={action.busy} onClick={() => setEditing(false)}>
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button type="submit" variant="primary" disabled={action.busy || !domainId}>
-                    {action.busy ? "Saving…" : "Save personal mail"}
+                    {action.busy ? t("common.saving") : t("componentsUserMail.savePersonalMail")}
                   </Button>
                 </div>
               </MailFieldset>
@@ -261,9 +274,9 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
           )}
           {box && canManage && (
             <details className="console-role-summary console-mail-access">
-              <summary>Mailbox access</summary>
+              <summary>{t("componentsUserMail.mailboxAccess")}</summary>
               <p className="mail-hint">
-                Disabling the mailbox stops access and mail processing. Messages remain stored.
+                {t("componentsUserMail.disablingTheMailboxStopsAccessAndMailProcessingMessages")}
               </p>
               <Button
                 size="sm"
@@ -280,15 +293,17 @@ export function UserMailPanel({ user }: { user: AdminUser }) {
                     });
                 }}
               >
-                {box.status === "active" ? "Disable mailbox" : "Enable mailbox"}
+                {box.status === "active"
+                  ? t("componentsUserMail.disableMailbox")
+                  : t("componentsUserMail.enableMailbox")}
               </Button>
             </details>
           )}
           <Confirm
             open={disable}
-            title="Disable personal mailbox?"
-            description="The user will lose mailbox access and new messages will stop being processed. Existing messages remain stored."
-            label="Disable mailbox"
+            title={t("componentsUserMail.disablePersonalMailbox")}
+            description={t("componentsUserMail.theUserWillLoseMailboxAccessAndNewMessages")}
+            label={t("componentsUserMail.disableMailbox")}
             onClose={() => setDisable(false)}
             onConfirm={async () => {
               await api(`/api/mail/mailboxes/${box!.id}`, {
@@ -332,8 +347,10 @@ export function MailboxAliases({
       <div className="console-mail-aliases">
         <div className="console-mail-summary">
           <div>
-            <h3>Aliases</h3>
-            <p className="mail-hint">Additional addresses use the same mailbox and messages.</p>
+            <h3>{t("componentsUserMail.aliases")}</h3>
+            <p className="mail-hint">
+              {t("componentsUserMail.additionalAddressesUseTheSameMailboxAndMessages")}
+            </p>
           </div>
           {canManage && !adding && !!domains.length && (
             <Button
@@ -343,7 +360,7 @@ export function MailboxAliases({
                 setAdding(true);
               }}
             >
-              Add alias
+              {t("componentsUserMail.addAlias")}
             </Button>
           )}
         </div>
@@ -353,8 +370,13 @@ export function MailboxAliases({
               <div>
                 <strong>{address.email_address}</strong>
                 <p>
-                  {address.receive_enabled ? "Receive enabled" : "Receive disabled"} ·{" "}
-                  {address.send_enabled ? "Send enabled" : "Send disabled"}
+                  {address.receive_enabled
+                    ? t("componentsUserMail.receiveEnabled")
+                    : t("componentsUserMail.receiveDisabled")}
+                  {t("componentsUserMail.text2")}{" "}
+                  {address.send_enabled
+                    ? t("componentsUserMail.sendEnabled")
+                    : t("componentsUserMail.sendDisabled")}
                 </p>
               </div>
               {canManage && (
@@ -371,7 +393,7 @@ export function MailboxAliases({
                       setSend(!!address.send_enabled);
                     }}
                   >
-                    Edit
+                    {t("common.edit")}
                   </Button>
                   <Button
                     size="sm"
@@ -379,7 +401,7 @@ export function MailboxAliases({
                     disabled={action.busy}
                     onClick={() => setDeleting(address)}
                   >
-                    Remove
+                    {t("common.remove")}
                   </Button>
                 </div>
               )}
@@ -387,7 +409,7 @@ export function MailboxAliases({
             {canManage && editing?.id === address.id && (
               <MailForm
                 className="mail-form"
-                aria-label={`Edit ${address.email_address}`}
+                aria-label={t("componentsUserMail.edit", { email_address: address.email_address })}
                 onSubmit={(event) => {
                   event.preventDefault();
                   void action.run(async () => {
@@ -402,10 +424,10 @@ export function MailboxAliases({
               >
                 <MailFieldset disabled={action.busy}>
                   <Check checked={receive} onChange={setReceive}>
-                    Receive mail
+                    {t("componentsUserMail.receiveMail")}
                   </Check>
                   <Check checked={send} onChange={setSend}>
-                    Send mail
+                    {t("componentsUserMail.sendMail")}
                   </Check>
                   <div className="mail-actions">
                     <Button
@@ -415,10 +437,10 @@ export function MailboxAliases({
                         setEditing(null);
                       }}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                     <Button type="submit" disabled={action.busy} variant="primary">
-                      Save alias
+                      {t("componentsUserMail.saveAlias")}
                     </Button>
                   </div>
                 </MailFieldset>
@@ -427,7 +449,7 @@ export function MailboxAliases({
             )}
           </div>
         ))}
-        {!aliases.length && <p className="mail-hint">No aliases.</p>}
+        {!aliases.length && <p className="mail-hint">{t("componentsUserMail.noAliases")}</p>}
         {adding && (
           <MailForm
             className="mail-form"
@@ -453,7 +475,7 @@ export function MailboxAliases({
           >
             <MailFieldset disabled={action.busy}>
               <MailAddressField
-                label="Alias address"
+                label={t("componentsUserMail.aliasAddress")}
                 domains={domains}
                 local={local}
                 domainId={domainId}
@@ -462,10 +484,10 @@ export function MailboxAliases({
               />
               <div className="mail-actions">
                 <Button disabled={action.busy} onClick={() => setAdding(false)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={action.busy || !domainId} variant="primary">
-                  Add alias
+                  {t("componentsUserMail.addAlias")}
                 </Button>
               </div>
             </MailFieldset>
@@ -474,9 +496,11 @@ export function MailboxAliases({
         )}
         <Confirm
           open={!!deleting}
-          title="Remove alias?"
-          description={`${deleting?.email_address ?? "This address"} will stop receiving and sending mail. Messages remain in the mailbox.`}
-          label="Remove alias"
+          title={t("componentsUserMail.removeAlias")}
+          description={t("componentsUserMail.willStopReceivingAndSendingMailMessagesRemainIn", {
+            value1: deleting?.email_address ?? t("componentsUserMail.thisAddress"),
+          })}
+          label={t("componentsUserMail.removeAlias2")}
           destructive
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
@@ -500,8 +524,15 @@ function AddressDelivery({ address, onSaved }: { address: Address; onSaved: () =
   return (
     <details className="console-mail-primary-delivery">
       <summary>
-        Primary address delivery
-        {!address.receive_enabled || !address.send_enabled ? " · Restricted" : ""}
+        <LocalizedMessage
+          id="componentsUserMail.primaryAddressDelivery"
+          values={{
+            value1:
+              !address.receive_enabled || !address.send_enabled
+                ? t("componentsUserMail.restricted")
+                : "",
+          }}
+        />
       </summary>
       <MailForm
         className="mail-form console-mail-delivery"
@@ -517,14 +548,17 @@ function AddressDelivery({ address, onSaved }: { address: Address; onSaved: () =
         }}
       >
         <p className="mail-hint">
-          {address.email_address} · Domain settings must also allow delivery.
+          <LocalizedMessage
+            id="componentsUserMail.domainSettingsMustAlsoAllowDelivery"
+            values={{ email_address: address.email_address }}
+          />
         </p>
         <MailFieldset disabled={action.busy}>
           <Check checked={receive} onChange={setReceive}>
-            Receive mail at this address
+            {t("componentsUserMail.receiveMailAtThisAddress")}
           </Check>
           <Check checked={send} onChange={setSend}>
-            Send mail from this address
+            {t("componentsUserMail.sendMailFromThisAddress")}
           </Check>
           <Button
             type="submit"
@@ -533,7 +567,7 @@ function AddressDelivery({ address, onSaved }: { address: Address; onSaved: () =
               (receive === !!address.receive_enabled && send === !!address.send_enabled)
             }
           >
-            Save delivery settings
+            {t("componentsUserMail.saveDeliverySettings")}
           </Button>
         </MailFieldset>
         <MailNotice error={action.error} />

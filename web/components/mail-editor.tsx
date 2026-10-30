@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { lazy, Suspense, type RefObject } from "react";
 import type { Attachment } from "../lib/mail";
 import "./mail-editor.css";
@@ -29,7 +30,7 @@ export function MailEditor(props: MailEditorProps) {
     <Suspense
       fallback={
         <div className={`mail-html-editor ${props.className ?? ""}`} aria-busy="true">
-          <p className="mail-hint">Loading editor…</p>
+          <p className="mail-hint">{t("componentsMailEditor.loadingEditor")}</p>
         </div>
       }
     >

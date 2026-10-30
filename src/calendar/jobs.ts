@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { createDatabase } from "../db";
 import { now, uuid, type AuthEnv } from "../auth/types";
 import { provider } from "../mail/providers";
@@ -75,7 +76,7 @@ async function systemSender(env: AuthEnv) {
     "SELECT a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,p.id,p.name,p.enabled,p.version,p.config_json,p.secret_ciphertext,p.secret_nonce FROM calendar_workspace_settings s JOIN mail_addresses a ON a.id=s.system_address_id JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE s.id='workspace' AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
   );
   if (!value)
-    throw Object.assign(new Error("System invitation sender is not configured"), {
+    throw Object.assign(new Error(t("calendarJobs.systemInvitationSenderIsNotConfigured")), {
       code: "CALENDAR_SENDER_UNAVAILABLE",
       retryable: true,
     });
@@ -225,7 +226,7 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
     let text = "",
       subject = "";
     if (payload.kind === "invitation") {
-      const event = payload.event!,
+      const event = payload.event,
         method = payload.action === "cancel" ? "CANCEL" : "REQUEST",
         filename =
           payload.action === "cancel"
@@ -251,17 +252,28 @@ export async function deliverCalendar(env: AuthEnv, id: string) {
         content_id: null,
       });
       subject =
-        `${payload.action === "cancel" ? "Cancelled" : payload.action === "update" ? "Updated" : "Invitation"}: ${event.title}`.replace(
+        `${payload.action === "cancel" ? t("calendarJobs.cancelled") : payload.action === "update" ? t("calendarJobs.updated") : t("calendarJobs.invitation")}: ${event.title}`.replace(
           /[\r\n]/g,
           " ",
         );
-      text = `${event.title}\n${event.time_kind === "all_day" ? `All day: ${event.start_date} – ${new Date(Date.parse(event.end_date!) - 86400000).toISOString().slice(0, 10)}` : `${endpoint(event, "start").date_time} – ${endpoint(event, "end").date_time} (${event.start_time_zone})`}\n${plainText(event.description_html)}${payload.url ? `\n\nView and respond: ${payload.url}` : ""}`;
+      let time: string;
+      if (event.time_kind === "all_day") {
+        const { start_date, end_date } = event;
+        if (!start_date || !end_date) return void (await finish("failed", "event_unavailable"));
+        time = t("calendarJobs.allDay", {
+          start_date,
+          slice: new Date(Date.parse(end_date) - 86400000).toISOString().slice(0, 10),
+        });
+      } else {
+        time = `${endpoint(event, "start").date_time} – ${endpoint(event, "end").date_time} (${event.start_time_zone})`;
+      }
+      text = `${event.title}\n${time}\n${plainText(event.description_html)}${payload.url ? t("calendarJobs.viewAndRespond", { url: payload.url }) : ""}`;
     } else if (payload.kind === "verify") {
-      subject = "Verify your calendar registration email";
-      text = `Your verification code is ${payload.code}. It expires in 10 minutes.`;
+      subject = t("calendarJobs.verifyYourCalendarRegistrationEmail");
+      text = t("calendarJobs.yourVerificationCodeIsItExpiresIn10Minutes", { code: payload.code });
     } else {
-      subject = "Manage your calendar registration";
-      text = `Manage your registration: ${payload.url}`;
+      subject = t("calendarJobs.manageYourCalendarRegistration");
+      text = t("calendarJobs.manageYourRegistration", { url: payload.url });
     }
     let snapshot: SubmissionSnapshot = {
       from: from.email_address,

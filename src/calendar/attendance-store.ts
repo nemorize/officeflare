@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { uuid, now } from "../auth/types";
 import type { CalendarContext, Event, Calendar, Bind, Condition } from "./types";
 import type { Attendee, Policy } from "./collaboration-types";
@@ -10,11 +11,12 @@ import { canSeeDetails } from "./access";
 import { recipientUser } from "./recipients";
 export async function attendanceDetails(c: CalendarContext, cal: Calendar, event: Event, key = "") {
   const effective = await occurrence(c, event, key);
-  if (!canSeeDetails(effective, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
+  if (!canSeeDetails(effective, cal))
+    fail(404, "EVENT_NOT_FOUND", t("calendarAttendanceStore.eventNotFound"));
   if (!key)
     for (const value of await loadOverrides(c, [event.id]))
       if (!canSeeDetails({ ...event, ...JSON.parse(value.patch_json) }, cal))
-        fail(404, "EVENT_NOT_FOUND", "Event not found");
+        fail(404, "EVENT_NOT_FOUND", t("calendarAttendanceStore.eventNotFound"));
   return effective;
 }
 export const email = (value: unknown) => {
@@ -23,7 +25,7 @@ export const email = (value: unknown) => {
     !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(result) ||
     /[\r\n]/.test(result)
   )
-    fail(400, "INVALID_EMAIL", "Invalid email address");
+    fail(400, "INVALID_EMAIL", t("calendarAttendanceStore.invalidEmailAddress"));
   return result;
 };
 export async function occurrence(c: CalendarContext, event: Event, key = "") {
@@ -32,13 +34,13 @@ export async function occurrence(c: CalendarContext, event: Event, key = "") {
     override = (await loadOverrides(c, [event.id])).find((value) => value.occurrence_key === key),
     effective = applyOverride(event, original, override);
   if (effective.status === "cancelled" || event.trashed_at)
-    fail(409, "OCCURRENCE_CANCELLED", "Occurrence is cancelled");
+    fail(409, "OCCURRENCE_CANCELLED", t("calendarAttendanceStore.occurrenceIsCancelled"));
   return effective;
 }
 export function registrationKey(event: Event, key: unknown) {
   if (event.recurrence_json === "[]") {
     if (key !== undefined && key !== null && key !== "" && key !== keyOf(event))
-      fail(400, "INVALID_SCOPE", "This event has no recurring scope");
+      fail(400, "INVALID_SCOPE", t("calendarAttendanceStore.thisEventHasNoRecurringScope"));
     return "";
   }
   return text(key, "occurrence_key", 64);
@@ -207,11 +209,15 @@ export async function parseAttendee(
     "attendance_mode",
   ]);
   if (data.user_id !== undefined && data.email_address !== undefined)
-    fail(400, "INVALID_INPUT", "Use user_id or email_address");
+    fail(400, "INVALID_INPUT", t("calendarAttendanceStore.useUserIdOrEmailAddress"));
   const resolved =
     data.user_id === undefined ? await recipientUser(c.env, email(data.email_address)) : null;
   if (resolved?.ambiguous)
-    fail(400, "AMBIGUOUS_ATTENDEE", "Choose the internal user ID for this address");
+    fail(
+      400,
+      "AMBIGUOUS_ATTENDEE",
+      t("calendarAttendanceStore.chooseTheInternalUserIdForThisAddress"),
+    );
   const user =
     data.user_id !== undefined
       ? await first<{
@@ -224,7 +230,8 @@ export async function parseAttendee(
           identifier(data.user_id),
         )
       : (resolved?.user ?? null);
-  if (data.user_id !== undefined && !user) fail(400, "INVALID_ATTENDEE", "Unknown internal user");
+  if (data.user_id !== undefined && !user)
+    fail(400, "INVALID_ATTENDEE", t("calendarAttendanceStore.unknownInternalUser"));
   const address =
       data.email_address === undefined ? user!.email_address : email(data.email_address),
     stamp = now();
@@ -275,7 +282,7 @@ export async function expandAttendeeInputs(
   key = "",
 ) {
   if (!Array.isArray(value) || value.length > 50)
-    fail(400, "INVALID_INPUT", "At most 50 invitation entries are allowed");
+    fail(400, "INVALID_INPUT", t("calendarAttendanceStore.atMost50InvitationEntriesAreAllowed"));
   const inputs: unknown[] = [];
   for (const item of value) {
     const data = object(item, "attendee");
@@ -292,7 +299,7 @@ export async function expandAttendeeInputs(
           user,
         ))
       )
-        fail(404, "GROUP_NOT_FOUND", "Group not found");
+        fail(404, "GROUP_NOT_FOUND", t("calendarAttendanceStore.groupNotFound"));
       const members = await rows<{ user_id: string }>(
         c.env,
         `SELECT gm.user_id FROM calendar_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=? AND ${active("u")}`,
@@ -305,7 +312,8 @@ export async function expandAttendeeInputs(
         });
     } else inputs.push(item);
   }
-  if (inputs.length > 100) fail(422, "TOO_MANY_ATTENDEES", "At most 100 attendees are allowed");
+  if (inputs.length > 100)
+    fail(422, "TOO_MANY_ATTENDEES", t("calendarAttendanceStore.atMost100AttendeesAreAllowed"));
   const result = new Map<string, Attendee>();
   for (const input of inputs) {
     const value = await parseAttendee(c, input, event, scopeId, key);
@@ -454,7 +462,12 @@ export async function capacityChecks(
           ).map((value) => value.occurrence_key),
         ]),
       ];
-  if (keys.length > 500) fail(422, "TOO_MANY_SCOPES", "Respond to individual occurrences instead");
+  if (keys.length > 500)
+    fail(
+      422,
+      "TOO_MANY_SCOPES",
+      t("calendarAttendanceStore.respondToIndividualOccurrencesInstead"),
+    );
   const checks: Condition[] = [];
   for (const item of keys) {
     const p = await policy(c, event.id, item);

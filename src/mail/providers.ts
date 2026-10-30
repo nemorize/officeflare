@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { fail, type Connection, type SubmissionSnapshot } from "./types";
 import { unseal } from "./secrets";
 
@@ -86,7 +87,7 @@ const standard = (
 // the provider's documented wire format.
 const cloudflare: MailProvider = {
   id: "cloudflare",
-  label: "Cloudflare Email Service (Worker binding)",
+  label: t("mailProviders.cloudflareEmailServiceWorkerBinding"),
   capabilities: { receive: true, send: true, max_send_bytes: 5 * 1024 * 1024, max_recipients: 50 },
   config_fields: [],
   secret_fields: [],
@@ -123,148 +124,256 @@ export const providers: MailProvider[] = [
   cloudflare,
   standard(
     "cloudflare-rest",
-    "Cloudflare Email Sending (REST)",
-    [secret("apiToken", "API token")],
-    { config: [field("accountId", "Account ID")], maxBytes: 5 * 1024 * 1024 },
+    t("mailProviders.cloudflareEmailSendingRest"),
+    [secret("apiToken", t("mailProviders.apiToken"))],
+    { config: [field("accountId", t("mailProviders.accountId"))], maxBytes: 5 * 1024 * 1024 },
   ),
-  standard("resend", "Resend", [secret("apiKey", "API key")], {
+  standard("resend", t("mailProviders.resend"), [secret("apiKey", t("mailProviders.apiKey"))], {
     maxBytes: 40 * 1024 * 1024,
     maxRecipients: 50,
   }),
-  standard("postmark", "Postmark", [secret("serverToken", "Server token")], {
-    config: [{ key: "messageStream", label: "Message stream" }],
-    maxBytes: 10 * 1024 * 1024,
-  }),
-  standard("sendgrid", "Twilio SendGrid", [secret("apiKey", "API key")], {
-    maxBytes: 30 * 1024 * 1024,
-    maxRecipients: 1000,
-  }),
+  standard(
+    "postmark",
+    t("mailProviders.postmark"),
+    [secret("serverToken", t("mailProviders.serverToken"))],
+    {
+      config: [{ key: "messageStream", label: t("mailProviders.messageStream") }],
+      maxBytes: 10 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "sendgrid",
+    t("mailProviders.twilioSendgrid"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
+    {
+      maxBytes: 30 * 1024 * 1024,
+      maxRecipients: 1000,
+    },
+  ),
   standard(
     "ses",
-    "Amazon SES v2",
+    t("mailProviders.amazonSesV2"),
     [
-      secret("accessKeyId", "Access key ID"),
-      secret("secretAccessKey", "Secret access key"),
-      { key: "sessionToken", label: "Session token", secret: true },
+      secret("accessKeyId", t("mailProviders.accessKeyId")),
+      secret("secretAccessKey", t("mailProviders.secretAccessKey")),
+      { key: "sessionToken", label: t("mailProviders.sessionToken"), secret: true },
     ],
     {
       config: [
-        field("region", "AWS region"),
-        { key: "configurationSet", label: "Configuration set" },
+        field("region", t("mailProviders.awsRegion")),
+        { key: "configurationSet", label: t("mailProviders.configurationSet") },
       ],
       maxBytes: 40 * 1024 * 1024,
     },
   ),
-  standard("mailgun", "Mailgun", [secret("apiKey", "Private API key")], {
-    config: [
-      field("domain", "Sending domain"),
-      { key: "region", label: "Region", help: "Use us (default) or eu." },
-    ],
+  standard(
+    "mailgun",
+    t("mailProviders.mailgun"),
+    [secret("apiKey", t("mailProviders.privateApiKey"))],
+    {
+      config: [
+        field("domain", t("mailProviders.sendingDomain")),
+        {
+          key: "region",
+          label: t("mailProviders.region"),
+          help: t("mailProviders.useUsDefaultOrEu"),
+        },
+      ],
+      maxBytes: 25 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "mailersend",
+    t("mailProviders.mailersend"),
+    [secret("apiKey", t("mailProviders.apiToken"))],
+    {
+      maxBytes: 25 * 1024 * 1024,
+    },
+  ),
+  standard("brevo", t("mailProviders.brevo"), [secret("apiKey", t("mailProviders.apiKey"))], {
     maxBytes: 25 * 1024 * 1024,
   }),
-  standard("mailersend", "MailerSend", [secret("apiKey", "API token")], {
-    maxBytes: 25 * 1024 * 1024,
+  standard(
+    "mailtrap",
+    t("mailProviders.mailtrapEmailApi"),
+    [secret("apiToken", t("mailProviders.apiToken"))],
+    {
+      maxBytes: 25 * 1024 * 1024,
+    },
+  ),
+  standard("maileroo", t("mailProviders.maileroo"), [secret("apiKey", t("mailProviders.apiKey"))], {
+    maxBytes: 20 * 1024 * 1024,
   }),
-  standard("brevo", "Brevo", [secret("apiKey", "API key")], { maxBytes: 25 * 1024 * 1024 }),
-  standard("mailtrap", "Mailtrap Email API", [secret("apiToken", "API token")], {
-    maxBytes: 25 * 1024 * 1024,
+  standard(
+    "lettermint",
+    t("mailProviders.lettermint"),
+    [secret("apiToken", t("mailProviders.apiToken"))],
+    {
+      config: [{ key: "route", label: t("mailProviders.route") }],
+      maxBytes: 25 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "mailpace",
+    t("mailProviders.mailpace"),
+    [secret("serverToken", t("mailProviders.serverToken"))],
+    {
+      maxBytes: 30 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "zeptomail",
+    t("mailProviders.zeptomail"),
+    [secret("sendToken", t("mailProviders.sendMailToken"))],
+    {
+      config: [
+        field(
+          "sendUrl",
+          t("mailProviders.sendMailUrl"),
+          t("mailProviders.useYourRegionalEndpointForExampleHttpsApiZeptomail"),
+        ),
+      ],
+      maxBytes: 15 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "mailchannels",
+    t("mailProviders.mailchannelsEmailApi"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
+    {
+      maxBytes: 25 * 1024 * 1024,
+    },
+  ),
+  standard("plunk", t("mailProviders.plunk"), [secret("apiKey", t("mailProviders.apiKey"))], {
+    maxBytes: 10 * 1024 * 1024,
   }),
-  standard("maileroo", "Maileroo", [secret("apiKey", "API key")], { maxBytes: 20 * 1024 * 1024 }),
-  standard("lettermint", "Lettermint", [secret("apiToken", "API token")], {
-    config: [{ key: "route", label: "Route" }],
-    maxBytes: 25 * 1024 * 1024,
-  }),
-  standard("mailpace", "MailPace", [secret("serverToken", "Server token")], {
-    maxBytes: 30 * 1024 * 1024,
-  }),
-  standard("zeptomail", "ZeptoMail", [secret("sendToken", "Send mail token")], {
-    config: [
-      field(
-        "sendUrl",
-        "Send mail URL",
-        "Use your regional endpoint, for example https://api.zeptomail.com/v1.1/email.",
-      ),
-    ],
-    maxBytes: 15 * 1024 * 1024,
-  }),
-  standard("mailchannels", "MailChannels Email API", [secret("apiKey", "API key")], {
-    maxBytes: 25 * 1024 * 1024,
-  }),
-  standard("plunk", "Plunk", [secret("apiKey", "API key")], { maxBytes: 10 * 1024 * 1024 }),
   standard(
     "mailchimp-transactional",
-    "Mailchimp Transactional (Mandrill)",
-    [secret("apiKey", "API key")],
+    t("mailProviders.mailchimpTransactionalMandrill"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
     { maxBytes: 25 * 1024 * 1024 },
   ),
-  standard("sparkpost", "SparkPost", [secret("apiKey", "API key")], {
-    config: [{ key: "region", label: "Region", help: "Use us (default) or eu." }],
-    maxBytes: 20 * 1024 * 1024,
+  standard(
+    "sparkpost",
+    t("mailProviders.sparkpost"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
+    {
+      config: [
+        {
+          key: "region",
+          label: t("mailProviders.region"),
+          help: t("mailProviders.useUsDefaultOrEu"),
+        },
+      ],
+      maxBytes: 20 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "microsoft-graph",
+    t("mailProviders.microsoftGraph"),
+    [secret("clientSecret", t("mailProviders.clientSecret"))],
+    {
+      config: [
+        field("tenantId", t("mailProviders.tenantId")),
+        field("clientId", t("mailProviders.applicationClientId")),
+        field("mailbox", t("mailProviders.mailboxUserIdOrAddress")),
+      ],
+      maxBytes: 3 * 1024 * 1024,
+    },
+  ),
+  standard(
+    "scaleway",
+    t("mailProviders.scalewayTem"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
+    {
+      config: [
+        field("projectId", t("mailProviders.projectId")),
+        {
+          key: "region",
+          label: t("mailProviders.region"),
+          help: t("mailProviders.forExampleFrParOrNlAms"),
+        },
+      ],
+      maxBytes: 20 * 1024 * 1024,
+    },
+  ),
+  standard("unosend", t("mailProviders.unosend"), [secret("apiKey", t("mailProviders.apiKey"))], {
+    maxBytes: 25 * 1024 * 1024,
   }),
-  standard("microsoft-graph", "Microsoft Graph", [secret("clientSecret", "Client secret")], {
+  standard("jetemail", t("mailProviders.jetemail"), [secret("apiKey", t("mailProviders.apiKey"))], {
     config: [
-      field("tenantId", "Tenant ID"),
-      field("clientId", "Application client ID"),
-      field("mailbox", "Mailbox user ID or address"),
-    ],
-    maxBytes: 3 * 1024 * 1024,
-  }),
-  standard("scaleway", "Scaleway TEM", [secret("apiKey", "API key")], {
-    config: [
-      field("projectId", "Project ID"),
-      { key: "region", label: "Region", help: "For example fr-par or nl-ams." },
-    ],
-    maxBytes: 20 * 1024 * 1024,
-  }),
-  standard("unosend", "Unosend", [secret("apiKey", "API key")], { maxBytes: 25 * 1024 * 1024 }),
-  standard("jetemail", "JetEmail", [secret("apiKey", "API key")], {
-    config: [
-      field("senderName", "Sender name", "JetEmail requires a display name for the sender."),
+      field(
+        "senderName",
+        t("mailProviders.senderName"),
+        t("mailProviders.jetemailRequiresADisplayNameForTheSender"),
+      ),
     ],
     maxBytes: 40 * 1024 * 1024,
   }),
-  standard("lettr", "Lettr", [secret("apiKey", "API key")], {
+  standard("lettr", t("mailProviders.lettr"), [secret("apiKey", t("mailProviders.apiKey"))], {
     maxBytes: 20 * 1024 * 1024,
     maxRecipients: 50,
   }),
-  standard("sendheron", "SendHeron", [secret("apiKey", "API key")], {
-    config: [optionalField("senderName", "Sender name")],
+  standard(
+    "sendheron",
+    t("mailProviders.sendheron"),
+    [secret("apiKey", t("mailProviders.apiKey"))],
+    {
+      config: [optionalField("senderName", t("mailProviders.senderName"))],
+      maxBytes: 20 * 1024 * 1024,
+    },
+  ),
+  standard("helo", t("mailProviders.helo"), [secret("apiKey", t("mailProviders.apiKey"))], {
+    config: [optionalField("channelId", t("mailProviders.channelId"))],
     maxBytes: 20 * 1024 * 1024,
   }),
-  standard("helo", "Helo", [secret("apiKey", "API key")], {
-    config: [optionalField("channelId", "Channel ID")],
-    maxBytes: 20 * 1024 * 1024,
-  }),
-  standard("smtp", "SMTP", [secret("username", "Username"), secret("password", "Password")], {
-    config: [
-      field("host", "SMTP host"),
-      field("port", "Port", "Use 465 for implicit TLS or 587 for STARTTLS."),
-      {
-        key: "security",
-        label: "Connection security",
-        required: true,
-        options: ["tls", "starttls"],
-      },
-    ],
-    maxBytes: 25 * 1024 * 1024,
-    maxRecipients: 50,
-  }),
-  standard("jmap", "JMAP", [secret("accessToken", "Access token")], {
-    config: [
-      field("sessionUrl", "JMAP session URL"),
-      optionalField(
-        "accountId",
-        "Account ID",
-        "Leave blank to use the mail account advertised by the session.",
-      ),
-    ],
-    maxBytes: 25 * 1024 * 1024,
-    maxRecipients: 50,
-  }),
+  standard(
+    "smtp",
+    t("mailProviders.smtp"),
+    [secret("username", t("mailProviders.username")), secret("password", t("common.password"))],
+    {
+      config: [
+        field("host", t("mailProviders.smtpHost")),
+        field(
+          "port",
+          t("mailProviders.port"),
+          t("mailProviders.use465ForImplicitTlsOr587ForStarttls"),
+        ),
+        {
+          key: "security",
+          label: t("mailProviders.connectionSecurity"),
+          required: true,
+          options: ["tls", "starttls"],
+        },
+      ],
+      maxBytes: 25 * 1024 * 1024,
+      maxRecipients: 50,
+    },
+  ),
+  standard(
+    "jmap",
+    t("mailProviders.jmap"),
+    [secret("accessToken", t("mailProviders.accessToken"))],
+    {
+      config: [
+        field("sessionUrl", t("mailProviders.jmapSessionUrl")),
+        optionalField(
+          "accountId",
+          t("mailProviders.accountId"),
+          t("mailProviders.leaveBlankToUseTheMailAccountAdvertisedBy"),
+        ),
+      ],
+      maxBytes: 25 * 1024 * 1024,
+      maxRecipients: 50,
+    },
+  ),
 ];
 
 export function provider(name: string) {
-  return providers.find((entry) => entry.id === name) ?? fail(422, "Unsupported provider: " + name);
+  return (
+    providers.find((entry) => entry.id === name) ??
+    fail(422, t("mailProviders.unsupportedProviderName", { name }))
+  );
 }
 export function publicProvider(entry: MailProvider) {
   return {
@@ -278,20 +387,21 @@ export function publicProvider(entry: MailProvider) {
 export function parseProviderConfig(value: unknown, selected: MailProvider): ProviderConfig {
   const result: ProviderConfig = {};
   if (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value)))
-    fail(400, "Provider config must be an object");
+    fail(400, t("mailProviders.providerConfigMustBeAnObject"));
   const source = (value ?? {}) as Record<string, unknown>;
   const allowed = new Set(selected.config_fields.map((item) => item.key));
   if (Object.keys(source).some((key) => !allowed.has(key)))
-    fail(400, "Unsupported provider config field");
+    fail(400, t("mailProviders.unsupportedProviderConfigField"));
   for (const item of selected.config_fields) {
     const raw = source[item.key];
     if (raw === undefined || raw === "") {
-      if (item.required) fail(400, `${item.label} is required`);
+      if (item.required) fail(400, t("mailProviders.isRequired", { label: item.label }));
       continue;
     }
     if (typeof raw !== "string" || raw.length > 500 || /[\r\n\0]/.test(raw))
-      fail(400, `Invalid ${item.label}`);
-    if (item.options && !item.options.includes(raw.trim())) fail(400, `Invalid ${item.label}`);
+      fail(400, t("mailProviders.invalid", { label: item.label }));
+    if (item.options && !item.options.includes(raw.trim()))
+      fail(400, t("mailProviders.invalid", { label: item.label }));
     result[item.key] = raw.trim();
   }
   return result;
@@ -303,22 +413,24 @@ function parseProviderSecretValues(
 ): ProviderSecret {
   const result: ProviderSecret = {};
   if (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value)))
-    fail(400, "Provider secrets must be an object");
+    fail(400, t("mailProviders.providerSecretsMustBeAnObject"));
   const source = (value ?? {}) as Record<string, unknown>;
   const allowed = new Set(selected.secret_fields.map((item) => item.key));
   if (Object.keys(source).some((key) => !allowed.has(key)))
-    fail(400, "Unsupported provider secret field");
+    fail(400, t("mailProviders.unsupportedProviderSecretField"));
   for (const item of selected.secret_fields) {
     const raw = source[item.key];
     if (raw === undefined) {
-      if (item.required && !partial) fail(400, `${item.label} is required`);
+      if (item.required && !partial)
+        fail(400, t("mailProviders.isRequired", { label: item.label }));
       continue;
     }
     if (typeof raw !== "string" || raw.length > 8192 || /[\r\n\0]/.test(raw))
-      fail(400, `Invalid ${item.label}`);
+      fail(400, t("mailProviders.invalid", { label: item.label }));
     const normalized = raw.trim();
     if (!normalized) {
-      if (item.required && !partial) fail(400, `${item.label} is required`);
+      if (item.required && !partial)
+        fail(400, t("mailProviders.isRequired", { label: item.label }));
       continue;
     }
     result[item.key] = normalized;
@@ -624,11 +736,19 @@ async function sendWithProvider(
         dateStamp = amzDate.slice(0, 8);
       const bodyHash = await sha256Hex(requestBody),
         sessionToken = credentials.sessionToken;
-      const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}${sessionToken ? `\nx-amz-security-token:${sessionToken}` : ""}`;
+      const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}${
+        sessionToken ? `\nx-amz-security-token:${sessionToken}` : ""
+      }`;
       const signedHeaders = `host;x-amz-content-sha256;x-amz-date${sessionToken ? ";x-amz-security-token" : ""}`;
-      const canonicalRequest = `POST\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${bodyHash}`;
+      const canonicalRequest = `POST\n${path}
+
+${canonicalHeaders}
+${signedHeaders}
+${bodyHash}`;
       const scope = `${dateStamp}/${region}/ses/aws4_request`,
-        toSign = `AWS4-HMAC-SHA256\n${amzDate}\n${scope}\n${await sha256Hex(canonicalRequest)}`;
+        toSign = `AWS4-HMAC-SHA256\n${amzDate}
+${scope}
+${await sha256Hex(canonicalRequest)}`;
       const kDate = await hmac(
           `AWS4${required(credentials.secretAccessKey, "secretAccessKey")}`,
           dateStamp,
@@ -848,7 +968,7 @@ async function sendWithProvider(
           endpoint.search ||
           endpoint.hash
         )
-          throw new Error("invalid endpoint");
+          throw new Error(t("mailProviders.invalidEndpoint"));
         url = endpoint.toString();
       } catch {
         throw providerError("provider_configuration_missing");
@@ -1260,9 +1380,9 @@ class SmtpSession {
         return result;
       }
       const { value, done } = await this.reader.read();
-      if (done) throw new Error("SMTP connection closed");
+      if (done) throw new Error(t("mailProviders.smtpConnectionClosed"));
       this.buffer += new TextDecoder().decode(value, { stream: true });
-      if (this.buffer.length > 16_384) throw new Error("SMTP response too large");
+      if (this.buffer.length > 16_384) throw new Error(t("mailProviders.smtpResponseTooLarge"));
     }
   }
   async response() {
@@ -1270,10 +1390,10 @@ class SmtpSession {
     let code = 0;
     for (;;) {
       const line = await this.line();
-      if (!/^\d{3}[ -]/.test(line)) throw new Error("Invalid SMTP response");
+      if (!/^\d{3}[ -]/.test(line)) throw new Error(t("mailProviders.invalidSmtpResponse"));
       const nextCode = Number(line.slice(0, 3));
       if (!code) code = nextCode;
-      if (code !== nextCode) throw new Error("Invalid SMTP response");
+      if (code !== nextCode) throw new Error(t("mailProviders.invalidSmtpResponse"));
       lines.push(line);
       if (line[3] !== "-") return { code, lines };
     }
@@ -1541,7 +1661,7 @@ function validateHttpsEndpoint(value: string) {
   try {
     const endpoint = new URL(value);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.hash)
-      throw new Error("invalid endpoint");
+      throw new Error(t("mailProviders.invalidEndpoint"));
   } catch {
     throw providerError("provider_configuration_missing");
   }

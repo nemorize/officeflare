@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { now, uuid, type AppEnv } from "../auth/types";
 import { digest, random } from "../auth/crypto";
@@ -34,7 +35,7 @@ function fields(value: unknown) {
     value.length > sharedFields.length ||
     value.some((item) => !sharedFields.includes(item))
   )
-    fail(400, "INVALID_INPUT", "Invalid shared fields");
+    fail(400, "INVALID_INPUT", t("calendarLinks.invalidSharedFields"));
   return [...new Set(value)] as string[];
 }
 export function linkDto(link: ShareLink) {
@@ -60,7 +61,11 @@ export function inLinkRange(
 }
 export function assertLinkOccurrence(link: ShareLink, event: Event, cal: Calendar) {
   if (!inLinkRange(link, event, cal))
-    fail(404, "OCCURRENCE_NOT_SHARED", "This occurrence is outside the shared date range");
+    fail(
+      404,
+      "OCCURRENCE_NOT_SHARED",
+      t("calendarLinks.thisOccurrenceIsOutsideTheSharedDateRange"),
+    );
 }
 export async function limitPublic(c: CalendarContext, bucket: string, max: number, seconds = 3600) {
   const window = Math.floor(now() / seconds) * seconds,
@@ -71,7 +76,8 @@ export async function limitPublic(c: CalendarContext, bucket: string, max: numbe
       )
       .bind(hash, window)
       .first<{ attempts: number }>();
-  if (result!.attempts > max) fail(429, "RATE_LIMITED", "Too many requests. Try again later");
+  if (result!.attempts > max)
+    fail(429, "RATE_LIMITED", t("calendarLinks.tooManyRequestsTryAgainLater"));
 }
 export function publicHeaders(c: CalendarContext) {
   c.header("Referrer-Policy", "no-referrer");
@@ -80,7 +86,7 @@ export function publicHeaders(c: CalendarContext) {
   if (c.req.method !== "GET") {
     const origin = c.req.header("Origin");
     if (origin && origin !== new URL(c.req.url).origin)
-      fail(403, "INVALID_ORIGIN", "Invalid request origin");
+      fail(403, "INVALID_ORIGIN", t("calendarLinks.invalidRequestOrigin"));
   }
 }
 export function linkCondition(link: ShareLink) {
@@ -96,16 +102,17 @@ export function linkCondition(link: ShareLink) {
 }
 export async function publicLink(c: CalendarContext) {
   const token = text(c.req.param("token"), "token", 100);
-  if (!/^ofcl_[A-Za-z0-9_-]{43}$/.test(token)) fail(404, "LINK_NOT_FOUND", "Share link not found");
+  if (!/^ofcl_[A-Za-z0-9_-]{43}$/.test(token))
+    fail(404, "LINK_NOT_FOUND", t("calendarLinks.shareLinkNotFound"));
   const link = await first<ShareLink>(
     c.env,
     "SELECT * FROM calendar_share_links WHERE token_hash=?",
     await digest(token),
   );
-  if (!link) fail(404, "LINK_NOT_FOUND", "Share link not found");
+  if (!link) fail(404, "LINK_NOT_FOUND", t("calendarLinks.shareLinkNotFound"));
   const auth = linkCondition(link);
   if (!(await first(c.env, `SELECT 1 WHERE ${auth.sql}`, ...auth.args)))
-    fail(404, "LINK_NOT_FOUND", "Share link not found");
+    fail(404, "LINK_NOT_FOUND", t("calendarLinks.shareLinkNotFound"));
   const cal = (await first<Calendar>(
     c.env,
     "SELECT * FROM calendars WHERE id=?",
@@ -122,11 +129,11 @@ export async function linkSession(c: CalendarContext, link: ShareLink, required 
   const token = c.req.header("X-Calendar-Link-Session");
   if (!token) {
     if (required || link.password_hash)
-      fail(403, "LINK_SESSION_REQUIRED", "A valid link session is required");
+      fail(403, "LINK_SESSION_REQUIRED", t("calendarLinks.aValidLinkSessionIsRequired"));
     return null;
   }
   if (!/^ofcs_[A-Za-z0-9_-]{43}$/.test(token))
-    fail(403, "LINK_SESSION_REQUIRED", "A valid link session is required");
+    fail(403, "LINK_SESSION_REQUIRED", t("calendarLinks.aValidLinkSessionIsRequired"));
   const value = await first<LinkSession>(
     c.env,
     "SELECT * FROM calendar_link_sessions WHERE token_hash=? AND share_link_id=? AND link_access_version=? AND expires_at>unixepoch() AND revoked_at IS NULL",
@@ -134,7 +141,7 @@ export async function linkSession(c: CalendarContext, link: ShareLink, required 
     link.id,
     link.access_version,
   );
-  if (!value) fail(403, "LINK_SESSION_REQUIRED", "A valid link session is required");
+  if (!value) fail(403, "LINK_SESSION_REQUIRED", t("calendarLinks.aValidLinkSessionIsRequired"));
   return value;
 }
 export const sessionCondition = (session: LinkSession) =>
@@ -181,12 +188,14 @@ for (const path of paths) {
         : null,
       config = await settings(c);
     if (!config.external_sharing_enabled)
-      fail(403, "SHARING_DISABLED", "External sharing is disabled");
+      fail(403, "SHARING_DISABLED", t("calendarLinks.externalSharingIsDisabled"));
     const mode = choice(data.mode ?? "view", "mode", ["view", "join"]);
-    if (!event && mode === "join") fail(400, "INVALID_LINK", "Calendar links support viewing only");
+    if (!event && mode === "join")
+      fail(400, "INVALID_LINK", t("calendarLinks.calendarLinksSupportViewingOnly"));
     const key =
       data.occurrence_key === undefined ? null : text(data.occurrence_key, "occurrence_key", 64);
-    if (key && !event) fail(400, "INVALID_SCOPE", "A calendar link has no occurrence scope");
+    if (key && !event)
+      fail(400, "INVALID_SCOPE", t("calendarLinks.aCalendarLinkHasNoOccurrenceScope"));
     if (key) await occurrence(c, event!, key);
     const max = now() + config.public_link_max_days * 86400,
       expires =
@@ -195,9 +204,9 @@ for (const path of paths) {
           : integer(data.expires_at, "expires_at", now() + 1, max),
       password = data.password == null ? null : text(data.password, "password", 128);
     if (password && password.length < 8)
-      fail(400, "INVALID_PASSWORD", "Link passwords need at least 8 characters");
+      fail(400, "INVALID_PASSWORD", t("calendarLinks.linkPasswordsNeedAtLeast8Characters"));
     if (config.public_link_password_required && !password)
-      fail(403, "PASSWORD_REQUIRED", "Workspace policy requires link passwords");
+      fail(403, "PASSWORD_REQUIRED", t("calendarLinks.workspacePolicyRequiresLinkPasswords"));
     const range =
         data.time_min === undefined && data.time_max === undefined
           ? null
@@ -268,7 +277,7 @@ async function managedLink(c: CalendarContext) {
     "SELECT * FROM calendar_share_links WHERE id=? AND revoked_at IS NULL",
     identifier(c.req.param("linkId")),
   );
-  if (!link) fail(404, "LINK_NOT_FOUND", "Share link not found");
+  if (!link) fail(404, "LINK_NOT_FOUND", t("calendarLinks.shareLinkNotFound"));
   const cal = await requireCalendar(c, link.calendar_id, 5);
   return { link, cal };
 }
@@ -298,9 +307,9 @@ routes.on(["PATCH", "DELETE"], "/share-links/:linkId", async (c) => {
   if ("password" in data) {
     const password = data.password === null ? null : text(data.password, "password", 128);
     if (password && password.length < 8)
-      fail(400, "INVALID_PASSWORD", "Link passwords need at least 8 characters");
+      fail(400, "INVALID_PASSWORD", t("calendarLinks.linkPasswordsNeedAtLeast8Characters"));
     if (cfg.public_link_password_required && !password)
-      fail(403, "PASSWORD_REQUIRED", "Workspace policy requires link passwords");
+      fail(403, "PASSWORD_REQUIRED", t("calendarLinks.workspacePolicyRequiresLinkPasswords"));
     values.password_hash = password ? await hashPassword(password) : null;
   }
   await mutate(c, {
@@ -383,7 +392,7 @@ linkSessions.post("/public/share-links/:token/sessions", async (c) => {
     link.password_hash &&
     !(await verifyPassword(text(data.password, "password", 128), link.password_hash))
   )
-    fail(403, "INVALID_PASSWORD", "Invalid link password");
+    fail(403, "INVALID_PASSWORD", t("calendarLinks.invalidLinkPassword"));
   const id = uuid(),
     token = `ofcs_${random()}`,
     expires = now() + 1800,

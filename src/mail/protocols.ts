@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { renderMime } from "./data";
 import { mailboxSendingLimits } from "./limits";
 import { providers } from "./providers";
@@ -122,7 +123,7 @@ jmap.post("/upload/:account", async (c) => {
   const account = c.req.param("account"),
     actor = c.get("mail_actor");
   await authorize(c.env, actor, account, "write");
-  if (!c.req.raw.body) fail(400, "Missing upload");
+  if (!c.req.raw.body) fail(400, t("mailProtocols.missingUpload"));
   const limits = await mailboxSendingLimits(c.env, account),
     maximum = limits.max_send_bytes || limits.max_upload_bytes;
   const uploadId = id();
@@ -144,7 +145,7 @@ jmap.post("/upload/:account", async (c) => {
   );
   if (!object || object.size > maximum) {
     await c.env.MAIL_BUCKET.delete("uploads/" + account + "/" + actor.user_id + "/" + uploadId);
-    fail(413, `Upload exceeds ${maximum} bytes`);
+    fail(413, t("mailProtocols.uploadExceedsBytes", { maximum: maximum }));
   }
   return c.json(
     {
@@ -173,7 +174,7 @@ jmap.get("/download/:account/:blob/:name", async (c) => {
     const message = await partition(c.env, locator(messageId!)).get(messageId!, actor.user_id);
     if (attachmentId) {
       const file = message.attachments.find((file) => file.id === attachmentId);
-      if (!file) fail(404, "Blob not found");
+      if (!file) fail(404, t("mailProtocols.blobNotFound"));
       object = await c.env.MAIL_BUCKET.get(file.r2_key);
     } else if (message.raw_r2_key) object = await c.env.MAIL_BUCKET.get(message.raw_r2_key);
     else
@@ -189,7 +190,7 @@ jmap.get("/download/:account/:blob/:name", async (c) => {
         },
       );
   }
-  if (!object) fail(404, "Blob not found");
+  if (!object) fail(404, t("mailProtocols.blobNotFound"));
   return new Response(object.body, {
     headers: {
       "Content-Type": "application/octet-stream",
@@ -208,7 +209,7 @@ jmap.post("/", async (c) => {
     !Array.isArray(data.methodCalls) ||
     data.methodCalls.length > 32
   )
-    fail(400, "Invalid JMAP request");
+    fail(400, t("mailProtocols.invalidJmapRequest"));
   const responses: [string, Record<string, unknown>, string][] = [],
     createdIds: Record<string, string> = {};
   for (const call of data.methodCalls) {
@@ -220,7 +221,7 @@ jmap.post("/", async (c) => {
       typeof call[1] !== "object" ||
       typeof call[2] !== "string"
     )
-      fail(400, "Invalid JMAP method call");
+      fail(400, t("mailProtocols.invalidJmapMethodCall"));
     const [name, original, tag] = call as [string, Record<string, unknown>, string],
       args = { ...original };
     try {
@@ -232,7 +233,8 @@ jmap.post("/", async (c) => {
               path: string;
             },
             result = responses.find((r) => r[2] === reference.resultOf && r[0] === reference.name);
-          if (!result || reference.path !== "/ids") fail(400, "Invalid JMAP result reference");
+          if (!result || reference.path !== "/ids")
+            fail(400, t("mailProtocols.invalidJmapResultReference"));
           args[key.slice(1)] = result[1].ids;
           delete args[key];
         }
@@ -254,7 +256,7 @@ jmap.post("/", async (c) => {
                   : "invalidArguments";
       responses.push([
         "error",
-        { type, description: match?.[2] ?? "Unsupported method or arguments" },
+        { type, description: match?.[2] ?? t("mailProtocols.unsupportedMethodOrArguments") },
         tag,
       ]);
     }
@@ -289,18 +291,19 @@ async function jmapMethod(
     ].includes(name) &&
     !name.endsWith("/changes")
   )
-    fail(400, "Unknown JMAP method");
-  if (name.endsWith("/changes")) fail(400, "Change history is not available");
+    fail(400, t("mailProtocols.unknownJmapMethod"));
+  if (name.endsWith("/changes")) fail(400, t("mailProtocols.changeHistoryIsNotAvailable"));
   const account = text(args.accountId, "accountId", 36);
   await authorize(env, actor, account, "read");
   const currentState = await state(env, account);
-  if (args.ifInState !== undefined && args.ifInState !== currentState) fail(409, "State changed");
+  if (args.ifInState !== undefined && args.ifInState !== currentState)
+    fail(409, t("mailProtocols.stateChanged"));
   const ids = args.ids === undefined || args.ids === null ? null : args.ids;
   if (
     ids !== null &&
     (!Array.isArray(ids) || ids.length > 100 || ids.some((value) => typeof value !== "string"))
   )
-    fail(400, "Invalid IDs");
+    fail(400, t("mailProtocols.invalidIds"));
   if (name === "Mailbox/get") {
     const folders = await mailbox(env, account).folders(),
       counts: Record<string, { total: number; unread: number }> = {};
@@ -359,12 +362,12 @@ async function jmapMethod(
           ),
       )
     )
-      fail(400, "Unsupported filter");
+      fail(400, t("mailProtocols.unsupportedFilter"));
     if (
       filter.hasKeyword !== undefined &&
       !["$seen", "$flagged"].includes(String(filter.hasKeyword))
     )
-      fail(400, "Unsupported keyword filter");
+      fail(400, t("mailProtocols.unsupportedKeywordFilter"));
     if (
       args.sort !== undefined &&
       (!Array.isArray(args.sort) ||
@@ -372,7 +375,7 @@ async function jmapMethod(
         (args.sort[0] as { property?: string }).property !== "receivedAt" ||
         (args.sort[0] as { isAscending?: boolean }).isAscending !== false)
     )
-      fail(400, "Only descending receivedAt sorting is supported");
+      fail(400, t("mailProtocols.onlyDescendingReceivedatSortingIsSupported"));
     const terms: string[] = [];
     for (const [field, prefix] of [
       ["text", ""],
@@ -383,7 +386,8 @@ async function jmapMethod(
       if (filter[field])
         terms.push(prefix + '"' + text(filter[field], field, 256).replaceAll('"', "") + '"');
     if (filter.hasAttachment !== undefined) {
-      if (typeof filter.hasAttachment !== "boolean") fail(400, "Invalid hasAttachment");
+      if (typeof filter.hasAttachment !== "boolean")
+        fail(400, t("mailProtocols.invalidHasattachment"));
       terms.push((filter.hasAttachment ? "" : "-") + "has:attachment");
     }
     if (filter.hasKeyword === "$seen") terms.push("is:read");
@@ -477,7 +481,7 @@ async function jmapMethod(
     return { accountId: account, state: currentState, list, notFound };
   }
   if (name === "Thread/get") {
-    if (!ids) fail(400, "Thread IDs required");
+    if (!ids) fail(400, t("mailProtocols.threadIdsRequired"));
     const list = [],
       notFound = [];
     for (const threadId of ids as string[]) {
@@ -533,7 +537,8 @@ async function jmapMethod(
   }
   if (name === "SearchSnippet/get") {
     const selected = args.emailIds;
-    if (!Array.isArray(selected) || selected.length > 100) fail(400, "Invalid emailIds");
+    if (!Array.isArray(selected) || selected.length > 100)
+      fail(400, t("mailProtocols.invalidEmailids"));
     const list = [];
     for (const emailId of selected) {
       const message = await getMessage(env, actor, account, text(emailId, "emailId", 73));
@@ -564,7 +569,7 @@ async function jmapMethod(
       Array.isArray(create) ||
       Object.keys(create).length > 100
     )
-      fail(400, "Invalid create");
+      fail(400, t("mailProtocols.invalidCreate"));
     for (const [creationId, raw] of Object.entries(
       create as Record<string, Record<string, unknown>>,
     )) {
@@ -579,7 +584,7 @@ async function jmapMethod(
         if (name === "EmailSubmission/set") {
           const emailId = text(raw.emailId, "emailId", 74),
             resolved = emailId.startsWith("#") ? createdIds[emailId.slice(1)]! : emailId;
-          if (!resolved) fail(400, "Unknown creation ID");
+          if (!resolved) fail(400, t("mailProtocols.unknownCreationId"));
           const message = await partition(env, locator(resolved)).get(resolved, actor.user_id);
           const job = await submitDraft(
             env,
@@ -607,11 +612,12 @@ async function jmapMethod(
         let draftData: Record<string, unknown>;
         if (name === "Email/import") {
           const blobId = text(raw.blobId, "blobId", 100);
-          if (!blobId.startsWith("upload:")) fail(400, "Import requires an uploaded MIME blob");
+          if (!blobId.startsWith("upload:"))
+            fail(400, t("mailProtocols.importRequiresAnUploadedMimeBlob"));
           const object = await env.MAIL_BUCKET.get(
             "uploads/" + account + "/" + actor.user_id + "/" + blobId.slice(7),
           );
-          if (!object) fail(404, "Blob not found");
+          if (!object) fail(404, t("mailProtocols.blobNotFound"));
           const parsed = await PostalMime.parse(await object.arrayBuffer()),
             uploads = [];
           for (const file of parsed.attachments) {
@@ -665,7 +671,7 @@ async function jmapMethod(
       } catch (error) {
         notCreated[creationId] = {
           type: "invalidProperties",
-          description: error instanceof Error ? error.message : "Creation failed",
+          description: error instanceof Error ? error.message : t("mailProtocols.creationFailed"),
         };
       }
     }
@@ -676,7 +682,7 @@ async function jmapMethod(
       Array.isArray(update) ||
       Object.keys(update).length > 100
     )
-      fail(400, "Invalid update");
+      fail(400, t("mailProtocols.invalidUpdate"));
     for (const [resourceId, value] of Object.entries(
       update as Record<string, Record<string, unknown>>,
     )) {
@@ -684,7 +690,7 @@ async function jmapMethod(
         await authorize(env, actor, account, "write");
         if (name === "Mailbox/set") {
           const folder = (await mailbox(env, account).folders()).find((f) => f.id === resourceId);
-          if (!folder) fail(404, "Folder not found");
+          if (!folder) fail(404, t("mailProtocols.folderNotFound"));
           await mailbox(env, account).putFolder(
             resourceId,
             text(value.name, "name", 100),
@@ -708,20 +714,21 @@ async function jmapMethod(
               ),
             },
           );
-        } else fail(400, "Update is unsupported");
+        } else fail(400, t("mailProtocols.updateIsUnsupported"));
         updated[resourceId] = null;
       } catch {
         notUpdated[resourceId] = { type: "invalidProperties" };
       }
     }
     const destroy = args.destroy ?? [];
-    if (!Array.isArray(destroy) || destroy.length > 100) fail(400, "Invalid destroy");
+    if (!Array.isArray(destroy) || destroy.length > 100)
+      fail(400, t("mailProtocols.invalidDestroy"));
     for (const resourceId of destroy) {
       try {
         await authorize(env, actor, account, "write");
         if (name === "Mailbox/set") {
           const folder = (await mailbox(env, account).folders()).find((f) => f.id === resourceId);
-          if (!folder) fail(404, "Folder not found");
+          if (!folder) fail(404, t("mailProtocols.folderNotFound"));
           await mailbox(env, account).deleteFolder(String(resourceId), folder.version);
         } else if (name === "Email/set") {
           await belongs(env, account, locator(String(resourceId)));
@@ -734,7 +741,7 @@ async function jmapMethod(
             actor.user_id,
             !!message.draft,
           );
-        } else fail(400, "Destroy is unsupported for this method");
+        } else fail(400, t("mailProtocols.destroyIsUnsupportedForThisMethod"));
         destroyed.push(String(resourceId));
       } catch {
         notDestroyed[String(resourceId)] = { type: "forbidden" };
@@ -752,7 +759,7 @@ async function jmapMethod(
       notDestroyed,
     };
   }
-  fail(400, "Unsupported JMAP method");
+  fail(400, t("mailProtocols.unsupportedJmapMethod"));
 }
 const toolSchema = (properties: Record<string, unknown>, required: string[]) => ({
   type: "object",
@@ -764,22 +771,22 @@ const field = { type: "string" };
 const tools = [
   {
     name: "list_mailboxes",
-    description: "List mailboxes available to this credential",
+    description: t("mailProtocols.listMailboxesAvailableToThisCredential"),
     inputSchema: toolSchema({}, []),
   },
   {
     name: "search_messages",
-    description: "Search a mailbox",
+    description: t("mailProtocols.searchAMailbox"),
     inputSchema: toolSchema({ mailbox_id: field, query: field }, ["mailbox_id", "query"]),
   },
   {
     name: "get_message",
-    description: "Read an authorized message",
+    description: t("mailProtocols.readAnAuthorizedMessage"),
     inputSchema: toolSchema({ mailbox_id: field, message_id: field }, ["mailbox_id", "message_id"]),
   },
   {
     name: "create_draft",
-    description: "Create a private draft for review",
+    description: t("mailProtocols.createAPrivateDraftForReview"),
     inputSchema: toolSchema(
       {
         mailbox_id: field,
@@ -792,22 +799,23 @@ const tools = [
   },
   {
     name: "request_send",
-    description: "Request human review of the current draft; does not send or schedule mail",
+    description: t("mailProtocols.requestHumanReviewOfTheCurrentDraftDoesNot"),
     inputSchema: toolSchema({ mailbox_id: field, draft_id: field }, ["mailbox_id", "draft_id"]),
   },
 ];
 export async function mcp(c: import("hono").Context<MailAppEnv>) {
   const origin = c.req.header("origin");
-  if (origin && origin !== new URL(c.req.url).origin) fail(403, "Invalid MCP origin");
+  if (origin && origin !== new URL(c.req.url).origin)
+    fail(403, t("mailProtocols.invalidMcpOrigin"));
   const version = c.req.header("mcp-protocol-version");
   if (version && !["2025-03-26", "2025-06-18", "2025-11-25"].includes(version))
-    fail(400, "Unsupported MCP protocol version");
+    fail(400, t("mailProtocols.unsupportedMcpProtocolVersion"));
   const accept = c.req.header("accept") ?? "";
   if (!accept.includes("application/json") || !accept.includes("text/event-stream"))
-    fail(406, "MCP requires JSON and event-stream acceptance");
+    fail(406, t("mailProtocols.mcpRequiresJsonAndEventStreamAcceptance"));
   const request = await jsonBody(c.req.raw, ["jsonrpc", "id", "method", "params"]);
   if (request.jsonrpc !== "2.0" || typeof request.method !== "string")
-    fail(400, "Invalid JSON-RPC request");
+    fail(400, t("mailProtocols.invalidJsonRpcRequest"));
   if (!("id" in request)) return c.body(null, 202);
   let result: unknown;
   if (request.method === "initialize")
@@ -862,7 +870,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
           const account = text(args.mailbox_id, "mailbox_id", 36),
             draftId = text(args.draft_id, "draft_id", 73);
           const message = await getMessage(c.env, actor, account, draftId);
-          if (!message.draft) fail(409, "Message is not a draft");
+          if (!message.draft) fail(409, t("mailProtocols.messageIsNotADraft"));
           value = {
             requires_human_approval: true,
             draft_id: message.id,
@@ -875,7 +883,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
           break;
         }
         default:
-          fail(400, "Unknown tool");
+          fail(400, t("mailProtocols.unknownTool"));
       }
       result = {
         content: [{ type: "text", text: JSON.stringify(value) }],
@@ -886,7 +894,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
         content: [
           {
             type: "text",
-            text: error instanceof Error ? error.message : "Tool failed",
+            text: error instanceof Error ? error.message : t("mailProtocols.toolFailed"),
           },
         ],
         isError: true,
@@ -896,7 +904,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
     return c.json({
       jsonrpc: "2.0",
       id: request.id,
-      error: { code: -32601, message: "Method not found" },
+      error: { code: -32601, message: t("mailProtocols.methodNotFound") },
     });
   return c.json({ jsonrpc: "2.0", id: request.id, result });
 }

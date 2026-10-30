@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { timingSafeEqual, createHmac } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { importJWK, SignJWT, jwtVerify, type JWK } from "jose";
@@ -24,13 +25,13 @@ function signingRing(env: AuthEnv): SigningRing {
     new Set(ring.keys.map((k) => k.kid)).size !== ring.keys.length ||
     ring.keys.some((k) => !k.kid || k.kty !== "EC" || k.crv !== "P-256")
   )
-    throw new Error("Invalid signing key ring");
+    throw new Error(t("authCrypto.invalidSigningKeyRing"));
   return ring;
 }
 export async function signAccess(env: AuthEnv, session: Session) {
   const ring = signingRing(env);
   const jwk = ring.keys.find((key) => key.kid === ring.active_kid);
-  if (!jwk?.d) throw new Error("Active JWT private key is missing");
+  if (!jwk?.d) throw new Error(t("authCrypto.activeJwtPrivateKeyIsMissing"));
   const key = await importJWK({ ...jwk, alg: "ES256", key_ops: undefined }, "ES256");
   const timestamp = now();
   return new SignJWT({ sid: session.id, ver: session.auth_version })
@@ -51,7 +52,7 @@ export async function verifyAccess(env: AuthEnv, token: string) {
       token,
       async (header) => {
         const jwk = ring.keys.find((key) => key.kid === header.kid);
-        if (!jwk) throw new Error("Unknown key");
+        if (!jwk) throw new Error(t("authCrypto.unknownKey"));
         const { d: _private, ...publicKey } = jwk;
         const identity = JSON.stringify(publicKey);
         let key = verificationKeys.get(identity);
@@ -98,7 +99,7 @@ async function encryptionKey(env: AuthEnv, version?: number) {
     !value ||
     !/^[A-Za-z0-9_-]{43}$/.test(value)
   )
-    throw new Error("Invalid MFA encryption key ring");
+    throw new Error(t("authCrypto.invalidMfaEncryptionKeyRing"));
   return {
     version: selected,
     key: await crypto.subtle.importKey("raw", Buffer.from(value, "base64url"), "AES-GCM", false, [

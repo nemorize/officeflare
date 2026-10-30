@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { type MailCommandResult } from "../lib/mail-ui";
 import { useMailCache } from "./mail-resource-context";
@@ -110,7 +112,7 @@ export function ConversationReader({
           void action.run(() => change({ is_read: false }));
         }}
       >
-        Mark unread
+        {t("componentsMailReader.markUnread")}
       </Menu.Item>
       <Menu.Item
         disabled={!canWrite || !!target.draft || action.busy}
@@ -122,10 +124,14 @@ export function ConversationReader({
           );
         }}
       >
-        {target.folder_id === "trash" ? "Restore to inbox" : "Move to trash"}
+        {target.folder_id === "trash"
+          ? t("componentsMailReader.restoreToInbox")
+          : t("componentsMailReader.moveToTrash")}
       </Menu.Item>
       <Menu.Item onClick={() => setPlain(!plain)}>
-        {plain ? "Show formatted message" : "Show plain text"}
+        {plain
+          ? t("componentsMailReader.showFormattedMessage")
+          : t("componentsMailReader.showPlainText")}
       </Menu.Item>
       <Menu.Item
         disabled={action.busy}
@@ -135,7 +141,7 @@ export function ConversationReader({
           );
         }}
       >
-        Download original
+        {t("componentsMailReader.downloadOriginal")}
       </Menu.Item>
       <Menu.Item
         disabled={!canWrite || action.busy}
@@ -145,39 +151,48 @@ export function ConversationReader({
               method: "PUT",
               body: { email_address: target.from_address, blocked: true },
             });
-            mail.feedback("Sender blocked");
+            mail.feedback(t("componentsMailReader.senderBlocked"));
           });
         }}
       >
-        Block sender
+        {t("componentsMailReader.blockSender")}
       </Menu.Item>
       {(target.draft || target.folder_id === "trash" || target.folder_id === "spam") && (
         <Menu.Item
           disabled={!canWrite || action.busy || target.draft?.state === "submitted"}
           onClick={() => setDeleting(target)}
         >
-          {target.draft ? "Discard draft" : "Delete permanently"}
+          {target.draft
+            ? t("componentsMailReader.discardDraft")
+            : t("componentsMailReader.deletePermanently")}
         </Menu.Item>
       )}
       <Menu.Separator />
       <Menu.Item
         onClick={() =>
           mail.feedback(
-            `Provider: ${target.provider ?? "—"} · Message ID: ${target.rfc_message_id ?? "—"}`,
+            t("componentsMailReader.providerMessageId", {
+              value1: target.provider ?? "—",
+              value2: target.rfc_message_id ?? "—",
+            }),
             undefined,
             undefined,
             15000,
           )
         }
       >
-        Technical details
+        {t("componentsMailReader.technicalDetails")}
       </Menu.Item>
     </>
   );
   return (
-    <section className="mail-conversation" aria-label="Message detail">
+    <section className="mail-conversation" aria-label={t("componentsMailReader.messageDetail")}>
       <div className="mail-conversation-toolbar">
-        <MailIconButton icon="back" label="Back to messages" onClick={onClose} />
+        <MailIconButton
+          icon="back"
+          label={t("componentsMailReader.backToMessages")}
+          onClick={onClose}
+        />
         {(actions || messageActions) && (
           <div className="mail-toolbar-actions">
             {actions ? actions(messageActions) : <MailMenu>{messageActions}</MailMenu>}
@@ -187,34 +202,40 @@ export function ConversationReader({
         <div className="mail-conversation-navigation">
           <MailIconButton
             icon="layers"
-            label={expandAll ? "Collapse conversation" : "Expand conversation"}
+            label={
+              expandAll
+                ? t("componentsMailReader.collapseConversation")
+                : t("componentsMailReader.expandConversation")
+            }
             onClick={() => setExpandAll(!expandAll)}
           />
           <MailIconButton
             icon="back"
-            label="Previous conversation"
+            label={t("componentsMailReader.previousConversation")}
             disabled={!onPrevious}
             onClick={onPrevious}
           />
           <MailIconButton
             icon="arrow"
-            label="Next conversation"
+            label={t("componentsMailReader.nextConversation")}
             disabled={!onNext}
             onClick={onNext}
           />
         </div>
         <div className="mail-conversation-mobile-menu">
-          <MailMenu icon="layers" label="Conversation navigation">
+          <MailMenu icon="layers" label={t("componentsMailReader.conversationNavigation")}>
             <Menu.Item onClick={() => setExpandAll(!expandAll)}>
-              {expandAll ? "Collapse conversation" : "Expand conversation"}
+              {expandAll
+                ? t("componentsMailReader.collapseConversation")
+                : t("componentsMailReader.expandConversation")}
             </Menu.Item>
             <Menu.Item disabled={!onPrevious} onClick={onPrevious}>
               <Icon name="back" />
-              Previous conversation
+              {t("componentsMailReader.previousConversation")}
             </Menu.Item>
             <Menu.Item disabled={!onNext} onClick={onNext}>
               <Icon name="arrow" />
-              Next conversation
+              {t("componentsMailReader.nextConversation")}
             </Menu.Item>
           </MailMenu>
         </div>
@@ -232,10 +253,10 @@ export function ConversationReader({
         {message && (
           <>
             <div className="mail-conversation-title">
-              <h1>{message.subject || "(No subject)"}</h1>
+              <h1>{message.subject || t("componentsMailReader.noSubject")}</h1>
               <span className="mail-badge">
                 {message.draft?.state === "submitted"
-                  ? "Outbox"
+                  ? t("componentsMailReader.outbox")
                   : (mail.folders.find((folder) => folder.id === message.folder_id)?.name ??
                     message.folder_id)}
               </span>
@@ -247,7 +268,7 @@ export function ConversationReader({
                 disabled={thread.loading}
                 onClick={() => setCursor(thread.data!.next_cursor)}
               >
-                Load earlier messages
+                {t("componentsMailReader.loadEarlierMessages")}
               </Button>
             )}
             {thread.error && <MailNotice error={thread.error} />}
@@ -274,9 +295,13 @@ export function ConversationReader({
       </div>
       <Confirm
         open={!!deleting}
-        title={deleting?.draft ? "Discard draft?" : "Delete permanently?"}
-        description="This message and its attachments will be permanently removed."
-        label="Delete permanently"
+        title={
+          deleting?.draft
+            ? t("componentsMailReader.discardDraft2")
+            : t("componentsMailReader.deletePermanently2")
+        }
+        description={t("componentsMailReader.thisMessageAndItsAttachmentsWillBePermanentlyRemoved")}
+        label={t("componentsMailReader.deletePermanently")}
         destructive
         onClose={() => setDeleting(null)}
         onConfirm={async () => {
@@ -287,7 +312,7 @@ export function ConversationReader({
           );
           setDeleting(null);
           mail.refresh();
-          mail.feedback("Message deleted");
+          mail.feedback(t("componentsMailReader.messageDeleted"));
           onClose();
         }}
       />
@@ -343,7 +368,7 @@ function MessageCard({
   }, [open, message]);
   const reply = async (kind: "reply" | "reply-all" | "forward") => {
     if (mail.composing) {
-      mail.feedback("Close your current draft before opening another.");
+      mail.feedback(t("componentsMailReader.closeYourCurrentDraftBeforeOpeningAnother"));
       return;
     }
     const data = kind === "forward" ? { to: [] } : {};
@@ -378,7 +403,7 @@ function MessageCard({
     >
       <div className="mail-card-header">
         <span className="mail-sender-avatar">
-          {(entry.from_address || "D").slice(0, 1).toUpperCase()}
+          {(entry.from_address || t("componentsMailReader.d")).slice(0, 1).toUpperCase()}
         </span>
         <Button
           variant="plain"
@@ -386,18 +411,24 @@ function MessageCard({
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          <strong>{entry.from_address || (entry.draft_owner_id ? "Draft" : "Me")}</strong>
+          <strong>
+            {entry.from_address ||
+              (entry.draft_owner_id
+                ? t("componentsMailReader.draft")
+                : t("componentsMailReader.me"))}
+          </strong>
           <span>
             {open
-              ? `to ${
-                  message?.recipients
-                    .filter((r) => r.kind === "to")
-                    .map((r) => r.email_address)
-                    .join(", ") ||
-                  entry.recipient_summary ||
-                  "—"
-                }`
-              : entry.snippet || "No preview"}
+              ? t("componentsMailReader.to", {
+                  value1:
+                    message?.recipients
+                      .filter((r) => r.kind === "to")
+                      .map((r) => r.email_address)
+                      .join(", ") ||
+                    entry.recipient_summary ||
+                    "—",
+                })
+              : entry.snippet || t("componentsMailReader.noPreview")}
           </span>
         </Button>
         <time>{mailDate(entry.received_at)}</time>
@@ -405,37 +436,43 @@ function MessageCard({
           <>
             <Popover.Root>
               <Popover.Trigger
-                render={<Button variant="ghost" size="icon" aria-label="Message details" />}
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("componentsMailReader.messageDetails")}
+                  />
+                }
               >
                 <Icon name="down" />
               </Popover.Trigger>
               <PopoverPopup className="mail-envelope-popup" positionerProps={{ align: "end" }}>
                 <dl>
                   {[
-                    ["From", message.from_address],
+                    [t("componentsMailReader.from"), message.from_address],
                     [
-                      "To",
+                      t("componentsMailReader.to2"),
                       message.recipients
                         .filter((r) => r.kind === "to")
                         .map((r) => r.email_address)
                         .join(", "),
                     ],
                     [
-                      "Cc",
+                      t("componentsMailReader.cc"),
                       message.recipients
                         .filter((r) => r.kind === "cc")
                         .map((r) => r.email_address)
                         .join(", "),
                     ],
                     [
-                      "Bcc",
+                      t("componentsMailReader.bcc"),
                       message.recipients
                         .filter((r) => r.kind === "bcc")
                         .map((r) => r.email_address)
                         .join(", "),
                     ],
-                    ["Date", mailDate(message.received_at)],
-                    ["Reply to", message.reply_to_address],
+                    [t("componentsMailReader.date"), mailDate(message.received_at)],
+                    [t("componentsMailReader.replyTo"), message.reply_to_address],
                   ].map(
                     ([label, value]) =>
                       value && (
@@ -465,7 +502,9 @@ function MessageCard({
               {!plain && message.body.html ? (
                 <MailHtml message={message} path={path} />
               ) : (
-                <pre className="mail-plain-body">{message.body.text || "(Empty message)"}</pre>
+                <pre className="mail-plain-body">
+                  {message.body.text || t("componentsMailReader.emptyMessage")}
+                </pre>
               )}
               {message.attachments.filter((file) => file.disposition !== "inline").length > 0 && (
                 <div className="mail-attachment-cards">
@@ -488,7 +527,12 @@ function MessageCard({
                         <Icon name="file" />
                         <span>
                           <strong>{file.filename}</strong>
-                          <small>{bytes(file.size_bytes)} · Download</small>
+                          <small>
+                            <LocalizedMessage
+                              id="componentsMailReader.download"
+                              values={{ bytes: bytes(file.size_bytes) }}
+                            />
+                          </small>
                         </span>
                       </Button>
                     ))}
@@ -513,22 +557,27 @@ function MessageCard({
                           const pending = message.submissions.find((submission) =>
                             cancelableSubmission(submission.status),
                           );
-                          if (!pending) throw new Error("This message is already being sent.");
+                          if (!pending)
+                            throw new Error(
+                              t("componentsMailReader.thisMessageIsAlreadyBeingSent"),
+                            );
                           await api(`${path}/submissions/${pending.id}/cancel`, {
                             method: "POST",
                           });
                           mail.refresh();
                           mail.feedback(
                             pending.status === "unknown"
-                              ? "Draft reopened. The provider may already have accepted this email."
-                              : "Send canceled. Draft is ready to continue.",
+                              ? t(
+                                  "componentsMailReader.draftReopenedTheProviderMayAlreadyHaveAcceptedThis",
+                                )
+                              : t("componentsMailReader.sendCanceledDraftIsReadyToContinue"),
                           );
                         }
                         mail.compose(message.id, true);
                       });
                     }}
                   >
-                    Continue draft
+                    {t("componentsMailReader.continueDraft")}
                   </Button>
                 ) : (
                   <>
@@ -539,7 +588,7 @@ function MessageCard({
                       }}
                     >
                       <Icon name="reply" />
-                      Reply
+                      {t("componentsMailReader.reply")}
                     </Button>
                     <Button
                       disabled={!canWrite || action.busy}
@@ -548,7 +597,7 @@ function MessageCard({
                       }}
                     >
                       <Icon name="replyAll" />
-                      Reply all
+                      {t("componentsMailReader.replyAll")}
                     </Button>
                     <Button
                       disabled={!canWrite || action.busy}
@@ -557,7 +606,7 @@ function MessageCard({
                       }}
                     >
                       <Icon name="forward" />
-                      Forward
+                      {t("componentsMailReader.forward")}
                     </Button>
                   </>
                 )}

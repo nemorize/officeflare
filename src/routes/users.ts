@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, eq, exists, gt, inArray, isNull, ne, notExists, type AnyColumn } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -55,7 +56,7 @@ const account = (user: User) => ({
   deleted_at: user.deleted_at,
 });
 function missing(): never {
-  throw new HTTPException(404, { message: "User not found" });
+  throw new HTTPException(404, { message: t("routesUsers.userNotFound") });
 }
 function emailAddress(value: unknown) {
   const email = string(value, "email_address", 254).trim().toLowerCase();
@@ -73,15 +74,15 @@ function emailAddress(value: unknown) {
     domain.split(".").length < 2 ||
     domain.split(".").some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
   )
-    invalid("Invalid email_address");
+    invalid(t("routesUsers.invalidEmailAddress"));
   return email;
 }
 function nullableText(value: unknown, key: string, max: number) {
   if (value === null) return null;
-  return string(value, key, max).trim() || invalid(`Invalid ${key}`);
+  return string(value, key, max).trim() || invalid(t("routesUsers.invalid", { key: key }));
 }
 function boolean(value: unknown, key: string) {
-  if (typeof value !== "boolean") invalid(`Invalid ${key}`);
+  if (typeof value !== "boolean") invalid(t("routesUsers.invalid", { key: key }));
   return value;
 }
 async function findUser(c: AuthContext, id: string) {
@@ -117,7 +118,7 @@ async function requireAvailableEmail(c: AuthContext, email: string, exceptId?: s
       .where(and(eq(users.id, c.get("identity").user.id), availableEmail(c, email, exceptId)))
       .get())
   )
-    conflict("Email address is already assigned");
+    conflict(t("routesUsers.emailAddressIsAlreadyAssigned"));
 }
 async function requireManageable(c: AuthContext, id: string) {
   const db = c.get("db"),
@@ -129,7 +130,7 @@ async function requireManageable(c: AuthContext, id: string) {
       .where(and(eq(users.id, actor), manageableUser(db, actor, id)))
       .get())
   ) {
-    forbidden("Cannot manage a user with permissions you do not hold");
+    forbidden(t("routesUsers.cannotManageAUserWithPermissionsYouDoNot"));
   }
 }
 // Catch changes between loading the account and committing its security-sensitive mutation.
@@ -212,9 +213,10 @@ function revokeCredentials(
 userRoutes.get("/", requirePermission("admin.users.read"), async (c) => {
   const cursor = c.req.query("cursor"),
     suppliedLimit = c.req.query("limit") ?? "50";
-  if (cursor !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(cursor)) invalid("Invalid cursor");
+  if (cursor !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(cursor))
+    invalid(t("routesUsers.invalidCursor"));
   if (!/^[1-9][0-9]{0,2}$/.test(suppliedLimit) || Number(suppliedLimit) > 100)
-    invalid("Invalid limit");
+    invalid(t("routesUsers.invalidLimit"));
   const limit = Number(suppliedLimit);
   const rows = await c
     .get("db")
@@ -283,17 +285,18 @@ userRoutes.post(
       enabled = await hasMailRole(c, target.id);
     if (data.enable_mail !== undefined) boolean(data.enable_mail, "enable_mail");
     const role = !enabled && data.enable_mail === true ? await personalMailRole(c) : null;
-    if (!enabled && !role) invalid("Enable Mail for this user before setting up their address");
+    if (!enabled && !role) invalid(t("routesUsers.enableMailForThisUserBeforeSettingUpTheir"));
     if (role) {
       if (!(await can(c, "admin.users.roles.assign")))
-        forbidden("Enabling Mail requires admin.users.roles.assign");
+        forbidden(t("routesUsers.enablingMailRequiresAdminUsersRolesAssign"));
       await requireOwnedRoles(c, [role.id]);
-      if ((await dbRolesCount(c, target.id)) >= 50) invalid("This user already has 50 roles");
+      if ((await dbRolesCount(c, target.id)) >= 50)
+        invalid(t("routesUsers.thisUserAlreadyHas50Roles"));
     }
     const { enable_mail: _enable, ...addressInput } = data,
       plan = await personalMailPlan(c, target, addressInput);
     if (plan.address && !(await can(c, "admin.mail.domains.manage")))
-      forbidden("Setting a mail address requires admin.mail.domains.manage");
+      forbidden(t("routesUsers.settingAMailAddressRequiresAdminMailDomainsManage"));
     const db = c.get("db"),
       { user, session } = c.get("identity"),
       operation = uuid();
@@ -352,7 +355,7 @@ userRoutes.post(
       ...personalMailStatements(c, plan, accessWon(db, session.id, operation)),
     ]);
     if (!result[0].meta.changes)
-      conflict("The account, address or permissions changed. Retry the setup.");
+      conflict(t("routesUsers.theAccountAddressOrPermissionsChangedRetryTheSetup"));
     await tryFinishMailbox(c.env, plan.box.id);
     return c.json(await personalMail(c.env, target.id));
   },
@@ -389,13 +392,13 @@ userRoutes.post("/", requirePermission("admin.users.create"), async (c) => {
     defaultIds = defaults.map((role) => role.id);
   const ids = "role_ids" in data ? roleIds(data.role_ids) : defaultIds;
   const selected = ids.length ? await db.select().from(roles).where(inArray(roles.id, ids)) : [];
-  if (selected.length !== ids.length) invalid("Unknown role");
+  if (selected.length !== ids.length) invalid(t("routesUsers.unknownRole"));
   const added = ids.filter((id) => !defaultIds.includes(id)),
     removed = defaultIds.filter((id) => !ids.includes(id));
   if (added.length && !(await can(c, "admin.users.roles.assign")))
-    forbidden("Changing default roles requires admin.users.roles.assign");
+    forbidden(t("routesUsers.changingDefaultRolesRequiresAdminUsersRolesAssign"));
   if (removed.length && !(await can(c, "admin.users.roles.remove")))
-    forbidden("Changing default roles requires admin.users.roles.remove");
+    forbidden(t("routesUsers.changingDefaultRolesRequiresAdminUsersRolesRemove"));
   await requireOwnedRoles(c, [...added, ...removed]);
   const email = emailAddress(data.email_address),
     suppliedPassword = password(data.password, true),
@@ -422,7 +425,8 @@ userRoutes.post("/", requirePermission("admin.users.create"), async (c) => {
   const hasMail = (await Promise.all(selected.map((role) => permissionsOf(c, role.id)))).some(
     (permissions) => permissions.includes("mail.access"),
   );
-  if ("mail_address" in data && !hasMail) invalid("Mail address requires a role with Mail access");
+  if ("mail_address" in data && !hasMail)
+    invalid(t("routesUsers.mailAddressRequiresARoleWithMailAccess"));
   const mailPlan = hasMail ? await personalMailPlan(c, values, data.mail_address) : null;
   await requireAvailableEmail(c, email);
   const operation = uuid(),
@@ -454,7 +458,7 @@ userRoutes.post("/", requirePermission("admin.users.create"), async (c) => {
     ...(mailPlan ? personalMailStatements(c, mailPlan, accessWon(db, session.id, operation)) : []),
   ]);
   if (result[0].meta.changes !== 1 || !result[1][0])
-    conflict("Account, permissions or email assignment changed; retry");
+    conflict(t("routesUsers.accountPermissionsOrEmailAssignmentChangedRetry"));
   c.header("Location", `/api/users/${values.id}`);
   if (mailPlan) await tryFinishMailbox(c.env, mailPlan.box.id);
   return c.json(
@@ -472,7 +476,7 @@ userRoutes.patch("/:id", requirePermission("admin.users.read"), async (c) => {
     "disabled",
     "password_reset_required",
   ]);
-  if (Object.keys(data).length === 0) invalid("No changes supplied");
+  if (Object.keys(data).length === 0) invalid(t("routesUsers.noChangesSupplied"));
   const required = new Set<Permission>();
   for (const key of Object.keys(data))
     required.add(
@@ -486,7 +490,8 @@ userRoutes.patch("/:id", requirePermission("admin.users.read"), async (c) => {
       }[key] as Permission,
     );
   for (const permission of required)
-    if (!(await can(c, permission))) forbidden(`This change requires ${permission}`);
+    if (!(await can(c, permission)))
+      forbidden(t("routesUsers.thisChangeRequires", { permission: permission }));
   const target = await findUser(c, c.req.param("id"));
   await requireManageable(c, target.id);
   const timestamp = now(),
@@ -502,7 +507,7 @@ userRoutes.patch("/:id", requirePermission("admin.users.read"), async (c) => {
   if ("disabled" in data) {
     const disabled = boolean(data.disabled, "disabled");
     if (disabled && target.id === c.get("identity").user.id)
-      forbidden("You cannot disable your own account.");
+      forbidden(t("routesUsers.youCannotDisableYourOwnAccount"));
     changes.disabled_at = disabled ? (target.disabled_at ?? timestamp) : null;
   }
   if ("password_reset_required" in data)
@@ -571,7 +576,7 @@ userRoutes.patch("/:id", requirePermission("admin.users.read"), async (c) => {
     ...(securityChanged ? revokeCredentials(c, target.id, operation, timestamp) : []),
   ]);
   if (result[0].meta.changes !== 1 || !result[1][0])
-    conflict("Account, permissions or administrator availability changed; reload and retry");
+    conflict(t("routesUsers.accountPermissionsOrAdministratorAvailabilityChangedReloadAndRetry"));
   return c.json({ user: account(result[1][0]) });
 });
 
@@ -615,7 +620,7 @@ userRoutes.delete("/:id", requirePermission("admin.users.delete"), async (c) => 
     ...revokeCredentials(c, target.id, operation, timestamp, true),
   ]);
   if (result[0].meta.changes !== 1 || result[1].meta.changes !== 1)
-    conflict("Account, permissions or administrator availability changed; reload and retry");
+    conflict(t("routesUsers.accountPermissionsOrAdministratorAvailabilityChangedReloadAndRetry"));
   return c.body(null, 204);
 });
 

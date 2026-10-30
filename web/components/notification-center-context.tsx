@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import {
   createContext,
   useCallback,
@@ -176,7 +177,8 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
 }
 export function useNotificationCenter() {
   const value = useContext(Context);
-  if (!value) throw new Error("NotificationCenterProvider is missing");
+  if (!value)
+    throw new Error(t("componentsNotificationCenterContext.notificationcenterproviderIsMissing"));
   return value;
 }
 

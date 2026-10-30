@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -19,7 +20,7 @@ async function target(c: CalendarContext) {
     cal.kind === "external"
       ? await first<CalendarFeed>(c.env, "SELECT * FROM calendar_feeds WHERE calendar_id=?", cal.id)
       : null;
-  if (!feed) fail(404, "FEED_NOT_FOUND", "External calendar not found");
+  if (!feed) fail(404, "FEED_NOT_FOUND", t("calendarFeeds.externalCalendarNotFound"));
   return { cal, feed };
 }
 function urlInput(value: unknown) {
@@ -29,7 +30,7 @@ function urlInput(value: unknown) {
     fail(
       400,
       "INVALID_FEED_URL",
-      "Use a public HTTPS or webcal calendar subscription URL without a username or password.",
+      t("calendarFeeds.useAPublicHttpsOrWebcalCalendarSubscriptionUrl"),
     );
   }
 }
@@ -71,14 +72,14 @@ routes.post("/feeds", requirePermission("calendar.calendars.create"), async (c) 
     hash,
   );
   if (!(await first(c.env, `SELECT 1 WHERE ${duplicate.sql}`, ...duplicate.args)))
-    fail(409, "FEED_EXISTS", "This calendar URL is already registered.");
+    fail(409, "FEED_EXISTS", t("calendarFeeds.thisCalendarUrlIsAlreadyRegistered"));
   const count = await first<{ count: number }>(
     c.env,
     "SELECT COUNT(*) count FROM calendars WHERE data_owner_user_id=? AND kind='external' AND trashed_at IS NULL",
     user,
   );
   if (count!.count >= 20)
-    fail(422, "FEED_LIMIT", "You can subscribe to at most 20 external calendars.");
+    fail(422, "FEED_LIMIT", t("calendarFeeds.youCanSubscribeToAtMost20ExternalCalendars"));
   const feed: CalendarFeed = {
     calendar_id: id,
     source_secret: await encryptFeedUrl(c.env, id, url),
@@ -155,7 +156,7 @@ routes.patch(
     }
     if ("enabled" in data) values.enabled = flag(data.enabled, "enabled");
     if ((values.enabled ?? feed.enabled) && !(values.source_secret ?? feed.source_secret))
-      fail(400, "URL_REQUIRED", "Enter a calendar subscription URL to reconnect.");
+      fail(400, "URL_REQUIRED", t("calendarFeeds.enterACalendarSubscriptionUrlToReconnect"));
     values.next_sync_at = now();
     await mutate(c, {
       operation: "calendar.feed.update",
@@ -189,11 +190,12 @@ routes.post("/calendars/:calendarId/feed/refresh", async (c) => {
   const { cal, feed } = await target(c),
     data = await body(c, ["version"]),
     version = expectedVersion(c, data);
-  if (!feed.enabled) fail(409, "FEED_PAUSED", "Resume this calendar before refreshing.");
+  if (!feed.enabled)
+    fail(409, "FEED_PAUSED", t("calendarFeeds.resumeThisCalendarBeforeRefreshing"));
   if (feed.lease_until > now())
-    fail(409, "SYNC_RUNNING", "This calendar is already synchronizing.");
+    fail(409, "SYNC_RUNNING", t("calendarFeeds.thisCalendarIsAlreadySynchronizing"));
   if (feed.last_attempt_at && feed.last_attempt_at > now() - 300)
-    fail(429, "REFRESH_LIMIT", "Wait five minutes between manual calendar refreshes.");
+    fail(429, "REFRESH_LIMIT", t("calendarFeeds.waitFiveMinutesBetweenManualCalendarRefreshes"));
   await mutate(c, {
     operation: "calendar.feed.refresh",
     request: data,

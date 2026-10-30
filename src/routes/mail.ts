@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { measured } from "../observability/performance";
 import { mailViewOptions, mailGrouped } from "../mail/ui-query";
 import { queryThreads, mailboxSummary } from "../mail/views";
@@ -137,13 +138,13 @@ const providerCatalog = () => {
 const key = (c: Parameters<typeof authenticateMail>[0]) => {
   const supplied = c.req.header("Idempotency-Key");
   if (supplied !== undefined && !/^[A-Za-z0-9._:-]{1,128}$/.test(supplied))
-    fail(400, "Invalid Idempotency-Key");
+    fail(400, t("routesMail.invalidIdempotencyKey"));
   return supplied ?? id();
 };
 const publicMessage = ({ body_r2_key: _body, raw_r2_key: _raw, ...message }: MessageRow) => message;
 mail.get("/mailboxes/:m/events/ws", async (c) => {
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
-    fail(400, "Expected WebSocket upgrade");
+    fail(400, t("routesMail.expectedWebsocketUpgrade"));
   const ticket = text(c.req.query("ticket"), "ticket", 72);
   // WebSockets are transferable through fetch responses, not DO RPC serialization.
   return mailbox(c.env, resource(c)).fetch(
@@ -174,14 +175,14 @@ mail.onError((error, c) => {
     return c.json({ error: found[2] }, { status: Number(found[1]) as 400 });
   }
   if (/UNIQUE constraint failed/i.test(error.message))
-    return c.json({ error: "Value is already assigned" }, 409);
+    return c.json({ error: t("routesMail.valueIsAlreadyAssigned") }, 409);
   if (/FOREIGN KEY constraint failed/i.test(error.message))
-    return c.json({ error: "Referenced resource is unavailable" }, 409);
+    return c.json({ error: t("routesMail.referencedResourceIsUnavailable") }, 409);
   console.error("Mail API failure", error);
-  return c.json({ error: "Internal server error" }, 500);
+  return c.json({ error: t("routesMail.internalServerError") }, 500);
 });
 mail.get("/preferences", async (c) => {
-  if (actor(c).api_key_id) fail(403, "Personal preferences require a user session");
+  if (actor(c).api_key_id) fail(403, t("routesMail.personalPreferencesRequireAUserSession"));
   const saved = await first<{ preferences_json: string }>(
     c.env,
     "SELECT preferences_json FROM user_mail_preferences WHERE user_id=?",
@@ -194,7 +195,7 @@ mail.get("/preferences", async (c) => {
   });
 });
 mail.patch("/preferences", async (c) => {
-  if (actor(c).api_key_id) fail(403, "Personal preferences require a user session");
+  if (actor(c).api_key_id) fail(403, t("routesMail.personalPreferencesRequireAUserSession"));
   const data = await input(c, Object.keys(defaultMailPreferences));
   const validated = mailPreferences(data);
   const changes = Object.fromEntries(
@@ -327,7 +328,7 @@ mail.patch("/provider-connections/:id", async (c) => {
     "SELECT * FROM mail_provider_connections WHERE id=?",
     c.req.param("id"),
   );
-  if (!existing) fail(404, "Connection not found");
+  if (!existing) fail(404, t("routesMail.connectionNotFound"));
   const selected = provider(existing.provider),
     config =
       data.config === undefined
@@ -364,7 +365,7 @@ mail.patch("/provider-connections/:id", async (c) => {
       version,
     )
     .run();
-  if (!result.meta.changes) fail(409, "Connection version changed");
+  if (!result.meta.changes) fail(409, t("routesMail.connectionVersionChanged"));
   return c.json({
     connection: publicConnection(
       await first<Connection>(
@@ -417,7 +418,7 @@ mail.post("/domains", async (c) => {
       outbound,
     ))
   )
-    fail(409, "Sending provider connections are configured per domain");
+    fail(409, t("routesMail.sendingProviderConnectionsAreConfiguredPerDomain"));
   const maxSendBytes = configuredSendLimit(
     data.max_send_bytes ?? null,
     sendingConnection?.provider ?? null,
@@ -427,7 +428,7 @@ mail.post("/domains", async (c) => {
     send =
       data.outbound_enabled === undefined ? 0 : flag(data.outbound_enabled, "outbound_enabled");
   if ((receive && !inbound) || (send && !outbound))
-    fail(400, "Enabled direction requires a provider connection");
+    fail(400, t("routesMail.enabledDirectionRequiresAProviderConnection"));
   const domainDb = administrativeControl(c, "admin.mail.domains.manage");
   const defaultFlag = data.is_default === undefined ? null : flag(data.is_default, "is_default");
   await domainDb.batch([
@@ -482,7 +483,7 @@ mail.patch("/domains/:id", async (c) => {
     "SELECT * FROM mail_domains WHERE id=?",
     c.req.param("id"),
   );
-  if (!existing) fail(404, "Domain not found");
+  if (!existing) fail(404, t("routesMail.domainNotFound"));
   const values: Record<string, string | number | null> = {};
   for (const field of ["inbound_connection_id", "outbound_connection_id"] as const)
     if (field in data) {
@@ -502,7 +503,7 @@ mail.patch("/domains/:id", async (c) => {
         values.catch_all_mailbox_id,
       ))
     )
-      fail(400, "Catch-all mailbox is not active");
+      fail(400, t("routesMail.catchAllMailboxIsNotActive"));
   }
   const inbound =
       values.inbound_connection_id === undefined
@@ -530,7 +531,7 @@ mail.patch("/domains/:id", async (c) => {
       existing.id,
     ))
   )
-    fail(409, "Sending provider connections are configured per domain");
+    fail(409, t("routesMail.sendingProviderConnectionsAreConfiguredPerDomain"));
   const maxSendBytes = configuredSendLimit(
     data.max_send_bytes === undefined ? existing.max_send_bytes : data.max_send_bytes,
     sendingConnection?.provider ?? null,
@@ -540,9 +541,9 @@ mail.patch("/domains/:id", async (c) => {
     ((values.inbound_enabled ?? existing.inbound_enabled) && !inbound) ||
     ((values.outbound_enabled ?? existing.outbound_enabled) && !outbound)
   )
-    fail(400, "Enabled direction requires a provider connection");
+    fail(400, t("routesMail.enabledDirectionRequiresAProviderConnection"));
   const fields = Object.keys(values);
-  if (!fields.length) fail(400, "No changes supplied");
+  if (!fields.length) fail(400, t("routesMail.noChangesSupplied"));
   const domainDb = administrativeControl(c, "admin.mail.domains.manage");
   await domainDb.batch([
     ...(values.is_default === 1
@@ -593,14 +594,14 @@ mail.post("/domains/:id/rules", async (c) => {
     data.conditions.length > 20 ||
     !["store", "forward", "reject"].includes(String(data.action))
   )
-    fail(400, "Invalid routing rule");
+    fail(400, t("routesMail.invalidRoutingRule"));
   const conditions = data.conditions.map((value) => {
     if (
       !value ||
       !["from", "to", "subject"].includes(value.field) ||
       !["contains", "equals", "prefix", "suffix"].includes(value.operator)
     )
-      fail(400, "Invalid routing condition");
+      fail(400, t("routesMail.invalidRoutingCondition"));
     return {
       field: value.field,
       operator: value.operator,
@@ -616,16 +617,16 @@ mail.post("/domains/:id/rules", async (c) => {
     );
   const version =
     data.version === undefined ? 1 : integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
-  if (existing && existing.version !== version) fail(409, "Rule version changed");
+  if (existing && existing.version !== version) fail(409, t("routesMail.ruleVersionChanged"));
   if (
     !existing &&
     (await all(c.env, "SELECT id FROM mail_routing_rules WHERE domain_id=?", c.req.param("id")))
       .length >= 100
   )
-    fail(409, "Routing rule limit reached");
+    fail(409, t("routesMail.routingRuleLimitReached"));
   const reason =
     data.reject_reason === undefined ? null : text(data.reject_reason, "reject_reason", 200);
-  if (reason && /[\r\n]/.test(reason)) fail(400, "Invalid rejection reason");
+  if (reason && /[\r\n]/.test(reason)) fail(400, t("routesMail.invalidRejectionReason"));
   const values = [
     text(data.name, "name", 100),
     integer(data.priority ?? 0, "priority", -1000, 1000),
@@ -649,7 +650,7 @@ mail.post("/domains/:id/rules", async (c) => {
         )
         .bind(ruleId, c.req.param("id"), ...values)
         .run();
-  if (!result.meta.changes) fail(409, "Rule or permissions changed");
+  if (!result.meta.changes) fail(409, t("routesMail.ruleOrPermissionsChanged"));
   return c.json(
     {
       rule: await first(c.env, "SELECT * FROM mail_routing_rules WHERE id=?", ruleId),
@@ -669,7 +670,8 @@ mail.get("/mailboxes", async (c) => {
   if (c.req.query("all") === "true") {
     await administrator(c, "admin.mail.mailboxes.read");
     const kind = c.req.query("kind") ?? null;
-    if (kind && !["personal", "shared"].includes(kind)) fail(400, "Invalid mailbox kind");
+    if (kind && !["personal", "shared"].includes(kind))
+      fail(400, t("routesMail.invalidMailboxKind"));
     return c.json({
       mailboxes: await all(
         c.env,
@@ -739,12 +741,12 @@ async function setupAddress(
     Array.isArray(value) ||
     Object.keys(value).some((key) => !["domain_id", "local_part"].includes(key))
   )
-    fail(400, "Invalid mail address");
+    fail(400, t("routesMail.invalidMailAddress"));
   const data = value as Record<string, unknown>;
   const address = { domain_id: strictId(data.domain_id), local_part: localPart(data.local_part) };
   await administrator(c, "admin.mail.domains.manage");
   if (!(await first(c.env, "SELECT id FROM mail_domains WHERE id=?", address.domain_id)))
-    fail(400, "Mail domain is unavailable");
+    fail(400, t("routesMail.mailDomainIsUnavailable"));
   return address;
 }
 async function setupMembers(
@@ -752,7 +754,7 @@ async function setupMembers(
   value: unknown,
 ): Promise<SetupMember[]> {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 100) fail(400, "Invalid mailbox members");
+  if (!Array.isArray(value) || value.length > 100) fail(400, t("routesMail.invalidMailboxMembers"));
   const members = value.map((value) => {
     if (
       !value ||
@@ -760,12 +762,13 @@ async function setupMembers(
       Array.isArray(value) ||
       Object.keys(value).some((key) => !["user_id", "role", "permissions"].includes(key))
     )
-      fail(400, "Invalid mailbox member");
+      fail(400, t("routesMail.invalidMailboxMember"));
     const user_id = text(value.user_id, "user_id", 100),
       role = value.role ?? "member";
-    if (!["viewer", "member", "manager", "custom"].includes(role)) fail(400, "Invalid member role");
+    if (!["viewer", "member", "manager", "custom"].includes(role))
+      fail(400, t("routesMail.invalidMemberRole"));
     if (role !== "custom" && value.permissions !== undefined)
-      fail(400, "Custom permissions require a custom role");
+      fail(400, t("routesMail.customPermissionsRequireACustomRole"));
     const keys = ["can_read", "can_write", "can_send", "can_manage"];
     if (
       role === "custom" &&
@@ -775,7 +778,7 @@ async function setupMembers(
         Object.keys(value.permissions).some((key) => !keys.includes(key)) ||
         keys.some((key) => typeof value.permissions[key] !== "boolean"))
     )
-      fail(400, "Invalid custom member permissions");
+      fail(400, t("routesMail.invalidCustomMemberPermissions"));
     return {
       user_id,
       role,
@@ -785,14 +788,14 @@ async function setupMembers(
     } as SetupMember;
   });
   if (new Set(members.map((entry) => entry.user_id)).size !== members.length)
-    fail(400, "Duplicate mailbox member");
+    fail(400, t("routesMail.duplicateMailboxMember"));
   const available = await all<{ id: string }>(
     c.env,
     "SELECT u.id FROM users u WHERE u.deleted_at IS NULL AND u.disabled_at IS NULL AND u.password_hash IS NOT NULL AND " +
       mailAccessSql,
   );
   if (members.some((member) => !available.some((user) => user.id === member.user_id)))
-    fail(400, "A selected member is unavailable or does not have Mail enabled");
+    fail(400, t("routesMail.aSelectedMemberIsUnavailableOrDoesNotHave"));
   return members.sort((a, b) => a.user_id.localeCompare(b.user_id));
 }
 function setupControl(
@@ -904,7 +907,7 @@ mail.get("/mailboxes/:m/configuration", async (c) => {
     "SELECT * FROM mail_mailboxes WHERE id=? AND status<>'deleted'",
     resource(c),
   );
-  if (!entry) fail(404, "Mailbox not found");
+  if (!entry) fail(404, t("routesMail.mailboxNotFound"));
   return c.json({
     mailbox: entry,
     owner: await first(
@@ -931,16 +934,16 @@ mail.patch("/mailboxes/:m/configuration", async (c) => {
     "SELECT * FROM mail_mailboxes WHERE id=? AND status<>'deleted'",
     resource(c),
   );
-  if (!entry) fail(404, "Mailbox not found");
+  if (!entry) fail(404, t("routesMail.mailboxNotFound"));
   const data = await input(c, ["name", "status", "address", "members"]),
     address = await setupAddress(c, data.address),
     members = await setupMembers(c, data.members);
   if (entry.kind !== "shared" && data.members !== undefined)
-    fail(400, "Manage personal mailboxes from the user account");
+    fail(400, t("routesMail.managePersonalMailboxesFromTheUserAccount"));
   const name = data.name === undefined ? entry.name : text(data.name, "name", 100),
     status = data.status ?? entry.status;
   if (!["active", "disabled", "provisioning"].includes(String(status)))
-    fail(400, "Invalid mailbox status");
+    fail(400, t("routesMail.invalidMailboxStatus"));
   if (entry.status === "provisioning" && status === "active")
     await mailbox(c.env, entry.id).initialize(entry.id);
   const db = setupControl(c, entry.id, entry.owner_user_id, address, members);
@@ -960,7 +963,7 @@ mail.patch("/mailboxes/:m/configuration", async (c) => {
     ),
   ]);
   if (!result[0]!.meta.changes)
-    fail(409, "Permissions, address or members changed. Retry the update.");
+    fail(409, t("routesMail.permissionsAddressOrMembersChangedRetryTheUpdate"));
   return c.json({
     mailbox: await first(c.env, "SELECT * FROM mail_mailboxes WHERE id=?", entry.id),
   });
@@ -971,11 +974,11 @@ mail.post("/mailboxes", async (c) => {
     owner = text(data.owner_user_id ?? actor(c).user_id, "owner_user_id", 100),
     name = text(data.name, "name", 100),
     kind = data.kind ?? "personal";
-  if (!["personal", "shared"].includes(String(kind))) fail(400, "Invalid mailbox kind");
+  if (!["personal", "shared"].includes(String(kind))) fail(400, t("routesMail.invalidMailboxKind"));
   if (kind !== "shared" && data.members !== undefined)
-    fail(400, "Only shared mailboxes accept members");
+    fail(400, t("routesMail.onlySharedMailboxesAcceptMembers"));
   if (!(await first(c.env, "SELECT id FROM users WHERE id=? AND deleted_at IS NULL", owner)))
-    fail(400, "Owner is unavailable");
+    fail(400, t("routesMail.ownerIsUnavailable"));
   const address = await setupAddress(c, data.address),
     members = await setupMembers(c, data.members);
   const operationId = await hash(actor(c).user_id + ":mailbox:" + key(c)),
@@ -992,7 +995,7 @@ mail.post("/mailboxes", async (c) => {
     operationId,
   );
   if (previous && previous.request_hash !== requestHash)
-    fail(409, "Idempotency key reused with different request");
+    fail(409, t("routesMail.idempotencyKeyReusedWithDifferentRequest"));
   const mailboxId = previous?.resource_id ?? id(),
     db = setupControl(c, mailboxId, owner, address, members, true);
   if (!previous) {
@@ -1008,7 +1011,7 @@ mail.post("/mailboxes", async (c) => {
         .bind(operationId, actor(c).user_id, mailboxId, requestHash, mailboxId),
     ]);
     if (!result[0]!.meta.changes)
-      fail(409, "Permissions, address or members changed during mailbox provisioning");
+      fail(409, t("routesMail.permissionsAddressOrMembersChangedDuringMailboxProvisioning"));
   }
   await mailbox(c.env, mailboxId).initialize(mailboxId);
   await db.batch([
@@ -1030,9 +1033,10 @@ mail.patch("/mailboxes/:m", async (c) => {
   await administrator(c, "admin.mail.mailboxes.manage");
   const data = await input(c, ["name", "status"]),
     existing = await first<Mailbox>(c.env, "SELECT * FROM mail_mailboxes WHERE id=?", resource(c));
-  if (!existing) fail(404, "Mailbox not found");
+  if (!existing) fail(404, t("routesMail.mailboxNotFound"));
   const status = data.status ?? existing.status;
-  if (!["active", "disabled"].includes(String(status))) fail(400, "Invalid mailbox status");
+  if (!["active", "disabled"].includes(String(status)))
+    fail(400, t("routesMail.invalidMailboxStatus"));
   await administrativeControl(c, "admin.mail.mailboxes.manage")
     .prepare("UPDATE mail_mailboxes SET name=?,status=?,updated_at=? WHERE id=?")
     .bind(
@@ -1076,7 +1080,7 @@ mail.put("/mailboxes/:m/members/:user", async (c) => {
       c.req.param("user"),
     ))
   )
-    fail(400, "User is unavailable");
+    fail(400, t("routesMail.userIsUnavailable"));
   await resourceControl(c, resource(c), "manage")
     .prepare(
       "INSERT INTO mail_mailbox_members(mailbox_id,user_id,can_read,can_write,can_send,can_manage,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(mailbox_id,user_id) DO UPDATE SET can_read=excluded.can_read,can_write=excluded.can_write,can_send=excluded.can_send,can_manage=excluded.can_manage,updated_at=excluded.updated_at",
@@ -1165,7 +1169,7 @@ mail.post("/addresses", async (c) => {
       strictId(data.mailbox_id),
     ))
   )
-    fail(400, "Mailbox is unavailable");
+    fail(400, t("routesMail.mailboxIsUnavailable"));
   await administrativeControl(c, "admin.mail.domains.manage")
     .prepare(
       "INSERT INTO mail_addresses(id,domain_id,mailbox_id,local_part,is_primary,receive_enabled,send_enabled) VALUES(?,?,?,?,?,?,?)",
@@ -1194,7 +1198,7 @@ mail.patch("/addresses/:id", async (c) => {
     "SELECT * FROM mail_addresses WHERE id=?",
     strictId(c.req.param("id")),
   );
-  if (!address) fail(404, "Address not found");
+  if (!address) fail(404, t("routesMail.addressNotFound"));
   const data = await input(c, ["receive_enabled", "send_enabled"]);
   const result = await administrativeControl(c, "admin.mail.domains.manage")
     .prepare("UPDATE mail_addresses SET receive_enabled=?,send_enabled=? WHERE id=?")
@@ -1208,7 +1212,7 @@ mail.patch("/addresses/:id", async (c) => {
       address.id,
     )
     .run();
-  if (!result.meta.changes) fail(409, "Address or permissions changed. Retry the update.");
+  if (!result.meta.changes) fail(409, t("routesMail.addressOrPermissionsChangedRetryTheUpdate"));
   return c.json({
     address: await first(c.env, "SELECT * FROM mail_addresses WHERE id=?", address.id),
   });
@@ -1310,7 +1314,7 @@ function pageQuery(c: Parameters<typeof authenticateMail>[0], options: URLSearch
     snoozed_only: options.get("snoozed_only") === "true",
   };
   if (query.view && !["inbox", "all", "scheduled", "outbox"].includes(query.view))
-    fail(400, "Invalid view");
+    fail(400, t("routesMail.invalidView"));
   return query;
 }
 async function messagePage(
@@ -1334,7 +1338,7 @@ async function messagePage(
     try {
       cursor = JSON.parse(atob(options.get("cursor")!));
     } catch {
-      fail(400, "Invalid cursor");
+      fail(400, t("routesMail.invalidCursor"));
     }
     if (
       !cursor ||
@@ -1345,7 +1349,7 @@ async function messagePage(
       !Number.isSafeInteger(cursor.before.received_at) ||
       typeof cursor.before.id !== "string"
     )
-      fail(400, "Invalid cursor");
+      fail(400, t("routesMail.invalidCursor"));
   }
   const result = await (grouped ? queryThreads : queryMessages)(
       c.env,
@@ -1418,7 +1422,7 @@ async function renderingStillAvailable(
   await belongs(c.env, resource(c), locator(original.id));
   const latest = await partition(c.env, locator(original.id)).get(original.id, actor(c).user_id);
   if (latest.body_r2_key !== original.body_r2_key)
-    fail(409, "Message content changed. Reload the message.");
+    fail(409, t("routesMail.messageContentChangedReloadTheMessage"));
 }
 mail.get("/mailboxes/:m/messages/:id/render", async (c) => {
   const { message, rendering } = await mailRendering(c);
@@ -1433,24 +1437,24 @@ mail.get("/mailboxes/:m/messages/:id/render", async (c) => {
   });
 });
 mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c) => {
-  if (!/^\d{1,2}$/.test(c.req.param("asset"))) fail(404, "Image not found");
+  if (!/^\d{1,2}$/.test(c.req.param("asset"))) fail(404, t("routesMail.imageNotFound"));
   const { message, rendering } = await mailRendering(c);
   const asset = rendering.assets.find((asset) => asset.id === c.req.param("asset"));
-  if (!asset) fail(404, "Image not found");
+  if (!asset) fail(404, t("routesMail.imageNotFound"));
   let response: Response;
   try {
     response = await loadMailRenderImage(asset, new URL(c.req.url).hostname);
   } catch (error) {
     // Diagnose upstream failures without logging message identifiers or tracking URLs.
     const reasons = new Set([
-      "DNS lookup failed",
-      "Private network resources are blocked",
-      "Remote resource unavailable",
-      "Unsupported remote image",
-      "Unsupported remote resource type",
-      "Remote resource is too large",
-      "Empty remote resource",
-      "Invalid remote redirect",
+      t("routesMail.dnsLookupFailed"),
+      t("routesMail.privateNetworkResourcesAreBlocked"),
+      t("routesMail.remoteResourceUnavailable"),
+      t("routesMail.unsupportedRemoteImage"),
+      t("routesMail.unsupportedRemoteResourceType"),
+      t("routesMail.remoteResourceIsTooLarge"),
+      t("routesMail.emptyRemoteResource"),
+      t("routesMail.invalidRemoteRedirect"),
     ]);
     console.warn(
       "Mail image proxy failure",
@@ -1458,9 +1462,9 @@ mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c) => {
         ? error.message
         : error instanceof Error
           ? error.name
-          : "Unknown error",
+          : t("routesMail.unknownError"),
     );
-    fail(502, "Image could not be loaded safely");
+    fail(502, t("routesMail.imageCouldNotBeLoadedSafely"));
   }
   await renderingStillAvailable(c, message);
   return response;
@@ -1472,9 +1476,9 @@ mail.get("/mailboxes/:m/messages/:id/original", async (c) => {
     c.req.param("id"),
     actor(c).user_id,
   );
-  if (!message.raw_r2_key) fail(404, "Original wire message is unavailable");
+  if (!message.raw_r2_key) fail(404, t("routesMail.originalWireMessageIsUnavailable"));
   const object = await c.env.MAIL_BUCKET.get(message.raw_r2_key);
-  if (!object) fail(503, "Original is unavailable");
+  if (!object) fail(503, t("routesMail.originalIsUnavailable"));
   return new Response(object.body, {
     headers: {
       "Content-Type": "message/rfc822",
@@ -1492,9 +1496,9 @@ mail.get("/mailboxes/:m/messages/:id/attachments/:a", async (c) => {
       actor(c).user_id,
     ),
     file = message.attachments.find((f) => f.id === c.req.param("a"));
-  if (!file) fail(404, "Attachment not found");
+  if (!file) fail(404, t("routesMail.attachmentNotFound"));
   const object = await c.env.MAIL_BUCKET.get(file.r2_key);
-  if (!object) fail(503, "Attachment unavailable");
+  if (!object) fail(503, t("routesMail.attachmentUnavailable"));
   const inline = /^image\/(png|jpeg|gif|webp)$/.test(file.content_type);
   return new Response(object.body, {
     headers: {
@@ -1568,12 +1572,12 @@ mail.post("/mailboxes/:m/images", async (c) => {
   const length = Number(c.req.header("content-length"));
   const maximum = (await mailboxSendingLimits(c.env, resource(c))).max_upload_bytes;
   if (!Number.isSafeInteger(length) || length <= 0 || length > maximum)
-    fail(413, `Choose an image up to ${maximum} bytes`);
+    fail(413, t("routesMail.chooseAnImageUpToBytes", { maximum: maximum }));
   const type = c.req.header("content-type")?.toLowerCase();
   if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type ?? ""))
-    fail(415, "Use a PNG, JPEG, GIF or WebP image");
+    fail(415, t("routesMail.useAPngJpegGifOrWebpImage"));
   const bytes = new Uint8Array(await c.req.arrayBuffer());
-  if (bytes.length !== length) fail(400, "Image length does not match Content-Length");
+  if (bytes.length !== length) fail(400, t("routesMail.imageLengthDoesNotMatchContentLength"));
   const starts = (...prefix: number[]) => prefix.every((byte, index) => bytes[index] === byte);
   const valid =
     type === "image/png"
@@ -1583,12 +1587,12 @@ mail.post("/mailboxes/:m/images", async (c) => {
         : type === "image/gif"
           ? /^GIF8[79]a$/.test(new TextDecoder().decode(bytes.slice(0, 6)))
           : starts(82, 73, 70, 70) && new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
-  if (!valid) fail(415, "The file is not a supported image");
+  if (!valid) fail(415, t("routesMail.theFileIsNotASupportedImage"));
   let filename = "image";
   try {
     filename = decodeURIComponent(c.req.header("x-filename-encoded") ?? "image");
   } catch {
-    fail(400, "Invalid filename");
+    fail(400, t("routesMail.invalidFilename"));
   }
   filename = text(filename, "filename", 255);
   const imageId = id();
@@ -1606,7 +1610,7 @@ mail.get("/mailboxes/:m/images/:id", async (c) => {
   const object = await c.env.MAIL_BUCKET.get(
     imageAssetKey(resource(c), strictId(c.req.param("id"))),
   );
-  if (!object) fail(404, "Image not found");
+  if (!object) fail(404, t("routesMail.imageNotFound"));
   return new Response(object.body, {
     headers: {
       "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
@@ -1625,19 +1629,22 @@ mail.post("/mailboxes/:m/uploads", async (c) => {
     length < 0 ||
     length > maximum
   )
-    fail(413, `Upload requires Content-Length and must not exceed ${maximum} bytes`);
+    fail(
+      413,
+      t("routesMail.uploadRequiresContentLengthAndMustNotExceedBytes", { maximum: maximum }),
+    );
   let suppliedFilename = c.req.header("x-filename") ?? "attachment";
   if (c.req.header("x-filename-encoded")) {
     try {
       suppliedFilename = decodeURIComponent(c.req.header("x-filename-encoded")!);
     } catch {
-      fail(400, "Invalid encoded filename");
+      fail(400, t("routesMail.invalidEncodedFilename"));
     }
   }
   const filename = text(suppliedFilename, "filename", 255),
     contentType = c.req.header("content-type") ?? "application/octet-stream",
     uploadId = id();
-  if (!c.req.raw.body) fail(400, "Missing upload body");
+  if (!c.req.raw.body) fail(400, t("routesMail.missingUploadBody"));
   await putStream(
     c.env.MAIL_BUCKET,
     "uploads/" + resource(c) + "/" + actor(c).user_id + "/" + uploadId,
@@ -1738,9 +1745,9 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
     bcc = data.bcc === undefined ? select("bcc") : recipients(data.bcc, "bcc"),
     replyTo =
       data.reply_to === undefined ? current.reply_to_address : replyToAddress(data.reply_to);
-  if (to.length + cc.length + bcc.length > 50) fail(400, "Too many recipients");
+  if (to.length + cc.length + bcc.length > 50) fail(400, t("routesMail.tooManyRecipients"));
   if (!current.draft || current.draft.state !== "editable" || current.draft.version !== version)
-    fail(409, "Draft version changed or is not editable");
+    fail(409, t("routesMail.draftVersionChangedOrIsNotEditable"));
   let attachments: Attachment[] | undefined;
   const addedKeys: string[] = [];
   let committed = false;
@@ -1755,18 +1762,18 @@ mail.patch("/mailboxes/:m/drafts/:id", async (c) => {
         new Set(retained).size !== retained.length ||
         new Set(uploads).size !== uploads.length
       )
-        fail(400, "Invalid attachments");
+        fail(400, t("routesMail.invalidAttachments"));
       attachments = retained.map(
         (value) =>
           current.attachments.find((file) => file.id === strictId(value)) ??
-          fail(400, "Unknown retained attachment"),
+          fail(400, t("routesMail.unknownRetainedAttachment")),
       );
       for (const value of uploads) {
         const upload = await c.env.MAIL_BUCKET.get(
           "uploads/" + resource(c) + "/" + actor(c).user_id + "/" + strictId(value),
         );
         if (!upload || Number(upload.customMetadata?.expires_at ?? 0) < epoch())
-          fail(400, "Upload is missing or expired");
+          fail(400, t("routesMail.uploadIsMissingOrExpired"));
         const fileId = id(),
           r2Key = "attachments/" + resource(c) + "/" + current.id + "/" + fileId;
         addedKeys.push(r2Key);
@@ -1952,7 +1959,7 @@ mail.post("/mailboxes/:m/rules", async (c) => {
     !data.actions.length ||
     data.actions.length > 10
   )
-    fail(400, "Invalid rule");
+    fail(400, t("routesMail.invalidRule"));
   const conditions: RuleCondition[] = data.conditions.map((v) => {
     if (
       !v ||
@@ -1960,7 +1967,7 @@ mail.post("/mailboxes/:m/rules", async (c) => {
       !["from", "to", "subject", "body"].includes(v.field) ||
       !["contains", "equals", "prefix", "suffix"].includes(v.operator)
     )
-      fail(400, "Invalid rule condition");
+      fail(400, t("routesMail.invalidRuleCondition"));
     return {
       field: v.field,
       operator: v.operator,
@@ -1970,12 +1977,12 @@ mail.post("/mailboxes/:m/rules", async (c) => {
   const actions: RuleAction[] = [];
   for (const v of data.actions) {
     if (!v || typeof v !== "object" || !["move", "star", "read", "spam"].includes(v.type))
-      fail(400, "Invalid rule action");
+      fail(400, t("routesMail.invalidRuleAction"));
     if (
       v.type === "move" &&
       !(await mailbox(c.env, resource(c)).hasFolder(text(v.folder_id, "folder_id", 100)))
     )
-      fail(400, "Unknown folder");
+      fail(400, t("routesMail.unknownFolder"));
     actions.push({
       type: v.type,
       ...(v.type === "move" ? { folder_id: v.folder_id } : {}),
@@ -2017,7 +2024,7 @@ mail.post("/mailboxes/:m/rules/evaluate", async (c) => {
   });
 });
 mail.get("/api-keys", async (c) => {
-  if (actor(c).api_key_id) fail(403, "Session authentication required");
+  if (actor(c).api_key_id) fail(403, t("routesMail.sessionAuthenticationRequired"));
   return c.json({
     keys: await all(
       c.env,
@@ -2032,18 +2039,18 @@ mail.get("/api-keys", async (c) => {
   });
 });
 mail.post("/api-keys", async (c) => {
-  if (actor(c).api_key_id) fail(403, "Session authentication required");
+  if (actor(c).api_key_id) fail(403, t("routesMail.sessionAuthenticationRequired"));
   const data = await input(c, ["name", "expires_at", "scopes"]),
     expires = integer(data.expires_at, "expires_at", epoch() + 1, epoch() + 366 * 86400);
   if (!Array.isArray(data.scopes) || !data.scopes.length || data.scopes.length > 100)
-    fail(400, "Invalid scopes");
+    fail(400, t("routesMail.invalidScopes"));
   const scopes: {
     mailbox_id: string;
     action: "read" | "write" | "send";
   }[] = [];
   for (const value of data.scopes) {
     if (!value || typeof value !== "object" || !["read", "write", "send"].includes(value.action))
-      fail(400, "Invalid scope");
+      fail(400, t("routesMail.invalidScope"));
     await authorize(c.env, actor(c), strictId(value.mailbox_id), value.action);
     scopes.push({ mailbox_id: value.mailbox_id, action: value.action });
   }
@@ -2072,7 +2079,7 @@ mail.post("/api-keys", async (c) => {
   return c.json({ key: { id: keyId, token, expires_at: expires, scopes } }, 201);
 });
 mail.delete("/api-keys/:id", async (c) => {
-  if (actor(c).api_key_id) fail(403, "Session authentication required");
+  if (actor(c).api_key_id) fail(403, t("routesMail.sessionAuthenticationRequired"));
   await control(c.env)
     .prepare("UPDATE mail_api_keys SET revoked_at=? WHERE id=? AND user_id=?")
     .bind(epoch(), c.req.param("id"), actor(c).user_id)
@@ -2096,7 +2103,7 @@ mail.post("/mailboxes/:m/webhooks", async (c) => {
   try {
     url = new URL(text(data.url, "url", 2000));
   } catch {
-    fail(400, "Invalid webhook URL");
+    fail(400, t("routesMail.invalidWebhookUrl"));
   }
   if (
     url.protocol !== "https:" ||
@@ -2108,7 +2115,7 @@ mail.post("/mailboxes/:m/webhooks", async (c) => {
     /^[\d.[\]:]+$/.test(url.hostname) ||
     /\.(local|internal|localhost)$/.test(url.hostname)
   )
-    fail(400, "Webhook URL must use a public HTTPS hostname");
+    fail(400, t("routesMail.webhookUrlMustUseAPublicHttpsHostname"));
   const secret = id() + id(),
     encrypted = await seal(c.env, secret),
     hookId = id();
@@ -2148,7 +2155,7 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
   await authorize(c.env, actor(c), resource(c), "write");
   const data = await input(c, ["items", "folder_id", "is_read", "is_starred", "is_spam"]);
   if (!Array.isArray(data.items) || !data.items.length || data.items.length > 200)
-    fail(400, "Invalid bulk items");
+    fail(400, t("routesMail.invalidBulkItems"));
   const changes: {
     folder_id?: string;
     is_read?: number;
@@ -2161,7 +2168,7 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
   const results = [],
     changedPartitions = new Set<string>();
   for (const item of data.items) {
-    if (!item || typeof item !== "object") fail(400, "Invalid bulk item");
+    if (!item || typeof item !== "object") fail(400, t("routesMail.invalidBulkItem"));
     const resourceId = text(item.id, "id", 73),
       version = integer(item.version, "version", 1, Number.MAX_SAFE_INTEGER);
     try {
@@ -2181,8 +2188,8 @@ mail.post("/mailboxes/:m/messages/bulk", async (c) => {
         success: false,
         error:
           error instanceof Error
-            ? (/MAIL:\d{3}:([^\n]+)/.exec(error.message)?.[1] ?? "Operation failed")
-            : "Operation failed",
+            ? (/MAIL:\d{3}:([^\n]+)/.exec(error.message)?.[1] ?? t("routesMail.operationFailed"))
+            : t("routesMail.operationFailed"),
       });
     }
   }
@@ -2242,7 +2249,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
       (file) => operation === "forward" || file.disposition === "inline",
     )) {
       const object = await c.env.MAIL_BUCKET.get(file.r2_key);
-      if (!object) fail(503, "Attachment unavailable");
+      if (!object) fail(503, t("routesMail.attachmentUnavailable"));
       const digest = await hash(JSON.stringify([actor(c).user_id, requestKey, sourceId, file.id]));
       const uploadId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
       await c.env.MAIL_BUCKET.put(
@@ -2259,7 +2266,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
       );
       uploads.push(uploadId);
     }
-    const prefix = operation === "forward" ? "Fwd: " : "Re: ",
+    const prefix = operation === "forward" ? t("routesMail.fwd") : t("routesMail.re"),
       subject =
         data.subject === undefined
           ? source.subject.toLowerCase().startsWith(prefix.toLowerCase())
@@ -2295,7 +2302,7 @@ for (const operation of ["reply", "reply-all", "forward"] as const)
     return c.json({ message: draft }, 201);
   });
 mail.post("/mailboxes/:m/imports", async (c) => {
-  if (!c.req.raw.body) fail(400, "Missing import");
+  if (!c.req.raw.body) fail(400, t("routesMail.missingImport"));
   const jobId = await startImport(
     c.env,
     actor(c),
@@ -2326,7 +2333,8 @@ mail.post("/mailboxes/:m/backups/:id/restore", async (c) => {
 async function ownedJob(c: Parameters<typeof authenticateMail>[0], jobId: string) {
   await authorize(c.env, actor(c), resource(c), "read");
   const job = await mailbox(c.env, resource(c)).dataJob(jobId);
-  if (JSON.parse(job.actor_json).user_id !== actor(c).user_id) fail(403, "Job access denied");
+  if (JSON.parse(job.actor_json).user_id !== actor(c).user_id)
+    fail(403, t("routesMail.jobAccessDenied"));
   return job;
 }
 mail.get("/mailboxes/:m/jobs", async (c) => {
@@ -2363,7 +2371,7 @@ mail.get("/mailboxes/:m/jobs/:id", async (c) => {
 });
 mail.get("/mailboxes/:m/jobs/:id/download", async (c) => {
   const job = await ownedJob(c, c.req.param("id"));
-  if (job.status !== "completed") fail(409, "Job is not completed");
+  if (job.status !== "completed") fail(409, t("routesMail.jobIsNotCompleted"));
   if (job.kind === "export")
     return new Response(await exportStream(c.env, job.output_prefix), {
       headers: {
@@ -2374,7 +2382,7 @@ mail.get("/mailboxes/:m/jobs/:id/download", async (c) => {
     });
   if (job.kind === "backup") {
     const object = await c.env.MAIL_BUCKET.get(job.output_prefix + "manifest.json");
-    if (!object) fail(503, "Backup manifest unavailable");
+    if (!object) fail(503, t("routesMail.backupManifestUnavailable"));
     return new Response(object.body, {
       headers: {
         "Content-Type": "application/json",
@@ -2382,15 +2390,16 @@ mail.get("/mailboxes/:m/jobs/:id/download", async (c) => {
       },
     });
   }
-  fail(409, "This job has no downloadable output");
+  fail(409, t("routesMail.thisJobHasNoDownloadableOutput"));
 });
 mail.get("/mailboxes/:m/jobs/:id/files/:file", async (c) => {
   const job = await ownedJob(c, c.req.param("id"));
-  if (job.kind !== "backup" || job.status !== "completed") fail(409, "Backup unavailable");
+  if (job.kind !== "backup" || job.status !== "completed")
+    fail(409, t("routesMail.backupUnavailable"));
   const filename = c.req.param("file");
-  if (!/^[a-z0-9.-]{1,100}$/.test(filename)) fail(400, "Invalid backup file");
+  if (!/^[a-z0-9.-]{1,100}$/.test(filename)) fail(400, t("routesMail.invalidBackupFile"));
   const object = await c.env.MAIL_BUCKET.get(job.output_prefix + filename);
-  if (!object) fail(404, "Backup file not found");
+  if (!object) fail(404, t("routesMail.backupFileNotFound"));
   return new Response(object.body, {
     headers: {
       "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
@@ -2403,7 +2412,7 @@ mail.get("/mailboxes/:m/jobs/:id/files/:file", async (c) => {
 });
 mail.post("/mailboxes/:m/jobs/:id/retry", async (c) => {
   const job = await ownedJob(c, c.req.param("id"));
-  if (job.status !== "failed") fail(409, "Only failed jobs may be retried");
+  if (job.status !== "failed") fail(409, t("routesMail.onlyFailedJobsMayBeRetried"));
   await authorize(
     c.env,
     actor(c),
@@ -2424,7 +2433,7 @@ mail.get("/mcp", (c) => c.body(null, 405));
 export default mail;
 
 function uiSession(c: Parameters<typeof authenticateMail>[0]) {
-  if (actor(c).api_key_id) fail(403, "Mail UI requires a user session");
+  if (actor(c).api_key_id) fail(403, t("routesMail.mailUiRequiresAUserSession"));
 }
 function listItem(
   message: Omit<MessageRow, "body_r2_key" | "raw_r2_key"> & {
@@ -2521,7 +2530,7 @@ mail.get("/ui/bootstrap", async (c) => {
       "folder",
     ].includes(section)
   )
-    fail(400, "Invalid mail section");
+    fail(400, t("routesMail.invalidMailSection"));
   const options = mailViewOptions(section, c.req.query("folder"), search),
     grouped = mailGrouped(section, search, preferences.conversation_view);
   const [folders, summary, page] = await Promise.all([
@@ -2575,7 +2584,7 @@ mail.get("/mailboxes/:m/ui/compose-context", async (c) => {
       ? getMessage(c.env, actor(c), resource(c), c.req.query("draft")!)
       : Promise.resolve(null),
   ]);
-  if (message && !message.draft) fail(404, "Draft not found");
+  if (message && !message.draft) fail(404, t("routesMail.draftNotFound"));
   return c.json({ ...addresses, settings, message });
 });
 mail.get("/mailboxes/:m/ui/changes", async (c) => {
@@ -2664,11 +2673,12 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
   await authorize(c.env, actor(c), resource(c), "write");
   const data = await input(c, ["targets", "changes", "scope"]);
   if (data.scope !== undefined && typeof data.scope !== "string")
-    fail(400, "Invalid command scope");
+    fail(400, t("routesMail.invalidCommandScope"));
   if (!Array.isArray(data.targets) || !data.targets.length || data.targets.length > 200)
-    fail(400, "Invalid command targets");
+    fail(400, t("routesMail.invalidCommandTargets"));
   const validateChanges = (value: unknown) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) fail(400, "Invalid changes");
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      fail(400, t("routesMail.invalidChanges"));
     const changes: Parameters<import("../mail/partition").MailPartitionDO["patch"]>[3] = {};
     for (const [key, entry] of Object.entries(value)) {
       if (key === "folder_id") changes.folder_id = text(entry, key, 100);
@@ -2677,9 +2687,9 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
           entry === null ? null : integer(entry, key, epoch() + 1, epoch() + 366 * 86400);
       else if (["is_read", "is_starred", "is_spam"].includes(key))
         changes[key as "is_read"] = flag(entry, key);
-      else fail(400, "Invalid change");
+      else fail(400, t("routesMail.invalidChange"));
     }
-    if (!Object.keys(changes).length) fail(400, "No changes supplied");
+    if (!Object.keys(changes).length) fail(400, t("routesMail.noChangesSupplied"));
     return changes;
   };
   const operation = key(c),
@@ -2700,11 +2710,11 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
       (await mailbox(c.env, resource(c)).partitions()).map((entry) => entry.id),
     );
     const targets = data.targets.map((target, index) => {
-      if (!target || typeof target !== "object") fail(400, "Invalid target");
+      if (!target || typeof target !== "object") fail(400, t("routesMail.invalidTarget"));
       const id = text(target.id, "id", 73),
         version = integer(target.version, "version", 1, Number.MAX_SAFE_INTEGER),
         changes = validateChanges(target.changes ?? data.changes);
-      if (!partitions.has(locator(id))) fail(404, "Mail resource not found");
+      if (!partitions.has(locator(id))) fail(404, t("routesMail.mailResourceNotFound"));
       return { id, version, changes, thread: target.thread === true, index };
     });
     await measured(c, "plan", async () => {
@@ -2724,9 +2734,9 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
         planned = new Map<string, { index: number; item: NonNullable<typeof items>[number] }>();
       for (const target of targets) {
         const anchor = anchors.get(target.id);
-        if (!anchor) fail(404, "Message not found");
+        if (!anchor) fail(404, t("routesMail.messageNotFound"));
         if (target.thread && anchor.draft_owner_id)
-          fail(400, "Drafts cannot be expanded as conversations");
+          fail(400, t("routesMail.draftsCannotBeExpandedAsConversations"));
         if (target.thread && anchor.version === target.version)
           threads.set(anchor.thread_id, target);
         else
@@ -2742,7 +2752,7 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
           thread_ids: [...threads.keys()],
           exclude_drafts: true,
         });
-        if (page.messages.length > 2000) fail(400, "Select fewer conversations");
+        if (page.messages.length > 2000) fail(400, t("routesMail.selectFewerConversations"));
         for (const message of page.messages) {
           const target = threads.get(message.thread_id)!;
           if ((planned.get(message.id)?.index ?? -1) <= target.index)
@@ -2753,7 +2763,7 @@ mail.post("/mailboxes/:m/ui/commands", async (c) => {
         }
       }
       for (const [id, value] of planned) plan.set(id, value.item);
-      if (plan.size > 2000) fail(400, "Select fewer conversations");
+      if (plan.size > 2000) fail(400, t("routesMail.selectFewerConversations"));
     });
     items = await mailbox(c.env, resource(c)).commandPlan(planKey, requestHash, [...plan.values()]);
   }

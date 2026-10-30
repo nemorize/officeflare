@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { CalendarEnv } from "./types";
 import { fail } from "./input";
 import { now } from "../auth/types";
@@ -65,6 +66,6 @@ export async function readCursor(
       throw new Error();
     return value[2] as string | number;
   } catch {
-    fail(400, "INVALID_CURSOR", "Invalid Calendar cursor");
+    fail(400, "INVALID_CURSOR", t("calendarCursor.invalidCalendarCursor"));
   }
 }

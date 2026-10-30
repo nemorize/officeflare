@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useSyncExternalStore } from "react";
 import { currentUser, logout, refresh } from "./auth";
 import { SESSION_KEY, SessionManager } from "./session-manager";
@@ -18,7 +19,7 @@ function lock<T>(action: () => T): Promise<T> {
     };
     open.onblocked = () => {
       database = undefined;
-      reject(new Error("Session storage is blocked"));
+      reject(new Error(t("libSession.sessionStorageIsBlocked")));
     };
   });
   return database.then(
@@ -40,7 +41,7 @@ function lock<T>(action: () => T): Promise<T> {
         };
         transaction.oncomplete = () => resolve(result);
         transaction.onabort = transaction.onerror = () =>
-          reject(failure ?? transaction.error ?? new Error("Session storage failed"));
+          reject(failure ?? transaction.error ?? new Error(t("libSession.sessionStorageFailed")));
       }),
   );
 }

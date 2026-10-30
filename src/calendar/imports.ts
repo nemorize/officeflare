@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -16,7 +17,7 @@ routes.post(
     const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 3);
     const data = await body(c, ["content", "dry_run"]);
     if (data.dry_run !== undefined && typeof data.dry_run !== "boolean")
-      fail(400, "INVALID_INPUT", "dry_run must be a boolean");
+      fail(400, "INVALID_INPUT", t("calendarImports.dryRunMustBeABoolean"));
     const content = text(data.content, "content", MAX_IMPORT_BYTES),
       dryRun = data.dry_run === true;
     const operation = `calendar.import:${cal.id}`;
@@ -31,7 +32,9 @@ routes.post(
       fail(
         400,
         "INVALID_ICALENDAR",
-        error instanceof Error ? error.message.slice(0, 512) : "Invalid iCalendar file.",
+        error instanceof Error
+          ? error.message.slice(0, 512)
+          : t("calendarImports.invalidIcalendarFile"),
       );
     }
     const existing = new Set(
@@ -48,7 +51,7 @@ routes.post(
       if (!existing.has(plan.event.i_cal_uid)) return true;
       for (const entry of plan.entries) {
         entry.status = "skipped";
-        entry.message = "An event with this UID already exists in this calendar (including trash).";
+        entry.message = t("calendarImports.anEventWithThisUidAlreadyExistsInThis");
       }
       return false;
     });

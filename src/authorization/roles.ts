@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, eq, inArray, isNull, not, notExists, sql, type SQL } from "drizzle-orm";
 import type { AuthContext } from "../auth/types";
 import { invalid } from "../auth/input";
@@ -19,9 +20,10 @@ export function permissionList(value: unknown): Permission[] {
     value.some((key) => !isPermission(key)) ||
     new Set(value).size !== value.length
   )
-    invalid("Invalid permissions");
+    invalid(t("authorizationRoles.invalidPermissions"));
   const missing = missingPrerequisites(value);
-  if (missing.length) invalid(`Missing required permissions: ${missing.join(", ")}`);
+  if (missing.length)
+    invalid(t("authorizationRoles.missingRequiredPermissions", { join: missing.join(", ") }));
   return value as Permission[];
 }
 export function roleIds(value: unknown): string[] {
@@ -31,7 +33,7 @@ export function roleIds(value: unknown): string[] {
     value.some((id) => typeof id !== "string" || !id.length || id.length > 100) ||
     new Set(value).size !== value.length
   )
-    invalid("Invalid role_ids");
+    invalid(t("authorizationRoles.invalidRoleIds"));
   return value as string[];
 }
 export async function permissionsOf(c: AuthContext, id: string) {
@@ -70,7 +72,7 @@ export async function requireOwnedRoles(c: AuthContext, ids: readonly string[]) 
       .where(and(eq(users.id, c.get("identity").user.id), rolesOwned(c, ids)))
       .get())
   ) {
-    forbidden("Cannot manage roles with permissions you do not hold");
+    forbidden(t("authorizationRoles.cannotManageRolesWithPermissionsYouDoNotHold"));
   }
 }
 // JSON snapshots keep batches below D1's 100-parameter limit, even with 50 roles.
@@ -93,10 +95,10 @@ export function defaultsSnapshot(rows: readonly RoleRecord[]): SQL {
 export async function defaultRoles(c: AuthContext) {
   const db = c.get("db"),
     rows = await db.select().from(roles).where(eq(roles.is_default, 1)).orderBy(roles.key);
-  if (rows.length > 50) invalid("Too many default roles");
+  if (rows.length > 50) invalid(t("authorizationRoles.tooManyDefaultRoles"));
   for (const role of rows)
     if (!defaultEligible(await permissionsOf(c, role.id)))
-      invalid("A default role contains administrative permissions");
+      invalid(t("authorizationRoles.aDefaultRoleContainsAdministrativePermissions"));
   return rows;
 }
 export async function assignedRoles(c: AuthContext, id: string) {

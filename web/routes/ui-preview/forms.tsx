@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../../components/i18n";
+import { t } from "../../../shared/i18n/index.ts";
 import { useRef, useState } from "react";
 import {
   Autocomplete,
@@ -23,16 +25,24 @@ import {
   TextField,
 } from "@/components/ui";
 
-const apps = ["Calendar", "Files", "Mail"];
-const roles = ["Reader", "Editor", "Administrator"];
+const apps = [
+  t("routesUiPreviewForms.calendar"),
+  t("routesUiPreviewForms.files"),
+  t("routesUiPreviewForms.mail"),
+];
+const roles = [
+  t("routesUiPreviewForms.reader"),
+  t("routesUiPreviewForms.editor"),
+  t("routesUiPreviewForms.administrator"),
+];
 
 export function InputDemo() {
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
-      <label htmlFor="preview-input">Display name</label>{" "}
-      <Input ref={input} id="preview-input" placeholder="Your name" />{" "}
-      <Button onClick={() => input.current?.focus()}>Focus input</Button>
+      <label htmlFor="preview-input">{t("routesUiPreviewForms.displayName")}</label>{" "}
+      <Input ref={input} id="preview-input" placeholder={t("routesUiPreviewForms.yourName")} />{" "}
+      <Button onClick={() => input.current?.focus()}>{t("routesUiPreviewForms.focusInput")}</Button>
     </>
   );
 }
@@ -40,8 +50,11 @@ export function InputDemo() {
 export function FieldDemo() {
   return (
     <Field.Root name="preview-field" validationMode="onBlur">
-      <Field.Label>Contact email</Field.Label> <Input type="email" required />
-      <Field.Description>Enter an email address, then move focus to validate.</Field.Description>
+      <Field.Label>{t("routesUiPreviewForms.contactEmail")}</Field.Label>{" "}
+      <Input type="email" required />
+      <Field.Description>
+        {t("routesUiPreviewForms.enterAnEmailAddressThenMoveFocusToValidate")}
+      </Field.Description>
       <Field.Error />
     </Field.Root>
   );
@@ -50,9 +63,9 @@ export function FieldDemo() {
 export function FieldsetDemo() {
   return (
     <Fieldset.Root>
-      <Fieldset.Legend>Contact details</Fieldset.Legend>
-      <TextField label="Given name" name="preview-given-name" />
-      <TextField label="Family name" name="preview-family-name" />
+      <Fieldset.Legend>{t("routesUiPreviewForms.contactDetails")}</Fieldset.Legend>
+      <TextField label={t("routesUiPreviewForms.givenName")} name="preview-given-name" />
+      <TextField label={t("routesUiPreviewForms.familyName")} name="preview-family-name" />
     </Fieldset.Root>
   );
 }
@@ -62,18 +75,22 @@ export function FormDemo() {
   return (
     <Form
       onFormSubmit={(values) =>
-        setResult(`Submitted: ${String(values["preview-form-email"] ?? "")}`)
+        setResult(
+          t("routesUiPreviewForms.submitted", {
+            String: String(values["preview-form-email"] ?? ""),
+          }),
+        )
       }
     >
       <TextField
         name="preview-form-email"
-        label="Email for preview form"
+        label={t("routesUiPreviewForms.emailForPreviewForm")}
         type="email"
         required
-        description="Only local demo state is updated."
+        description={t("routesUiPreviewForms.onlyLocalDemoStateIsUpdated")}
       />
       <Button type="submit" variant="primary">
-        Submit preview form
+        {t("routesUiPreviewForms.submitPreviewForm")}
       </Button>
       <p role="status">{result}</p>
     </Form>
@@ -85,50 +102,71 @@ export function CheckboxDemo() {
     <Field.Root name="preview-notifications">
       <Field.Label>
         <Checkbox.Root>
-          <Checkbox.Indicator aria-hidden="true">✓</Checkbox.Indicator>
-        </Checkbox.Root>{" "}
-        Enable notifications
+          <Checkbox.Indicator aria-hidden="true">
+            {t("routesUiPreviewForms.text")}
+          </Checkbox.Indicator>
+        </Checkbox.Root>
+        {t("routesUiPreviewForms.enableNotifications")}
       </Field.Label>
     </Field.Root>
   );
 }
 
 export function CheckboxGroupDemo() {
-  const [value, setValue] = useState(["Mail"]);
+  const [value, setValue] = useState([t("routesUiPreviewForms.mail")]);
   return (
     <Fieldset.Root>
-      <Fieldset.Legend>Enabled applications</Fieldset.Legend>
-      <CheckboxGroup value={value} onValueChange={setValue} aria-label="Enabled applications">
+      <Fieldset.Legend>{t("routesUiPreviewForms.enabledApplications")}</Fieldset.Legend>
+      <CheckboxGroup
+        value={value}
+        onValueChange={setValue}
+        aria-label={t("routesUiPreviewForms.enabledApplications")}
+      >
         {apps.map((app) => (
           <label key={app}>
             <Checkbox.Root value={app}>
-              <Checkbox.Indicator aria-hidden="true">✓</Checkbox.Indicator>
+              <Checkbox.Indicator aria-hidden="true">
+                {t("routesUiPreviewForms.text")}
+              </Checkbox.Indicator>
             </Checkbox.Root>{" "}
             {app}{" "}
           </label>
         ))}
       </CheckboxGroup>
-      <p role="status">Selected: {value.join(", ") || "None"}</p>
+      <p role="status">
+        <LocalizedMessage
+          id="routesUiPreviewForms.selected"
+          values={{ value1: value.join(", ") || t("common.none") }}
+        />
+      </p>
     </Fieldset.Root>
   );
 }
 
 export function RadioGroupDemo() {
-  const [value, setValue] = useState("Reader");
+  const [value, setValue] = useState(t("routesUiPreviewForms.reader"));
   return (
     <Fieldset.Root>
-      <Fieldset.Legend>Example role</Fieldset.Legend>
-      <RadioGroup value={value} onValueChange={setValue} aria-label="Example role">
+      <Fieldset.Legend>{t("routesUiPreviewForms.exampleRole")}</Fieldset.Legend>
+      <RadioGroup
+        value={value}
+        onValueChange={setValue}
+        aria-label={t("routesUiPreviewForms.exampleRole")}
+      >
         {roles.map((role) => (
           <label key={role}>
             <Radio.Root value={role}>
-              <Radio.Indicator aria-hidden="true">●</Radio.Indicator>
+              <Radio.Indicator aria-hidden="true">
+                {t("routesUiPreviewForms.text2")}
+              </Radio.Indicator>
             </Radio.Root>{" "}
             {role}{" "}
           </label>
         ))}
       </RadioGroup>
-      <p role="status">Role: {value}</p>
+      <p role="status">
+        <LocalizedMessage id="routesUiPreviewForms.role" values={{ value: value }} />
+      </p>
     </Fieldset.Root>
   );
 }
@@ -140,8 +178,8 @@ export function SwitchDemo() {
       <Field.Label>
         <Switch.Root checked={checked} onCheckedChange={setChecked}>
           <Switch.Thumb />
-        </Switch.Root>{" "}
-        Show online status
+        </Switch.Root>
+        {t("routesUiPreviewForms.showOnlineStatus")}
       </Field.Label>
     </Field.Root>
   );
@@ -150,12 +188,16 @@ export function SwitchDemo() {
 export function NumberFieldDemo() {
   return (
     <Field.Root name="preview-seats">
-      <Field.Label>Seat count</Field.Label>
+      <Field.Label>{t("routesUiPreviewForms.seatCount")}</Field.Label>
       <NumberField.Root defaultValue={5} min={1} max={20}>
         <NumberField.Group>
-          <NumberField.Decrement aria-label="Remove one seat">−</NumberField.Decrement>
+          <NumberField.Decrement aria-label={t("routesUiPreviewForms.removeOneSeat")}>
+            {t("routesUiPreviewForms.text3")}
+          </NumberField.Decrement>
           <NumberField.Input />
-          <NumberField.Increment aria-label="Add one seat">+</NumberField.Increment>
+          <NumberField.Increment aria-label={t("routesUiPreviewForms.addOneSeat")}>
+            {t("routesUiPreviewForms.text4")}
+          </NumberField.Increment>
         </NumberField.Group>
       </NumberField.Root>
     </Field.Root>
@@ -166,14 +208,23 @@ export function OTPFieldDemo() {
   const [value, setValue] = useState("");
   return (
     <Field.Root name="preview-otp">
-      <Field.Label>One-time code</Field.Label>
+      <Field.Label>{t("routesUiPreviewForms.oneTimeCode")}</Field.Label>
       <OTPField.Root length={6} value={value} onValueChange={setValue}>
         {Array.from({ length: 6 }, (_, index) => (
-          <OTPField.Input key={index} aria-label={`Code digit ${index + 1}`} />
+          <OTPField.Input
+            key={index}
+            aria-label={t("routesUiPreviewForms.codeDigit", { value1: index + 1 })}
+          />
         ))}
       </OTPField.Root>
-      <Field.Description>Try typing or pasting six digits. No code is sent.</Field.Description>
-      <p role="status">{value.length === 6 ? "Code complete" : `${value.length} of 6 digits`}</p>
+      <Field.Description>
+        {t("routesUiPreviewForms.tryTypingOrPastingSixDigitsNoCodeIs")}
+      </Field.Description>
+      <p role="status">
+        {value.length === 6
+          ? t("routesUiPreviewForms.codeComplete")
+          : t("routesUiPreviewForms.of6Digits", { length: value.length })}
+      </p>
     </Field.Root>
   );
 }
@@ -181,7 +232,7 @@ export function OTPFieldDemo() {
 export function SelectDemo() {
   return (
     <Select.Root items={roles.map((role) => ({ value: role, label: role }))} defaultValue="Reader">
-      <Select.Label>Role selection</Select.Label>{" "}
+      <Select.Label>{t("routesUiPreviewForms.roleSelection")}</Select.Label>{" "}
       <Select.Trigger>
         <Select.Value />
       </Select.Trigger>
@@ -189,7 +240,9 @@ export function SelectDemo() {
         <Select.List>
           {roles.map((role) => (
             <Select.Item key={role} value={role}>
-              <Select.ItemIndicator aria-hidden="true">✓ </Select.ItemIndicator>
+              <Select.ItemIndicator aria-hidden="true">
+                {t("routesUiPreviewForms.text5")}
+              </Select.ItemIndicator>
               <Select.ItemText>{role}</Select.ItemText>
             </Select.Item>
           ))}
@@ -202,16 +255,16 @@ export function SelectDemo() {
 export function ComboboxDemo() {
   return (
     <Field.Root name="preview-app">
-      <Field.Label>Application</Field.Label>{" "}
+      <Field.Label>{t("routesUiPreviewForms.application")}</Field.Label>{" "}
       <Combobox.Root items={apps}>
         <Combobox.InputGroup>
-          <Combobox.Input placeholder="Choose an application" />
-          <Combobox.Trigger aria-label="Show applications">
+          <Combobox.Input placeholder={t("routesUiPreviewForms.chooseAnApplication")} />
+          <Combobox.Trigger aria-label={t("routesUiPreviewForms.showApplications")}>
             <Icon name="down" />
           </Combobox.Trigger>
         </Combobox.InputGroup>
         <ComboboxPopup>
-          <Combobox.Empty>No applications found</Combobox.Empty>
+          <Combobox.Empty>{t("routesUiPreviewForms.noApplicationsFound")}</Combobox.Empty>
           <Combobox.List>
             {(app: string) => (
               <Combobox.Item key={app} value={app}>
@@ -228,16 +281,16 @@ export function ComboboxDemo() {
 export function AutocompleteDemo() {
   return (
     <Field.Root name="preview-search">
-      <Field.Label>Search applications</Field.Label>{" "}
+      <Field.Label>{t("routesUiPreviewForms.searchApplications")}</Field.Label>{" "}
       <Autocomplete.Root items={apps}>
         <Autocomplete.InputGroup>
-          <Autocomplete.Input placeholder="Search applications" />
-          <Autocomplete.Trigger aria-label="Show suggestions">
+          <Autocomplete.Input placeholder={t("routesUiPreviewForms.searchApplications")} />
+          <Autocomplete.Trigger aria-label={t("routesUiPreviewForms.showSuggestions")}>
             <Icon name="down" />
           </Autocomplete.Trigger>
         </Autocomplete.InputGroup>
         <AutocompletePopup>
-          <Autocomplete.Empty>No suggestions</Autocomplete.Empty>
+          <Autocomplete.Empty>{t("routesUiPreviewForms.noSuggestions")}</Autocomplete.Empty>
           <Autocomplete.List>
             {(app: string) => (
               <Autocomplete.Item key={app} value={app}>
@@ -247,7 +300,9 @@ export function AutocompleteDemo() {
           </Autocomplete.List>
         </AutocompletePopup>
       </Autocomplete.Root>
-      <Field.Description>Suggestions are optional; custom text is allowed.</Field.Description>
+      <Field.Description>
+        {t("routesUiPreviewForms.suggestionsAreOptionalCustomTextIsAllowed")}
+      </Field.Description>
     </Field.Root>
   );
 }
@@ -255,7 +310,7 @@ export function AutocompleteDemo() {
 export function SliderDemo() {
   return (
     <Slider.Root defaultValue={40} min={0} max={100} name="preview-volume">
-      <Slider.Label>Notification volume</Slider.Label> <Slider.Value />
+      <Slider.Label>{t("routesUiPreviewForms.notificationVolume")}</Slider.Label> <Slider.Value />
       <Slider.Control data-preview="slider-control">
         <Slider.Track data-preview="slider-track">
           <Slider.Indicator />

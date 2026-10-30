@@ -4,6 +4,25 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { fileURLToPath } from "node:url";
 import { readFile, readdir } from "node:fs/promises";
 import type { Plugin } from "vite";
+import { locale, messageTemplate, isStaticMessageKey } from "./shared/i18n/index.ts";
+
+function localizedHtml(): Plugin {
+  return {
+    name: "localized-html",
+    transformIndexHtml(html) {
+      return html.replace(/\{\{i18n:([\w.]+)\}\}/g, (_, key: string) => {
+        if (key !== "locale" && !isStaticMessageKey(key))
+          throw new Error(`Unknown HTML translation: ${key}`);
+        const value = key === "locale" ? locale : messageTemplate(key);
+        return value
+          .replaceAll("&", "&amp;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      });
+    },
+  };
+}
 
 // PDF.js needs its own worker plus local fonts/CMaps/decoders for reliable previews.
 function pdfPreviewAssets(): Plugin {
@@ -52,7 +71,12 @@ function pdfPreviewAssets(): Plugin {
 export default defineConfig(({ command }) => ({
   // Wrangler keeps building the API Worker for the existing deployment pipeline.
   // In development the plugin runs that same Worker alongside Vite's live UI.
-  plugins: [react(), pdfPreviewAssets(), ...(command === "serve" ? [cloudflare()] : [])],
+  plugins: [
+    react(),
+    localizedHtml(),
+    pdfPreviewAssets(),
+    ...(command === "serve" ? [cloudflare()] : []),
+  ],
   resolve: { alias: { "@": fileURLToPath(new URL("./web", import.meta.url)) } },
   server: { host: "127.0.0.1", port: 8787, strictPort: true },
   build: { outDir: "dist/client" },

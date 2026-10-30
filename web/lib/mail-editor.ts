@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { Attachment } from "./mail";
 
 export function plainMailHtml(value: string) {
@@ -36,7 +37,7 @@ export function storedEditorHtml(value: string, mailboxId: string, attachments: 
   for (const table of doc.body.querySelectorAll("table")) {
     table.style.borderCollapse = "collapse";
     table.style.width = "100%";
-    table.style.margin = "12px 0";
+    table.style.margin = t("libMailEditor.12px0");
   }
   return doc.body.innerHTML;
 }

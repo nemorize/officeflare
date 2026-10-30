@@ -1,62 +1,63 @@
+import { t } from "../../shared/i18n/index.ts";
 export const notificationTypes = {
   "security.sign_in": {
     service: "account",
     category: "security",
-    label: "New sign-ins",
+    label: t("notificationTypes.newSignIns"),
     required: true,
   },
   "system.announcement": {
     service: "system",
     category: "updates",
-    label: "Workspace announcements",
+    label: t("notificationTypes.workspaceAnnouncements"),
     required: false,
   },
   "drive.shared": {
     service: "drive",
     category: "sharing",
-    label: "Drive sharing changes",
+    label: t("notificationTypes.driveSharingChanges"),
     required: false,
   },
   "drive.updated": {
     service: "drive",
     category: "activity",
-    label: "Drive file updates",
+    label: t("notificationTypes.driveFileUpdates"),
     required: false,
   },
   "drive.comment": {
     service: "drive",
     category: "comments",
-    label: "Drive comments",
+    label: t("notificationTypes.driveComments"),
     required: false,
   },
   "drive.access_requested": {
     service: "drive",
     category: "sharing",
-    label: "Drive access requests",
+    label: t("notificationTypes.driveAccessRequests"),
     required: false,
   },
   "calendar.invited": {
     service: "calendar",
     category: "invitations",
-    label: "Calendar invitations",
+    label: t("notificationTypes.calendarInvitations"),
     required: true,
   },
   "calendar.updated": {
     service: "calendar",
     category: "invitations",
-    label: "Calendar event updates",
+    label: t("notificationTypes.calendarEventUpdates"),
     required: true,
   },
   "calendar.cancelled": {
     service: "calendar",
     category: "invitations",
-    label: "Calendar cancellations",
+    label: t("notificationTypes.calendarCancellations"),
     required: true,
   },
   "calendar.response": {
     service: "calendar",
     category: "responses",
-    label: "Calendar responses",
+    label: t("notificationTypes.calendarResponses"),
     required: false,
   },
 } as const;
@@ -72,5 +73,5 @@ export function targetPath(type: NotificationType, path?: string | null) {
   if (type === "system.announcement" && path === "/notifications") return path;
   if (type.startsWith("calendar.") && /^\/calendar\/invitations\/[A-Za-z0-9_-]+$/.test(path))
     return path;
-  throw new Error("Unsupported notification target");
+  throw new Error(t("notificationTypes.unsupportedNotificationTarget"));
 }

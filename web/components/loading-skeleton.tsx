@@ -1,6 +1,7 @@
+import { t } from "../../shared/i18n/index.ts";
 export function LoadingSkeleton({
   kind = "section",
-  label = "Loading…",
+  label = t("common.loading"),
   rows = 3,
 }: {
   kind?: "section" | "list" | "reader" | "form" | "page";

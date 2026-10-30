@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { now, uuid, type AppEnv } from "../auth/types";
@@ -77,13 +78,13 @@ export const literalCondition = (value: Condition) => {
 };
 function formSchema(value: unknown) {
   if (!Array.isArray(value) || value.length > 10)
-    fail(400, "INVALID_FORM", "At most 10 form fields are allowed");
+    fail(400, "INVALID_FORM", t("calendarRegistrations.atMost10FormFieldsAreAllowed"));
   const names = new Set<string>();
   return value.map((item) => {
-    const data = object(item, "form field");
+    const data = object(item, t("calendarRegistrations.formField"));
     fields(data, ["key", "label", "type", "required", "options"]);
     const key = identifier(data.key, "key");
-    if (names.has(key)) fail(400, "INVALID_FORM", "Repeated form field");
+    if (names.has(key)) fail(400, "INVALID_FORM", t("calendarRegistrations.repeatedFormField"));
     names.add(key);
     const type = choice(data.type, "type", ["text", "boolean", "choice"]),
       label = text(data.label, "label", 255),
@@ -91,7 +92,7 @@ function formSchema(value: unknown) {
     let options: string[] | undefined;
     if (type === "choice") {
       if (!Array.isArray(data.options) || data.options.length > 20 || !data.options.length)
-        fail(400, "INVALID_FORM", "Invalid field options");
+        fail(400, "INVALID_FORM", t("calendarRegistrations.invalidFieldOptions"));
       options = data.options.map((item) => text(item, "option", 255));
     }
     return { key, label, type, required, ...(options ? { options } : {}) };
@@ -107,14 +108,15 @@ function answers(value: unknown, p: Policy) {
   for (const field of schema) {
     const answer = data[field.key];
     if (answer === undefined) {
-      if (field.required) fail(400, "INVALID_ANSWERS", `Missing ${field.key}`);
+      if (field.required)
+        fail(400, "INVALID_ANSWERS", t("calendarRegistrations.missing", { key: field.key }));
       continue;
     }
     if (field.type === "boolean") flag(answer, field.key);
     else {
       const string = text(answer, field.key, 2048, !field.required);
       if (field.type === "choice" && !field.options!.includes(string))
-        fail(400, "INVALID_ANSWERS", `Invalid ${field.key}`);
+        fail(400, "INVALID_ANSWERS", t("calendarRegistrations.invalid", { key: field.key }));
     }
   }
   return data;
@@ -164,16 +166,18 @@ registrationRoutes.put(root + "/registration-policy", async (c) => {
     ),
     version = current ? expectedVersion(c, data) : 0;
   if (!current && data.version !== undefined && data.version !== 0)
-    fail(412, "VERSION_CONFLICT", "Registration policy does not exist");
+    fail(412, "VERSION_CONFLICT", t("calendarRegistrations.registrationPolicyDoesNotExist"));
   const stamp = (value: unknown) =>
-    value === null || value === undefined ? null : integer(value, "registration time", 0);
+    value === null || value === undefined
+      ? null
+      : integer(value, t("calendarRegistrations.registrationTime"), 0);
   const domains = data.allowed_email_domains === undefined ? [] : data.allowed_email_domains;
   if (
     !Array.isArray(domains) ||
     domains.length > 20 ||
     domains.some((value) => typeof value !== "string" || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(value))
   )
-    fail(400, "INVALID_DOMAIN", "Invalid allowed email domains");
+    fail(400, "INVALID_DOMAIN", t("calendarRegistrations.invalidAllowedEmailDomains"));
   const value: Policy = {
     id: current?.id ?? uuid(),
     event_id: event.id,
@@ -203,7 +207,7 @@ registrationRoutes.put(root + "/registration-policy", async (c) => {
     value.registration_closes_at !== null &&
     value.registration_closes_at <= value.registration_opens_at
   )
-    fail(400, "INVALID_RANGE", "Registration closes before it opens");
+    fail(400, "INVALID_RANGE", t("calendarRegistrations.registrationClosesBeforeItOpens"));
   await mutate(c, {
     action: "calendar.events.invite",
     operation: "registration.policy",
@@ -251,7 +255,8 @@ registrationRoutes.get(root + "/registrations", async (c) => {
     event.id,
     ...(key === undefined ? [] : [key]),
   );
-  if (list.length > 500) fail(422, "TOO_MANY_REGISTRATIONS", "Query an individual occurrence");
+  if (list.length > 500)
+    fail(422, "TOO_MANY_REGISTRATIONS", t("calendarRegistrations.queryAnIndividualOccurrence"));
   return c.json({ registrations: list.map(registrationDto) });
 });
 async function preparedConfirmation(
@@ -411,7 +416,11 @@ registrationRoutes.post(root + "/registrations/:registrationId/decision", async 
     version = expectedVersion(c, data),
     decision = choice(data.decision, "decision", ["approve", "reject"]);
   if (!reg || !["pending", "waitlisted"].includes(reg.status))
-    fail(409, "REGISTRATION_STATE", "This registration is not awaiting approval");
+    fail(
+      409,
+      "REGISTRATION_STATE",
+      t("calendarRegistrations.thisRegistrationIsNotAwaitingApproval"),
+    );
   const p = await policy(c, event.id, reg.occurrence_key),
     cap = capacityCondition(
       event.id,
@@ -421,7 +430,7 @@ registrationRoutes.post(root + "/registrations/:registrationId/decision", async 
       p.capacity,
     );
   if (decision === "approve" && !(await first(c.env, `SELECT 1 WHERE ${cap.sql}`, ...cap.args)))
-    fail(409, "REGISTRATION_FULL", "This occurrence has reached capacity");
+    fail(409, "REGISTRATION_FULL", t("calendarRegistrations.thisOccurrenceHasReachedCapacity"));
   const confirmation =
     decision === "approve" ? await preparedConfirmation(c, event, cal, reg, p) : null;
   await mutate(c, {
@@ -489,7 +498,7 @@ publicRegistrations.post("/public/share-links/:token/email-challenges", async (c
     session = await linkSession(c, link, true),
     address = email(data.email_address);
   if (link.mode !== "join" || !event)
-    fail(403, "REGISTRATION_DISABLED", "This link does not allow registration");
+    fail(403, "REGISTRATION_DISABLED", t("calendarRegistrations.thisLinkDoesNotAllowRegistration"));
   await limitPublic(c, `verify:${session!.id}`, 3, 600);
   await limitPublic(c, `verify-email:${address}`, 5);
   await limitPublic(c, `verify-ip:${c.req.header("cf-connecting-ip") ?? "unknown"}`, 20);
@@ -562,7 +571,7 @@ publicRegistrations.post(
       challenge.attempts >= 5 ||
       !/^\d{6}$/.test(code)
     )
-      fail(400, "INVALID_CODE", "Invalid or expired verification code");
+      fail(400, "INVALID_CODE", t("calendarRegistrations.invalidOrExpiredVerificationCode"));
     const hash = codeHash(c, id, code, Number(challenge.code_hash.split(":")[0]));
     if (
       !timingSafeEqual(
@@ -576,7 +585,7 @@ publicRegistrations.post(
       )
         .bind(id, ...guard.args)
         .run();
-      fail(400, "INVALID_CODE", "Invalid or expired verification code");
+      fail(400, "INVALID_CODE", t("calendarRegistrations.invalidOrExpiredVerificationCode"));
     }
     await mutate(c, {
       operation: "registration.verify",
@@ -627,12 +636,16 @@ async function register(c: CalendarContext, attempt = 0): Promise<Response> {
       { link, event, cal, auth } = await publicLink(c),
       session = await linkSession(c, link, true);
     if (link.mode !== "join" || !event || !session!.email_verified_at || !session!.email_key)
-      fail(403, "EMAIL_VERIFICATION_REQUIRED", "Verify your email before registering");
+      fail(
+        403,
+        "EMAIL_VERIFICATION_REQUIRED",
+        t("calendarRegistrations.verifyYourEmailBeforeRegistering"),
+      );
     await limitPublic(c, `register:${session!.id}`, 20);
     const key = registrationKey(event, data.occurrence_key ?? link.occurrence_key),
       p = await policy(c, event.id, key);
     if (link.occurrence_key && key !== link.occurrence_key)
-      fail(403, "LINK_SCOPE", "This link covers one occurrence");
+      fail(403, "LINK_SCOPE", t("calendarRegistrations.thisLinkCoversOneOccurrence"));
     const effective = await occurrence(c, event, key);
     assertLinkOccurrence(link, effective, cal);
     if (
@@ -640,13 +653,17 @@ async function register(c: CalendarContext, attempt = 0): Promise<Response> {
       (p.registration_opens_at !== null && p.registration_opens_at > now()) ||
       (p.registration_closes_at !== null && p.registration_closes_at <= now())
     )
-      fail(409, "REGISTRATION_CLOSED", "Registration is closed");
+      fail(409, "REGISTRATION_CLOSED", t("calendarRegistrations.registrationIsClosed"));
     const domains = JSON.parse(p.allowed_email_domains_json) as string[];
     if (domains.length && !domains.includes(session!.email_key.split("@")[1]!))
-      fail(403, "REGISTRATION_DOMAIN", "This email domain cannot register");
+      fail(403, "REGISTRATION_DOMAIN", t("calendarRegistrations.thisEmailDomainCannotRegister"));
     const resolved = await recipientUser(c.env, session!.email_key);
     if (resolved.ambiguous)
-      fail(400, "AMBIGUOUS_ATTENDEE", "This address matches more than one account");
+      fail(
+        400,
+        "AMBIGUOUS_ATTENDEE",
+        t("calendarRegistrations.thisAddressMatchesMoreThanOneAccount"),
+      );
     const mapped = resolved.user;
     const member = (await effectiveAttendees(c, event.id, key)).find(
       (value) =>
@@ -679,12 +696,12 @@ async function register(c: CalendarContext, attempt = 0): Promise<Response> {
       fail(
         409,
         "REGISTRATION_IDENTITY_CHANGED",
-        "This email registration belongs to a different account. Contact the organizer",
+        t("calendarRegistrations.thisEmailRegistrationBelongsToADifferentAccountContact"),
       );
     let status: Registration["status"] =
       p.approval_mode === "manual" ? "pending" : available ? "confirmed" : "waitlisted";
     if (status === "waitlisted" && !p.waitlist_enabled)
-      fail(409, "REGISTRATION_FULL", "This occurrence has reached capacity");
+      fail(409, "REGISTRATION_FULL", t("calendarRegistrations.thisOccurrenceHasReachedCapacity"));
     const reusable = old && !["cancelled", "rejected"].includes(old.status);
     const stamp = now(),
       reg: Registration = reusable
@@ -853,14 +870,14 @@ publicRegistrations.post("/public/share-links/:token/registrations", (c) => regi
 export async function managedRegistration(c: CalendarContext) {
   const token = text(c.req.param("manageToken"), "manage_token", 100);
   if (!/^ofcr_[A-Za-z0-9_-]{43}$/.test(token))
-    fail(404, "REGISTRATION_NOT_FOUND", "Registration not found");
+    fail(404, "REGISTRATION_NOT_FOUND", t("calendarRegistrations.registrationNotFound"));
   const hash = await digest(token),
     reg = await first<Registration>(
       c.env,
       "SELECT r.* FROM calendar_event_registrations r JOIN calendar_registration_manage_tokens t ON t.registration_id=r.id WHERE t.token_hash=? AND t.revoked_at IS NULL AND t.expires_at>unixepoch()",
       hash,
     );
-  if (!reg) fail(404, "REGISTRATION_NOT_FOUND", "Registration not found");
+  if (!reg) fail(404, "REGISTRATION_NOT_FOUND", t("calendarRegistrations.registrationNotFound"));
   const event = await first<Event>(c.env, "SELECT * FROM calendar_events WHERE id=?", reg.event_id),
     cal = event
       ? await first<Calendar>(
@@ -869,12 +886,13 @@ export async function managedRegistration(c: CalendarContext) {
           event.organizer_calendar_id,
         )
       : null;
-  if (!event || !cal) fail(404, "REGISTRATION_NOT_FOUND", "Registration not found");
+  if (!event || !cal)
+    fail(404, "REGISTRATION_NOT_FOUND", t("calendarRegistrations.registrationNotFound"));
   const recipient = reg.user_id
     ? condition(`EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${active("u")})`, reg.user_id)
     : condition("1");
   if (!(await first(c.env, `SELECT 1 WHERE ${recipient.sql}`, ...recipient.args)))
-    fail(404, "REGISTRATION_NOT_FOUND", "Registration is unavailable");
+    fail(404, "REGISTRATION_NOT_FOUND", t("calendarRegistrations.registrationIsUnavailable"));
   const auth = combine(
     recipient,
     condition(
@@ -944,9 +962,14 @@ publicRegistrations.post("/public/registrations/:manageToken/rsvp", async (c) =>
     { reg, event, cal, auth, actorKey } = await managedRegistration(c),
     version = expectedVersion(c, data);
   if (reg.status !== "confirmed" || !reg.attendee_id)
-    fail(409, "REGISTRATION_NOT_CONFIRMED", "This registration is not confirmed");
+    fail(
+      409,
+      "REGISTRATION_NOT_CONFIRMED",
+      t("calendarRegistrations.thisRegistrationIsNotConfirmed"),
+    );
   const attendee = (await allAttendees(c, event.id)).find((value) => value.id === reg.attendee_id);
-  if (!attendee) fail(404, "INVITATION_NOT_FOUND", "Your invitation is unavailable");
+  if (!attendee)
+    fail(404, "INVITATION_NOT_FOUND", t("calendarRegistrations.yourInvitationIsUnavailable"));
   return c.json(
     await respond(
       c,
@@ -1058,17 +1081,18 @@ publicRegistrations.post("/public/registrations/:manageToken/cancel", async (c) 
 publicRegistrations.get("/public/registrations/:manageToken/event.ics", async (c) => {
   const { reg, event, cal } = await managedRegistration(c);
   if (event.trashed_at || event.status === "cancelled" || cal.trashed_at)
-    fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
+    fail(404, "INVITATION_NOT_FOUND", t("calendarRegistrations.invitationIsUnavailable"));
   if (reg.status !== "confirmed" || !reg.attendee_id)
     fail(
       403,
       "REGISTRATION_NOT_CONFIRMED",
-      "Only confirmed registrations can download invitations",
+      t("calendarRegistrations.onlyConfirmedRegistrationsCanDownloadInvitations"),
     );
   const attendee = (await effectiveAttendees(c, event.id, reg.occurrence_key)).find(
     (value) => value.id === reg.attendee_id,
   );
-  if (!attendee) fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
+  if (!attendee)
+    fail(404, "INVITATION_NOT_FOUND", t("calendarRegistrations.invitationIsUnavailable"));
   return c.body(
     calendarFile({
       kind: "invitation",

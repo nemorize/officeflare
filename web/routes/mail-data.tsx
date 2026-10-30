@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { MailSettingsLayout } from "../components/mail-settings-nav";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -64,26 +67,26 @@ function DataJobs() {
   }
   return (
     <MailSettingsLayout
-      title="Import & backup"
-      description="Move mail in and out of this mailbox and track background operations."
+      title={t("routesMailData.importBackup")}
+      description={t("routesMailData.moveMailInAndOutOfThisMailboxAnd")}
       actions={
         <Button onClick={resource.reload} disabled={resource.loading}>
-          Refresh jobs
+          {t("routesMailData.refreshJobs")}
         </Button>
       }
     >
       <MailSection
-        title="Import mail"
-        description="Upload an .eml message or an .mbox archive. Imported messages are added to this mailbox."
+        title={t("routesMailData.importMail")}
+        description={t("routesMailData.uploadAnEmlMessageOrAnMboxArchiveImported")}
       >
         <MailForm
           className="mail-form"
           onSubmit={(event) => {
             event.preventDefault();
             void action.run(async () => {
-              if (!file?.size) throw new Error("Choose a non-empty mail file.");
+              if (!file?.size) throw new Error(t("routesMailData.chooseANonEmptyMailFile"));
               if (file.size > 26 * 1024 ** 2)
-                throw new Error("Split imports into files of at most 26 MiB.");
+                throw new Error(t("routesMailData.splitImportsIntoFilesOfAtMost26Mib"));
               await api(`${path}/imports?format=${format}`, {
                 method: "POST",
                 body: file,
@@ -96,7 +99,7 @@ function DataJobs() {
         >
           <MailFieldset disabled={!mail.box!.access?.write || action.busy}>
             <div className="mail-form-grid">
-              <MailField label="Import format">
+              <MailField label={t("routesMailData.importFormat")}>
                 <MailSelect
                   value={format}
                   onValueChange={(nextValue) => {
@@ -104,12 +107,15 @@ function DataJobs() {
                     setFile(null);
                   }}
                   options={[
-                    { value: "eml", label: "Email message (.eml)" },
-                    { value: "mbox", label: "Mailbox archive (.mbox)" },
+                    { value: "eml", label: t("routesMailData.emailMessageEml") },
+                    { value: "mbox", label: t("routesMailData.mailboxArchiveMbox") },
                   ]}
                 />
               </MailField>
-              <MailField label="Mail file" hint="Maximum 26 MiB per import.">
+              <MailField
+                label={t("routesMailData.mailFile")}
+                hint={t("routesMailData.maximum26MibPerImport")}
+              >
                 <MailFileInput
                   key={format}
                   accept={format === "eml" ? ".eml,message/rfc822" : ".mbox,application/mbox"}
@@ -119,56 +125,55 @@ function DataJobs() {
             </div>
             {file && (
               <p className="mail-hint">
-                {file.name} · {bytes(file.size)}
+                {file.name}
+                {t("routesMailData.text")}
+                {bytes(file.size)}
               </p>
             )}
             <Button type="submit" disabled={!file || action.busy}>
-              Start import
+              {t("routesMailData.startImport")}
             </Button>
           </MailFieldset>
         </MailForm>
         {!mail.box!.access?.write && (
-          <p className="mail-hint">Importing requires mailbox edit permission.</p>
+          <p className="mail-hint">{t("routesMailData.importingRequiresMailboxEditPermission")}</p>
         )}
       </MailSection>
       <MailSection
-        title="Export & backup"
-        description="Exports include messages you can access. Other members’ private drafts are excluded. A backup includes mail and mailbox settings."
+        title={t("routesMailData.exportBackup")}
+        description={t("routesMailData.exportsIncludeMessagesYouCanAccessOtherMembersPrivate")}
       >
         <div className="mail-data-options">
           <article>
-            <h3>Export to MBOX</h3>
-            <p>Download messages in a format that other mail applications can import.</p>
+            <h3>{t("routesMailData.exportToMbox")}</h3>
+            <p>{t("routesMailData.downloadMessagesInAFormatThatOtherMailApplications")}</p>
             <Button
               disabled={action.busy}
               onClick={() => {
                 void action.run(() => start("exports"));
               }}
             >
-              Create export
+              {t("routesMailData.createExport")}
             </Button>
           </article>
           <article>
-            <h3>Mailbox backup</h3>
-            <p>
-              Save messages, attachments, folders, rules and settings. Restore a completed backup to
-              a writable mailbox.
-            </p>
+            <h3>{t("routesMailData.mailboxBackup")}</h3>
+            <p>{t("routesMailData.saveMessagesAttachmentsFoldersRulesAndSettingsRestoreA")}</p>
             <Button
               disabled={action.busy}
               onClick={() => {
                 void action.run(() => start("backups"));
               }}
             >
-              Create backup
+              {t("routesMailData.createBackup")}
             </Button>
           </article>
         </div>
       </MailSection>
       <MailNotice error={action.error} />
       <MailSection
-        title="Your background jobs"
-        description="Jobs and downloadable backups are visible only to the account that created them."
+        title={t("routesMailData.yourBackgroundJobs")}
+        description={t("routesMailData.jobsAndDownloadableBackupsAreVisibleOnlyToThe")}
       >
         <MailState
           loading={resource.loading && !resource.data}
@@ -179,31 +184,31 @@ function DataJobs() {
           <table className="mail-table">
             <thead>
               <tr>
-                <th>Operation</th>
-                <th>Status</th>
-                <th>Processed</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th>{t("routesMailData.operation")}</th>
+                <th>{t("common.status")}</th>
+                <th>{t("routesMailData.processed")}</th>
+                <th>{t("routesMailData.created")}</th>
+                <th>{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {resource.data?.jobs.map((job) => (
                 <tr key={job.id}>
-                  <td data-label="Operation">{job.kind.replaceAll("_", " ")}</td>
-                  <td data-label="Status">
+                  <td data-label={t("routesMailData.operation")}>{enumLabel(job.kind)}</td>
+                  <td data-label={t("common.status")}>
                     <span className="mail-badge" data-status={job.status}>
-                      {job.status}
+                      {enumLabel(job.status)}
                     </span>
                     {job.error_code && (
                       <p className="mail-hint">{mailErrorDescription(job.error_code)}</p>
                     )}
                   </td>
-                  <td data-label="Processed">{job.progress}</td>
-                  <td data-label="Created">{mailDate(job.created_at)}</td>
-                  <td data-label="Actions">
+                  <td data-label={t("routesMailData.processed")}>{job.progress}</td>
+                  <td data-label={t("routesMailData.created")}>{mailDate(job.created_at)}</td>
+                  <td data-label={t("common.actions")}>
                     <div className="mail-actions">
                       <Button size="sm" onClick={() => setSelected(job)}>
-                        Details
+                        {t("routesMailData.details")}
                       </Button>
                       {job.status === "completed" && ["export", "backup"].includes(job.kind) && (
                         <Button
@@ -218,7 +223,15 @@ function DataJobs() {
                             );
                           }}
                         >
-                          Download {job.kind === "backup" ? "manifest" : "MBOX"}
+                          <LocalizedMessage
+                            id="routesMailData.download"
+                            values={{
+                              value1:
+                                job.kind === "backup"
+                                  ? t("routesMailData.backupManifest")
+                                  : t("routesMailData.mbox"),
+                            }}
+                          />
                         </Button>
                       )}
                       {job.kind === "backup" && job.status === "completed" && (
@@ -233,7 +246,7 @@ function DataJobs() {
                             setRestoreSettings(false);
                           }}
                         >
-                          Restore
+                          {t("routesMailData.restore")}
                         </Button>
                       )}
                       {job.status === "failed" && (
@@ -253,7 +266,7 @@ function DataJobs() {
                             });
                           }}
                         >
-                          Retry
+                          {t("common.retry")}
                         </Button>
                       )}
                     </div>
@@ -264,7 +277,7 @@ function DataJobs() {
           </table>
         </div>
         {resource.data && !resource.data.jobs.length && (
-          <p className="mail-empty">No background jobs yet.</p>
+          <p className="mail-empty">{t("routesMailData.noBackgroundJobsYet")}</p>
         )}
       </MailSection>
       {selected && (
@@ -277,8 +290,8 @@ function DataJobs() {
       )}
       <MailModal
         open={!!restore}
-        title="Restore mailbox backup"
-        description="Choose the mailbox that should receive the backed-up messages."
+        title={t("routesMailData.restoreMailboxBackup")}
+        description={t("routesMailData.chooseTheMailboxThatShouldReceiveTheBackedUp")}
         onClose={() => setRestore(null)}
       >
         <MailForm
@@ -288,7 +301,7 @@ function DataJobs() {
             setConfirmRestore(true);
           }}
         >
-          <MailField label="Target mailbox">
+          <MailField label={t("routesMailData.targetMailbox")}>
             <MailSelect
               required
               value={target}
@@ -308,27 +321,35 @@ function DataJobs() {
             disabled={!targetBox?.access?.manage}
             onChange={setRestoreSettings}
           >
-            Also restore settings and rules
+            {t("routesMailData.alsoRestoreSettingsAndRules")}
           </Check>
           <p className="mail-hint">
-            Restoring adds messages to the target mailbox. Starting a separate restore can add
-            another copy.
+            {t("routesMailData.restoringAddsMessagesToTheTargetMailboxStartingA")}
           </p>
           <Button type="submit" variant="primary" disabled={!targetBox?.access?.write}>
-            Review restore
+            {t("routesMailData.reviewRestore")}
           </Button>
         </MailForm>
       </MailModal>
       <Confirm
         open={confirmRestore}
-        title={`Restore into ${targetBox?.name ?? "mailbox"}?`}
+        title={t("routesMailData.restoreInto", {
+          value1: targetBox?.name ?? t("mail.fallbackName"),
+        })}
         description={
           <>
-            {restore?.progress ?? 0} message(s) will be added to this mailbox.
-            {restoreSettings && " Its mailbox settings will also be replaced and rules restored."}
+            <LocalizedMessage
+              id="routesMailData.messageSWillBeAddedToThisMailbox"
+              values={{
+                value1: restore?.progress ?? 0,
+                value2:
+                  restoreSettings &&
+                  t("routesMailData.itsMailboxSettingsWillAlsoBeReplacedAndRules"),
+              }}
+            />
           </>
         }
-        label="Start restore"
+        label={t("routesMailData.startRestore")}
         onClose={() => setConfirmRestore(false)}
         onConfirm={async () => {
           const result = await api<{ job: { mailbox_id: string } }>(
@@ -363,8 +384,8 @@ function JobDetails({ job, path, onClose }: { job: Job; path: string; onClose: (
   return (
     <MailModal
       open
-      title="Job details"
-      description={`${current.kind.replaceAll("_", " ")} · ${current.status}`}
+      title={t("routesMailData.jobDetails")}
+      description={`${enumLabel(current.kind)} · ${enumLabel(current.status)}`}
       onClose={onClose}
       busy={action.busy}
       wide
@@ -376,30 +397,29 @@ function JobDetails({ job, path, onClose }: { job: Job; path: string; onClose: (
       />
       <dl className="mail-message-details">
         <div>
-          <dt>Job ID</dt>
+          <dt>{t("routesMailData.jobId")}</dt>
           <dd>{current.id}</dd>
         </div>
         <div>
-          <dt>Processed messages</dt>
+          <dt>{t("routesMailData.processedMessages")}</dt>
           <dd>{current.progress}</dd>
         </div>
         <div>
-          <dt>Last updated</dt>
+          <dt>{t("routesMailData.lastUpdated")}</dt>
           <dd>{mailDate(current.updated_at)}</dd>
         </div>
         {current.error_code && (
           <div>
-            <dt>Error</dt>
+            <dt>{t("routesMailData.error")}</dt>
             <dd>{mailErrorDescription(current.error_code)}</dd>
           </div>
         )}
       </dl>
       {resource.data?.files && (
         <>
-          <h3>Backup files</h3>
+          <h3>{t("routesMailData.backupFiles")}</h3>
           <p className="mail-hint">
-            The manifest describes the backup. Download the individual message, body and attachment
-            files below to keep a local copy.
+            {t("routesMailData.theManifestDescribesTheBackupDownloadTheIndividualMessage")}
           </p>
           <div className="mail-backup-files">
             {resource.data.files.map((file) => (
@@ -420,16 +440,18 @@ function JobDetails({ job, path, onClose }: { job: Job; path: string; onClose: (
                     );
                   }}
                 >
-                  Download
+                  {t("routesMailData.download2")}
                 </Button>
               </div>
             ))}
           </div>
           <div className="mail-actions">
-            {cursor && <Button onClick={() => setCursor(null)}>First page</Button>}
+            {cursor && (
+              <Button onClick={() => setCursor(null)}>{t("routesMailData.firstPage")}</Button>
+            )}
             {resource.data.next_file_cursor && (
               <Button onClick={() => setCursor(resource.data!.next_file_cursor!)}>
-                Next files
+                {t("routesMailData.nextFiles")}
               </Button>
             )}
           </div>
@@ -463,12 +485,12 @@ function Activity() {
     [rebuild, setRebuild] = useState(false);
   return (
     <MailSettingsLayout
-      title="Activity & storage"
-      description="Review mailbox activity and metadata usage."
+      title={t("routesMailData.activityStorage")}
+      description={t("routesMailData.reviewMailboxActivityAndMetadataUsage")}
     >
       <MailSection
-        title="Metadata storage"
-        description="Includes message records and search indexes. Email bodies and attachments are stored separately and are not included in this total."
+        title={t("routesMailData.metadataStorage")}
+        description={t("routesMailData.includesMessageRecordsAndSearchIndexesEmailBodiesAnd")}
       >
         <MailState
           loading={storage.loading && !storage.data}
@@ -483,29 +505,29 @@ function Activity() {
                   storage.data.partitions.reduce((total, part) => total + part.database_bytes, 0),
                 )}
               </strong>
-              <span>of message records and search indexes</span>
+              <span>{t("routesMailData.ofMessageRecordsAndSearchIndexes")}</span>
             </div>
             <p className="mail-hint">
-              Total mailbox usage, including bodies and attachments, is not available in this view.
+              {t("routesMailData.totalMailboxUsageIncludingBodiesAndAttachmentsIsNot")}
             </p>
           </>
         )}
       </MailSection>
       {mail.box!.access?.manage && mail.box!.access?.write && (
         <MailSection
-          title="Search index"
-          description="Rebuild the mailbox search index from stored message bodies."
+          title={t("routesMailData.searchIndex")}
+          description={t("routesMailData.rebuildTheMailboxSearchIndexFromStoredMessageBodies")}
         >
           <Button disabled={action.busy} onClick={() => setRebuild(true)}>
-            Rebuild search index
+            {t("routesMailData.rebuildSearchIndex")}
           </Button>
           <MailNotice error={action.error} />
         </MailSection>
       )}
       {canAudit && (
         <MailSection
-          title="Audit history"
-          description="Inspect recent changes to this mailbox’s resources."
+          title={t("routesMailData.auditHistory")}
+          description={t("routesMailData.inspectRecentChangesToThisMailboxSResources")}
         >
           <MailState
             loading={audits.loading && !audits.data}
@@ -516,19 +538,19 @@ function Activity() {
             <table className="mail-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Actor</th>
-                  <th>Operation</th>
-                  <th>Resource</th>
+                  <th>{t("routesMailData.time")}</th>
+                  <th>{t("routesMailData.actor")}</th>
+                  <th>{t("routesMailData.operation")}</th>
+                  <th>{t("routesMailData.resource")}</th>
                 </tr>
               </thead>
               <tbody>
                 {audits.data?.events.map((event) => (
                   <tr key={event.sequence}>
-                    <td data-label="Time">{mailDate(event.created_at)}</td>
-                    <td data-label="Actor">{event.actor_id}</td>
-                    <td data-label="Operation">{event.operation}</td>
-                    <td data-label="Resource">
+                    <td data-label={t("routesMailData.time")}>{mailDate(event.created_at)}</td>
+                    <td data-label={t("routesMailData.actor")}>{event.actor_id}</td>
+                    <td data-label={t("routesMailData.operation")}>{enumLabel(event.operation)}</td>
+                    <td data-label={t("routesMailData.resource")}>
                       <code>{event.resource_path}</code>
                     </td>
                   </tr>
@@ -537,13 +559,15 @@ function Activity() {
             </table>
           </div>
           {audits.data && !audits.data.events.length && (
-            <p className="mail-hint">No audit events on this page.</p>
+            <p className="mail-hint">{t("routesMailData.noAuditEventsOnThisPage")}</p>
           )}
           <div className="mail-actions">
-            {before && <Button onClick={() => setBefore(null)}>Latest events</Button>}
+            {before && (
+              <Button onClick={() => setBefore(null)}>{t("routesMailData.latestEvents")}</Button>
+            )}
             {audits.data?.events.length === 100 && (
               <Button onClick={() => setBefore(audits.data!.events.at(-1)!.sequence)}>
-                Older events
+                {t("routesMailData.olderEvents")}
               </Button>
             )}
           </div>
@@ -551,9 +575,9 @@ function Activity() {
       )}
       <Confirm
         open={rebuild}
-        title="Rebuild search index?"
-        description="A background job will reread stored message bodies and rebuild search documents. Existing messages are retained."
-        label="Start rebuild"
+        title={t("routesMailData.rebuildSearchIndex2")}
+        description={t("routesMailData.aBackgroundJobWillRereadStoredMessageBodiesAnd")}
+        label={t("routesMailData.startRebuild")}
         onClose={() => setRebuild(false)}
         onConfirm={async () => {
           await api(path + "/search/rebuild", { method: "POST" });

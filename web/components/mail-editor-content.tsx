@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Extension, type Editor } from "@tiptap/core";
 import {
@@ -21,14 +24,14 @@ import { displayEditorHtml, storedEditorHtml } from "../lib/mail-editor";
 import type { MailEditorProps } from "./mail-editor";
 
 const fonts = [
-  { value: "", label: "Default font" },
-  { value: "Arial, sans-serif", label: "Arial" },
-  { value: "Georgia, serif", label: "Georgia" },
-  { value: "'Times New Roman', serif", label: "Times New Roman" },
-  { value: "'Courier New', monospace", label: "Courier New" },
+  { value: "", label: t("componentsMailEditorContent.defaultFont") },
+  { value: "Arial, sans-serif", label: t("componentsMailEditorContent.arial") },
+  { value: "Georgia, serif", label: t("componentsMailEditorContent.georgia") },
+  { value: "'Times New Roman', serif", label: t("componentsMailEditorContent.timesNewRoman") },
+  { value: "'Courier New', monospace", label: t("componentsMailEditorContent.courierNew") },
 ];
 const sizes = [
-  { value: "", label: "Normal" },
+  { value: "", label: t("componentsMailEditorContent.normal") },
   ...[10, 12, 14, 16, 18, 24, 32].map((size) => ({ value: `${size}px`, label: String(size) })),
 ];
 const colors = [
@@ -44,10 +47,10 @@ const colors = [
 ];
 const emptyAttachments: Attachment[] = [];
 const emailStyles: Record<string, string> = {
-  paragraph: "margin:0 0 12px",
+  paragraph: t("componentsMailEditorContent.margin0012px"),
   blockquote: "border-left:2px solid #dddddd;padding-left:16px;margin:16px 0",
   table: "border-collapse:collapse;width:100%",
-  tableCell: "border:1px solid #dddddd;padding:8px",
+  tableCell: t("componentsMailEditorContent.border1pxSolidDdddddPadding8px"),
   tableHeader: "border:1px solid #dddddd;padding:8px;background-color:#f5f5f5",
 };
 const EmailStyles = Extension.create({
@@ -101,7 +104,7 @@ export function MailEditor({
   mailboxId,
   attachments = emptyAttachments,
   disabled = false,
-  label = "Message body",
+  label = t("componentsMailEditorContent.messageBody"),
   className = "",
 }: MailEditorProps) {
   const limits = useMailResource<{ limits: { max_upload_bytes: number } }>(
@@ -250,14 +253,17 @@ export function MailEditor({
     try {
       for (const file of files) {
         const maximum = current.current.imageMaximum;
-        if (!maximum) throw new Error("Wait for the image size limit to load.");
+        if (!maximum)
+          throw new Error(t("componentsMailEditorContent.waitForTheImageSizeLimitToLoad"));
         if (
           !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type) ||
           !file.size ||
           file.size > maximum
         )
           throw new Error(
-            `Choose a PNG, JPEG, GIF or WebP image up to ${Math.floor(maximum / 1024)} KiB.`,
+            t("componentsMailEditorContent.chooseAPngJpegGifOrWebpImageUp", {
+              floor: Math.floor(maximum / 1024),
+            }),
           );
         const result = await api<{
           image: { id: string; content_id: string; size_bytes: number; filename: string };
@@ -279,7 +285,11 @@ export function MailEditor({
             .run();
       }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Image upload failed.");
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : t("componentsMailEditorContent.imageUploadFailed"),
+      );
     } finally {
       uploadCount.current--;
       setUploading(uploadCount.current > 0);
@@ -311,10 +321,14 @@ export function MailEditor({
   );
   return (
     <div className={`mail-html-editor ${className}`} data-disabled={disabled || undefined}>
-      <div className="mail-html-toolbar" role="group" aria-label={`${label} formatting`}>
+      <div
+        className="mail-html-toolbar"
+        role="group"
+        aria-label={t("componentsMailEditorContent.formatting", { label: label })}
+      >
         <div className="mail-html-format-row">
           <MailSelect
-            aria-label="Font family"
+            aria-label={t("componentsMailEditorContent.fontFamily")}
             value={state.font}
             disabled={disabled}
             className="mail-editor-font"
@@ -327,7 +341,7 @@ export function MailEditor({
             }
           />
           <MailSelect
-            aria-label="Font size"
+            aria-label={t("componentsMailEditorContent.fontSize")}
             value={state.size}
             disabled={disabled}
             className="mail-editor-size"
@@ -346,22 +360,22 @@ export function MailEditor({
                   size="icon"
                   variant="ghost"
                   disabled={disabled}
-                  aria-label="Text color"
-                  title="Text color"
+                  aria-label={t("componentsMailEditorContent.textColor")}
+                  title={t("componentsMailEditorContent.textColor")}
                 />
               }
             >
-              <span className="mail-color-letter">A</span>
+              <span className="mail-color-letter">{t("componentsMailEditorContent.a")}</span>
             </Popover.Trigger>
             <PopoverPopup className="mail-editor-popover">
-              <p>Text color</p>
+              <p>{t("componentsMailEditorContent.textColor")}</p>
               <div className="mail-editor-colors">
                 {colors.map((color) => (
                   <Button
                     variant="swatch"
                     key={color}
                     size="icon"
-                    aria-label={`Text color ${color}`}
+                    aria-label={t("componentsMailEditorContent.textColor2", { color: color })}
                     style={{ backgroundColor: color }}
                     onClick={() =>
                       run((instance) => {
@@ -380,24 +394,44 @@ export function MailEditor({
                   })
                 }
               >
-                Default color
+                {t("componentsMailEditorContent.defaultColor")}
               </Button>
             </PopoverPopup>
           </Popover.Root>
         </div>
         <div className="mail-html-format-row">
-          {toggle("Bold", state.bold, <strong>B</strong>, (instance) => {
-            instance.chain().focus().toggleBold().run();
-          })}
-          {toggle("Italic", state.italic, <em>I</em>, (instance) => {
-            instance.chain().focus().toggleItalic().run();
-          })}
-          {toggle("Underline", state.underline, <u>U</u>, (instance) => {
-            instance.chain().focus().toggleUnderline().run();
-          })}
-          {toggle("Strikethrough", state.strike, <s>S</s>, (instance) => {
-            instance.chain().focus().toggleStrike().run();
-          })}
+          {toggle(
+            t("componentsMailEditorContent.bold"),
+            state.bold,
+            <strong>{t("componentsMailEditorContent.b")}</strong>,
+            (instance) => {
+              instance.chain().focus().toggleBold().run();
+            },
+          )}
+          {toggle(
+            t("componentsMailEditorContent.italic"),
+            state.italic,
+            <em>{t("componentsMailEditorContent.i")}</em>,
+            (instance) => {
+              instance.chain().focus().toggleItalic().run();
+            },
+          )}
+          {toggle(
+            t("componentsMailEditorContent.underline"),
+            state.underline,
+            <u>{t("componentsMailEditorContent.u")}</u>,
+            (instance) => {
+              instance.chain().focus().toggleUnderline().run();
+            },
+          )}
+          {toggle(
+            t("componentsMailEditorContent.strikethrough"),
+            state.strike,
+            <s>{t("componentsMailEditorContent.s")}</s>,
+            (instance) => {
+              instance.chain().focus().toggleStrike().run();
+            },
+          )}
           <Menu.Root>
             <Menu.Trigger
               render={
@@ -405,8 +439,8 @@ export function MailEditor({
                   size="icon"
                   variant="ghost"
                   disabled={disabled}
-                  aria-label="Text alignment"
-                  title="Text alignment"
+                  aria-label={t("componentsMailEditorContent.textAlignment")}
+                  title={t("componentsMailEditorContent.textAlignment")}
                 />
               }
             >
@@ -419,20 +453,35 @@ export function MailEditor({
                   onClick={() => editor.chain().focus().setTextAlign(alignment).run()}
                 >
                   {state.align === alignment && <Icon name="check" />}
-                  {alignment[0]!.toUpperCase() + alignment.slice(1)}
+                  {enumLabel(alignment)}
                 </Menu.Item>
               ))}
             </MenuPopup>
           </Menu.Root>
-          {toggle("Bullet list", state.bullet, <Icon name="bulletList" />, (instance) => {
-            instance.chain().focus().toggleBulletList().run();
-          })}
-          {toggle("Numbered list", state.ordered, <Icon name="numberedList" />, (instance) => {
-            instance.chain().focus().toggleOrderedList().run();
-          })}
-          {toggle("Blockquote", state.quote, <Icon name="quote" />, (instance) => {
-            instance.chain().focus().toggleBlockquote().run();
-          })}
+          {toggle(
+            t("componentsMailEditorContent.bulletList"),
+            state.bullet,
+            <Icon name="bulletList" />,
+            (instance) => {
+              instance.chain().focus().toggleBulletList().run();
+            },
+          )}
+          {toggle(
+            t("componentsMailEditorContent.numberedList"),
+            state.ordered,
+            <Icon name="numberedList" />,
+            (instance) => {
+              instance.chain().focus().toggleOrderedList().run();
+            },
+          )}
+          {toggle(
+            t("componentsMailEditorContent.blockquote"),
+            state.quote,
+            <Icon name="quote" />,
+            (instance) => {
+              instance.chain().focus().toggleBlockquote().run();
+            },
+          )}
           <LinkControl editor={editor} href={state.href} disabled={disabled} active={state.link} />
           <Input
             ref={fileInput}
@@ -449,8 +498,8 @@ export function MailEditor({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Insert image"
-            title="Insert image"
+            aria-label={t("componentsMailEditorContent.insertImage")}
+            title={t("componentsMailEditorContent.insertImage")}
             disabled={disabled || uploading}
             onClick={() => fileInput.current?.click()}
           >
@@ -460,10 +509,15 @@ export function MailEditor({
             <Menu.Root>
               <Menu.Trigger
                 render={
-                  <Button size="sm" variant="ghost" disabled={disabled} aria-label="Image size" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={disabled}
+                    aria-label={t("componentsMailEditorContent.imageSize")}
+                  />
                 }
               >
-                Image size
+                {t("componentsMailEditorContent.imageSize")}
               </Menu.Trigger>
               <MenuPopup className="mail-action-menu">
                 {[120, 240, 360].map((width) => (
@@ -477,11 +531,14 @@ export function MailEditor({
                         .run()
                     }
                   >
-                    {width} px wide
+                    <LocalizedMessage
+                      id="componentsMailEditorContent.pxWide"
+                      values={{ width: width }}
+                    />
                   </Menu.Item>
                 ))}
                 <Menu.Item onClick={() => editor.chain().focus().deleteSelection().run()}>
-                  Remove image
+                  {t("componentsMailEditorContent.removeImage")}
                 </Menu.Item>
               </MenuPopup>
             </Menu.Root>
@@ -493,8 +550,8 @@ export function MailEditor({
                   size="icon"
                   variant="ghost"
                   disabled={disabled}
-                  aria-label="Table"
-                  title="Table"
+                  aria-label={t("componentsMailEditorContent.table")}
+                  title={t("componentsMailEditorContent.table")}
                 />
               }
             >
@@ -510,7 +567,7 @@ export function MailEditor({
                     .run()
                 }
               >
-                Insert 2 × 2 table
+                {t("componentsMailEditorContent.insert22Table")}
               </Menu.Item>
               <Menu.Item
                 onClick={() =>
@@ -521,25 +578,25 @@ export function MailEditor({
                     .run()
                 }
               >
-                Insert 3 × 3 table
+                {t("componentsMailEditorContent.insert33Table")}
               </Menu.Item>
               {state.table && (
                 <>
                   <Menu.Separator />
                   <Menu.Item onClick={() => editor.chain().focus().addRowAfter().run()}>
-                    Add row
+                    {t("componentsMailEditorContent.addRow")}
                   </Menu.Item>
                   <Menu.Item onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                    Add column
+                    {t("componentsMailEditorContent.addColumn")}
                   </Menu.Item>
                   <Menu.Item onClick={() => editor.chain().focus().deleteRow().run()}>
-                    Delete row
+                    {t("componentsMailEditorContent.deleteRow")}
                   </Menu.Item>
                   <Menu.Item onClick={() => editor.chain().focus().deleteColumn().run()}>
-                    Delete column
+                    {t("componentsMailEditorContent.deleteColumn")}
                   </Menu.Item>
                   <Menu.Item onClick={() => editor.chain().focus().deleteTable().run()}>
-                    Delete table
+                    {t("componentsMailEditorContent.deleteTable")}
                   </Menu.Item>
                 </>
               )}
@@ -548,8 +605,8 @@ export function MailEditor({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Clear formatting"
-            title="Clear formatting"
+            aria-label={t("componentsMailEditorContent.clearFormatting")}
+            title={t("componentsMailEditorContent.clearFormatting")}
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
@@ -559,8 +616,8 @@ export function MailEditor({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Undo"
-            title="Undo"
+            aria-label={t("componentsMailEditorContent.undo")}
+            title={t("componentsMailEditorContent.undo")}
             disabled={disabled || !state.undo}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => editor.chain().focus().undo().run()}
@@ -570,8 +627,8 @@ export function MailEditor({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Redo"
-            title="Redo"
+            aria-label={t("componentsMailEditorContent.redo")}
+            title={t("componentsMailEditorContent.redo")}
             disabled={disabled || !state.redo}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => editor.chain().focus().redo().run()}
@@ -583,7 +640,7 @@ export function MailEditor({
       <EditorContent editor={editor} className="mail-html-content" />
       {uploading && (
         <p className="mail-hint" role="status">
-          Uploading image…
+          {t("componentsMailEditorContent.uploadingImage")}
         </p>
       )}
       <MailNotice error={error} />
@@ -620,8 +677,8 @@ function LinkControl({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="Insert or edit link"
-            title="Insert or edit link"
+            aria-label={t("componentsMailEditorContent.insertOrEditLink")}
+            title={t("componentsMailEditorContent.insertOrEditLink")}
             disabled={disabled}
             aria-pressed={active}
           />
@@ -631,9 +688,9 @@ function LinkControl({
       </Popover.Trigger>
       <PopoverPopup className="mail-editor-popover">
         <MailInput
-          label="Link address"
+          label={t("componentsMailEditorContent.linkAddress")}
           value={url}
-          placeholder="https://example.com"
+          placeholder={t("componentsMailEditorContent.httpsExampleCom")}
           onChange={(event) => setUrl(event.target.value)}
         />
         <MailNotice error={error} />
@@ -643,7 +700,7 @@ function LinkControl({
             onClick={() => {
               const value = url.trim();
               if (!/^(?:https?:\/\/|mailto:)/i.test(value)) {
-                setError("Enter an HTTP, HTTPS or mailto link.");
+                setError(t("componentsMailEditorContent.enterAnHttpHttpsOrMailtoLink"));
                 return;
               }
               if (editor.state.selection.empty && !active)
@@ -660,7 +717,7 @@ function LinkControl({
               setOpen(false);
             }}
           >
-            Apply link
+            {t("componentsMailEditorContent.applyLink")}
           </Button>
           <Button
             variant="ghost"
@@ -670,7 +727,7 @@ function LinkControl({
               setOpen(false);
             }}
           >
-            Remove link
+            {t("componentsMailEditorContent.removeLink")}
           </Button>
         </div>
       </PopoverPopup>
@@ -718,7 +775,9 @@ function AuthenticatedImage({ node, selected }: NodeViewProps) {
         />
       ) : (
         <span className="mail-hint" role="status">
-          {error ? "Image unavailable" : "Loading image…"}
+          {error
+            ? t("componentsMailEditorContent.imageUnavailable")
+            : t("componentsMailEditorContent.loadingImage")}
         </span>
       )}
     </NodeViewWrapper>

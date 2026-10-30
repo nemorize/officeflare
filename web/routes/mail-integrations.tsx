@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { MailSettingsLayout } from "../components/mail-settings-nav";
 import { useId, useState } from "react";
 import { api } from "../lib/api";
@@ -17,7 +19,11 @@ import {
 } from "../components/mail-common";
 import { Check, Confirm } from "../components/console-shared";
 import { Button, Icon } from "../components/ui";
-const scopeLabels = { read: "Read", write: "Edit", send: "Send" };
+const scopeLabels = {
+  read: t("routesMailIntegrations.read"),
+  write: t("common.edit"),
+  send: t("routesMailIntegrations.send"),
+};
 interface ApiKey {
   id: string;
   name: string;
@@ -35,15 +41,19 @@ export function MailIntegrationsPage() {
   return (
     <div className="account-page mail-manage-page" key={mail.box?.id}>
       <MailSettingsLayout
-        title="Integrations"
-        description="Connect scripts and mail tools with explicit mailbox permissions."
+        title={t("routesMailIntegrations.integrations")}
+        description={t(
+          "routesMailIntegrations.connectScriptsAndMailToolsWithExplicitMailboxPermissions",
+        )}
       >
         <ApiKeys />
         {mail.capabilities?.features.webhooks &&
           (mail.box ? (
             <Webhooks />
           ) : (
-            <p className="mail-hint">Choose an available mailbox to manage its webhooks.</p>
+            <p className="mail-hint">
+              {t("routesMailIntegrations.chooseAnAvailableMailboxToManageItsWebhooks")}
+            </p>
           ))}
         <Jmap />
         <Mcp />
@@ -58,7 +68,7 @@ function Secret({ title, value, onClose }: { title: string; value: string; onClo
     <MailModal
       open
       title={title}
-      description="Copy this secret now. It is shown only once and is not stored in your browser."
+      description={t("routesMailIntegrations.copyThisSecretNowItIsShownOnlyOnce")}
       onClose={onClose}
     >
       <div className="mail-secret">
@@ -72,13 +82,13 @@ function Secret({ title, value, onClose }: { title: string; value: string; onClo
             });
           }}
         >
-          {copied ? "Copied" : "Copy secret"}
+          {copied ? t("routesMailIntegrations.copied") : t("routesMailIntegrations.copySecret")}
         </Button>
       </div>
       <MailNotice error={action.error} />
       <div className="mail-actions">
         <Button variant="primary" onClick={onClose}>
-          Done
+          {t("common.done")}
         </Button>
       </div>
     </MailModal>
@@ -103,8 +113,8 @@ function ApiKeys() {
   }
   return (
     <MailSection
-      title="Mail API keys"
-      description="Keys belong to your account, expire within 366 days and cannot grant permissions you do not hold."
+      title={t("routesMailIntegrations.mailApiKeys")}
+      description={t("routesMailIntegrations.keysBelongToYourAccountExpireWithin366Days")}
       action={
         <Button
           onClick={() => {
@@ -115,7 +125,7 @@ function ApiKeys() {
             setOpen(true);
           }}
         >
-          Create API key
+          {t("routesMailIntegrations.createApiKey")}
         </Button>
       }
     >
@@ -130,38 +140,45 @@ function ApiKeys() {
             <div>
               <strong>{key.name}</strong>
               <p>
-                {key.revoked_at
-                  ? "Revoked"
-                  : key.expires_at <= Date.now() / 1000
-                    ? "Expired"
-                    : "Active"}{" "}
-                · Expires {mailDate(key.expires_at)}
+                <LocalizedMessage
+                  id="routesMailIntegrations.expires"
+                  values={{
+                    value1: key.revoked_at
+                      ? t("common.revoked")
+                      : key.expires_at <= Date.now() / 1000
+                        ? t("common.expired")
+                        : t("common.active"),
+                    mailDate: mailDate(key.expires_at),
+                  }}
+                />
               </p>
               <p className="mail-hint">
                 {resource
                   .data!.scopes.filter((scope) => scope.key_id === key.id)
                   .map(
                     (scope) =>
-                      `${mail.boxes.find((box) => box.id === scope.mailbox_id)?.name ?? "Unavailable mailbox"}: ${scopeLabels[scope.action]}`,
+                      `${mail.boxes.find((box) => box.id === scope.mailbox_id)?.name ?? t("routesMailIntegrations.unavailableMailbox")}: ${scopeLabels[scope.action]}`,
                   )
                   .join(" · ")}
               </p>
             </div>
             {!key.revoked_at && (
               <Button size="sm" onClick={() => setRevoking(key)}>
-                Revoke
+                {t("routesMailIntegrations.revoke")}
               </Button>
             )}
           </div>
         ))}
       </div>
       {resource.data && !resource.data.keys.length && (
-        <p className="mail-hint">No API keys created.</p>
+        <p className="mail-hint">{t("routesMailIntegrations.noApiKeysCreated")}</p>
       )}
       <MailModal
         open={open}
-        title="Create mail API key"
-        description="Choose only the mailbox permissions this integration needs."
+        title={t("routesMailIntegrations.createMailApiKey")}
+        description={t(
+          "routesMailIntegrations.chooseOnlyTheMailboxPermissionsThisIntegrationNeeds",
+        )}
         onClose={() => setOpen(false)}
         busy={action.busy}
         wide
@@ -172,9 +189,9 @@ function ApiKeys() {
             event.preventDefault();
             void action.run(async () => {
               const timestamp = scheduledTime(expires);
-              if (!timestamp) throw new Error("Choose an expiration time.");
+              if (!timestamp) throw new Error(t("routesMailIntegrations.chooseAnExpirationTime"));
               if (!scopes.length || scopes.length > 100)
-                throw new Error("Choose between 1 and 100 mailbox scopes.");
+                throw new Error(t("routesMailIntegrations.chooseBetween1And100MailboxScopes"));
               const result = await api<{ key: { token: string } }>("/api/mail/api-keys", {
                 method: "POST",
                 body: { name, expires_at: timestamp, scopes },
@@ -188,14 +205,14 @@ function ApiKeys() {
           <MailFieldset disabled={action.busy}>
             <div className="mail-form-grid">
               <MailInput
-                label="Key name"
+                label={t("routesMailIntegrations.keyName")}
                 maxLength={100}
                 value={name}
                 required
                 onChange={(event) => setName(event.target.value)}
               />
               <MailInput
-                label="Expires at"
+                label={t("routesMailIntegrations.expiresAt")}
                 type="datetime-local"
                 value={expires}
                 required
@@ -224,18 +241,24 @@ function ApiKeys() {
           </MailFieldset>
           <MailNotice error={action.error} />
           <Button variant="primary" type="submit" disabled={action.busy || !scopes.length}>
-            {action.busy ? "Creating…" : "Create key"}
+            {action.busy ? t("common.creating") : t("routesMailIntegrations.createKey")}
           </Button>
         </MailForm>
       </MailModal>
       {secret && (
-        <Secret title="Your new mail API key" value={secret} onClose={() => setSecret(null)} />
+        <Secret
+          title={t("routesMailIntegrations.yourNewMailApiKey")}
+          value={secret}
+          onClose={() => setSecret(null)}
+        />
       )}
       <Confirm
         open={!!revoking}
-        title="Revoke API key?"
-        description={`“${revoking?.name ?? ""}” will immediately stop authenticating mail requests.`}
-        label="Revoke key"
+        title={t("routesMailIntegrations.revokeApiKey")}
+        description={t("routesMailIntegrations.willImmediatelyStopAuthenticatingMailRequests", {
+          value1: revoking?.name ?? "",
+        })}
+        label={t("routesMailIntegrations.revokeKey")}
         destructive
         onClose={() => setRevoking(null)}
         onConfirm={async () => {
@@ -279,8 +302,10 @@ function Webhooks() {
     [deleting, setDeleting] = useState<Webhook | null>(null);
   return (
     <MailSection
-      title="Webhooks"
-      description="Receive signed mailbox change notifications at a public HTTPS endpoint."
+      title={t("routesMailIntegrations.webhooks")}
+      description={t(
+        "routesMailIntegrations.receiveSignedMailboxChangeNotificationsAtAPublicHttps",
+      )}
       action={
         manage && (
           <div className="mail-actions">
@@ -290,7 +315,7 @@ function Webhooks() {
               aria-controls={deliveriesId}
               onClick={() => setShowDeliveries(!showDeliveries)}
             >
-              Delivery history
+              {t("routesMailIntegrations.deliveryHistory")}
               <Icon name="down" className="mail-webhook-history-chevron" />
             </Button>
             <Button
@@ -300,14 +325,16 @@ function Webhooks() {
                 setOpen(true);
               }}
             >
-              Add webhook
+              {t("routesMailIntegrations.addWebhook")}
             </Button>
           </div>
         )
       }
     >
       {!manage ? (
-        <p className="mail-hint">Managing webhooks requires mailbox management permission.</p>
+        <p className="mail-hint">
+          {t("routesMailIntegrations.managingWebhooksRequiresMailboxManagementPermission")}
+        </p>
       ) : (
         <>
           <MailState
@@ -321,19 +348,27 @@ function Webhooks() {
                 <div>
                   <strong>{hook.url}</strong>
                   <p>
-                    {hook.enabled ? "Enabled" : "Disabled"} · Created {mailDate(hook.created_at)}
+                    <LocalizedMessage
+                      id="routesMailIntegrations.created"
+                      values={{
+                        value1: hook.enabled ? t("common.enabled") : t("common.disabled"),
+                        mailDate: mailDate(hook.created_at),
+                      }}
+                    />
                   </p>
                 </div>
                 {!!hook.enabled && (
                   <Button size="sm" onClick={() => setDeleting(hook)}>
-                    Disable
+                    {t("routesMailIntegrations.disable")}
                   </Button>
                 )}
               </div>
             ))}
           </div>
           {resource.data && !resource.data.webhooks.length && (
-            <p className="mail-hint">No webhooks yet. Add one to receive mailbox notifications.</p>
+            <p className="mail-hint">
+              {t("routesMailIntegrations.noWebhooksYetAddOneToReceiveMailboxNotifications")}
+            </p>
           )}
           <section
             id={deliveriesId}
@@ -343,13 +378,13 @@ function Webhooks() {
           >
             <header>
               <div>
-                <h3 id={deliveriesTitleId}>Delivery history</h3>
-                <p>Recent delivery attempts for this mailbox.</p>
+                <h3 id={deliveriesTitleId}>{t("routesMailIntegrations.deliveryHistory")}</h3>
+                <p>{t("routesMailIntegrations.recentDeliveryAttemptsForThisMailbox")}</p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Refresh delivery history"
+                aria-label={t("routesMailIntegrations.refreshDeliveryHistory")}
                 disabled={deliveries.loading}
                 onClick={deliveries.reload}
               >
@@ -372,10 +407,10 @@ function Webhooks() {
                   <table className="mail-table">
                     <thead>
                       <tr>
-                        <th scope="col">Endpoint</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Attempts</th>
-                        <th scope="col">Updated</th>
+                        <th scope="col">{t("routesMailIntegrations.endpoint")}</th>
+                        <th scope="col">{t("common.status")}</th>
+                        <th scope="col">{t("routesMailIntegrations.attempts")}</th>
+                        <th scope="col">{t("routesMailIntegrations.updated")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -383,12 +418,12 @@ function Webhooks() {
                         .sort((a, b) => b.updated_at - a.updated_at)
                         .map((delivery) => (
                           <tr key={delivery.id}>
-                            <td data-label="Endpoint">
+                            <td data-label={t("routesMailIntegrations.endpoint")}>
                               {resource.data?.webhooks.find(
                                 (hook) => hook.id === delivery.webhook_id,
                               )?.url ?? delivery.webhook_id}
                             </td>
-                            <td data-label="Status">
+                            <td data-label={t("common.status")}>
                               <span
                                 className="mail-webhook-delivery-status"
                                 data-status={delivery.status}
@@ -406,15 +441,19 @@ function Webhooks() {
                                 />
                                 {(
                                   {
-                                    delivered: "Delivered",
-                                    pending: "Pending",
-                                    failed: "Failed",
+                                    delivered: t("routesMailIntegrations.delivered"),
+                                    pending: t("routesMailIntegrations.pending"),
+                                    failed: t("routesMailIntegrations.failed"),
                                   } as Record<string, string>
                                 )[delivery.status] ?? delivery.status}
                               </span>
                             </td>
-                            <td data-label="Attempts">{delivery.attempt_count}</td>
-                            <td data-label="Updated">{mailDate(delivery.updated_at)}</td>
+                            <td data-label={t("routesMailIntegrations.attempts")}>
+                              {delivery.attempt_count}
+                            </td>
+                            <td data-label={t("routesMailIntegrations.updated")}>
+                              {mailDate(delivery.updated_at)}
+                            </td>
                           </tr>
                         ))}
                     </tbody>
@@ -425,8 +464,12 @@ function Webhooks() {
                   <span>
                     <Icon name="clock" width="22" height="22" />
                   </span>
-                  <h4>No deliveries yet</h4>
-                  <p>Delivery attempts will appear here when this mailbox changes.</p>
+                  <h4>{t("routesMailIntegrations.noDeliveriesYet")}</h4>
+                  <p>
+                    {t(
+                      "routesMailIntegrations.deliveryAttemptsWillAppearHereWhenThisMailboxChanges",
+                    )}
+                  </p>
                 </div>
               ))}
           </section>
@@ -434,8 +477,8 @@ function Webhooks() {
       )}
       <MailModal
         open={open}
-        title="Add webhook"
-        description="Keep the signing secret to verify incoming notifications."
+        title={t("routesMailIntegrations.addWebhook")}
+        description={t("routesMailIntegrations.keepTheSigningSecretToVerifyIncomingNotifications")}
         onClose={() => setOpen(false)}
         busy={action.busy}
       >
@@ -455,27 +498,31 @@ function Webhooks() {
           }}
         >
           <MailInput
-            label="Endpoint URL"
+            label={t("routesMailIntegrations.endpointUrl")}
             type="url"
-            placeholder="https://example.com/mail-events"
+            placeholder={t("routesMailIntegrations.httpsExampleComMailEvents")}
             required
             value={url}
             onChange={(event) => setUrl(event.target.value)}
           />
           <MailNotice error={action.error} />
           <Button type="submit" variant="primary" disabled={action.busy}>
-            Create webhook
+            {t("routesMailIntegrations.createWebhook")}
           </Button>
         </MailForm>
       </MailModal>
       {secret && (
-        <Secret title="Webhook signing secret" value={secret} onClose={() => setSecret(null)} />
+        <Secret
+          title={t("routesMailIntegrations.webhookSigningSecret")}
+          value={secret}
+          onClose={() => setSecret(null)}
+        />
       )}
       <Confirm
         open={!!deleting}
-        title="Disable webhook?"
+        title={t("routesMailIntegrations.disableWebhook")}
         description={deleting?.url}
-        label="Disable webhook"
+        label={t("routesMailIntegrations.disableWebhook2")}
         destructive
         onClose={() => setDeleting(null)}
         onConfirm={async () => {
@@ -497,8 +544,8 @@ function Jmap() {
     capabilityCount = session ? Object.keys(session.capabilities).length : 0;
   return (
     <MailSection
-      title="JMAP"
-      description="Use a scoped mail API key as a Bearer token. JMAP supports a subset of methods."
+      title={t("routesMailIntegrations.jmap")}
+      description={t("routesMailIntegrations.useAScopedMailApiKeyAsABearer")}
       action={
         <Button
           disabled={action.busy}
@@ -508,19 +555,19 @@ function Jmap() {
             });
           }}
         >
-          Check JMAP session
+          {t("routesMailIntegrations.checkJmapSession")}
         </Button>
       }
     >
       <div className="mail-protocol-content">
         <div className="mail-protocol-urls">
           <div className="mail-protocol-endpoint">
-            <h3>Session URL</h3>
-            <code>{origin}/.well-known/jmap</code>
+            <h3>{t("routesMailIntegrations.sessionUrl")}</h3>
+            <code>{`${origin}/.well-known/jmap`}</code>
           </div>
           <div className="mail-protocol-endpoint">
-            <h3>API URL</h3>
-            <code>{origin}/api/mail/jmap</code>
+            <h3>{t("routesMailIntegrations.apiUrl")}</h3>
+            <code>{`${origin}/api/mail/jmap`}</code>
           </div>
         </div>
         <MailState loading={action.busy && !session} error={action.error} />
@@ -528,22 +575,27 @@ function Jmap() {
           <div className="mail-protocol-result">
             <header>
               <div>
-                <h3>Session details</h3>
+                <h3>{t("routesMailIntegrations.sessionDetails")}</h3>
                 <p>
-                  {capabilityCount} {capabilityCount === 1 ? "capability" : "capabilities"} ·{" "}
-                  {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
+                  {t("routesMailIntegrations.integrationSummary", {
+                    capabilities: plural("counts.capabilities", capabilityCount),
+                    accounts: plural("counts.accounts", accounts.length),
+                  })}
                 </p>
               </div>
               <span className="mail-protocol-connected" role="status">
                 <Icon name="check" width="12" height="12" />
-                Connected
+                {t("routesMailIntegrations.connected")}
               </span>
             </header>
-            <table className="mail-protocol-table" aria-label="JMAP session accounts">
+            <table
+              className="mail-protocol-table"
+              aria-label={t("routesMailIntegrations.jmapSessionAccounts")}
+            >
               <thead>
                 <tr>
-                  <th scope="col">Account</th>
-                  <th scope="col">Access</th>
+                  <th scope="col">{t("routesMailIntegrations.account")}</th>
+                  <th scope="col">{t("routesMailIntegrations.access")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -552,7 +604,9 @@ function Jmap() {
                     <td>{account.name}</td>
                     <td>
                       <span className="mail-badge">
-                        {account.isReadOnly ? "Read only" : "Writable"}
+                        {account.isReadOnly
+                          ? t("routesMailIntegrations.readOnly")
+                          : t("routesMailIntegrations.writable")}
                       </span>
                     </td>
                   </tr>
@@ -560,7 +614,7 @@ function Jmap() {
                 {!accounts.length && (
                   <tr>
                     <td colSpan={2} className="mail-protocol-empty">
-                      No accessible mailboxes.
+                      {t("routesMailIntegrations.noAccessibleMailboxes")}
                     </td>
                   </tr>
                 )}
@@ -577,8 +631,8 @@ function Mcp() {
     [tools, setTools] = useState<{ name: string; description: string }[] | null>(null);
   return (
     <MailSection
-      title="MCP"
-      description="Use a scoped mail API key as a Bearer token. Send requests require human review."
+      title={t("routesMailIntegrations.mcp")}
+      description={t("routesMailIntegrations.useAScopedMailApiKeyAsABearer2")}
       action={
         <Button
           disabled={action.busy}
@@ -596,7 +650,7 @@ function Mcp() {
                     params: {
                       protocolVersion: "2025-03-26",
                       capabilities: {},
-                      clientInfo: { name: "Officeflare UI", version: "1" },
+                      clientInfo: { name: t("routesMailIntegrations.officeflareUi"), version: "1" },
                     },
                   },
                 },
@@ -615,18 +669,17 @@ function Mcp() {
             });
           }}
         >
-          Check MCP tools
+          {t("routesMailIntegrations.checkMcpTools")}
         </Button>
       }
     >
       <div className="mail-protocol-content">
         <div className="mail-protocol-endpoint">
-          <h3>HTTP endpoint</h3>
-          <code>{window.location.origin}/mcp</code>
+          <h3>{t("routesMailIntegrations.httpEndpoint")}</h3>
+          <code>{`${window.location.origin}/mcp`}</code>
         </div>
         <p className="mail-hint">
-          Tools can list mailboxes, search and read messages, create drafts and request a send for
-          human review.
+          {t("routesMailIntegrations.toolsCanListMailboxesSearchAndReadMessagesCreate")}
         </p>
         <MailState loading={action.busy && !tools} error={action.error} />
         {tools && (

@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { Button, Icon, Popover, PopoverPopup, useNotifications } from "@/components/ui";
@@ -48,7 +50,10 @@ export function NotificationCard({
         <div className="notification-card-heading">
           <strong>{item.title}</strong>
           {item.read_at === null && (
-            <span className="notification-unread-dot" aria-label="Unread" />
+            <span
+              className="notification-unread-dot"
+              aria-label={t("componentsNotificationCenter.unread")}
+            />
           )}
         </div>
         <p>{item.body}</p>
@@ -57,7 +62,10 @@ export function NotificationCard({
         </time>
         {item.snoozed_until && item.snoozed_until > Date.now() / 1000 && (
           <span className="notification-snooze-label">
-            Snoozed until {notificationDate(item.snoozed_until)}
+            <LocalizedMessage
+              id="componentsNotificationCenter.snoozedUntil"
+              values={{ notificationDate: notificationDate(item.snoozed_until) }}
+            />
           </span>
         )}
         <div className="notification-card-actions">
@@ -68,7 +76,7 @@ export function NotificationCard({
                 if (item.read_at === null) void change({ read: true });
               }}
             >
-              View details
+              {t("componentsNotificationCenter.viewDetails")}
               <Icon name="arrow" width="12" height="12" />
             </Link>
           )}
@@ -80,7 +88,9 @@ export function NotificationCard({
               void change({ read: item.read_at === null });
             }}
           >
-            {item.read_at === null ? "Mark read" : "Mark unread"}
+            {item.read_at === null
+              ? t("componentsNotificationCenter.markRead")
+              : t("componentsNotificationCenter.markUnread")}
           </Button>
           {!compact && (
             <>
@@ -92,7 +102,9 @@ export function NotificationCard({
                   void change({ archived: item.archived_at === null, snoozed_until: null });
                 }}
               >
-                {item.archived_at === null ? "Archive" : "Restore"}
+                {item.archived_at === null
+                  ? t("componentsNotificationCenter.archive")
+                  : t("componentsNotificationCenter.restore")}
               </Button>
               <Button
                 variant="ghost"
@@ -109,15 +121,17 @@ export function NotificationCard({
                 }}
               >
                 {item.snoozed_until && item.snoozed_until > Date.now() / 1000
-                  ? "Unsnooze"
-                  : "Snooze 1h"}
+                  ? t("componentsNotificationCenter.unsnooze")
+                  : t("componentsNotificationCenter.snooze1h")}
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 disabled={disabled}
-                aria-label={`Delete notification: ${item.title}`}
-                title="Delete"
+                aria-label={t("componentsNotificationCenter.deleteNotification", {
+                  title: item.title,
+                })}
+                title={t("common.delete")}
                 onClick={() => {
                   void change({ deleted: true });
                 }}
@@ -149,7 +163,9 @@ export function ReadAllButton() {
           .finally(() => setBusy(false));
       }}
     >
-      {busy ? "Updating…" : "Mark all as read"}
+      {busy
+        ? t("componentsNotificationCenter.updating")
+        : t("componentsNotificationCenter.markAllAsRead")}
     </Button>
   );
 }
@@ -164,13 +180,22 @@ function NotificationPreview({ open, close }: { open: boolean; close: () => void
       positionerProps={{ side: "right", align: "start", sideOffset: 10 }}
     >
       <header className="notification-popup-header">
-        <Popover.Title>Notifications</Popover.Title>
-        <Button variant="ghost" size="icon" aria-label="Close notifications" onClick={close}>
+        <Popover.Title>{t("componentsNotificationCenter.notifications")}</Popover.Title>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("componentsNotificationCenter.closeNotifications")}
+          onClick={close}
+        >
           <Icon name="close" />
         </Button>
       </header>
       <div className="notification-popup-tools">
-        <span>{center.summary ? `${center.summary.unread} unread` : ""}</span>
+        <span>
+          {center.summary
+            ? t("componentsNotificationCenter.unread2", { unread: center.summary.unread })
+            : ""}
+        </span>
         <ReadAllButton />
       </div>
       <div className="notification-popup-list">
@@ -183,13 +208,13 @@ function NotificationPreview({ open, close }: { open: boolean; close: () => void
                 void center.refresh(true);
               }}
             >
-              Retry
+              {t("common.retry")}
             </Button>
           </p>
         )}
         {list.loading && !list.items.length ? (
           <p className="notification-empty" role="status">
-            Loading notifications…
+            {t("componentsNotificationCenter.loadingNotifications")}
           </p>
         ) : (
           <>
@@ -201,8 +226,8 @@ function NotificationPreview({ open, close }: { open: boolean; close: () => void
             {!list.error && !list.items.length && (
               <div className="notification-empty">
                 <Icon name="check" width="24" height="24" />
-                <strong>You’re all caught up</strong>
-                <p>New updates will appear here.</p>
+                <strong>{t("componentsNotificationCenter.youReAllCaughtUp")}</strong>
+                <p>{t("componentsNotificationCenter.newUpdatesWillAppearHere")}</p>
               </div>
             )}
           </>
@@ -210,14 +235,14 @@ function NotificationPreview({ open, close }: { open: boolean; close: () => void
       </div>
       <footer className="notification-popup-footer">
         <Link to="/notifications" onClick={close}>
-          View all notifications
+          {t("componentsNotificationCenter.viewAllNotifications")}
           <Icon name="arrow" />
         </Link>
         <Link
           to="/profile/notifications"
           onClick={close}
-          aria-label="Notification settings"
-          title="Notification settings"
+          aria-label={t("componentsNotificationCenter.notificationSettings")}
+          title={t("componentsNotificationCenter.notificationSettings")}
         >
           <Icon name="settings" />
         </Link>
@@ -236,8 +261,10 @@ export function NotificationBell() {
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
         render={<Button variant="ghost" size="icon" className="notification-bell" />}
-        aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
-        title="Notifications"
+        aria-label={t("componentsNotificationCenter.notifications2", {
+          value1: unread ? t("componentsNotificationCenter.unread3", { unread: unread }) : "",
+        })}
+        title={t("componentsNotificationCenter.notifications")}
       >
         <Icon name="bell" width="18" height="18" />
         {unread > 0 && (

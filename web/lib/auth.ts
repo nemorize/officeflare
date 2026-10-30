@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 export interface Session {
   token_type: "Bearer";
   access_token: string;
@@ -26,7 +27,7 @@ export class AuthError extends Error {
   readonly status: number;
   readonly retryAfter: number;
   constructor(status: number, retryAfter = 0) {
-    super("Authentication request failed");
+    super(t("libAuth.authenticationRequestFailed"));
     this.status = status;
     this.retryAfter = retryAfter;
   }

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import type { DriveEnv } from "./types";
 import { invalid } from "../auth/input";
 const encode = (data: Uint8Array) =>
@@ -64,6 +65,6 @@ export async function readCursor(
       throw new Error();
     return [value[2][0], value[2][1]];
   } catch {
-    invalid("Invalid Drive cursor");
+    invalid(t("driveCursor.invalidDriveCursor"));
   }
 }

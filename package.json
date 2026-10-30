@@ -19,8 +19,9 @@
     "format:check": "prettier --check .",
     "format:staged": "lint-staged",
     "cf-typegen": "wrangler types",
-    "typecheck": "npm run cf-typegen && tsc --noEmit && tsc --project tsconfig.web.json",
-    "build:web": "vite build",
+    "typecheck": "npm run cf-typegen && tsc --noEmit && tsc --project tsconfig.web.json && npm run typecheck:i18n",
+    "typecheck:i18n": "tsc --project tsconfig.i18n-tests.json",
+    "build:web": "npm run typecheck:i18n && vite build",
     "build": "npm run build:web && wrangler deploy --dry-run --outdir dist",
     "preview": "wrangler dev",
     "check": "npm run format:check && npm run typecheck && npm run build",
@@ -30,7 +31,8 @@
     "tail": "wrangler tail",
     "prepare": "husky && npm run cf-typegen",
     "auth:keys": "node scripts/generate-auth-keys.mjs",
-    "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs",
+    "audit:ui-strings": "node scripts/audit-ui-strings.mjs"
   },
   "overrides": {
     "undici": "7.29.1"
@@ -39,6 +41,7 @@
     "*": "prettier --write --ignore-unknown"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.9",
     "@cloudflare/vite-plugin": "1.60.0",
     "@types/css-tree": "3.2.0",
     "@types/node": "22.20.4",

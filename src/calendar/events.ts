@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -65,13 +66,13 @@ const scopeOf = (data: Record<string, unknown>) => {
     "following",
   ]);
   if (scope === "all" && data.occurrence_key !== undefined)
-    fail(400, "INVALID_SCOPE", "occurrence_key requires single or following scope");
+    fail(400, "INVALID_SCOPE", t("calendarEvents.occurrenceKeyRequiresSingleOrFollowingScope"));
   return scope;
 };
 const occurrenceKey = (data: Record<string, unknown>) =>
   text(data.occurrence_key, "occurrence_key", 64);
 function requireDetails(event: Event, cal: Calendar) {
-  if (!canSeeDetails(event, cal)) fail(404, "EVENT_NOT_FOUND", "Event not found");
+  if (!canSeeDetails(event, cal)) fail(404, "EVENT_NOT_FOUND", t("calendarEvents.eventNotFound"));
 }
 function requireSeriesDetails(event: Event, cal: Calendar, overrides: Override[]) {
   requireDetails(event, cal);
@@ -91,7 +92,7 @@ async function labelCheck(c: CalendarContext, cal: Calendar, label: string | nul
     cal.id,
   );
   if (!(await first(c.env, `SELECT 1 WHERE ${check.sql}`, ...check.args)))
-    fail(400, "INVALID_LABEL", "Label does not belong to this calendar");
+    fail(400, "INVALID_LABEL", t("calendarEvents.labelDoesNotBelongToThisCalendar"));
   return check;
 }
 function changed(event: Event, proof: string, c: CalendarContext, operation = "upsert") {
@@ -108,7 +109,7 @@ export async function listEvents(
   const byId = new Map(all.map((cal) => [cal.id, cal]));
   const resolve = (id: string) => {
     const cal = id === "primary" ? all.find((cal) => cal.is_primary) : byId.get(id);
-    if (!cal) fail(404, "CALENDAR_NOT_FOUND", "Calendar not found");
+    if (!cal) fail(404, "CALENDAR_NOT_FOUND", t("calendarEvents.calendarNotFound"));
     return cal;
   };
   let selected: Calendar[];
@@ -121,7 +122,8 @@ export async function listEvents(
           .map((value) => identifier(value)),
       ),
     ];
-    if (ids.length > 50) fail(400, "INVALID_INPUT", "At most 50 calendars may be queried");
+    if (ids.length > 50)
+      fail(400, "INVALID_INPUT", t("calendarEvents.atMost50CalendarsMayBeQueried"));
     selected = [...new Set(ids.map(resolve))];
   } else {
     const subs = await rows<{ calendar_id: string }>(
@@ -159,9 +161,9 @@ export async function listEvents(
     new Date((range.min - 172800) * 1000).toISOString().slice(0, 10),
   );
   if (candidates.length > 2000)
-    fail(422, "TOO_MANY_EVENTS", "Narrow the date range or calendar selection");
+    fail(422, "TOO_MANY_EVENTS", t("calendarEvents.narrowTheDateRangeOrCalendarSelection"));
   if (candidates.filter((event) => event.recurrence_json !== "[]").length > 100)
-    fail(422, "TOO_MANY_SERIES", "Query fewer calendars or recurring series");
+    fail(422, "TOO_MANY_SERIES", t("calendarEvents.queryFewerCalendarsOrRecurringSeries"));
   if (!candidates.length) return { events: [], next_cursor: null };
   const foreign = candidates.some(
     (event) => !selected.some((cal) => cal.id === event.organizer_calendar_id),
@@ -291,7 +293,7 @@ export async function listEvents(
       result.push({ key: event.id, value });
     }
     if (result.length > MAX_OCCURRENCES)
-      fail(422, "TOO_MANY_OCCURRENCES", "Too many occurrences; narrow the date range");
+      fail(422, "TOO_MANY_OCCURRENCES", t("calendarEvents.tooManyOccurrencesNarrowTheDateRange"));
   }
   result.sort((a, b) => a.key.localeCompare(b.key));
   const page = result.filter((value) => value.key > after).slice(0, limit),
@@ -317,7 +319,11 @@ routes.post(paths, async (c) => {
       cal.data_owner_user_id,
     );
   if (data.copy_preferences !== undefined && cal.data_owner_user_id !== c.get("identity").user.id)
-    fail(403, "PERMISSION_DENIED", "Only the calendar owner may set personal copy preferences");
+    fail(
+      403,
+      "PERMISSION_DENIED",
+      t("calendarEvents.onlyTheCalendarOwnerMaySetPersonalCopyPreferences"),
+    );
   event.organizer_email = owner!.email_address;
   event.creator_user_id = c.get("identity").user.id;
   const baseScopeId = uuid(),
@@ -556,15 +562,15 @@ routes.patch(`${paths}/:eventId`, async (c) => {
     scope = scopeOf(data),
     overrides = await participatingScopes(c, event, await loadOverrides(c, [event.id]));
   if (!Object.keys(data).some((key) => (eventFields as readonly string[]).includes(key)))
-    fail(400, "INVALID_INPUT", "No event changes supplied");
+    fail(400, "INVALID_INPUT", t("calendarEvents.noEventChangesSupplied"));
   if (scope !== "all" && event.recurrence_json === "[]")
-    fail(400, "INVALID_SCOPE", "Single and following scopes require a recurring event");
+    fail(400, "INVALID_SCOPE", t("calendarEvents.singleAndFollowingScopesRequireARecurringEvent"));
   if (scope === "single") {
     const key = occurrenceKey(data),
       original = originalOccurrence(event, key),
       old = overrides.find((value) => value.occurrence_key === key);
     if (old?.cancelled)
-      fail(409, "OCCURRENCE_CANCELLED", "Restore the occurrence before editing it");
+      fail(409, "OCCURRENCE_CANCELLED", t("calendarEvents.restoreTheOccurrenceBeforeEditingIt"));
     const effective = applyOverride(event, original, old),
       { patch, parsed } = overridePatch(data, effective, cal);
     requireDetails(effective, cal);
@@ -655,12 +661,16 @@ async function following(
   const key = occurrenceKey(data),
     boundary = originalOccurrence(event, key);
   if (key < keyOf(event))
-    fail(422, "FEATURE_UNAVAILABLE", "Following edits before DTSTART are not supported");
+    fail(
+      422,
+      "FEATURE_UNAVAILABLE",
+      t("calendarEvents.followingEditsBeforeDtstartAreNotSupported"),
+    );
   if (!("recurrence" in data) && key !== keyOf(event) && !ruleContains(event, boundary))
     fail(
       422,
       "EXPLICIT_RECURRENCE_REQUIRED",
-      "A split at an added RDATE needs an explicit new recurrence rule",
+      t("calendarEvents.aSplitAtAnAddedRdateNeedsAnExplicit"),
     );
   const split = splitRecurrence(event, boundary),
     firstBoundary = key === keyOf(event),
@@ -776,7 +786,7 @@ routes.delete(`${paths}/:eventId`, async (c) => {
     scope = scopeOf({ scope: c.req.query("scope"), occurrence_key: key }),
     overrides = await loadOverrides(c, [event.id]);
   if (scope !== "all" && event.recurrence_json === "[]")
-    fail(400, "INVALID_SCOPE", "Single and following scopes require a recurring event");
+    fail(400, "INVALID_SCOPE", t("calendarEvents.singleAndFollowingScopesRequireARecurringEvent"));
   if (scope === "single") {
     const selected = occurrenceKey({ occurrence_key: key });
     originalOccurrence(event, selected);
@@ -822,7 +832,11 @@ routes.delete(`${paths}/:eventId`, async (c) => {
     const selected = occurrenceKey({ occurrence_key: key }),
       boundary = originalOccurrence(event, selected);
     if (selected < keyOf(event))
-      fail(422, "FEATURE_UNAVAILABLE", "Following cancellations before DTSTART are not supported");
+      fail(
+        422,
+        "FEATURE_UNAVAILABLE",
+        t("calendarEvents.followingCancellationsBeforeDtstartAreNotSupported"),
+      );
     if (selected !== keyOf(event))
       values = {
         version: version + 1,
@@ -899,13 +913,19 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
     { cal, event } = await target(c, true, true),
     version = expectedVersion(c, data);
   if (scope === "following")
-    fail(422, "FEATURE_UNAVAILABLE", "Restore a single occurrence or the entire deleted event");
+    fail(
+      422,
+      "FEATURE_UNAVAILABLE",
+      t("calendarEvents.restoreASingleOccurrenceOrTheEntireDeletedEvent"),
+    );
   if (scope === "single") {
-    if (event.trashed_at) fail(409, "EVENT_TRASHED", "Restore the parent event first");
+    if (event.trashed_at)
+      fail(409, "EVENT_TRASHED", t("calendarEvents.restoreTheParentEventFirst"));
     const key = occurrenceKey(data),
       original = originalOccurrence(event, key),
       override = (await loadOverrides(c, [event.id])).find((value) => value.occurrence_key === key);
-    if (!override?.cancelled) fail(409, "NOT_CANCELLED", "Occurrence is not cancelled");
+    if (!override?.cancelled)
+      fail(409, "NOT_CANCELLED", t("calendarEvents.occurrenceIsNotCancelled"));
     requireDetails(applyOverride(event, original, override), cal);
     const notices = await prepareDeliveries(
       c,
@@ -945,7 +965,7 @@ routes.post(`${paths}/:eventId/restore`, async (c) => {
       ),
     });
   }
-  if (!event.trashed_at) fail(409, "NOT_TRASHED", "Event is not in trash");
+  if (!event.trashed_at) fail(409, "NOT_TRASHED", t("calendarEvents.eventIsNotInTrash"));
   const restored = {
     ...event,
     trashed_at: null,
@@ -998,7 +1018,7 @@ routes.post(`${paths}/:eventId/duplicate`, async (c) => {
     fail(
       403,
       "READ_ONLY_CALENDAR",
-      "External calendars are read-only. Choose a different destination.",
+      t("calendarEvents.externalCalendarsAreReadOnlyChooseADifferentDestination"),
     );
   const clone: Event = {
       ...event,
@@ -1015,7 +1035,7 @@ routes.post(`${paths}/:eventId/duplicate`, async (c) => {
     },
     copy = makeCopy(clone);
   if (cal.effective_role === "free_busy" || eventDto(event, cal).is_redacted)
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+    fail(404, "EVENT_NOT_FOUND", t("calendarEvents.eventNotFound"));
   clone.organizer_email = (await first<{ email_address: string }>(
     c.env,
     "SELECT email_address FROM users WHERE id=?",
@@ -1077,7 +1097,8 @@ routes.post(`${paths}/:eventId/move`, async (c) => {
   const event = await requireEvent(c, cal, id, true),
     version = expectedVersion(c, data);
   requireSeriesDetails(event, cal, await loadOverrides(c, [event.id]));
-  if (destination.id === cal.id) fail(400, "INVALID_INPUT", "Choose a different calendar");
+  if (destination.id === cal.id)
+    fail(400, "INVALID_INPUT", t("calendarEvents.chooseADifferentCalendar"));
   const currentCopy = await getCopy(c, event),
     destinationCopy = await getCopy(c, event, destination.id),
     owner = await first<{ email_address: string }>(
@@ -1257,7 +1278,7 @@ routes.get(`${paths}/:eventId/activity`, async (c) => {
       ? String(await readCursor(c.env, c.get("identity").user.id, scope, c.req.query("cursor")!))
       : "";
   if (cal.effective_role !== "data_owner" && cal.effective_role !== "manager")
-    fail(404, "EVENT_NOT_FOUND", "Event not found");
+    fail(404, "EVENT_NOT_FOUND", t("calendarEvents.eventNotFound"));
   const values = await rows<{
       id: string;
       action: string;

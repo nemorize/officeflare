@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useRef, useState } from "react";
 import { Button, Dialog, DialogPopup, useNotifications } from "@/components/ui";
 import { api, errorMessage, type AccountUser } from "../lib/api";
@@ -21,7 +22,7 @@ export function ProfileImageSettings() {
       body: photo,
     });
     update(result.user);
-    notify.success("Your profile photo has been saved.");
+    notify.success(t("componentsProfileImageSettings.yourProfilePhotoHasBeenSaved"));
   }
 
   async function deletePhoto() {
@@ -34,7 +35,7 @@ export function ProfileImageSettings() {
       });
       update(result.user);
       setRemove(false);
-      notify.success("Your profile photo has been removed.");
+      notify.success(t("componentsProfileImageSettings.yourProfilePhotoHasBeenRemoved"));
     } catch (failure) {
       notify.error(errorMessage(failure));
     } finally {
@@ -46,18 +47,20 @@ export function ProfileImageSettings() {
   return (
     <section className="account-panel">
       <div className="account-panel-header">
-        <h2>Profile photo</h2>
-        <p>Choose a PNG, JPEG or WebP image up to 10 MB. Adjust it before saving.</p>
+        <h2>{t("componentsProfileImageSettings.profilePhoto")}</h2>
+        <p>{t("componentsProfileImageSettings.chooseAPngJpegOrWebpImageUpTo")}</p>
       </div>
       <div className="account-photo-settings">
         <AccountAvatar className="account-photo-avatar" />
         <div className="account-photo-settings-actions">
           <Button type="button" disabled={!user || busy} onClick={() => input.current?.click()}>
-            {user?.profile_image_key ? "Change photo" : "Choose photo"}
+            {user?.profile_image_key
+              ? t("componentsProfileImageSettings.changePhoto")
+              : t("componentsProfileImageSettings.choosePhoto")}
           </Button>
           {user?.profile_image_key && (
             <Button type="button" disabled={busy} onClick={() => setRemove(true)}>
-              Remove photo
+              {t("componentsProfileImageSettings.removePhoto")}
             </Button>
           )}
           <input
@@ -65,7 +68,7 @@ export function ProfileImageSettings() {
             type="file"
             accept="image/png,image/jpeg,image/webp"
             className="account-photo-file"
-            aria-label="Choose profile photo"
+            aria-label={t("componentsProfileImageSettings.chooseProfilePhoto")}
             onChange={(event) => {
               const selected = event.target.files?.[0];
               event.target.value = "";
@@ -74,7 +77,7 @@ export function ProfileImageSettings() {
                 !/^(image\/png|image\/jpeg|image\/webp)$/.test(selected.type) ||
                 selected.size > profilePhotoFileLimit
               ) {
-                notify.error("Choose a PNG, JPEG or WebP image up to 10 MB.");
+                notify.error(t("componentsProfileImageSettings.chooseAPngJpegOrWebpImageUpTo2"));
                 return;
               }
               setFile(selected);
@@ -90,11 +93,13 @@ export function ProfileImageSettings() {
         }}
       >
         <DialogPopup>
-          <Dialog.Title>Remove your profile photo?</Dialog.Title>
-          <Dialog.Description>Your initials will be shown in its place.</Dialog.Description>
+          <Dialog.Title>{t("componentsProfileImageSettings.removeYourProfilePhoto")}</Dialog.Title>
+          <Dialog.Description>
+            {t("componentsProfileImageSettings.yourInitialsWillBeShownInItsPlace")}
+          </Dialog.Description>
           <div className="account-actions">
             <Button disabled={busy} onClick={() => setRemove(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="danger"
@@ -103,7 +108,9 @@ export function ProfileImageSettings() {
                 void deletePhoto();
               }}
             >
-              {busy ? "Removing…" : "Remove photo"}
+              {busy
+                ? t("componentsProfileImageSettings.removing")
+                : t("componentsProfileImageSettings.removePhoto")}
             </Button>
           </div>
         </DialogPopup>

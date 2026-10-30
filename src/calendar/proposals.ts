@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { now, uuid, type AppEnv } from "../auth/types";
 import type { CalendarContext, Event } from "./types";
@@ -44,13 +45,13 @@ export async function propose(
     data.occurrence_key !== undefined &&
     data.occurrence_key !== attendee.occurrence_key
   )
-    fail(403, "INVITATION_SCOPE", "This invitation covers one occurrence");
+    fail(403, "INVITATION_SCOPE", t("calendarProposals.thisInvitationCoversOneOccurrence"));
   const effective = await occurrence(c, event, key);
   if (
     attendee.removed_at ||
     !(await effectiveAttendees(c, event.id, key)).some((value) => value.id === attendee.id)
   )
-    fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
+    fail(404, "INVITATION_NOT_FOUND", t("calendarProposals.invitationIsUnavailable"));
   writeEvent({ start: data.start, end: data.end }, cal, {
     ...effective,
     recurrence_json: "[]",
@@ -175,7 +176,7 @@ routes.post(root + "/time-proposals/:proposalId/resolve", async (c) => {
     ),
     decision = choice(data.decision, "decision", ["accept", "reject"]);
   if (!proposal || proposal.status !== "pending")
-    fail(409, "PROPOSAL_STATE", "This proposal is not pending");
+    fail(409, "PROPOSAL_STATE", t("calendarProposals.thisProposalIsNotPending"));
   const effective = await attendanceDetails(c, cal, event, proposal.occurrence_key),
     accepted = decision === "accept",
     eventVersion = accepted ? integer(data.event_version, "event_version", 1) : event.version;

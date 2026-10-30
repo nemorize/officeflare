@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { DurableObject } from "cloudflare:workers";
 import schema from "./mailbox.sql";
 import removeContacts from "./mailbox-v2.sql";
@@ -47,7 +48,8 @@ export class MailboxDO extends DurableObject<Env> {
       this.sql,
       "SELECT mailbox_id FROM mailbox_settings WHERE id=1",
     );
-    if (existing && existing.mailbox_id !== mailboxId) fail(409, "Mailbox identity mismatch");
+    if (existing && existing.mailbox_id !== mailboxId)
+      fail(409, t("mailMailbox.mailboxIdentityMismatch"));
     this.ctx.storage.transactionSync(() => {
       this.sql.exec("INSERT OR IGNORE INTO mailbox_settings(id,mailbox_id) VALUES(1,?)", mailboxId);
       for (const system of systems)
@@ -64,7 +66,7 @@ export class MailboxDO extends DurableObject<Env> {
   private identity() {
     return (
       row<{ mailbox_id: string }>(this.sql, "SELECT mailbox_id FROM mailbox_settings WHERE id=1")
-        ?.mailbox_id ?? fail(409, "Mailbox is not initialized")
+        ?.mailbox_id ?? fail(409, t("mailMailbox.mailboxIsNotInitialized"))
     );
   }
   async allocate(operationId: string, reservedBytes = 64 * 1024 * 1024): Promise<string> {
@@ -145,7 +147,7 @@ export class MailboxDO extends DurableObject<Env> {
     );
     if (previous) {
       if (previous.request_hash !== requestHash)
-        fail(409, "Idempotency key reused with different request");
+        fail(409, t("mailMailbox.idempotencyKeyReusedWithDifferentRequest"));
       return previous.resource_id;
     }
     this.sql.exec(
@@ -169,7 +171,7 @@ export class MailboxDO extends DurableObject<Env> {
   }
   async storeMessage(partitionId: string, input: import("./types").MessageInput) {
     return this.ctx.blockConcurrencyWhile(async () => {
-      if (!this.hasFolder(input.folder_id)) fail(409, "Folder no longer exists");
+      if (!this.hasFolder(input.folder_id)) fail(409, t("mailMailbox.folderNoLongerExists"));
       const store = partition(this.env, partitionId),
         messageId = await store.insert(input);
       if (input.snoozed_until !== undefined) {
@@ -201,7 +203,8 @@ export class MailboxDO extends DurableObject<Env> {
     },
   ): Promise<import("./types").MessageRow> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      if (changes.folder_id && !this.hasFolder(changes.folder_id)) fail(404, "Folder not found");
+      if (changes.folder_id && !this.hasFolder(changes.folder_id))
+        fail(404, t("mailMailbox.folderNotFound"));
       return partition(this.env, partitionId).patch(messageId, actorId, version, changes);
     });
   }
@@ -223,7 +226,7 @@ export class MailboxDO extends DurableObject<Env> {
       epoch(),
     );
     if (previous && previous.request_hash !== requestHash)
-      fail(409, "Idempotency key reused with different request");
+      fail(409, t("mailMailbox.idempotencyKeyReusedWithDifferentRequest"));
     if (!previous && !plan) return null;
     return JSON.parse(
       previous?.resource_id ?? this.registerRequest(operation, requestHash, JSON.stringify(plan)),
@@ -240,9 +243,9 @@ export class MailboxDO extends DurableObject<Env> {
       const groups = new Map<string, typeof items>();
       for (const item of items) {
         const partitionId = item.id.split(".")[0]!;
-        if (!allowed.has(partitionId)) fail(404, "Mail resource not found");
+        if (!allowed.has(partitionId)) fail(404, t("mailMailbox.mailResourceNotFound"));
         if (item.changes.folder_id && !this.hasFolder(item.changes.folder_id))
-          fail(404, "Folder not found");
+          fail(404, t("mailMailbox.folderNotFound"));
         groups.set(partitionId, [...(groups.get(partitionId) ?? []), item]);
       }
       const results = [];
@@ -319,12 +322,12 @@ export class MailboxDO extends DurableObject<Env> {
       "SELECT * FROM folders WHERE id=?",
       folderId,
     );
-    if (existing?.system_key) fail(409, "System folders cannot be renamed");
-    if (existing && existing.version !== version) fail(409, "Folder version changed");
+    if (existing?.system_key) fail(409, t("mailMailbox.systemFoldersCannotBeRenamed"));
+    if (existing && existing.version !== version) fail(409, t("mailMailbox.folderVersionChanged"));
     if (
       row(this.sql, "SELECT id FROM folders WHERE lower(name)=lower(?) AND id<>?", name, folderId)
     )
-      fail(409, "Folder name is already used");
+      fail(409, t("mailMailbox.folderNameIsAlreadyUsed"));
     if (existing)
       this.sql.exec("UPDATE folders SET name=?,version=version+1 WHERE id=?", name, folderId);
     else this.sql.exec("INSERT INTO folders(id,name) VALUES(?,?)", folderId, name);
@@ -339,12 +342,12 @@ export class MailboxDO extends DurableObject<Env> {
       "SELECT * FROM folders WHERE id=?",
       folderId,
     );
-    if (!existing) fail(404, "Folder not found");
+    if (!existing) fail(404, t("mailMailbox.folderNotFound"));
     if (existing.system_key || existing.version !== version)
-      fail(409, "Folder cannot be deleted or version changed");
+      fail(409, t("mailMailbox.folderCannotBeDeletedOrVersionChanged"));
     for (const entry of this.partitions())
       if (await partition(this.env, entry.id).folderCount(folderId))
-        fail(409, "Folder is not empty");
+        fail(409, t("mailMailbox.folderIsNotEmpty"));
     // Recheck after child calls; keep folder routing changes serialized with new writes via the caller.
     this.sql.exec("DELETE FROM folders WHERE id=? AND version=?", folderId, version);
   }
@@ -364,7 +367,8 @@ export class MailboxDO extends DurableObject<Env> {
       "auto_reply_text",
     ];
     const keys = Object.keys(data);
-    if (keys.some((key) => !allowed.includes(key)) || !keys.length) fail(400, "Invalid settings");
+    if (keys.some((key) => !allowed.includes(key)) || !keys.length)
+      fail(400, t("mailMailbox.invalidSettings"));
     this.sql.exec(
       "UPDATE mailbox_settings SET " + keys.map((key) => key + "=?").join(",") + " WHERE id=1",
       ...keys.map((key) => data[key]!),
@@ -386,8 +390,9 @@ export class MailboxDO extends DurableObject<Env> {
   }
   putRule(value: Rule) {
     const existing = row<Rule>(this.sql, "SELECT * FROM rules WHERE id=?", value.id);
-    if (existing && value.version !== existing.version) fail(409, "Rule version changed");
-    if (!existing && this.rules().length >= 100) fail(409, "Rule limit reached");
+    if (existing && value.version !== existing.version)
+      fail(409, t("mailMailbox.ruleVersionChanged"));
+    if (!existing && this.rules().length >= 100) fail(409, t("mailMailbox.ruleLimitReached"));
     this.sql.exec(
       "INSERT INTO rules VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,priority=excluded.priority,enabled=excluded.enabled,conditions_json=excluded.conditions_json,actions_json=excluded.actions_json,version=rules.version+1",
       value.id,
@@ -465,7 +470,7 @@ export class MailboxDO extends DurableObject<Env> {
     return this.scheduleMany([task]);
   }
   async scheduleMany(tasks: ScheduledMailTask[]) {
-    if (tasks.length > 2000) fail(400, "Too many scheduled tasks");
+    if (tasks.length > 2000) fail(400, t("mailMailbox.tooManyScheduledTasks"));
     this.ctx.storage.transactionSync(() => {
       for (const task of tasks)
         this.sql.exec(
@@ -612,7 +617,8 @@ export class MailboxDO extends DurableObject<Env> {
         progress: number;
         cursor_json: string;
         error_code: string | null;
-      }>(this.sql, "SELECT * FROM data_jobs WHERE id=?", jobId) ?? fail(404, "Job not found")
+      }>(this.sql, "SELECT * FROM data_jobs WHERE id=?", jobId) ??
+      fail(404, t("mailMailbox.jobNotFound"))
     );
   }
   claimDataJob(jobId: string) {
@@ -643,7 +649,8 @@ export class MailboxDO extends DurableObject<Env> {
     );
   }
   retryDataJob(jobId: string, actor: MailActor) {
-    if (this.dataJob(jobId).status !== "failed") fail(409, "Only failed jobs may be retried");
+    if (this.dataJob(jobId).status !== "failed")
+      fail(409, t("mailMailbox.onlyFailedJobsMayBeRetried"));
     this.sql.exec(
       "UPDATE data_jobs SET status='queued',actor_json=?,error_code=NULL,updated_at=? WHERE id=?",
       JSON.stringify(actor),
@@ -694,7 +701,7 @@ export class MailboxDO extends DurableObject<Env> {
   }
   async fetch(request: Request) {
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
-      return new Response("Expected WebSocket upgrade", { status: 400 });
+      return new Response(t("mailMailbox.expectedWebsocketUpgrade"), { status: 400 });
     return this.openEvents(new URL(request.url).searchParams.get("ticket") ?? "");
   }
   private async openEvents(token: string) {
@@ -705,7 +712,7 @@ export class MailboxDO extends DurableObject<Env> {
       hashed,
       epoch(),
     );
-    if (!ticket) return new Response("Invalid event ticket", { status: 401 });
+    if (!ticket) return new Response(t("mailMailbox.invalidEventTicket"), { status: 401 });
     const actor = JSON.parse(ticket.actor_json) as MailActor;
     await authorize(this.env, actor, this.identity(), "read");
     const sockets = new WebSocketPair();
@@ -717,7 +724,7 @@ export class MailboxDO extends DurableObject<Env> {
     return this.emitMany([message]);
   }
   async emitMany(messages: MailEvent[]) {
-    if (messages.length > 50) fail(400, "Too many events");
+    if (messages.length > 50) fail(400, t("mailMailbox.tooManyEvents"));
     const mailboxId = this.identity();
     const events = this.ctx.storage.transactionSync(() =>
       messages.flatMap((message) => {
@@ -774,7 +781,7 @@ export class MailboxDO extends DurableObject<Env> {
             await authorize(this.env, actor, mailboxId, "read");
           } catch (error) {
             if (!(error instanceof Error) || !error.message.startsWith("MAIL:403:")) throw error;
-            for (const socket of sockets) socket.close(1008, "Access revoked");
+            for (const socket of sockets) socket.close(1008, t("mailMailbox.accessRevoked"));
             return;
           }
           for (const socket of sockets)
@@ -799,7 +806,7 @@ export class MailboxDO extends DurableObject<Env> {
       );
       socket.send('{"type":"pong"}');
     } catch {
-      socket.close(1008, "Access revoked");
+      socket.close(1008, t("mailMailbox.accessRevoked"));
     }
   }
 }

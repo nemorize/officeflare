@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { body } from "../auth/input";
 import { now, uuid, type AppEnv } from "../auth/types";
@@ -55,7 +56,7 @@ collaboration.get("/:itemId/comments", async (c) => {
         item.id,
       )
     : null;
-  if (after && !previous) fail(400, "Invalid comment cursor");
+  if (after && !previous) fail(400, t("driveCollaboration.invalidCommentCursor"));
   const comments = await rows<Comment>(
     c.env,
     `SELECT c.*,u.display_name author_name FROM drive_comments c JOIN users u ON u.id=c.author_user_id WHERE c.item_id=? AND c.deleted_at IS NULL
@@ -75,7 +76,7 @@ collaboration.post("/:itemId/comments", async (c) => {
     item = await requireItem(c, pathId(c), "comment"),
     id = uuid(),
     content = text(data.body, "body", 5000);
-  if (!content.trim()) fail(400, "Comment cannot be empty");
+  if (!content.trim()) fail(400, t("driveCollaboration.commentCannotBeEmpty"));
   const parent = data.parent_id == null ? null : identifier(data.parent_id, "parent_id");
   const parentCheck = parent
     ? condition(
@@ -85,7 +86,7 @@ collaboration.post("/:itemId/comments", async (c) => {
       )
     : condition("1");
   if (!(await first(c.env, `SELECT 1 WHERE ${parentCheck.sql}`, ...parentCheck.args)))
-    fail(400, "Invalid comment thread");
+    fail(400, t("driveCollaboration.invalidCommentThread"));
   const recipients = await audience(c, item.id);
   await mutate(
     c,
@@ -108,8 +109,8 @@ collaboration.post("/:itemId/comments", async (c) => {
       recipients,
       notification: {
         type: "drive.comment",
-        title: "New Drive comment",
-        body: "A comment was added to a shared Drive item.",
+        title: t("driveCollaboration.newDriveComment"),
+        body: t("driveCollaboration.aCommentWasAddedToASharedDriveItem"),
         recipients,
       },
     },
@@ -124,18 +125,18 @@ collaboration.patch("/:itemId/comments/:commentId", async (c) => {
     item = await requireItem(c, pathId(c), "comment"),
     id = identifier(c.req.param("commentId")),
     expected = integer(data.version, "version", 1);
-  if (Object.keys(data).length < 2) fail(400, "No changes supplied");
+  if (Object.keys(data).length < 2) fail(400, t("driveCollaboration.noChangesSupplied"));
   const comment = await first<Comment>(
     c.env,
     "SELECT * FROM drive_comments WHERE id=? AND item_id=? AND deleted_at IS NULL",
     id,
     item.id,
   );
-  if (!comment) fail(404, "Comment not found");
+  if (!comment) fail(404, t("driveCollaboration.commentNotFound"));
   if (data.body !== undefined && comment.author_user_id !== c.get("identity").user.id)
-    fail(403, "Only the author can edit comment text");
+    fail(403, t("driveCollaboration.onlyTheAuthorCanEditCommentText"));
   if (data.deleted !== undefined && !bool(data.deleted, "deleted"))
-    fail(400, "Deleted comments cannot be restored");
+    fail(400, t("driveCollaboration.deletedCommentsCannotBeRestored"));
   const action =
     data.resolved !== undefined ||
     (data.deleted === true && comment.author_user_id !== c.get("identity").user.id)
@@ -146,12 +147,12 @@ collaboration.patch("/:itemId/comments/:commentId", async (c) => {
     args: (string | number | null)[] = [now()];
   if (data.body !== undefined) {
     const content = text(data.body, "body", 5000);
-    if (!content.trim()) fail(400, "Comment cannot be empty");
+    if (!content.trim()) fail(400, t("driveCollaboration.commentCannotBeEmpty"));
     updates.push("body=?");
     args.push(content);
   }
   if (data.resolved !== undefined) {
-    if (comment.parent_id) fail(400, "Resolve the thread's first comment");
+    if (comment.parent_id) fail(400, t("driveCollaboration.resolveTheThreadSFirstComment"));
     updates.push("resolved=?");
     args.push(+bool(data.resolved, "resolved"));
   }
@@ -262,8 +263,8 @@ collaboration.post("/:itemId/access-requests", async (c) => {
       recipients: [item.owner_user_id],
       notification: {
         type: "drive.access_requested",
-        title: "Drive access requested",
-        body: "An account requested access to one of your Drive items.",
+        title: t("driveCollaboration.driveAccessRequested"),
+        body: t("driveCollaboration.anAccountRequestedAccessToOneOfYourDrive"),
         recipients: [item.owner_user_id],
       },
     },
@@ -291,7 +292,7 @@ collaboration.patch("/:itemId/access-requests/:requestId", async (c) => {
     requestId,
     item.id,
   );
-  if (!request) fail(404, "Access request not found");
+  if (!request) fail(404, t("driveCollaboration.accessRequestNotFound"));
   const granted = role(data.role ?? request.role),
     recipient = condition(
       `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${activeUser("u")} AND ${driveEnabled("u")})`,
@@ -345,10 +346,10 @@ collaboration.patch("/:itemId/access-requests/:requestId", async (c) => {
       kind: "permissions",
       notification: {
         type: "drive.shared",
-        title: "Drive access request updated",
+        title: t("driveCollaboration.driveAccessRequestUpdated"),
         body: approved
-          ? "Your Drive access request was approved."
-          : "Your Drive access request was declined.",
+          ? t("driveCollaboration.yourDriveAccessRequestWasApproved")
+          : t("driveCollaboration.yourDriveAccessRequestWasDeclined"),
         recipients: [request.user_id],
       },
     },
@@ -362,19 +363,20 @@ collaboration.post("/:itemId/transfer", async (c) => {
   const data = await body(c, ["version", "user_id"]),
     item = await requireItem(c, pathId(c), "owner"),
     recipient = identifier(data.user_id, "user_id");
-  if (recipient === item.owner_user_id) fail(400, "Item already belongs to this account");
+  if (recipient === item.owner_user_id)
+    fail(400, t("driveCollaboration.itemAlreadyBelongsToThisAccount"));
   const eligible = condition(
     `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${activeUser("u")} AND ${driveEnabled("u")})`,
     recipient,
   );
   if (!(await first(c.env, `SELECT 1 WHERE ${eligible.sql}`, ...eligible.args)))
-    fail(400, "Recipient must be an active Drive account");
+    fail(400, t("driveCollaboration.recipientMustBeAnActiveDriveAccount"));
   const tree = await rows<DriveItem>(
     c.env,
     `SELECT * FROM drive_items WHERE id IN (${descendants("?")}) AND purged_at IS NULL LIMIT 201`,
     item.id,
   );
-  if (tree.length > 200) fail(413, "Transfer at most 200 items per operation");
+  if (tree.length > 200) fail(413, t("driveCollaboration.transferAtMost200ItemsPerOperation"));
   const totals = await first<{ size: number }>(
     c.env,
     `SELECT COALESCE(SUM(size),0) size FROM drive_versions WHERE item_id IN (${descendants("?")})`,
@@ -388,7 +390,7 @@ collaboration.post("/:itemId/transfer", async (c) => {
     const next = tree.find(
       (node) => pending.has(node.id) && (node.id === item.id || !pending.has(node.parent_id!)),
     );
-    if (!next) fail(409, "Invalid folder hierarchy");
+    if (!next) fail(409, t("driveCollaboration.invalidFolderHierarchy"));
     ordered.push(next);
     pending.delete(next.id);
   }
@@ -463,8 +465,8 @@ collaboration.post("/:itemId/transfer", async (c) => {
       kind: "permissions",
       notification: {
         type: "drive.shared",
-        title: "Drive ownership transferred",
-        body: "Ownership of a Drive item was transferred to your account.",
+        title: t("driveCollaboration.driveOwnershipTransferred"),
+        body: t("driveCollaboration.ownershipOfADriveItemWasTransferredToYour"),
         recipients: [recipient],
       },
     },

@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "./i18n";
+import { t } from "../../shared/i18n/index.ts";
 import {
   useEffect,
   useMemo,
@@ -112,8 +114,8 @@ export function CalendarEventButton({
         <span className="calendar-event-time">{eventTimeLabel(item, calendar.zone, locale)}</span>
       )}
       {item.recurrence?.length ? (
-        <span className="calendar-repeat-mark" aria-label="Repeating">
-          ↻
+        <span className="calendar-repeat-mark" aria-label={t("componentsCalendarViews.repeating")}>
+          {t("componentsCalendarViews.text")}
         </span>
       ) : null}
     </button>
@@ -281,7 +283,13 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
                       <button
                         type="button"
                         className="calendar-month-date"
-                        aria-label={`Show ${dateLabel(date, { weekday: "long", month: "long", day: "numeric" }, locale)}`}
+                        aria-label={t("componentsCalendarViews.show", {
+                          dateLabel: dateLabel(
+                            date,
+                            { weekday: "long", month: "long", day: "numeric" },
+                            locale,
+                          ),
+                        })}
                         aria-current={date === today ? "date" : undefined}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -302,7 +310,10 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
                             setOverflow(overflow === date ? null : date);
                           }}
                         >
-                          {more} more
+                          <LocalizedMessage
+                            id="componentsCalendarViews.more"
+                            values={{ more: more }}
+                          />
                         </button>
                       )}
                     </div>
@@ -364,7 +375,7 @@ export function CalendarMonth({ actions }: { actions: CalendarViewActions }) {
                 setOverflow(null);
               }}
             >
-              Open day
+              {t("componentsCalendarViews.openDay")}
             </Button>
           </div>
         </CalendarModal>
@@ -496,25 +507,31 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
           </div>
           <div className="calendar-all-day-row" style={{ minHeight: visibleAllRows * 25 + 8 }}>
             <span className="calendar-all-day-label">
-              All day
-              {allRows > 3 && (
-                <button
-                  type="button"
-                  onClick={() => setAllDayExpanded(!allDayExpanded)}
-                  aria-expanded={allDayExpanded}
-                >
-                  {allDayExpanded
-                    ? "Less"
-                    : `+${allPlacements.filter((value) => value.row >= 3).length} more`}
-                </button>
-              )}
+              <LocalizedMessage
+                id="componentsCalendarViews.allDay"
+                values={{
+                  value1: allRows > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setAllDayExpanded(!allDayExpanded)}
+                      aria-expanded={allDayExpanded}
+                    >
+                      {allDayExpanded
+                        ? t("componentsCalendarViews.less")
+                        : t("componentsCalendarViews.more2", {
+                            length: allPlacements.filter((value) => value.row >= 3).length,
+                          })}
+                    </button>
+                  ),
+                }}
+              />
             </span>
             <div className="calendar-all-day-cells">
               {days.map((date) => (
                 <button
                   key={date}
                   type="button"
-                  aria-label={`Create all-day event on ${date}`}
+                  aria-label={t("componentsCalendarViews.createAllDayEventOn", { date: date })}
                   disabled={!canCreate}
                   onClick={() => calendar.setCreate({ date, allDay: true })}
                   onDragOver={(event) => {
@@ -675,7 +692,14 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
                       ?.focus();
                   }}
                   style={{ top: (slot * HOUR_HEIGHT) / 2, height: HOUR_HEIGHT / 2 }}
-                  aria-label={`Create event, ${dateLabel(day, { weekday: "long", month: "short", day: "numeric" }, locale)}, ${timeLabel(slot * 30, locale)}`}
+                  aria-label={t("componentsCalendarViews.createEvent", {
+                    dateLabel: dateLabel(
+                      day,
+                      { weekday: "long", month: "short", day: "numeric" },
+                      locale,
+                    ),
+                    timeLabel: timeLabel(slot * 30, locale),
+                  })}
                   disabled={!canCreate}
                   onClick={(event) => {
                     if (!event.detail) calendar.setCreate({ date: day, minute: slot * 30 });
@@ -696,7 +720,8 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
                       HOUR_HEIGHT,
                   }}
                 >
-                  {timeLabel(Math.min(selection.start, selection.end - 15), locale)} –{" "}
+                  {timeLabel(Math.min(selection.start, selection.end - 15), locale)}
+                  {t("componentsCalendarViews.text2")}{" "}
                   {timeLabel(Math.max(selection.start + 15, selection.end), locale)}
                 </div>
               )}
@@ -732,7 +757,9 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
                       <button
                         type="button"
                         className="calendar-event-resize"
-                        aria-label={`Change end time for ${event.title}`}
+                        aria-label={t("componentsCalendarViews.changeEndTimeFor", {
+                          title: event.title,
+                        })}
                         onPointerDown={(pointer) => {
                           pointer.preventDefault();
                           pointer.stopPropagation();
@@ -775,7 +802,9 @@ export function CalendarTimeGrid({ actions }: { actions: CalendarViewActions }) 
               {nowLocal.date === day && (
                 <div
                   className="calendar-now-line"
-                  aria-label={`Current time ${timeLabel(nowLocal.minute, locale)}`}
+                  aria-label={t("componentsCalendarViews.currentTime", {
+                    timeLabel: timeLabel(nowLocal.minute, locale),
+                  })}
                   style={{ top: (nowLocal.minute / 60) * HOUR_HEIGHT }}
                 >
                   <span />
@@ -843,12 +872,16 @@ export function CalendarAgenda({
                       {eventTimeLabel(event, calendar.zone, locale)}
                       {eventDayBounds(event, calendar.zone).end > addDays(date, 1) && (
                         <small>
-                          Until{" "}
-                          {dateLabel(
-                            addDays(eventDayBounds(event, calendar.zone).end, -1),
-                            { month: "short", day: "numeric" },
-                            locale,
-                          )}
+                          <LocalizedMessage
+                            id="componentsCalendarViews.until"
+                            values={{
+                              dateLabel: dateLabel(
+                                addDays(eventDayBounds(event, calendar.zone).end, -1),
+                                { month: "short", day: "numeric" },
+                                locale,
+                              ),
+                            }}
+                          />
                         </small>
                       )}
                     </span>
@@ -857,7 +890,9 @@ export function CalendarAgenda({
                       {event.location?.label && <small>{event.location.label}</small>}
                     </span>
                     {event.response_status === "needs_action" && (
-                      <span className="calendar-small-tag">Invitation</span>
+                      <span className="calendar-small-tag">
+                        {t("componentsCalendarViews.invitation")}
+                      </span>
                     )}
                   </button>
                 ))}

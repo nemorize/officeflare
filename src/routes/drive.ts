@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { requireAccess } from "../auth/store";
 import { requirePermission } from "../authorization/access";
@@ -77,10 +78,10 @@ drive.get("/people/:userId/profile-image", async (c) => {
     query,
     ...args,
   );
-  if (!owner) fail(404, "No profile image");
+  if (!owner) fail(404, t("routesDrive.noProfileImage"));
   const response = await profileImageResponse(c, owner);
   if (!(await first(c.env, `${query} AND u.profile_image_key=?`, ...args, owner.profile_image_key)))
-    fail(404, "No profile image");
+    fail(404, t("routesDrive.noProfileImage"));
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 });
@@ -104,6 +105,42 @@ drive.get("/quota", async (c) => {
   return c.json({
     ...quota,
     available_bytes: Math.max(0, quota.quota_bytes - quota.used_bytes - quota.reserved_bytes),
+  });
+});
+drive.get("/activity", async (c) => {
+  const user = c.get("identity").user.id,
+    pageSize = limit(c),
+    scope = "drive.activity";
+  const after: [number, string] = c.req.query("cursor")
+    ? await readCursor(c.env, user, scope, c.req.query("cursor")!)
+    : [Number.MAX_SAFE_INTEGER, ""];
+  const check = access(user, "read", "d.id");
+  const result = await rows<{
+    seq: number;
+    item_id: string;
+    item_name: string;
+    actor_name: string | null;
+    link_id: string | null;
+    action: string;
+    created_at: number;
+    available: number;
+  }>(
+    c.env,
+    `SELECT a.seq,a.item_id,d.name item_name,CASE WHEN u.id IS NOT NULL THEN COALESCE(u.display_name,'Workspace member') END actor_name,a.link_id,a.action,a.created_at,
+      CASE WHEN ${check.sql} THEN 1 ELSE 0 END available
+      FROM drive_activity a JOIN drive_items d ON d.id=a.item_id LEFT JOIN users u ON u.id=a.actor_user_id
+      WHERE a.seq<? AND (d.owner_user_id=? OR (${check.sql})) ORDER BY a.seq DESC LIMIT ?`,
+    ...check.args,
+    after[0],
+    user,
+    ...check.args,
+    pageSize + 1,
+  );
+  const page = result.slice(0, pageSize);
+  return c.json({
+    activity: page.map(({ available, ...event }) => ({ ...event, available: !!available })),
+    next_cursor:
+      result.length > pageSize ? await cursor(c.env, user, scope, [page.at(-1)!.seq, ""]) : null,
   });
 });
 drive.get("/changes", async (c) => {

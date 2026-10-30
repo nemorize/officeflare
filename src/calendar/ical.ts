@@ -172,8 +172,12 @@ function component(
   lines.push("END:VEVENT");
   return lines;
 }
-export function calendarFile(payload: DeliveryPayload, sender?: string, stamp?: number) {
-  const event = payload.event!;
+export function calendarFile(
+  payload: Extract<DeliveryPayload, { kind: "invitation" }>,
+  sender?: string,
+  stamp?: number,
+) {
+  const event = payload.event;
   const method =
     payload.action === "cancel" ? "CANCEL" : payload.action === "export" ? "PUBLISH" : "REQUEST";
   const entries = [

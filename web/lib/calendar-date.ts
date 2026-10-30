@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEndpoint, CalendarEvent, CalendarView } from "./calendar";
 
@@ -94,7 +95,7 @@ export function localEndpoint(date: string, time: string, zone: string): Calenda
   // A typed DST gap is a validation error; a repeated clock time uses its first offset.
   const value = plain.toZonedDateTime(zone, { disambiguation: "compatible" });
   if (!value.toPlainDateTime().equals(plain))
-    throw new Error("This time does not exist because the clocks change. Choose another time.");
+    throw new Error(t("libCalendarDate.thisTimeDoesNotExistBecauseTheClocksChange"));
   return { date_time: value.toInstant().toString(), time_zone: zone };
 }
 export function eventDayBounds(event: CalendarEvent, zone: string) {
@@ -127,7 +128,7 @@ export const multiDay = (event: CalendarEvent, zone: string) => {
   return civilDate(value.start).until(civilDate(value.end)).days > 1;
 };
 export function eventTimeLabel(event: CalendarEvent, zone: string, locale = "en") {
-  if (event.start.date) return "All day";
+  if (event.start.date) return t("common.allDay");
   const format = formatter(locale, { hour: "numeric", minute: "2-digit", timeZone: zone });
   return `${format.format(new Date(event.start.date_time!))} – ${format.format(new Date(event.end.date_time!))}`;
 }

@@ -100,15 +100,16 @@ export interface Settings {
   version: number;
   updated_at: number;
 }
-export interface DeliveryPayload {
-  kind: "invitation" | "verify" | "recovery";
-  event?: Event;
-  calendar?: Pick<Calendar, "time_zone">;
-  attendee?: Attendee;
-  occurrence_key?: string;
-  action: string;
-  url?: string;
-  automatic?: boolean;
-  code?: string;
-  overrides?: { original_key: string; event: Event }[];
-}
+export type DeliveryPayload = { action: string } & (
+  | {
+      kind: "invitation";
+      event: Event;
+      calendar?: Pick<Calendar, "time_zone">;
+      attendee?: Attendee;
+      occurrence_key?: string;
+      url?: string;
+      overrides?: { original_key: string; event: Event }[];
+    }
+  | { kind: "verify"; code: string }
+  | { kind: "recovery"; url: string; automatic?: boolean }
+);

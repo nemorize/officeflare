@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { Temporal } from "@js-temporal/polyfill";
 import { now, type AppEnv } from "../auth/types";
@@ -31,24 +32,26 @@ interface Hours {
 function minute(value: unknown, end = false) {
   const raw = text(value, "time", 5);
   if (end && raw === "24:00") return 1440;
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) fail(400, "INVALID_WORKING_HOURS", "Use HH:mm times");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw))
+    fail(400, "INVALID_WORKING_HOURS", t("calendarAvailability.useHhMmTimes"));
   return Number(raw.slice(0, 2)) * 60 + Number(raw.slice(3));
 }
 function ranges(value: unknown) {
   if (!Array.isArray(value) || value.length > 10)
-    fail(400, "INVALID_WORKING_HOURS", "At most ten intervals per day");
+    fail(400, "INVALID_WORKING_HOURS", t("calendarAvailability.atMostTenIntervalsPerDay"));
   const parsed = value
     .map((item) => {
       const data = object(item);
       fields(data, ["start", "end"]);
       const start = minute(data.start),
         end = minute(data.end, true);
-      if (end <= start) fail(400, "INVALID_WORKING_HOURS", "End must follow start");
+      if (end <= start)
+        fail(400, "INVALID_WORKING_HOURS", t("calendarAvailability.endMustFollowStart"));
       return { start, end };
     })
     .sort((a, b) => a.start - b.start);
   if (parsed.some((value, index) => index > 0 && value.start < parsed[index - 1]!.end))
-    fail(400, "INVALID_WORKING_HOURS", "Working intervals cannot overlap");
+    fail(400, "INVALID_WORKING_HOURS", t("calendarAvailability.workingIntervalsCannotOverlap"));
   return parsed;
 }
 const dto = (value: Hours) => {
@@ -91,7 +94,7 @@ routes.put("/working-hours", async (c) => {
         Object.fromEntries(
           Object.entries(weekly).map(([day, value]) => {
             if (!/^[0-6]$/.test(day))
-              fail(400, "INVALID_WORKING_HOURS", "Weekdays range from 0 to 6");
+              fail(400, "INVALID_WORKING_HOURS", t("calendarAvailability.weekdaysRangeFrom0To6"));
             return [day, ranges(value)];
           }),
         ),
@@ -137,7 +140,8 @@ export async function calendarBusy(c: CalendarContext, cal: Calendar, min: numbe
     new Date((max + 172800) * 1000).toISOString().slice(0, 10),
     new Date((min - 172800) * 1000).toISOString().slice(0, 10),
   );
-  if (candidates.length > 2000) fail(422, "TOO_MANY_EVENTS", "Narrow the calendar selection");
+  if (candidates.length > 2000)
+    fail(422, "TOO_MANY_EVENTS", t("calendarAvailability.narrowTheCalendarSelection"));
   const overrides = await loadOverrides(
       c,
       candidates.map((value) => value.id),
@@ -177,7 +181,8 @@ export async function calendarBusy(c: CalendarContext, cal: Calendar, min: numbe
         start: Math.max(min, range.min),
         end: Math.min(max, range.max),
       });
-      if (busy.length > 5000) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the date range");
+      if (busy.length > 5000)
+        fail(422, "TOO_MANY_OCCURRENCES", t("calendarAvailability.narrowTheDateRange"));
     }
   }
   return merge(busy);
@@ -197,7 +202,7 @@ const wire = (value: { start: number; end: number }) => ({
 });
 async function selection(c: CalendarContext, input: unknown) {
   if (!Array.isArray(input) || !input.length || input.length > 50)
-    fail(400, "INVALID_INPUT", "Choose 1–50 calendars");
+    fail(400, "INVALID_INPUT", t("calendarAvailability.choose150Calendars"));
   const result: Calendar[] = [];
   for (const id of [...new Set(input.map((value) => identifier(value)))])
     result.push(await requireCalendar(c, id));
@@ -276,7 +281,7 @@ routes.post("/availability/query", async (c) => {
     ),
     values = [];
   if (range.max - range.min > 31 * 86400)
-    fail(400, "INVALID_RANGE", "Availability queries are limited to 31 days");
+    fail(400, "INVALID_RANGE", t("calendarAvailability.availabilityQueriesAreLimitedTo31Days"));
   for (
     let start = Math.ceil(range.min / step) * step;
     start + duration <= range.max;

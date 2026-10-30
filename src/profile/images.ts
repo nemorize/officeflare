@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { invalid } from "../auth/input";
 
 export const profileImageLimit = 2 * 1024 * 1024;
@@ -5,7 +6,7 @@ export const profileImagePrefix = (userId: string) => `profiles/${encodeURICompo
 
 export function inspectProfileImage(bytes: Uint8Array, mime: string) {
   if (!bytes.length || bytes.length > profileImageLimit)
-    invalid("Profile images must be at most 2 MB");
+    invalid(t("profileImages.profileImagesMustBeAtMost2Mb"));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const text = (start: number, end: number) => String.fromCharCode(...bytes.subarray(start, end));
   let width = 0,
@@ -72,6 +73,6 @@ export function inspectProfileImage(bytes: Uint8Array, mime: string) {
     extension = "jpg";
   }
   if (!extension || width < 1 || height < 1 || width > 4096 || height > 4096)
-    invalid("Upload a valid PNG, JPEG or WebP image up to 4096 × 4096 pixels");
+    invalid(t("profileImages.uploadAValidPngJpegOrWebpImageUp"));
   return { width, height, extension, mime };
 }

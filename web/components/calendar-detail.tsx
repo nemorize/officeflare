@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { Button, Dialog, DialogPopup, Icon, Popover, PopoverPopup, useNotifications } from "./ui";
 import {
@@ -98,7 +101,8 @@ export function CalendarEventDetail({
     action.run(async () => {
       if (!mine) return;
       const latest = await calendarApi<InvitationDetail>(`/inbox-invitations/${mine.id}`);
-      if (latest.is_revoked) throw new Error("This invitation is no longer available.");
+      if (latest.is_revoked)
+        throw new Error(t("componentsCalendarDetail.thisInvitationIsNoLongerAvailable"));
       await calendarApi(`/inbox-invitations/${mine.id}/rsvp`, {
         method: "POST",
         body: {
@@ -110,7 +114,7 @@ export function CalendarEventDetail({
       });
       setSavedResponse(status);
       calendar.refresh();
-      notify.success("Your response has been saved.");
+      notify.success(t("componentsCalendarDetail.yourResponseHasBeenSaved"));
       setResponse(null);
     });
   const download = () =>
@@ -129,15 +133,23 @@ export function CalendarEventDetail({
     <>
       <div className="calendar-detail-toolbar">
         {writable && calendar.can("events.update") && (
-          <CalendarIconButton icon="edit" label="Edit event" onClick={() => onEdit(item)} />
+          <CalendarIconButton
+            icon="edit"
+            label={t("componentsCalendarDetail.editEvent")}
+            onClick={() => onEdit(item)}
+          />
         )}
         {writable && calendar.can("events.delete") && (
-          <CalendarIconButton icon="trash" label="Delete event" onClick={() => onDelete(item)} />
+          <CalendarIconButton
+            icon="trash"
+            label={t("componentsCalendarDetail.deleteEvent")}
+            onClick={() => onDelete(item)}
+          />
         )}
         {mine && (
           <CalendarIconButton
             icon="download"
-            label="Download calendar invitation"
+            label={t("componentsCalendarDetail.downloadCalendarInvitation")}
             disabled={action.busy}
             onClick={() => {
               void download();
@@ -147,11 +159,15 @@ export function CalendarEventDetail({
         {writable && rank >= 5 && (
           <CalendarIconButton
             icon="link"
-            label="Share event"
+            label={t("componentsCalendarDetail.shareEvent")}
             onClick={() => onManage(item, "sharing")}
           />
         )}
-        <CalendarIconButton icon="close" label="Close event details" onClick={onClose} />
+        <CalendarIconButton
+          icon="close"
+          label={t("componentsCalendarDetail.closeEventDetails")}
+          onClick={onClose}
+        />
       </div>
       <div className="calendar-detail-body" style={appearance(item)}>
         <div className="calendar-detail-title-row">
@@ -170,22 +186,22 @@ export function CalendarEventDetail({
             {recurring && (
               <span className="calendar-detail-repeat">
                 <Icon name="refresh" width="12" height="12" />
-                Repeating event
+                {t("componentsCalendarDetail.repeatingEvent")}
               </span>
             )}
           </div>
         </div>
         {mobile ? (
           <Dialog.Description className="visually-hidden">
-            Event details and guest responses
+            {t("componentsCalendarDetail.eventDetailsAndGuestResponses")}
           </Dialog.Description>
         ) : (
           <Popover.Description className="visually-hidden">
-            Event details and guest responses
+            {t("componentsCalendarDetail.eventDetailsAndGuestResponses")}
           </Popover.Description>
         )}
         {master.data?.is_revoked ? (
-          <CalendarNotice error="This invitation is no longer available." />
+          <CalendarNotice error={t("componentsCalendarDetail.thisInvitationIsNoLongerAvailable")} />
         ) : (
           <>
             {event.location?.label && (
@@ -207,14 +223,19 @@ export function CalendarEventDetail({
               <div className="calendar-detail-row">
                 <Icon name="users" />
                 <div className="calendar-detail-guests">
-                  <strong>
-                    {guests.length} guest{guests.length === 1 ? "" : "s"}
-                  </strong>
+                  <strong>{plural("counts.guests", guests.length)}</strong>
                   <span>
-                    {guests.filter((guest) => guest.response_status === "accepted").length} yes ·{" "}
-                    {guests.filter((guest) => guest.response_status === "tentative").length} maybe ·{" "}
-                    {guests.filter((guest) => guest.response_status === "needs_action").length}{" "}
-                    awaiting
+                    <LocalizedMessage
+                      id="componentsCalendarDetail.yesMaybeAwaiting"
+                      values={{
+                        length: guests.filter((guest) => guest.response_status === "accepted")
+                          .length,
+                        value2: guests.filter((guest) => guest.response_status === "tentative")
+                          .length,
+                        value3: guests.filter((guest) => guest.response_status === "needs_action")
+                          .length,
+                      }}
+                    />
                   </span>
                   {guests.slice(0, 4).map((guest) => (
                     <div key={guest.id}>
@@ -223,9 +244,14 @@ export function CalendarEventDetail({
                       </span>
                       <span>
                         {guest.display_name || guest.email_address}
-                        {guest.user_id === user?.id && <small> (you)</small>}
+                        {guest.user_id === user?.id && (
+                          <small>{t("componentsCalendarDetail.you")}</small>
+                        )}
                       </span>
-                      <span className="calendar-guest-status" title={guest.response_status}>
+                      <span
+                        className="calendar-guest-status"
+                        title={enumLabel(guest.response_status)}
+                      >
                         {guest.response_status === "accepted"
                           ? "✓"
                           : guest.response_status === "declined"
@@ -234,7 +260,14 @@ export function CalendarEventDetail({
                       </span>
                     </div>
                   ))}
-                  {guests.length > 4 && <span>+{guests.length - 4} more</span>}
+                  {guests.length > 4 && (
+                    <span>
+                      <LocalizedMessage
+                        id="componentsCalendarDetail.more"
+                        values={{ value1: guests.length - 4 }}
+                      />
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -250,15 +283,22 @@ export function CalendarEventDetail({
               <Icon name="calendar" />
               <div>
                 {calendar.data?.calendars.find((cal) => cal.id === item.calendar_id)?.name ??
-                  "Calendar"}
+                  t("componentsCalendarDetail.calendar")}
                 {event.organizer?.email_address && (
-                  <small>Organized by {event.organizer.email_address}</small>
+                  <small>
+                    <LocalizedMessage
+                      id="componentsCalendarDetail.organizedBy"
+                      values={{ email_address: event.organizer.email_address }}
+                    />
+                  </small>
                 )}
                 <small>
                   {calendar.data?.calendars.find((cal) => cal.id === item.calendar_id)?.kind ===
-                    "external" && "Read-only external calendar · "}
-                  {event.visibility === "private" ? "Private · " : ""}
-                  {event.transparency === "free" ? "Free" : "Busy"}
+                    "external" && t("componentsCalendarDetail.readOnlyExternalCalendar")}
+                  {event.visibility === "private" ? t("componentsCalendarDetail.private") : ""}
+                  {event.transparency === "free"
+                    ? t("componentsCalendarDetail.free")
+                    : t("componentsCalendarDetail.busy")}
                 </small>
               </div>
             </div>
@@ -266,22 +306,22 @@ export function CalendarEventDetail({
               <div className="calendar-detail-manage">
                 <Button size="sm" variant="text" onClick={() => onManage(item, "guests")}>
                   <Icon name="users" />
-                  Manage guests
+                  {t("componentsCalendarDetail.manageGuests")}
                 </Button>
                 <Button size="sm" variant="text" onClick={() => onManage(item, "attachments")}>
                   <Icon name="attachment" />
-                  Attachments
+                  {t("componentsCalendarDetail.attachments2")}
                 </Button>
               </div>
             )}
             {mine && (
               <div className="calendar-rsvp">
-                <strong>Going?</strong>
+                <strong>{t("componentsCalendarDetail.going")}</strong>
                 <div>
                   {[
-                    ["accepted", "Yes"],
-                    ["tentative", "Maybe"],
-                    ["declined", "No"],
+                    ["accepted", t("common.yes")],
+                    ["tentative", t("componentsCalendarDetail.maybe")],
+                    ["declined", t("common.no")],
                   ].map(([status, label]) => (
                     <Button
                       key={status}
@@ -348,7 +388,7 @@ export function CalendarEventDetail({
       )}
       {response && (
         <CalendarScopeDialog
-          title="Respond to repeating event"
+          title={t("componentsCalendarDetail.respondToRepeatingEvent")}
           error={action.error}
           allowFollowing={false}
           onClose={() => setResponse(null)}

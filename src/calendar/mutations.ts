@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now, uuid } from "../auth/types";
 import { digest } from "../auth/crypto";
 import type { Permission } from "../authorization/permissions";
@@ -96,7 +97,7 @@ export async function replay<T>(
 ): Promise<{ result: T } | null> {
   const auth = identity(c, action);
   if (!(await first(c.env, `SELECT 1 WHERE ${auth.sql}`, ...auth.args)))
-    fail(403, "PERMISSION_DENIED", "Calendar action is not permitted");
+    fail(403, "PERMISSION_DENIED", t("calendarMutations.calendarActionIsNotPermitted"));
   const key = text(c.req.header("Idempotency-Key"), "Idempotency-Key", 128),
     actor = c.get("identity").user.id;
   const old = await first<{ request_hash: string; result_json: string }>(
@@ -108,7 +109,11 @@ export async function replay<T>(
   );
   if (!old) return null;
   if (old.request_hash !== (await digest(stable(request))))
-    fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
+    fail(
+      409,
+      "IDEMPOTENCY_CONFLICT",
+      t("calendarMutations.idempotencyKeyWasUsedWithAnotherRequest"),
+    );
   return {
     result: await receipt<T>(
       c.env,
@@ -137,11 +142,15 @@ export async function mutate<T>(c: CalendarContext, input: Mutation<T>): Promise
         )
       : null;
   if (!(await first(c.env, `SELECT 1 WHERE ${auth.sql}`, ...auth.args)))
-    fail(403, "PERMISSION_DENIED", "Calendar action is not permitted");
+    fail(403, "PERMISSION_DENIED", t("calendarMutations.calendarActionIsNotPermitted"));
   const previous = await existing();
   if (previous) {
     if (previous.request_hash !== hash)
-      fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
+      fail(
+        409,
+        "IDEMPOTENCY_CONFLICT",
+        t("calendarMutations.idempotencyKeyWasUsedWithAnotherRequest"),
+      );
     return receipt<T>(
       c.env,
       `receipt:${actorKey}:${input.operation}:${hash}`,
@@ -210,14 +219,22 @@ export async function mutate<T>(c: CalendarContext, input: Mutation<T>): Promise
   const results = await c.env.DB.withSession("first-primary").batch(statements);
   if (results[0]!.meta.changes !== 1) {
     if (!(await first(c.env, `SELECT 1 WHERE ${auth.sql}`, ...auth.args)))
-      fail(403, "PERMISSION_DENIED", "Calendar permissions changed");
+      fail(403, "PERMISSION_DENIED", t("calendarMutations.calendarPermissionsChanged"));
     const raced = await existing();
     if (raced) {
       if (raced.request_hash !== hash)
-        fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was used with another request");
+        fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          t("calendarMutations.idempotencyKeyWasUsedWithAnotherRequest"),
+        );
       return receipt<T>(c.env, `receipt:${actorKey}:${input.operation}:${hash}`, raced.result_json);
     }
-    fail(412, "VERSION_CONFLICT", "Calendar resource or permissions changed. Reload and try again");
+    fail(
+      412,
+      "VERSION_CONFLICT",
+      t("calendarMutations.calendarResourceOrPermissionsChangedReloadAndTryAgain"),
+    );
   }
   return input.result;
 }

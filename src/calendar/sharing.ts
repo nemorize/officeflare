@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import type { AppEnv } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -32,7 +33,7 @@ adminSettings.post("/admin/invitation-deliveries/:deliveryId/resolve", async (c)
     fail(
       400,
       "PROVIDER_CONFIRMATION_REQUIRED",
-      "Confirm that the provider did not accept this message before retrying",
+      t("calendarSharing.confirmThatTheProviderDidNotAcceptThisMessage"),
     );
   await mutate(c, {
     action: "admin.calendar.settings.manage",
@@ -114,7 +115,7 @@ adminSettings.patch("/admin/settings", async (c) => {
         values.system_address_id,
       ))
     )
-      fail(400, "INVALID_SENDER", "Choose an enabled system sending address");
+      fail(400, "INVALID_SENDER", t("calendarSharing.chooseAnEnabledSystemSendingAddress"));
   }
   await mutate(c, {
     action: "admin.calendar.settings.manage",
@@ -168,11 +169,11 @@ routes.post("/calendars/:calendarId/acl", async (c) => {
     role = aclRole(data.role);
   const external = type === "public";
   if (!(external ? config.external_sharing_enabled : config.internal_sharing_enabled))
-    fail(403, "SHARING_DISABLED", "Calendar sharing is disabled");
+    fail(403, "SHARING_DISABLED", t("calendarSharing.calendarSharingIsDisabled"));
   let valid = condition("1");
   if (type === "user") {
     if (key === cal.data_owner_user_id)
-      fail(400, "INVALID_GRANT", "The owner already has full access");
+      fail(400, "INVALID_GRANT", t("calendarSharing.theOwnerAlreadyHasFullAccess"));
     valid = condition(`EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${active("u")})`, key);
   }
   if (type === "group")
@@ -191,9 +192,9 @@ routes.post("/calendars/:calendarId/acl", async (c) => {
     (type === "organization" || type === "public") &&
     (key !== "workspace" || !["free_busy", "reader"].includes(role))
   )
-    fail(400, "INVALID_GRANT", "Workspace grants allow read access only");
+    fail(400, "INVALID_GRANT", t("calendarSharing.workspaceGrantsAllowReadAccessOnly"));
   if (!(await first(c.env, `SELECT 1 WHERE ${valid.sql}`, ...valid.args)))
-    fail(400, "INVALID_GRANT", "Unknown or unavailable sharing subject");
+    fail(400, "INVALID_GRANT", t("calendarSharing.unknownOrUnavailableSharingSubject"));
   const value = {
     id,
     calendar_id: cal.id,
@@ -248,11 +249,11 @@ routes.on(["PATCH", "DELETE"], "/calendars/:calendarId/acl/:aclId", async (c) =>
       id,
       cal.id,
     );
-  if (!old) fail(404, "ACL_NOT_FOUND", "Grant not found");
+  if (!old) fail(404, "ACL_NOT_FOUND", t("calendarSharing.grantNotFound"));
   const external = old.scope_type === "public" && c.req.method === "PATCH";
   const config = await settings(c);
   if (external && !config.external_sharing_enabled)
-    fail(403, "SHARING_DISABLED", "External sharing is disabled");
+    fail(403, "SHARING_DISABLED", t("calendarSharing.externalSharingIsDisabled"));
   const values: Record<string, Bind> = {
     version: version + 1,
     updated_at: now(),
@@ -265,7 +266,7 @@ routes.on(["PATCH", "DELETE"], "/calendars/:calendarId/acl/:aclId", async (c) =>
     values.role &&
     !["reader", "free_busy"].includes(String(values.role))
   )
-    fail(400, "INVALID_GRANT", "Workspace grants allow read access only");
+    fail(400, "INVALID_GRANT", t("calendarSharing.workspaceGrantsAllowReadAccessOnly"));
   await mutate(c, {
     action: external ? "calendar.sharing.external" : "calendar.sharing.internal",
     operation: "acl.change",
@@ -349,14 +350,15 @@ routes.post("/groups", async (c) => {
 });
 async function memberIds(c: CalendarContext, value: unknown) {
   if (!Array.isArray(value) || value.length > 100)
-    fail(400, "INVALID_INPUT", "At most 100 group members are allowed");
+    fail(400, "INVALID_INPUT", t("calendarSharing.atMost100GroupMembersAreAllowed"));
   const members = [...new Set(value.map((v) => identifier(v, "member_id")))];
   const n = await first<{ n: number }>(
     c.env,
     `SELECT COUNT(*) n FROM users u WHERE id IN(SELECT value FROM json_each(?)) AND ${active("u")}`,
     JSON.stringify(members),
   );
-  if (n?.n !== members.length) fail(400, "INVALID_MEMBER", "Members must be active users");
+  if (n?.n !== members.length)
+    fail(400, "INVALID_MEMBER", t("calendarSharing.membersMustBeActiveUsers"));
   return members;
 }
 routes.get("/groups/:groupId", async (c) => {
@@ -369,7 +371,7 @@ routes.get("/groups/:groupId", async (c) => {
       user,
       user,
     );
-  if (!group) fail(404, "GROUP_NOT_FOUND", "Group not found");
+  if (!group) fail(404, "GROUP_NOT_FOUND", t("calendarSharing.groupNotFound"));
   return c.json({
     group,
     members: await rows(

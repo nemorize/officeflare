@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { DurableObject } from "cloudflare:workers";
 import type { AuthEnv } from "../auth/types";
 import { connectionValid, type NotificationConnection } from "./session";
@@ -33,14 +34,14 @@ export class NotificationHubDO extends DurableObject<AuthEnv> {
       try {
         socket.send(JSON.stringify({ kind: "notifications.changed" }));
       } catch {
-        socket.close(1011, "Reconnect");
+        socket.close(1011, t("notificationsHub.reconnect"));
       }
     }
   }
   private async valid(socket: WebSocket) {
     const connection = socket.deserializeAttachment() as NotificationConnection | null;
     if (connection && (await connectionValid(this.env.DB, connection))) return true;
-    socket.close(4001, "Session ended");
+    socket.close(4001, t("notificationsHub.sessionEnded"));
     return false;
   }
   async alarm() {
@@ -50,9 +51,9 @@ export class NotificationHubDO extends DurableObject<AuthEnv> {
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     if (!(await this.valid(socket))) return;
     if (message === "ping") socket.send("pong");
-    else socket.close(1008, "Unsupported message");
+    else socket.close(1008, t("notificationsHub.unsupportedMessage"));
   }
   webSocketError(socket: WebSocket) {
-    socket.close(1011, "Reconnect");
+    socket.close(1011, t("notificationsHub.reconnect"));
   }
 }

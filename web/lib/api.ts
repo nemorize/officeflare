@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { ApiError, createApiClient } from "./api-client";
 import { sessions } from "./session";
 
@@ -19,4 +20,4 @@ export interface AccountUser {
 export const errorMessage = (failure: unknown) =>
   failure instanceof ApiError
     ? failure.message
-    : "Unable to connect to the server. Check your connection and try again.";
+    : t("libApi.unableToConnectToTheServerCheckYourConnection");

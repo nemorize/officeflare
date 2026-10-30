@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "../components/i18n";
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { Button, CheckboxControl, Icon, useNotifications } from "../components/ui";
@@ -67,20 +70,19 @@ function SharedCalendars() {
     <div className="calendar-management-page">
       <div className="calendar-management-heading">
         <div>
-          <h2>Shared calendars</h2>
-          <p>Keep your team, projects and personal plans together.</p>
+          <h2>{t("routesCalendar.sharedCalendars")}</h2>
+          <p>{t("routesCalendar.keepYourTeamProjectsAndPersonalPlansTogether")}</p>
         </div>
         {calendar.can("calendars.create") && (
           <Button onClick={() => calendar.setSettings("new")}>
             <Icon name="plus" />
-            Create calendar
+            {t("routesCalendar.createCalendar")}
           </Button>
         )}
       </div>
       {!shared.length ? (
-        <CalendarEmpty icon="users" title="A little more room for your plans">
-          Create a calendar for your team or project. Calendars shared with you will also appear
-          here.
+        <CalendarEmpty icon="users" title={t("routesCalendar.aLittleMoreRoomForYourPlans")}>
+          {t("routesCalendar.createACalendarForYourTeamOrProjectCalendars")}
         </CalendarEmpty>
       ) : (
         <div className="calendar-shared-cards">
@@ -99,14 +101,14 @@ function SharedCalendars() {
                         void calendar.toggleCalendar(cal.id, value);
                       }}
                     />
-                    <span className="visually-hidden">Display {cal.name}</span>
+                    <span className="visually-hidden">
+                      <LocalizedMessage id="routesCalendar.display" values={{ name: cal.name }} />
+                    </span>
                   </label>
                 </div>
                 <h3>{cal.name}</h3>
                 <p>{cal.description || cal.time_zone.replaceAll("_", " ")}</p>
-                <span className="calendar-small-tag">
-                  {cal.effective_role.replaceAll("_", " ")}
-                </span>
+                <span className="calendar-small-tag">{enumLabel(cal.effective_role)}</span>
                 <footer>
                   <Button
                     size="sm"
@@ -114,12 +116,12 @@ function SharedCalendars() {
                     nativeButton={false}
                     render={<Link to={`/calendar/settings/calendars/${cal.id}`} />}
                   >
-                    Settings
+                    {t("common.settings")}
                   </Button>
                   {calendarRank(cal) >= 5 && calendar.can("sharing.external") && (
                     <Button size="sm" variant="text" onClick={() => setSharing(cal.id)}>
                       <Icon name="link" />
-                      Share link
+                      {t("routesCalendar.shareLink")}
                     </Button>
                   )}
                 </footer>
@@ -130,7 +132,11 @@ function SharedCalendars() {
       )}
       {sharing && (
         <CalendarModal
-          title={`Share ${calendar.data!.calendars.find((cal) => cal.id === sharing)?.name ?? "calendar"}`}
+          title={t("routesCalendar.share", {
+            value1:
+              calendar.data!.calendars.find((cal) => cal.id === sharing)?.name ??
+              t("calendar.fallbackName"),
+          })}
           onClose={() => setSharing(null)}
           className="calendar-collaboration-modal"
         >
@@ -154,13 +160,13 @@ function CalendarTrash() {
     <div className="calendar-management-page">
       <div className="calendar-management-heading">
         <div>
-          <h2>Deleted events</h2>
-          <p>Restore events from calendars you own.</p>
+          <h2>{t("routesCalendar.deletedEvents")}</h2>
+          <p>{t("routesCalendar.restoreEventsFromCalendarsYouOwn")}</p>
         </div>
       </div>
       <CalendarNotice error={resource.error || action.error} />
       {resource.loading ? (
-        <LoadingSkeleton kind="list" label="Loading deleted events…" />
+        <LoadingSkeleton kind="list" label={t("routesCalendar.loadingDeletedEvents")} />
       ) : resource.data?.events.length ? (
         <div className="calendar-trash-list">
           {resource.data.events.map((event) => (
@@ -169,9 +175,10 @@ function CalendarTrash() {
               <div>
                 <strong>{event.title}</strong>
                 <small>
-                  {dateLabel(event.start.date ?? event.start.date_time!.slice(0, 10))} ·{" "}
+                  {dateLabel(event.start.date ?? event.start.date_time!.slice(0, 10))}
+                  {t("routesCalendar.text")}{" "}
                   {calendar.data?.calendars.find((cal) => cal.id === event.calendar_id)?.name ??
-                    "Calendar"}
+                    t("routesCalendar.calendar")}
                 </small>
               </div>
               <Button
@@ -184,20 +191,20 @@ function CalendarTrash() {
                       body: { version: event.version, scope: "all" },
                     });
                     calendar.refresh();
-                    notify.success("Event restored.");
+                    notify.success(t("routesCalendar.eventRestored"));
                   });
                 }}
               >
                 <Icon name="undo" />
-                Restore
+                {t("routesCalendar.restore2")}
               </Button>
             </div>
           ))}
         </div>
       ) : (
         !resource.error && (
-          <CalendarEmpty icon="trash" title="Your trash is empty">
-            Deleted events will appear here.
+          <CalendarEmpty icon="trash" title={t("routesCalendar.yourTrashIsEmpty")}>
+            {t("routesCalendar.deletedEventsWillAppearHere")}
           </CalendarEmpty>
         )
       )}
@@ -209,7 +216,7 @@ function CalendarTrash() {
               setPrevious((old) => old.slice(0, -1));
             }}
           >
-            Previous
+            {t("common.previous")}
           </Button>
         )}
         {resource.data?.next_cursor && (
@@ -219,7 +226,7 @@ function CalendarTrash() {
               setCursor(resource.data!.next_cursor);
             }}
           >
-            Next
+            {t("common.next")}
           </Button>
         )}
       </div>
@@ -272,7 +279,9 @@ export function CalendarPage() {
       setPending(null);
       setDetail(null);
       calendar.refresh();
-      notify.success(times ? "Event updated." : "Event moved to trash.");
+      notify.success(
+        times ? t("routesCalendar.eventUpdated") : t("routesCalendar.eventMovedToTrash"),
+      );
     });
   const prepare = async (event: CalendarEvent, times?: Pick<CalendarEvent, "start" | "end">) => {
     if (preparing.current || action.busy) return;
@@ -282,7 +291,7 @@ export function CalendarPage() {
       const { event: master } = await calendarApi<{ event: CalendarEvent }>(eventPath(event));
       if (master.version !== event.version) {
         calendar.refresh();
-        throw new Error("This event changed. Open its latest version and try again.");
+        throw new Error(t("routesCalendar.thisEventChangedOpenItsLatestVersionAndTry"));
       }
       const change = { event, master, times };
       if (master.recurrence?.length || !times) {
@@ -331,9 +340,13 @@ export function CalendarPage() {
   // and keep creation disabled until an editable calendar is available.
   if (main && !calendar.data && !calendar.error && !calendar.query && calendar.view !== "agenda")
     return (
-      <section className="calendar-page calendar-main-page" aria-label="Calendar" aria-busy="true">
+      <section
+        className="calendar-page calendar-main-page"
+        aria-label={t("routesCalendar.calendar")}
+        aria-busy="true"
+      >
         <div className="calendar-loading-line" role="status">
-          <span className="visually-hidden">Opening your calendar…</span>
+          <span className="visually-hidden">{t("routesCalendar.openingYourCalendar")}</span>
         </div>
         {calendar.view === "month" ? (
           <CalendarMonth actions={actions} />
@@ -343,12 +356,17 @@ export function CalendarPage() {
       </section>
     );
   return (
-    <section className={`calendar-page${main ? " calendar-main-page" : ""}`} aria-label="Calendar">
+    <section
+      className={`calendar-page${main ? " calendar-main-page" : ""}`}
+      aria-label={t("routesCalendar.calendar")}
+    >
       {!calendar.data ? (
         <div className="calendar-startup">
-          <LoadingSkeleton kind="page" label="Opening your calendar…" />
+          <LoadingSkeleton kind="page" label={t("routesCalendar.openingYourCalendar")} />
           <CalendarNotice error={calendar.error} />
-          {calendar.error && <Button onClick={() => calendar.refresh(true)}>Try again</Button>}
+          {calendar.error && (
+            <Button onClick={() => calendar.refresh(true)}>{t("routesCalendar.tryAgain")}</Button>
+          )}
         </div>
       ) : (
         <>
@@ -366,24 +384,27 @@ export function CalendarPage() {
               {calendar.query && (
                 <div className="calendar-search-summary">
                   <span>
-                    Results for <strong>{calendar.query}</strong> ·{" "}
-                    {dateLabel(calendar.range.start, { month: "short", day: "numeric" })} –{" "}
+                    {t("routesCalendar.resultsFor")}
+                    <strong>{calendar.query}</strong>
+                    {t("routesCalendar.text")}{" "}
+                    {dateLabel(calendar.range.start, { month: "short", day: "numeric" })}
+                    {t("routesCalendar.text2")}{" "}
                     {dateLabel(addDays(calendar.range.end, -1), { month: "short", day: "numeric" })}
                   </span>
                   <Button size="sm" variant="text" onClick={() => calendar.search("")}>
                     <Icon name="close" />
-                    Clear search
+                    {t("routesCalendar.clearSearch")}
                   </Button>
                 </div>
               )}
               {calendar.eventsLoading && (
                 <div className="calendar-loading-line" role="status">
-                  <span className="visually-hidden">Loading events…</span>
+                  <span className="visually-hidden">{t("routesCalendar.loadingEvents")}</span>
                 </div>
               )}
               {!calendar.selectedIds.length ? (
-                <CalendarEmpty title="Choose a calendar to get started">
-                  Select a calendar in the sidebar to see your events.
+                <CalendarEmpty title={t("routesCalendar.chooseACalendarToGetStarted")}>
+                  {t("routesCalendar.selectACalendarInTheSidebarToSeeYour")}
                 </CalendarEmpty>
               ) : calendar.query || calendar.view === "agenda" ? (
                 calendar.events.length ? (
@@ -392,11 +413,15 @@ export function CalendarPage() {
                   !calendar.eventsLoading && (
                     <CalendarEmpty
                       icon={calendar.query ? "search" : "calendar"}
-                      title={calendar.query ? "No matching events" : "Your schedule is clear"}
+                      title={
+                        calendar.query
+                          ? t("routesCalendar.noMatchingEvents")
+                          : t("routesCalendar.yourScheduleIsClear")
+                      }
                     >
                       {calendar.query
-                        ? "Try another search or move to a different period."
-                        : "Create an event or choose another date to see what's coming up."}
+                        ? t("routesCalendar.tryAnotherSearchOrMoveToADifferentPeriod")
+                        : t("routesCalendar.createAnEventOrChooseAnotherDateToSee")}
                     </CalendarEmpty>
                   )
                 )
@@ -410,7 +435,7 @@ export function CalendarPage() {
                   variant="primary"
                   size="icon"
                   className="calendar-mobile-create"
-                  aria-label="Create event"
+                  aria-label={t("routesCalendar.createEvent")}
                   onClick={() => calendar.setCreate({ date: calendar.date })}
                 >
                   <Icon name="plus" width="22" height="22" />
@@ -464,7 +489,11 @@ export function CalendarPage() {
             (pending.master.recurrence?.length ? (
               <CalendarScopeDialog
                 error={action.error}
-                title={pending.times ? "Move repeating event" : "Delete repeating event"}
+                title={
+                  pending.times
+                    ? t("routesCalendar.moveRepeatingEvent")
+                    : t("routesCalendar.deleteRepeatingEvent")
+                }
                 busy={action.busy}
                 onClose={() => setPending(null)}
                 onConfirm={(scope) => {
@@ -473,14 +502,14 @@ export function CalendarPage() {
               />
             ) : (
               <CalendarModal
-                title="Delete event?"
-                description="This event will move to trash. Guests will receive an update."
+                title={t("routesCalendar.deleteEvent")}
+                description={t("routesCalendar.thisEventWillMoveToTrashGuestsWillReceive")}
                 busy={action.busy}
                 onClose={() => setPending(null)}
               >
                 <CalendarNotice error={action.error} />
                 <div className="calendar-dialog-actions">
-                  <Button onClick={() => setPending(null)}>Cancel</Button>
+                  <Button onClick={() => setPending(null)}>{t("common.cancel")}</Button>
                   <Button
                     variant="danger"
                     disabled={action.busy}
@@ -488,7 +517,7 @@ export function CalendarPage() {
                       void commit(pending, "all");
                     }}
                   >
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </CalendarModal>

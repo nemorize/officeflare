@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { now, type AppEnv } from "../auth/types";
 import type { Event, Calendar } from "./types";
@@ -29,7 +30,7 @@ export function publicEvent(event: Event, cal: Calendar, link: ShareLink, key?: 
       occurrence_key: key ?? null,
       start: endpoint(event, "start"),
       end: endpoint(event, "end"),
-      title: fields.includes("title") ? event.title : "Busy",
+      title: fields.includes("title") ? event.title : t("calendarPublic.busy"),
       is_redacted: redacted,
     };
   return {
@@ -49,7 +50,7 @@ export async function publicInstances(c: Parameters<typeof publicLink>[0]) {
     (link.time_min !== null && range.min < link.time_min) ||
     (link.time_max !== null && range.max > link.time_max)
   )
-    fail(400, "LINK_RANGE_EXCEEDED", "Query exceeds the shared date range");
+    fail(400, "LINK_RANGE_EXCEEDED", t("calendarPublic.queryExceedsTheSharedDateRange"));
   const candidates = event
     ? [event]
     : await rows<Event>(
@@ -61,7 +62,8 @@ export async function publicInstances(c: Parameters<typeof publicLink>[0]) {
         new Date((range.max + 172800) * 1000).toISOString().slice(0, 10),
         new Date((range.min - 172800) * 1000).toISOString().slice(0, 10),
       );
-  if (candidates.length > 200) fail(422, "TOO_MANY_EVENTS", "Narrow the shared calendar scope");
+  if (candidates.length > 200)
+    fail(422, "TOO_MANY_EVENTS", t("calendarPublic.narrowTheSharedCalendarScope"));
   const overrides = await loadOverrides(
       c,
       candidates.map((value) => value.id),
@@ -84,7 +86,8 @@ export async function publicInstances(c: Parameters<typeof publicLink>[0]) {
           recurring: value.recurrence_json !== "[]",
         })),
     );
-  if (values.length > 500) fail(422, "TOO_MANY_OCCURRENCES", "Narrow the shared date range");
+  if (values.length > 500)
+    fail(422, "TOO_MANY_OCCURRENCES", t("calendarPublic.narrowTheSharedDateRange"));
   return { link, cal, values };
 }
 export const publicRoutes = new Hono<AppEnv>();
@@ -106,7 +109,7 @@ publicRoutes.get("/public/share-links/:token", async (c) => {
   await linkSession(c, link);
   const requested = c.req.query("occurrence_key") ?? link.occurrence_key ?? "";
   if (link.occurrence_key && requested !== link.occurrence_key)
-    fail(403, "LINK_SCOPE", "This link covers one occurrence");
+    fail(403, "LINK_SCOPE", t("calendarPublic.thisLinkCoversOneOccurrence"));
   let effective = event ? await occurrence(c, event, requested) : null;
   if (effective && !inLinkRange(link, effective, cal)) {
     if (requested || event?.recurrence_json === "[]") assertLinkOccurrence(link, effective, cal);
@@ -160,7 +163,8 @@ publicRoutes.get("/public/share-links/:token/events", async (c) => {
 publicRoutes.get("/public/share-links/:token/export.ics", async (c) => {
   const { link, cal } = await publicLink(c);
   await linkSession(c, link);
-  if (!link.allow_ics) fail(403, "ICS_DISABLED", "This link does not allow calendar downloads");
+  if (!link.allow_ics)
+    fail(403, "ICS_DISABLED", t("calendarPublic.thisLinkDoesNotAllowCalendarDownloads"));
   const fields = JSON.parse(link.shared_fields_json) as string[];
   let values: { event: Event; key?: string }[];
   if (link.target_type === "event" && link.occurrence_key) {
@@ -184,7 +188,7 @@ publicRoutes.get("/public/share-links/:token/export.ics", async (c) => {
       ...value,
       event: {
         ...value.event,
-        title: visible && fields.includes("title") ? value.event.title : "Busy",
+        title: visible && fields.includes("title") ? value.event.title : t("calendarPublic.busy"),
         description_html:
           visible && fields.includes("description_html") ? value.event.description_html : "",
         location_json: visible && fields.includes("location") ? value.event.location_json : "{}",
@@ -227,7 +231,7 @@ publicRoutes.get("/invitations/:token/event.ics", async (c) => {
     context.event.status === "cancelled" ||
     context.cal.trashed_at
   )
-    fail(404, "INVITATION_NOT_FOUND", "Invitation is unavailable");
+    fail(404, "INVITATION_NOT_FOUND", t("calendarPublic.invitationIsUnavailable"));
   const event = await occurrence(c, context.event, context.attendee.occurrence_key);
   return c.body(
     calendarFile({

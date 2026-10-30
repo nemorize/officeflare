@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Parser } from "htmlparser2";
 import parse from "css-tree/parser";
 import generate from "css-tree/generator";
@@ -157,7 +158,7 @@ export async function renderMailHtml(
   cache: RenderCache | undefined = frameCache(),
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
 ): Promise<MailRendering> {
-  if (source.length > 2 * 1024 ** 2) throw new Error("Mail body is too large to render");
+  if (source.length > 2 * 1024 ** 2) throw new Error(t("mailRender.mailBodyIsTooLargeToRender"));
   const fingerprint = await hash(resourcePath + "\n" + source);
   const key = cacheRequest("html", fingerprint),
     existing = await cache?.match(key);

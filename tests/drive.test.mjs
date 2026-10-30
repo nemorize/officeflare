@@ -226,6 +226,57 @@ async function fixture(t, options = {}) {
   };
 }
 
+test("Drive settings activity paginates and respects current file access", async (t) => {
+  const { call, folder, share, edit, item, db } = await fixture(t);
+  await call("/activity", { actor: null, expected: 401 });
+  await call("/activity", { actor: "no-drive", expected: 403 });
+  assert.deepEqual((await call("/activity", { actor: "outsider" })).activity, []);
+  const privateFolder = await folder("Private activity");
+  const shared = await folder("Shared activity");
+  await share(shared.id, "viewer", "viewer");
+  const child = await folder("Inherited activity", shared.id);
+  const viewer = await call("/activity", { actor: "viewer" });
+  assert.ok(viewer.activity.some((event) => event.item_id === child.id && event.available));
+  assert.ok(viewer.activity.every((event) => event.item_id !== privateFolder.id));
+  assert.deepEqual((await call("/activity", { actor: "admin" })).activity, []);
+  const first = await call("/activity?limit=1");
+  assert.equal(first.activity.length, 1);
+  assert.ok(first.next_cursor);
+  const second = await call(`/activity?limit=1&cursor=${encodeURIComponent(first.next_cursor)}`);
+  assert.ok(second.activity[0].seq < first.activity[0].seq);
+  await call(`/activity?cursor=${encodeURIComponent(first.next_cursor)}`, {
+    actor: "viewer",
+    expected: 400,
+  });
+  await call("/activity?cursor=invalid", { expected: 400 });
+  await call(`/items/${shared.id}/activity?cursor=${encodeURIComponent(first.next_cursor)}`, {
+    expected: 400,
+  });
+  await edit(child.id, { trashed: true });
+  assert.ok(
+    (await call("/activity")).activity.some(
+      (event) => event.item_id === child.id && !event.available,
+    ),
+  );
+  assert.ok(
+    (await call("/activity", { actor: "viewer" })).activity.every(
+      (event) => event.item_id !== child.id,
+    ),
+  );
+  await call(`/items/${shared.id}/permissions/viewer?version=${(await item(shared.id)).version}`, {
+    method: "DELETE",
+  });
+  assert.deepEqual((await call("/activity", { actor: "viewer" })).activity, []);
+  await share(shared.id, "viewer", "viewer");
+  await db
+    .prepare(
+      "UPDATE drive_permissions SET expires_at=unixepoch()-1 WHERE item_id=? AND user_id='viewer'",
+    )
+    .bind(shared.id)
+    .run();
+  assert.deepEqual((await call("/activity", { actor: "viewer" })).activity, []);
+});
+
 test("Drive backend: file lifecycle, inherited sharing, public links and recovery", async (t) => {
   const f = await fixture(t),
     { db, bucket, raw, call, item, folder, start, complete, upload, share, edit, link, recover } =

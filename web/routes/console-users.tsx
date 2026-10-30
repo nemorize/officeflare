@@ -1,3 +1,5 @@
+import { LocalizedMessage } from "../components/i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import {
@@ -60,36 +62,45 @@ export function UsersPage() {
     <section className="account-page console-page">
       <header className="account-page-header console-page-header">
         <div>
-          <h1>Users</h1>
-          <p>Manage people, personal mail addresses and workspace access.</p>
+          <h1>{t("routesConsoleUsers.users")}</h1>
+          <p>{t("routesConsoleUsers.managePeoplePersonalMailAddressesAndWorkspaceAccess")}</p>
         </div>
         {access.permissions.includes("admin.users.create") && (
           <Button nativeButton={false} render={<Link to="/console/users/new" />} variant="primary">
             <Icon name="plus" />
-            New user
+            {t("routesConsoleUsers.newUser")}
           </Button>
         )}
       </header>
       <section className="account-panel console-list-panel">
         {!canRead ? (
-          <p className="console-empty">You do not have permission to view user accounts.</p>
+          <p className="console-empty">
+            {t("routesConsoleUsers.youDoNotHavePermissionToViewUserAccounts")}
+          </p>
         ) : !resource.data ? (
-          <ResourceState {...resource} kind="list" label="Loading users…" rows={5} />
+          <ResourceState
+            {...resource}
+            kind="list"
+            label={t("routesConsoleUsers.loadingUsers")}
+            rows={5}
+          />
         ) : (
           <>
             <div className="console-table-scroll">
               <table className="console-table">
-                <caption className="console-sr-only">User accounts</caption>
+                <caption className="console-sr-only">
+                  {t("routesConsoleUsers.userAccounts")}
+                </caption>
                 <thead>
                   <tr>
-                    <th scope="col">User</th>
-                    <th scope="col">Personal mail</th>
-                    <th scope="col">Status</th>
+                    <th scope="col">{t("routesConsoleUsers.user")}</th>
+                    <th scope="col">{t("routesConsoleUsers.personalMail")}</th>
+                    <th scope="col">{t("common.status")}</th>
                     <th scope="col" className="console-date-column">
-                      Last sign-in
+                      {t("routesConsoleUsers.lastSignIn")}
                     </th>
                     <th scope="col">
-                      <span className="console-sr-only">Actions</span>
+                      <span className="console-sr-only">{t("common.actions")}</span>
                     </th>
                   </tr>
                 </thead>
@@ -111,28 +122,32 @@ export function UsersPage() {
                       <td>
                         <span>
                           {user.mail?.email_address ??
-                            (user.mail?.mail_enabled ? "Address not set" : "Not enabled")}
+                            (user.mail?.mail_enabled
+                              ? t("routesConsoleUsers.addressNotSet")
+                              : t("routesConsoleUsers.notEnabled"))}
                         </span>
                         <small className="console-subtext">
                           {!user.mail?.mail_enabled
-                            ? "Mail not enabled"
+                            ? t("routesConsoleUsers.mailNotEnabled")
                             : user.mail?.mailbox
                               ? user.mail.mailbox.status === "active"
-                                ? "Mailbox ready"
+                                ? t("routesConsoleUsers.mailboxReady")
                                 : user.mail.mailbox.status === "provisioning"
-                                  ? "Preparing mailbox"
-                                  : "Mailbox disabled"
+                                  ? t("routesConsoleUsers.preparingMailbox")
+                                  : t("routesConsoleUsers.mailboxDisabled")
                               : user.mail?.mail_enabled
-                                ? "Set up from user details"
-                                : "No Mail role"}
+                                ? t("routesConsoleUsers.setUpFromUserDetails")
+                                : t("routesConsoleUsers.noMailRole")}
                         </small>
                       </td>
                       <td>
                         <span className="console-badge" data-muted={user.disabled_at !== null}>
-                          {user.disabled_at === null ? "Active" : "Disabled"}
+                          {user.disabled_at === null ? t("common.active") : t("common.disabled")}
                         </span>
                         {user.password_reset_required && (
-                          <small className="console-subtext">Password change required</small>
+                          <small className="console-subtext">
+                            {t("routesConsoleUsers.passwordChangeRequired")}
+                          </small>
                         )}
                       </td>
                       <td className="console-date-column">{adminDate(user.last_login_at)}</td>
@@ -142,9 +157,11 @@ export function UsersPage() {
                           render={<Link to={`/console/users/${encodeURIComponent(user.id)}`} />}
                           size="sm"
                           variant="ghost"
-                          aria-label={`Manage ${user.email_address}`}
+                          aria-label={t("routesConsoleUsers.manage", {
+                            email_address: user.email_address,
+                          })}
                         >
-                          Manage
+                          {t("routesConsoleUsers.manage2")}
                           <Icon name="chevron" width="12" height="12" />
                         </Button>
                       </td>
@@ -152,12 +169,16 @@ export function UsersPage() {
                   ))}
                 </tbody>
               </table>
-              {!resource.data.users.length && <p className="console-empty">No users found.</p>}
+              {!resource.data.users.length && (
+                <p className="console-empty">{t("routesConsoleUsers.noUsersFound")}</p>
+              )}
             </div>
             <div className="console-pagination">
               <span>
-                Page {cursors.length} · {resource.data.users.length}{" "}
-                {resource.data.users.length === 1 ? "user" : "users"}
+                {t("routesConsoleUsers.page", {
+                  page: cursors.length,
+                  users: plural("counts.users", resource.data.users.length),
+                })}
               </span>
               <div>
                 <Button
@@ -165,7 +186,7 @@ export function UsersPage() {
                   disabled={cursors.length === 1}
                   onClick={() => setCursors((current) => current.slice(0, -1))}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <Button
                   size="sm"
@@ -175,7 +196,7 @@ export function UsersPage() {
                       setCursors((current) => [...current, resource.data!.next_cursor]);
                   }}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             </div>
@@ -248,7 +269,10 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
     }
   }, [user]);
 
-  async function patch(changes: object, message = "The user account has been updated.") {
+  async function patch(
+    changes: object,
+    message = t("routesConsoleUsers.theUserAccountHasBeenUpdated"),
+  ) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
@@ -278,7 +302,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
     setError("");
     try {
       if ([...name.trim()].length > 200)
-        throw new Error("Display name must contain at most 200 characters.");
+        throw new Error(t("routesConsoleUsers.displayNameMustContainAtMost200Characters"));
       if (creating) {
         validatePassword(password, password);
         inFlight.current = true;
@@ -307,7 +331,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
             },
           });
           setPassword("");
-          notify.success("The user account has been created.");
+          notify.success(t("routesConsoleUsers.theUserAccountHasBeenCreated"));
           if (access.permissions.includes("admin.users.read"))
             navigate(`/console/users/${encodeURIComponent(result.user.id)}`);
           else {
@@ -327,7 +351,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
           account.user?.id,
         );
         if (!Object.keys(changes).length) {
-          notify.info("No changes to save.");
+          notify.info(t("routesConsoleUsers.noChangesToSave"));
           return;
         }
         if (changesEndSessions(changes)) setPending(changes);
@@ -344,36 +368,42 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
   return (
     <section className="account-page console-page console-detail-page">
       <Link to="/console/users" className="console-back">
-        ← Users
+        {t("routesConsoleUsers.users2")}
       </Link>
       <header className="account-page-header">
         <h1>
-          {creating ? "New user" : user?.display_name || user?.email_address || "User account"}
+          {creating
+            ? t("routesConsoleUsers.newUser")
+            : user?.display_name || user?.email_address || t("routesConsoleUsers.userAccount")}
         </h1>
         <p>
           {creating
-            ? "Create a person with their workspace address and personal mail together."
-            : "Manage personal mail, account information and workspace access."}
+            ? t("routesConsoleUsers.createAPersonWithTheirWorkspaceAddressAndPersonal")
+            : t("routesConsoleUsers.managePersonalMailAccountInformationAndWorkspaceAccess")}
         </p>
       </header>
       {!creating && !user ? (
-        <ResourceState {...resource} kind="form" label="Loading user…" />
+        <ResourceState {...resource} kind="form" label={t("routesConsoleUsers.loadingUser")} />
       ) : (
         <>
           {!creating && user && <UserMailPanel user={user} />}
           <Form onSubmit={submit} aria-busy={busy}>
             <section className="account-panel">
               <div className="account-panel-header">
-                <h2>{creating ? "User details" : "Account information"}</h2>
+                <h2>
+                  {creating
+                    ? t("routesConsoleUsers.userDetails")
+                    : t("routesConsoleUsers.accountInformation")}
+                </h2>
                 <p>
                   {creating
-                    ? "The user should change their temporary password when they first sign in."
-                    : "Account security changes end the user's active sessions."}
+                    ? t("routesConsoleUsers.theUserShouldChangeTheirTemporaryPasswordWhenThey")
+                    : t("routesConsoleUsers.accountSecurityChangesEndTheUserSActiveSessions")}
                 </p>
               </div>
               <Fieldset.Root disabled={busy}>
                 <TextField
-                  label="Display name"
+                  label={t("routesConsoleUsers.displayName")}
                   name="display_name"
                   autoComplete="off"
                   value={name}
@@ -390,17 +420,16 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
                       onDomainChange={setMailDomain}
                     />
                     <p className="console-subtext">
-                      This is their sign-in email and primary mail address. Their personal mailbox
-                      is ready after creation.
+                      {t("routesConsoleUsers.thisIsTheirSignInEmailAndPrimaryMail")}
                     </p>
                   </>
                 ) : (
                   <TextField
-                    label="Sign-in email"
+                    label={t("routesConsoleUsers.signInEmail")}
                     description={
                       creating
                         ? undefined
-                        : "Changing sign-in email does not change personal mail or aliases."
+                        : t("routesConsoleUsers.changingSignInEmailDoesNotChangePersonalMail")
                     }
                     name="email_address"
                     type="email"
@@ -423,23 +452,29 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
                   <>
                     <PasswordField
                       id="user-temporary-password"
-                      label="Temporary password"
+                      label={t("routesConsoleUsers.temporaryPassword")}
                       value={password}
                       onChange={setPassword}
                       autoComplete="new-password"
                     />
-                    <p className="console-subtext">Use 15–128 characters.</p>
+                    <p className="console-subtext">{t("routesConsoleUsers.use15128Characters")}</p>
                   </>
                 )}
                 <section className="console-role-summary console-account-security">
-                  <h3>Account security</h3>
+                  <h3>{t("routesConsoleUsers.accountSecurity")}</h3>
                   <div className="console-role-options">
                     <Check checked={disabled} onChange={setDisabled} disabled={!canDisable}>
-                      Disable this account
-                      {isSelf && <small>You cannot disable your own account.</small>}
+                      <LocalizedMessage
+                        id="routesConsoleUsers.disableThisAccount"
+                        values={{
+                          value1: isSelf && (
+                            <small>{t("routesConsoleUsers.youCannotDisableYourOwnAccount")}</small>
+                          ),
+                        }}
+                      />
                     </Check>
                     <Check checked={passwordReset} onChange={setPasswordReset} disabled={!canReset}>
-                      Require a password change at next sign-in
+                      {t("routesConsoleUsers.requireAPasswordChangeAtNextSignIn")}
                     </Check>
                   </div>
                 </section>
@@ -460,7 +495,7 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
                       disabled={busy}
                       onClick={() => navigate("/console/users")}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   )}
                   <Button
@@ -472,7 +507,11 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
                         (creationRoles === null || mailOptions.loading || !!mailOptions.error))
                     }
                   >
-                    {busy ? "Saving…" : creating ? "Create user" : "Save changes"}
+                    {busy
+                      ? t("common.saving")
+                      : creating
+                        ? t("routesConsoleUsers.createUser")
+                        : t("common.saveChanges")}
                   </Button>
                 </div>
               )}
@@ -483,19 +522,19 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
               {access.permissions.includes("admin.users.roles.read") && <UserRoles user={user} />}
               <section className="account-panel">
                 <div className="account-panel-header">
-                  <h2>Account activity</h2>
+                  <h2>{t("routesConsoleUsers.accountActivity")}</h2>
                 </div>
                 <dl className="console-facts">
                   <div>
-                    <dt>Created</dt>
+                    <dt>{t("routesConsoleUsers.created")}</dt>
                     <dd>{adminDate(user.created_at)}</dd>
                   </div>
                   <div>
-                    <dt>Last sign-in</dt>
+                    <dt>{t("routesConsoleUsers.lastSignIn")}</dt>
                     <dd>{adminDate(user.last_login_at)}</dd>
                   </div>
                   <div>
-                    <dt>Password changed</dt>
+                    <dt>{t("routesConsoleUsers.passwordChanged")}</dt>
                     <dd>{adminDate(user.password_changed_at)}</dd>
                   </div>
                 </dl>
@@ -503,22 +542,22 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
               {canReset && (
                 <section className="account-panel account-danger-panel">
                   <div>
-                    <h2>Reset password</h2>
-                    <p>Set a temporary password and require a change at the next sign-in.</p>
+                    <h2>{t("routesConsoleUsers.resetPassword")}</h2>
+                    <p>{t("routesConsoleUsers.setATemporaryPasswordAndRequireAChangeAt")}</p>
                   </div>
                   <Button disabled={busy} onClick={() => setReset(true)}>
-                    Reset password
+                    {t("routesConsoleUsers.resetPassword")}
                   </Button>
                 </section>
               )}
               {access.permissions.includes("admin.users.delete") && (
                 <section className="account-panel account-danger-panel">
                   <div>
-                    <h2>Delete account</h2>
-                    <p>Remove this user from the workspace and end all their sessions.</p>
+                    <h2>{t("routesConsoleUsers.deleteAccount")}</h2>
+                    <p>{t("routesConsoleUsers.removeThisUserFromTheWorkspaceAndEndAll")}</p>
                   </div>
                   <Button variant="danger" disabled={busy} onClick={() => setRemove(true)}>
-                    Delete user
+                    {t("routesConsoleUsers.deleteUser")}
                   </Button>
                 </section>
               )}
@@ -528,20 +567,22 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
                 onSave={async (next) => {
                   await patch(
                     { password: next, password_reset_required: true },
-                    "The user's password has been reset.",
+                    t("routesConsoleUsers.theUserSPasswordHasBeenReset"),
                   );
                 }}
               />
               <Confirm
                 open={remove}
                 destructive
-                title="Delete this user?"
-                description={`Delete ${user.email_address}? They will lose access to the workspace and all their sessions will end.`}
-                label="Delete user"
+                title={t("routesConsoleUsers.deleteThisUser")}
+                description={t("routesConsoleUsers.deleteTheyWillLoseAccessToTheWorkspaceAnd", {
+                  email_address: user.email_address,
+                })}
+                label={t("routesConsoleUsers.deleteUser")}
                 onClose={() => setRemove(false)}
                 onConfirm={async () => {
                   await api(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-                  notify.success("The user account has been deleted.");
+                  notify.success(t("routesConsoleUsers.theUserAccountHasBeenDeleted"));
                   if (id === account.user?.id) await sessions.restore(true);
                   navigate("/console/users");
                 }}
@@ -552,9 +593,11 @@ export function UserEditorPage({ creating = false }: { creating?: boolean }) {
       )}
       <Confirm
         open={pending !== null}
-        title="Update account security?"
-        description="Changing the email, account status or password-change requirement ends this user's current sessions. They will need to sign in again."
-        label="Save changes"
+        title={t("routesConsoleUsers.updateAccountSecurity")}
+        description={t(
+          "routesConsoleUsers.changingTheEmailAccountStatusOrPasswordChangeRequirement",
+        )}
+        label={t("common.saveChanges")}
         onClose={() => setPending(null)}
         onConfirm={async () => {
           if (pending) await patch(pending);
@@ -591,7 +634,9 @@ function ResetPassword({
     try {
       validatePassword(password, confirmation);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Check the password.");
+      setError(
+        failure instanceof Error ? failure.message : t("routesConsoleUsers.checkThePassword"),
+      );
       return;
     }
     running.current = true;
@@ -618,23 +663,22 @@ function ResetPassword({
       }}
     >
       <DialogPopup>
-        <Dialog.Title>Reset password</Dialog.Title>
+        <Dialog.Title>{t("routesConsoleUsers.resetPassword")}</Dialog.Title>
         <Dialog.Description>
-          Set a temporary password with 15–128 characters. This user will be signed out and must
-          change it at their next sign-in.
+          {t("routesConsoleUsers.setATemporaryPasswordWith15128CharactersThis")}
         </Dialog.Description>
         <Form className="account-dialog-form" onSubmit={submit}>
           <Fieldset.Root disabled={busy}>
             <PasswordField
               id="reset-user-password"
-              label="Temporary password"
+              label={t("routesConsoleUsers.temporaryPassword")}
               value={password}
               onChange={setPassword}
               autoComplete="new-password"
             />
             <PasswordField
               id="confirm-reset-user-password"
-              label="Confirm temporary password"
+              label={t("routesConsoleUsers.confirmTemporaryPassword")}
               value={confirmation}
               onChange={setConfirmation}
               autoComplete="new-password"
@@ -643,10 +687,10 @@ function ResetPassword({
           <Notice error={error} />
           <div className="account-actions">
             <Button type="button" disabled={busy} onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "Saving…" : "Reset password"}
+              {busy ? t("common.saving") : t("routesConsoleUsers.resetPassword")}
             </Button>
           </div>
         </Form>
@@ -697,13 +741,17 @@ function InitialRoles({
   }, [canReadRoles, onChange, onMailChange]);
   return (
     <details className="console-role-summary">
-      <summary>Workspace access and roles{error ? " · Unable to load" : ""}</summary>
+      <summary>
+        <LocalizedMessage
+          id="routesConsoleUsers.workspaceAccessAndRoles"
+          values={{ value1: error ? t("routesConsoleUsers.unableToLoad") : "" }}
+        />
+      </summary>
       <p className="console-subtext">
-        Default roles are selected automatically. A role with Mail access includes a personal
-        mailbox.
+        {t("routesConsoleUsers.defaultRolesAreSelectedAutomaticallyARoleWithMail")}
       </p>
       {loading ? (
-        <LoadingSkeleton label="Loading default roles…" />
+        <LoadingSkeleton label={t("routesConsoleUsers.loadingDefaultRoles")} />
       ) : error ? (
         <Notice error={error} />
       ) : (
@@ -737,7 +785,9 @@ function InitialRoles({
               >
                 <strong>
                   {role.label}
-                  {isDefault && <span className="console-badge">Default</span>}
+                  {isDefault && (
+                    <span className="console-badge">{t("routesConsoleUsers.default")}</span>
+                  )}
                 </strong>
                 <small>{role.description}</small>
               </Check>
@@ -745,7 +795,7 @@ function InitialRoles({
           })}
           {!roles.length && (
             <p className="console-subtext">
-              No default roles configured. This user will have access to their account settings.
+              {t("routesConsoleUsers.noDefaultRolesConfiguredThisUserWillHaveAccess")}
             </p>
           )}
         </div>
@@ -813,14 +863,12 @@ function UserRoles({ user }: { user: AdminUser }) {
   return (
     <section id="user-roles" className="account-panel">
       <div className="account-panel-header">
-        <h2>Workspace access</h2>
-        <p>
-          Role permissions are combined. Changes apply immediately. You can assign up to 50 roles.
-        </p>
+        <h2>{t("routesConsoleUsers.workspaceAccess")}</h2>
+        <p>{t("routesConsoleUsers.rolePermissionsAreCombinedChangesApplyImmediatelyYouCan")}</p>
       </div>
       <Notice error={error} />
       {loading ? (
-        <LoadingSkeleton label="Loading roles…" />
+        <LoadingSkeleton label={t("routesConsoleUsers.loadingRoles")} />
       ) : error ? null : (
         <>
           {editable ? (
@@ -843,13 +891,17 @@ function UserRoles({ user }: { user: AdminUser }) {
                     {role.description && <small>{role.description}</small>}
                     {!held && (
                       <small>
-                        You cannot change this role because it contains permissions you do not hold.
+                        {t(
+                          "routesConsoleUsers.youCannotChangeThisRoleBecauseItContainsPermissions",
+                        )}
                       </small>
                     )}
                   </Check>
                 );
               })}
-              {!roles.length && <p className="console-empty">No roles available.</p>}
+              {!roles.length && (
+                <p className="console-empty">{t("routesConsoleUsers.noRolesAvailable")}</p>
+              )}
             </div>
           ) : (
             <ul className="console-assigned-roles">
@@ -859,23 +911,40 @@ function UserRoles({ user }: { user: AdminUser }) {
                   <span>{role.label}</span>
                 </li>
               ))}
-              {!assigned.length && <li>No roles assigned.</li>}
+              {!assigned.length && <li>{t("routesConsoleUsers.noRolesAssigned")}</li>}
             </ul>
           )}
           <div className="console-role-diff">
-            {!!added.length && <span>Add: {added.map((role) => role.label).join(", ")}</span>}
+            {!!added.length && (
+              <span>
+                <LocalizedMessage
+                  id="routesConsoleUsers.add"
+                  values={{ join: added.map((role) => role.label).join(", ") }}
+                />
+              </span>
+            )}
             {!!removed.length && (
-              <span>Remove: {removed.map((role) => role.label).join(", ")}</span>
+              <span>
+                <LocalizedMessage
+                  id="routesConsoleUsers.remove"
+                  values={{ join: removed.map((role) => role.label).join(", ") }}
+                />
+              </span>
             )}
           </div>
           <details className="console-role-summary">
-            <summary>Resulting access · {resulting.length} permissions</summary>
+            <summary>
+              <LocalizedMessage
+                id="routesConsoleUsers.resultingAccessPermissions"
+                values={{ length: resulting.length }}
+              />
+            </summary>
             <PermissionPicker selected={resulting} />
           </details>
           {editable && (
             <div className="account-actions">
               <Button variant="primary" disabled={!changed} onClick={() => setConfirm(true)}>
-                Save roles
+                {t("routesConsoleUsers.saveRoles")}
               </Button>
             </div>
           )}
@@ -883,33 +952,47 @@ function UserRoles({ user }: { user: AdminUser }) {
       )}
       <Confirm
         open={confirm}
-        title="Update assigned roles?"
+        title={t("routesConsoleUsers.updateAssignedRoles")}
         description={
           <span>
-            Update access for {user.email_address}?
-            {added.length > 0 && (
-              <span className="console-subtext">
-                Add: {added.map((role) => role.label).join(", ")}
-              </span>
-            )}
-            {removed.length > 0 && (
-              <span className="console-subtext">
-                Remove: {removed.map((role) => role.label).join(", ")}
-              </span>
-            )}
+            <LocalizedMessage
+              id="routesConsoleUsers.updateAccessFor"
+              values={{
+                email_address: user.email_address,
+                value2: added.length > 0 && (
+                  <span className="console-subtext">
+                    <LocalizedMessage
+                      id="routesConsoleUsers.add"
+                      values={{ join: added.map((role) => role.label).join(", ") }}
+                    />
+                  </span>
+                ),
+                value3: removed.length > 0 && (
+                  <span className="console-subtext">
+                    <LocalizedMessage
+                      id="routesConsoleUsers.remove"
+                      values={{ join: removed.map((role) => role.label).join(", ") }}
+                    />
+                  </span>
+                ),
+              }}
+            />
             <span className="console-subtext">
-              Result: {resulting.length} permissions. Changes take effect immediately.
+              <LocalizedMessage
+                id="routesConsoleUsers.resultPermissionsChangesTakeEffectImmediately"
+                values={{ length: resulting.length }}
+              />
             </span>
           </span>
         }
-        label="Save roles"
+        label={t("routesConsoleUsers.saveRoles")}
         onClose={() => setConfirm(false)}
         onConfirm={async () => {
           await api(`/api/users/${encodeURIComponent(user.id)}/roles`, {
             method: "PUT",
             body: { role_ids: selected, version },
           });
-          notify.success("Assigned roles have been updated.");
+          notify.success(t("routesConsoleUsers.assignedRolesHaveBeenUpdated"));
           access.refresh();
           window.dispatchEvent(new Event("officeflare:user-mail-changed"));
         }}

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Button, Dialog, DialogPopup, Icon, useNotifications } from "./ui";
 import { api } from "../lib/api";
@@ -117,21 +118,23 @@ export function DrivePreview({
             <div>
               <Dialog.Title>{item.name}</Dialog.Title>
               <Dialog.Description>
-                {fileKind(item).label} · {formatBytes(driveSize(item))}
+                {fileKind(item).label}
+                {t("componentsDrivePreview.text")}
+                {formatBytes(driveSize(item))}
               </Dialog.Description>
             </div>
           </div>
           <div>
             {onShare && (
-              <Button mobileIcon aria-label="Share" onClick={onShare}>
+              <Button mobileIcon aria-label={t("componentsDrivePreview.share")} onClick={onShare}>
                 <Icon name="users" />
-                <span>Share</span>
+                <span>{t("componentsDrivePreview.share")}</span>
               </Button>
             )}
             {canDownload && (
               <Button
                 mobileIcon
-                aria-label="Download"
+                aria-label={t("componentsDrivePreview.download")}
                 disabled={downloading}
                 onClick={() => {
                   setDownloading(true);
@@ -141,10 +144,18 @@ export function DrivePreview({
                 }}
               >
                 <Icon name="download" />
-                <span>{downloading ? "Downloading…" : "Download"}</span>
+                <span>
+                  {downloading
+                    ? t("componentsDrivePreview.downloading")
+                    : t("componentsDrivePreview.download")}
+                </span>
               </Button>
             )}
-            <DriveIconButton icon="close" label="Close preview" onClick={onClose} />
+            <DriveIconButton
+              icon="close"
+              label={t("componentsDrivePreview.closePreview")}
+              onClick={onClose}
+            />
           </div>
         </header>
         <div
@@ -153,7 +164,7 @@ export function DrivePreview({
           {loading ? (
             <div className="drive-state" role="status">
               <span className="drive-spinner" />
-              <p>Preparing preview…</p>
+              <p>{t("componentsDrivePreview.preparingPreview")}</p>
             </div>
           ) : error ? (
             <DriveNotice error={error} />
@@ -165,7 +176,7 @@ export function DrivePreview({
             <Suspense
               fallback={
                 <div className="drive-state" role="status">
-                  Preparing PDF preview…
+                  {t("componentsDrivePreview.preparingPdfPreview")}
                 </div>
               }
             >
@@ -174,13 +185,17 @@ export function DrivePreview({
           ) : (
             <div className="drive-state">
               <DriveFileIcon item={item} large />
-              <h2>{canDownload ? "No preview available" : "Preview and downloads disabled"}</h2>
+              <h2>
+                {canDownload
+                  ? t("componentsDrivePreview.noPreviewAvailable")
+                  : t("componentsDrivePreview.previewAndDownloadsDisabled")}
+              </h2>
               <p>
                 {!canDownload
-                  ? "The owner has shared file information only."
+                  ? t("componentsDrivePreview.theOwnerHasSharedFileInformationOnly")
                   : driveSize(item) > 20 * 1024 * 1024
-                    ? "This file is larger than the 20 MB preview limit."
-                    : "Download this file to open it on your device."}
+                    ? t("componentsDrivePreview.thisFileIsLargerThanThe20MbPreview")
+                    : t("componentsDrivePreview.downloadThisFileToOpenItOnYourDevice")}
               </p>
             </div>
           )}

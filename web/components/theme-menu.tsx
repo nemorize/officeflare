@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useSyncExternalStore } from "react";
 import { browserTheme } from "../lib/browser-theme";
 import { Icon, Menu } from "./ui";
@@ -10,16 +11,20 @@ export function ThemeMenu() {
   );
   return (
     <Menu.Group>
-      <Menu.GroupLabel>Appearance</Menu.GroupLabel>
+      <Menu.GroupLabel>{t("componentsThemeMenu.appearance")}</Menu.GroupLabel>
       <Menu.RadioGroup
-        aria-label="Appearance"
+        aria-label={t("componentsThemeMenu.appearance")}
         value={preference}
         onValueChange={browserTheme.setPreference}
       >
         {(["system", "light", "dark"] as const).map((value) => (
           <Menu.RadioItem key={value} value={value}>
             <Icon name={preference === value ? "check" : "circle"} />
-            {value === "system" ? "System" : value === "light" ? "Light" : "Dark"}
+            {value === "system"
+              ? t("componentsThemeMenu.system")
+              : value === "light"
+                ? t("componentsThemeMenu.light")
+                : t("componentsThemeMenu.dark")}
           </Menu.RadioItem>
         ))}
       </Menu.RadioGroup>

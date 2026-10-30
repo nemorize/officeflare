@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { body } from "../auth/input";
 import { digest, random } from "../auth/crypto";
@@ -58,7 +59,7 @@ sharing.put("/:itemId/permissions/:userId", async (c) => {
     id = itemId(c),
     item = await requireItem(c, id, "owner"),
     recipient = identifier(c.req.param("userId"), "user_id");
-  if (recipient === item.owner_user_id) fail(400, "The owner's access cannot be changed");
+  if (recipient === item.owner_user_id) fail(400, t("driveSharing.theOwnerSAccessCannotBeChanged"));
   const grantRole = role(data.role),
     expires = expiry(data.expires_at);
   const eligible = condition(
@@ -66,7 +67,7 @@ sharing.put("/:itemId/permissions/:userId", async (c) => {
     recipient,
   );
   if (!(await first(c.env, `SELECT 1 WHERE ${eligible.sql}`, ...eligible.args)))
-    fail(400, "Recipient must be an active Drive account");
+    fail(400, t("driveSharing.recipientMustBeAnActiveDriveAccount"));
   const recipients = [...(await audience(c, id)), recipient];
   await mutate(
     c,
@@ -98,8 +99,8 @@ sharing.put("/:itemId/permissions/:userId", async (c) => {
       kind: "permissions",
       notification: {
         type: "drive.shared",
-        title: "Drive access updated",
-        body: "A Drive file or folder was shared with your account.",
+        title: t("driveSharing.driveAccessUpdated"),
+        body: t("driveSharing.aDriveFileOrFolderWasSharedWithYour"),
         recipients: [recipient],
       },
     },
@@ -114,7 +115,7 @@ sharing.delete("/:itemId/permissions/:userId", async (c) => {
     item = await requireItem(c, id, "owner"),
     recipient = identifier(c.req.param("userId"), "user_id"),
     version = integer(Number(c.req.query("version")), "version", 1);
-  if (recipient === item.owner_user_id) fail(400, "The owner's access cannot be changed");
+  if (recipient === item.owner_user_id) fail(400, t("driveSharing.theOwnerSAccessCannotBeChanged"));
   const recipients = [...(await audience(c, id)), recipient];
   await mutate(
     c,
@@ -149,8 +150,8 @@ sharing.delete("/:itemId/permissions/:userId", async (c) => {
       kind: "permissions",
       notification: {
         type: "drive.shared",
-        title: "Drive access updated",
-        body: "Your access to a Drive file or folder changed.",
+        title: t("driveSharing.driveAccessUpdated"),
+        body: t("driveSharing.yourAccessToADriveFileOrFolderChanged"),
         recipients: [recipient],
       },
     },
@@ -179,12 +180,12 @@ sharing.post("/:itemId/links", async (c) => {
       ? null
       : text(data.password, "password", 128);
   if (password !== null && password.length < 8)
-    fail(400, "Link passwords need at least 8 characters");
+    fail(400, t("driveSharing.linkPasswordsNeedAtLeast8Characters"));
   const hash = password ? await hashPassword(password) : null,
     tokenHash = await digest(token);
   const policy = linkPolicy(!!hash, expires);
   if (!(await first(c.env, `SELECT 1 WHERE ${policy.sql}`, ...policy.args)))
-    fail(403, "Public link must satisfy the workspace password and expiry policy");
+    fail(403, t("driveSharing.publicLinkMustSatisfyTheWorkspacePasswordAndExpiry"));
   await mutate(
     c,
     [policy, itemCondition(c, id, expected(data), "owner")],
@@ -240,7 +241,7 @@ sharing.patch("/:itemId/links/:linkId", async (c) => {
     id = itemId(c),
     linkId = identifier(c.req.param("linkId"));
   await requireItem(c, id, "owner");
-  if (Object.keys(data).length < 2) fail(400, "No changes supplied");
+  if (Object.keys(data).length < 2) fail(400, t("driveSharing.noChangesSupplied"));
   const current = await first<{
     password_hash: string | null;
     expires_at: number | null;
@@ -251,7 +252,7 @@ sharing.patch("/:itemId/links/:linkId", async (c) => {
     linkId,
     id,
   );
-  if (!current) fail(404, "Share link not found");
+  if (!current) fail(404, t("driveSharing.shareLinkNotFound"));
   const policy =
     data.revoked === true
       ? condition("1")
@@ -261,7 +262,7 @@ sharing.patch("/:itemId/links/:linkId", async (c) => {
           current.created_at,
         );
   if (!(await first(c.env, `SELECT 1 WHERE ${policy.sql}`, ...policy.args)))
-    fail(403, "Public link must satisfy the workspace password and expiry policy");
+    fail(403, t("driveSharing.publicLinkMustSatisfyTheWorkspacePasswordAndExpiry"));
   const updates: string[] = [],
     args: (string | number | null)[] = [];
   if (data.expires_at !== undefined) {
@@ -273,14 +274,14 @@ sharing.patch("/:itemId/links/:linkId", async (c) => {
     args.push(+bool(data.allow_download, "allow_download"));
   }
   if (data.revoked !== undefined) {
-    if (!bool(data.revoked, "revoked")) fail(400, "Revoked links cannot be restored");
+    if (!bool(data.revoked, "revoked")) fail(400, t("driveSharing.revokedLinksCannotBeRestored"));
     updates.push("revoked_at=?");
     args.push(now());
   }
   if (data.password !== undefined) {
     const password = data.password === null ? null : text(data.password, "password", 128);
     if (password !== null && password.length < 8)
-      fail(400, "Link passwords need at least 8 characters");
+      fail(400, t("driveSharing.linkPasswordsNeedAtLeast8Characters"));
     updates.push("password_hash=?");
     args.push(password ? await hashPassword(password) : null);
   }

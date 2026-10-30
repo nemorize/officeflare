@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { and, count, eq, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
@@ -83,37 +84,38 @@ profile.get("/profile", async (c) => {
 
 function validate(field: Field, value: unknown) {
   if (value === null) {
-    if (field.required) invalid(`Required field: ${field.key}`);
+    if (field.required) invalid(t("routesProfile.requiredField", { key: field.key }));
     return;
   }
   switch (field.value_type) {
     case "text":
       if (typeof value !== "string" || value.length > 4096 || (field.required && !value.trim()))
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       break;
     case "number":
       if (typeof value !== "number" || !Number.isFinite(value))
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       break;
     case "boolean":
-      if (typeof value !== "boolean") invalid(`Invalid field: ${field.key}`);
+      if (typeof value !== "boolean") invalid(t("routesProfile.invalidField", { key: field.key }));
       break;
     case "date": {
       if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       const date = new Date(`${value}T00:00:00Z`);
       if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value)
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       break;
     }
     case "url": {
-      if (typeof value !== "string" || value.length > 2048) invalid(`Invalid field: ${field.key}`);
+      if (typeof value !== "string" || value.length > 2048)
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       try {
         const url = new URL(value);
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
-          invalid(`Invalid field: ${field.key}`);
+          invalid(t("routesProfile.invalidField", { key: field.key }));
       } catch {
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       }
       break;
     }
@@ -130,11 +132,11 @@ function validate(field: Field, value: unknown) {
           (item) => typeof item !== "string" || !options.some((option) => option.value === item),
         )
       )
-        invalid(`Invalid field: ${field.key}`);
+        invalid(t("routesProfile.invalidField", { key: field.key }));
       break;
     }
     default:
-      invalid(`Unsupported field: ${field.key}`);
+      invalid(t("routesProfile.unsupportedField", { key: field.key }));
   }
 }
 profile.patch("/profile", async (c) => {
@@ -147,21 +149,21 @@ profile.patch("/profile", async (c) => {
       !data.display_name.trim() ||
       [...data.display_name].length > 200)
   )
-    invalid("Invalid display_name");
+    invalid(t("routesProfile.invalidDisplayName"));
   if (
     data.fields !== undefined &&
     (!data.fields || typeof data.fields !== "object" || Array.isArray(data.fields))
   )
-    invalid("Invalid fields");
+    invalid(t("routesProfile.invalidFields"));
   const supplied = (data.fields ?? {}) as Record<string, unknown>;
   if (!Object.keys(data).length || Object.keys(supplied).length > 50) invalid();
   const definitions = await fields(c),
     changes: { field: Field; value: unknown }[] = [];
   for (const [key, value] of Object.entries(supplied)) {
     const field = definitions.find((definition) => definition.key === key);
-    if (!field) invalid(`Unknown profile field: ${key}`);
+    if (!field) invalid(t("routesProfile.unknownProfileField", { key: key }));
     if (field.editable_by !== "user")
-      throw new HTTPException(403, { message: "Field cannot be edited" });
+      throw new HTTPException(403, { message: t("routesProfile.fieldCannotBeEdited") });
     validate(field, value);
     changes.push({ field, value });
   }
@@ -175,7 +177,7 @@ profile.patch("/profile", async (c) => {
   )) {
     const change = changes.find((change) => change.field.id === field.id);
     const existing = current.find((value) => value.field_id === field.id);
-    if (!change && !existing) invalid(`Required field: ${field.key}`);
+    if (!change && !existing) invalid(t("routesProfile.requiredField", { key: field.key }));
     if (!change && existing) validate(field, JSON.parse(existing.value));
   }
   const operation = uuid(),
@@ -245,7 +247,7 @@ profile.patch("/profile", async (c) => {
     ),
   ]);
   if (result[0]!.meta.changes !== 1)
-    conflict("Account or profile policy changed; reload and retry");
+    conflict(t("routesProfile.accountOrProfilePolicyChangedReloadAndRetry"));
   const updated = await db.select().from(users).where(eq(users.id, user.id)).get();
   if (!updated) unauthorized();
   return c.json({ user: publicUser(updated) });

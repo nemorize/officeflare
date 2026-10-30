@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   Button,
@@ -75,7 +76,7 @@ export function CalendarScopeDialog({
   return (
     <CalendarModal
       title={title}
-      description="Choose which events in this series to change."
+      description={t("componentsCalendarEditor.chooseWhichEventsInThisSeriesToChange")}
       onClose={onClose}
       busy={busy}
       className="calendar-scope-modal"
@@ -83,17 +84,25 @@ export function CalendarScopeDialog({
       <RadioGroup
         value={scope}
         onValueChange={(value) => setScope(value as CalendarScope)}
-        aria-label="Repeating event scope"
+        aria-label={t("componentsCalendarEditor.repeatingEventScope")}
         className="calendar-scope-options"
       >
         {[
-          { value: "single", label: "This event", disabled: !allowSingle },
-          { value: "following", label: "This and following events", disabled: !allowFollowing },
-          { value: "all", label: "All events", disabled: false },
+          {
+            value: "single",
+            label: t("componentsCalendarEditor.thisEvent"),
+            disabled: !allowSingle,
+          },
+          {
+            value: "following",
+            label: t("componentsCalendarEditor.thisAndFollowingEvents"),
+            disabled: !allowFollowing,
+          },
+          { value: "all", label: t("componentsCalendarEditor.allEvents"), disabled: false },
         ].map((option) => (
           <label key={option.value} data-disabled={option.disabled || undefined}>
             <Radio.Root value={option.value} disabled={option.disabled}>
-              <Radio.Indicator>●</Radio.Indicator>
+              <Radio.Indicator>{t("componentsCalendarEditor.text")}</Radio.Indicator>
             </Radio.Root>
             <span>{option.label}</span>
           </label>
@@ -102,10 +111,10 @@ export function CalendarScopeDialog({
       <CalendarNotice error={error} />
       <div className="calendar-dialog-actions">
         <Button variant="ghost" onClick={onClose} disabled={busy}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button variant="primary" onClick={() => onConfirm(scope)} disabled={busy}>
-          Confirm
+          {t("componentsCalendarEditor.confirm")}
         </Button>
       </div>
     </CalendarModal>
@@ -129,9 +138,9 @@ export function CalendarTimeZoneField({
 }) {
   const id = useId();
   return (
-    <CalendarField label="Time zone">
+    <CalendarField label={t("componentsCalendarEditor.timeZone")}>
       <Input
-        aria-label="Time zone"
+        aria-label={t("componentsCalendarEditor.timeZone")}
         value={value}
         disabled={disabled}
         list={id}
@@ -162,7 +171,8 @@ function FindTime({
   const load = () =>
     action.run(async () => {
       const times = draftTimes(draft);
-      if (draft.allDay) throw new Error("Choose start and end times to find an available slot.");
+      if (draft.allDay)
+        throw new Error(t("componentsCalendarEditor.chooseStartAndEndTimesToFindAnAvailable"));
       const duration = Math.round(
         (Temporal.Instant.from(times.end.date_time!).epochMilliseconds -
           Temporal.Instant.from(times.start.date_time!).epochMilliseconds) /
@@ -187,7 +197,7 @@ function FindTime({
     });
   return (
     <section className="calendar-find-time">
-      <p>Find a time across calendars you can access.</p>
+      <p>{t("componentsCalendarEditor.findATimeAcrossCalendarsYouCanAccess")}</p>
       <div className="calendar-availability-calendars">
         {calendar.data?.calendars.map((cal) => (
           <label key={cal.id}>
@@ -210,7 +220,7 @@ function FindTime({
             setSlots(null);
           }}
         />
-        Within working hours
+        {t("componentsCalendarEditor.withinWorkingHours")}
       </label>
       <CalendarNotice error={action.error} />
       <Button
@@ -219,15 +229,14 @@ function FindTime({
           void load();
         }}
       >
-        {action.busy ? "Finding times…" : "Find available times"}
+        {action.busy
+          ? t("componentsCalendarEditor.findingTimes")
+          : t("componentsCalendarEditor.findAvailableTimes")}
       </Button>
       {slots && (
         <div className="calendar-available-slots">
           {!slots.length && (
-            <p>
-              No available times in the next seven days. Try other calendars or enter a time
-              manually.
-            </p>
+            <p>{t("componentsCalendarEditor.noAvailableTimesInTheNextSevenDaysTry")}</p>
           )}
           {slots.slice(0, visible).map((slot) => (
             <button type="button" key={slot.start} onClick={() => onChoose(slot.start, slot.end)}>
@@ -251,7 +260,7 @@ function FindTime({
           ))}
           {slots.length > visible && (
             <Button variant="text" onClick={() => setVisible((old) => old + 24)}>
-              Show more times
+              {t("componentsCalendarEditor.showMoreTimes")}
             </Button>
           )}
         </div>
@@ -297,7 +306,7 @@ export function CalendarEventEditor({
       return;
     try {
       if (event?.occurrence_key && instance.data!.event.version !== master.data!.event.version)
-        throw new Error("This event changed. Close and reopen it to load the latest version.");
+        throw new Error(t("componentsCalendarEditor.thisEventChangedCloseAndReopenItToLoad"));
       const source = event
         ? {
             ...(instance.data?.event ?? master.data!.event),
@@ -329,7 +338,11 @@ export function CalendarEventEditor({
       setInitial(value);
       initialized.current = true;
     } catch (error) {
-      action.setError(error instanceof Error ? error.message : "Unable to open this event.");
+      action.setError(
+        error instanceof Error
+          ? error.message
+          : t("componentsCalendarEditor.unableToOpenThisEvent"),
+      );
     }
   }, [master.data, instance.data, calendar.data, event, request]);
   const update = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) =>
@@ -371,7 +384,11 @@ export function CalendarEventEditor({
           ...(!event ? { headers: operation.current.headers(body) } : {}),
         });
         operation.current.complete();
-        notify.success(event ? "Event updated." : "Event created.");
+        notify.success(
+          event
+            ? t("componentsCalendarEditor.eventUpdated")
+            : t("componentsCalendarEditor.eventCreated"),
+        );
         onSaved();
       } catch (failure) {
         if (failure instanceof ApiError && failure.status < 500) operation.current.complete();
@@ -396,24 +413,28 @@ export function CalendarEventEditor({
           <div className="calendar-editor-heading">
             <span>
               <Icon name="calendar" />
-              {event ? "Edit event" : "New event"}
+              {event
+                ? t("componentsCalendarEditor.editEvent")
+                : t("componentsCalendarEditor.newEvent")}
             </span>
             <CalendarIconButton
               icon="close"
-              label="Close event editor"
+              label={t("componentsCalendarEditor.closeEventEditor")}
               disabled={action.busy}
               onClick={close}
             />
           </div>
           <Dialog.Title className="visually-hidden">
-            {event ? "Edit event" : "Create event"}
+            {event
+              ? t("componentsCalendarEditor.editEvent")
+              : t("componentsCalendarEditor.createEvent")}
           </Dialog.Title>
           <Dialog.Description className="visually-hidden">
-            Event dates, guests and details.
+            {t("componentsCalendarEditor.eventDatesGuestsAndDetails")}
           </Dialog.Description>
           {!draft ? (
             <div className="calendar-editor-loading">
-              <LoadingSkeleton kind="form" label="Loading event…" />
+              <LoadingSkeleton kind="form" label={t("componentsCalendarEditor.loadingEvent")} />
               <CalendarNotice error={master.error || instance.error || action.error} />
             </div>
           ) : (
@@ -434,8 +455,8 @@ export function CalendarEventEditor({
                 <Input
                   className="calendar-event-title-input"
                   variant="integrated"
-                  aria-label="Event title"
-                  placeholder="Add title"
+                  aria-label={t("componentsCalendarEditor.eventTitle")}
+                  placeholder={t("componentsCalendarEditor.addTitle")}
                   autoFocus
                   value={draft.title}
                   maxLength={1000}
@@ -448,10 +469,12 @@ export function CalendarEventEditor({
                 >
                   <Tabs.List
                     className="calendar-event-editor-tabs"
-                    aria-label="Event editor sections"
+                    aria-label={t("componentsCalendarEditor.eventEditorSections")}
                   >
-                    <Tabs.Tab value="details">Event details</Tabs.Tab>
-                    <Tabs.Tab value="find">Find a time</Tabs.Tab>
+                    <Tabs.Tab value="details">
+                      {t("componentsCalendarEditor.eventDetails")}
+                    </Tabs.Tab>
+                    <Tabs.Tab value="find">{t("componentsCalendarEditor.findATime")}</Tabs.Tab>
                   </Tabs.List>
                   <Tabs.Panel value="find">
                     <FindTime
@@ -484,7 +507,7 @@ export function CalendarEventEditor({
                         <div className="calendar-editor-time-fields">
                           <div className="calendar-date-time-pair">
                             <Input
-                              aria-label="Start date"
+                              aria-label={t("componentsCalendarEditor.startDate")}
                               type="date"
                               min="1970-01-01"
                               max="2100-12-31"
@@ -505,7 +528,7 @@ export function CalendarEventEditor({
                             />
                             {!draft.allDay && (
                               <Input
-                                aria-label="Start time"
+                                aria-label={t("componentsCalendarEditor.startTime")}
                                 type="time"
                                 required
                                 value={draft.startTime}
@@ -513,10 +536,12 @@ export function CalendarEventEditor({
                               />
                             )}
                           </div>
-                          <span className="calendar-time-divider">–</span>
+                          <span className="calendar-time-divider">
+                            {t("componentsCalendarEditor.text2")}
+                          </span>
                           <div className="calendar-date-time-pair">
                             <Input
-                              aria-label="End date"
+                              aria-label={t("componentsCalendarEditor.endDate")}
                               type="date"
                               min={draft.startDate}
                               max="2100-12-31"
@@ -526,7 +551,7 @@ export function CalendarEventEditor({
                             />
                             {!draft.allDay && (
                               <Input
-                                aria-label="End time"
+                                aria-label={t("componentsCalendarEditor.endTime")}
                                 type="time"
                                 required
                                 value={draft.endTime}
@@ -539,7 +564,7 @@ export function CalendarEventEditor({
                               checked={draft.allDay}
                               onCheckedChange={(value) => update("allDay", value)}
                             />
-                            All day
+                            {t("common.allDay")}
                           </label>
                         </div>
                       </div>
@@ -547,21 +572,28 @@ export function CalendarEventEditor({
                         <Icon name="refresh" />
                         <div>
                           <SelectControl
-                            aria-label="Repeat event"
+                            aria-label={t("componentsCalendarEditor.repeatEvent")}
                             value={draft.frequency}
                             onValueChange={(value) => update("frequency", value)}
                             options={[
-                              { value: "", label: "Does not repeat" },
-                              { value: "DAILY", label: "Daily" },
+                              { value: "", label: t("componentsCalendarEditor.doesNotRepeat") },
+                              { value: "DAILY", label: t("componentsCalendarEditor.daily") },
                               {
                                 value: "WEEKLY",
-                                label: `Weekly on ${dateLabel(validDate(draft.startDate) ?? calendar.date, { weekday: "long" })}`,
+                                label: t("componentsCalendarEditor.weeklyOn", {
+                                  dateLabel: dateLabel(
+                                    validDate(draft.startDate) ?? calendar.date,
+                                    { weekday: "long" },
+                                  ),
+                                }),
                               },
                               {
                                 value: "MONTHLY",
-                                label: `Monthly on day ${Number(draft.startDate.slice(-2))}`,
+                                label: t("componentsCalendarEditor.monthlyOnDay", {
+                                  Number: Number(draft.startDate.slice(-2)),
+                                }),
                               },
-                              { value: "YEARLY", label: "Yearly" },
+                              { value: "YEARLY", label: t("componentsCalendarEditor.yearly") },
                             ]}
                           />
                           {draft.frequency && (
@@ -570,14 +602,14 @@ export function CalendarEventEditor({
                               size="sm"
                               onClick={() => setCustomRepeat(!customRepeat)}
                             >
-                              Customize
+                              {t("componentsCalendarEditor.customize")}
                             </Button>
                           )}
                           {customRepeat && draft.frequency && (
                             <div className="calendar-repeat-settings">
-                              <CalendarField label="Repeat every">
+                              <CalendarField label={t("componentsCalendarEditor.repeatEvery")}>
                                 <Input
-                                  aria-label="Repeat interval"
+                                  aria-label={t("componentsCalendarEditor.repeatInterval")}
                                   type="number"
                                   min={1}
                                   max={365}
@@ -589,11 +621,21 @@ export function CalendarEventEditor({
                               </CalendarField>
                               {draft.frequency === "WEEKLY" && (
                                 <div className="calendar-repeat-weekdays">
-                                  {["MO", "TU", "WE", "TH", "FR", "SA", "SU"].map((day, index) => (
+                                  {[
+                                    { day: "MO", label: t("componentsCalendarEditor.monday") },
+                                    { day: "TU", label: t("componentsCalendarEditor.tuesday") },
+                                    { day: "WE", label: t("componentsCalendarEditor.wednesday") },
+                                    { day: "TH", label: t("componentsCalendarEditor.thursday") },
+                                    { day: "FR", label: t("componentsCalendarEditor.friday") },
+                                    { day: "SA", label: t("componentsCalendarEditor.saturday") },
+                                    { day: "SU", label: t("componentsCalendarEditor.sunday") },
+                                  ].map(({ day, label }) => (
                                     <button
                                       type="button"
                                       key={day}
-                                      aria-label={`Repeat on ${["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]}`}
+                                      aria-label={t("componentsCalendarEditor.repeatOn", {
+                                        index: label,
+                                      })}
                                       aria-pressed={draft.weekdays.includes(day)}
                                       onClick={() =>
                                         update(
@@ -609,23 +651,29 @@ export function CalendarEventEditor({
                                   ))}
                                 </div>
                               )}
-                              <CalendarField label="Ends">
+                              <CalendarField label={t("componentsCalendarEditor.ends")}>
                                 <SelectControl
-                                  aria-label="Repeat ends"
+                                  aria-label={t("componentsCalendarEditor.repeatEnds")}
                                   value={draft.ends}
                                   onValueChange={(value) =>
                                     update("ends", value as EventDraft["ends"])
                                   }
                                   options={[
-                                    { value: "never", label: "Never" },
-                                    { value: "until", label: "On a date" },
-                                    { value: "count", label: "After a number of events" },
+                                    { value: "never", label: t("common.never") },
+                                    {
+                                      value: "until",
+                                      label: t("componentsCalendarEditor.onADate"),
+                                    },
+                                    {
+                                      value: "count",
+                                      label: t("componentsCalendarEditor.afterANumberOfEvents"),
+                                    },
                                   ]}
                                 />
                               </CalendarField>
                               {draft.ends === "until" && (
                                 <Input
-                                  aria-label="Repeat until"
+                                  aria-label={t("componentsCalendarEditor.repeatUntil")}
                                   type="date"
                                   value={draft.until}
                                   min={draft.startDate}
@@ -635,7 +683,7 @@ export function CalendarEventEditor({
                               )}
                               {draft.ends === "count" && (
                                 <Input
-                                  aria-label="Number of occurrences"
+                                  aria-label={t("componentsCalendarEditor.numberOfOccurrences")}
                                   type="number"
                                   min={1}
                                   max={1000}
@@ -659,9 +707,13 @@ export function CalendarEventEditor({
                         <div className="calendar-editor-row">
                           <Icon name="users" />
                           <div className="calendar-editor-guests">
-                            <RecipientField label="Guests" value={guests} onChange={setGuests} />
+                            <RecipientField
+                              label={t("componentsCalendarEditor.guests")}
+                              value={guests}
+                              onChange={setGuests}
+                            />
                             <p className="calendar-field-hint">
-                              Add internal or external guests by email.
+                              {t("componentsCalendarEditor.addInternalOrExternalGuestsByEmail")}
                             </p>
                           </div>
                         </div>
@@ -669,8 +721,8 @@ export function CalendarEventEditor({
                       <div className="calendar-editor-row">
                         <Icon name="navigation" />
                         <Input
-                          aria-label="Location"
-                          placeholder="Add location"
+                          aria-label={t("componentsCalendarEditor.location")}
+                          placeholder={t("componentsCalendarEditor.addLocation")}
                           value={draft.location}
                           maxLength={1024}
                           onChange={(event) => update("location", event.target.value)}
@@ -679,8 +731,8 @@ export function CalendarEventEditor({
                       <div className="calendar-editor-row">
                         <Icon name="align" />
                         <Textarea
-                          aria-label="Description"
-                          placeholder="Add a description"
+                          aria-label={t("componentsCalendarEditor.description")}
+                          placeholder={t("componentsCalendarEditor.addADescription")}
                           rows={4}
                           value={draft.description}
                           maxLength={50000}
@@ -691,7 +743,7 @@ export function CalendarEventEditor({
                         <Icon name="calendar" />
                         <div className="calendar-editor-calendar-options">
                           <SelectControl
-                            aria-label="Calendar"
+                            aria-label={t("componentsCalendarEditor.calendar")}
                             value={draft.calendarId}
                             disabled={!!event}
                             onValueChange={(value) => update("calendarId", value)}
@@ -700,22 +752,25 @@ export function CalendarEventEditor({
                               .map((cal) => ({ value: cal.id, label: cal.name }))}
                           />
                           <SelectControl
-                            aria-label="Show as"
+                            aria-label={t("componentsCalendarEditor.showAs")}
                             value={draft.transparency}
                             onValueChange={(value) => update("transparency", value)}
                             options={[
-                              { value: "busy", label: "Busy" },
-                              { value: "free", label: "Free" },
+                              { value: "busy", label: t("componentsCalendarEditor.busy") },
+                              { value: "free", label: t("componentsCalendarEditor.free") },
                             ]}
                           />
                           <SelectControl
-                            aria-label="Event visibility"
+                            aria-label={t("componentsCalendarEditor.eventVisibility")}
                             value={draft.visibility}
                             onValueChange={(value) => update("visibility", value)}
                             options={[
-                              { value: "default", label: "Default visibility" },
-                              { value: "private", label: "Private" },
-                              { value: "public", label: "Public" },
+                              {
+                                value: "default",
+                                label: t("componentsCalendarEditor.defaultVisibility"),
+                              },
+                              { value: "private", label: t("componentsCalendarEditor.private") },
+                              { value: "public", label: t("componentsCalendarEditor.public") },
                             ]}
                           />
                         </div>
@@ -728,14 +783,16 @@ export function CalendarEventEditor({
               <div className="calendar-editor-footer">
                 <span>
                   {guests.trim()
-                    ? "Internal guests are notified. External email requires an available personal mailbox."
+                    ? t(
+                        "componentsCalendarEditor.internalGuestsAreNotifiedExternalEmailRequiresAnAvailable",
+                      )
                     : ""}
                 </span>
                 <Button variant="ghost" disabled={action.busy} onClick={close}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button variant="primary" type="submit" disabled={action.busy || !draft.calendarId}>
-                  {action.busy ? "Saving…" : "Save"}
+                  {action.busy ? t("common.saving") : t("common.save")}
                 </Button>
               </div>
             </form>
@@ -744,7 +801,7 @@ export function CalendarEventEditor({
       </Dialog.Root>
       {scope && (
         <CalendarScopeDialog
-          title="Edit repeating event"
+          title={t("componentsCalendarEditor.editRepeatingEvent")}
           allowSingle={!repeatChanged}
           onClose={() => setScope(false)}
           busy={action.busy}
@@ -756,14 +813,16 @@ export function CalendarEventEditor({
       )}
       {discard && (
         <CalendarModal
-          title="Discard changes?"
-          description="Your unsaved changes will be lost."
+          title={t("componentsCalendarEditor.discardChanges")}
+          description={t("componentsCalendarEditor.yourUnsavedChangesWillBeLost")}
           onClose={() => setDiscard(false)}
         >
           <div className="calendar-dialog-actions">
-            <Button onClick={() => setDiscard(false)}>Keep editing</Button>
+            <Button onClick={() => setDiscard(false)}>
+              {t("componentsCalendarEditor.keepEditing")}
+            </Button>
             <Button variant="danger" onClick={onClose}>
-              Discard
+              {t("componentsCalendarEditor.discard")}
             </Button>
           </div>
         </CalendarModal>

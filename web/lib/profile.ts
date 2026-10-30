@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 export type ProfileValue = string | number | boolean | string[] | null;
 export interface ProfileField {
   id: string;
@@ -26,11 +27,11 @@ export function profileChanges(definitions: ProfileField[], values: Record<strin
         (typeof value === "string" && !value.trim()) ||
         (Array.isArray(value) && !value.length))
     ) {
-      throw new Error(`${title} is required.`);
+      throw new Error(t("libProfile.isRequired", { title: title }));
     }
     if (field.value_type === "number" && value !== null) {
       value = Number(value);
-      if (!Number.isFinite(value)) throw new Error(`${title} must be a number.`);
+      if (!Number.isFinite(value)) throw new Error(t("libProfile.mustBeANumber", { title: title }));
     }
     fields[field.key] = value;
   }
@@ -40,9 +41,9 @@ export function profileChanges(definitions: ProfileField[], values: Record<strin
 export function validatePassword(password: string, confirmation: string) {
   const length = [...password].length;
   if (length < 15 || length > 128 || new TextEncoder().encode(password).length > 512) {
-    throw new Error("Your new password must contain 15–128 characters.");
+    throw new Error(t("libProfile.yourNewPasswordMustContain15128Characters"));
   }
-  if (password !== confirmation) throw new Error("The passwords do not match.");
+  if (password !== confirmation) throw new Error(t("libProfile.thePasswordsDoNotMatch"));
 }
 
 export const returnToWorkspace = (path: unknown) =>
@@ -73,6 +74,10 @@ export const returnToWorkspace = (path: unknown) =>
     "/drive/recent",
     "/drive/starred",
     "/drive/trash",
+    "/drive/settings",
+    "/drive/integrations",
+    "/drive/data",
+    "/drive/activity",
     "/profile",
     "/profile/security",
     "/profile/sessions",

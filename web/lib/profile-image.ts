@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 export const profilePhotoSize = 512;
 export const profilePhotoFileLimit = 10 * 1024 * 1024;
 export interface PhotoView {
@@ -14,7 +15,7 @@ export function photoCrop(
   y: number,
   size = profilePhotoSize,
 ) {
-  if (width <= 0 || height <= 0) throw new Error("The image has invalid dimensions.");
+  if (width <= 0 || height <= 0) throw new Error(t("libProfileImage.theImageHasInvalidDimensions"));
   const scale = Math.max(size / width, size / height) * Math.min(3, Math.max(1, zoom));
   const scaledWidth = width * scale,
     scaledHeight = height * scale;

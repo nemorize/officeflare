@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { body } from "../auth/input";
@@ -79,25 +80,25 @@ transferRoutes.post("/", requirePermission("admin.drive.ownership.transfer"), as
           "SELECT * FROM drive_items WHERE id=? AND purged_at IS NULL",
           identifier(data.item_id, "item_id"),
         );
-  if (data.item_id != null && !root) fail(404, "Drive item not found");
+  if (data.item_id != null && !root) fail(404, t("driveTransfers.driveItemNotFound"));
   const source = root?.owner_user_id ?? identifier(data.source_user_id, "source_user_id");
-  if (source === target) fail(400, "Choose a different destination account");
+  if (source === target) fail(400, t("driveTransfers.chooseADifferentDestinationAccount"));
   if (!(await first(c.env, "SELECT id FROM users WHERE id=?", source)))
-    fail(404, "Source account not found");
+    fail(404, t("driveTransfers.sourceAccountNotFound"));
   const eligible = condition(
     `EXISTS(SELECT 1 FROM users u WHERE u.id=? AND ${activeUser("u")} AND ${driveEnabled("u")}) AND NOT EXISTS(SELECT 1 FROM drive_accounts WHERE user_id=? AND status<>'active')`,
     target,
     target,
   );
   if (!(await first(c.env, `SELECT 1 WHERE ${eligible.sql}`, ...eligible.args)))
-    fail(400, "Destination must have active, writable Drive access");
+    fail(400, t("driveTransfers.destinationMustHaveActiveWritableDriveAccess"));
   const originalAccount = await first<{ version: number }>(
     c.env,
     "SELECT version FROM drive_accounts WHERE user_id=?",
     source,
   );
   if (integer(data.version, "version", 0) !== (root?.version ?? originalAccount?.version ?? 0))
-    fail(412, "Source changed. Reload and try again.");
+    fail(412, t("driveTransfers.sourceChangedReloadAndTryAgain"));
   const selection = `d.owner_user_id=? AND d.purged_at IS NULL${root ? ` AND d.id IN (${descendants("?")})` : ""}`,
     args = root ? [source, root.id] : [source];
   const totals = (await first<{ count: number; size: number }>(
@@ -105,7 +106,7 @@ transferRoutes.post("/", requirePermission("admin.drive.ownership.transfer"), as
     `SELECT COUNT(*) count,COALESCE(SUM((SELECT COALESCE(SUM(size),0) FROM drive_versions WHERE item_id=d.id)),0) size FROM drive_items d WHERE ${selection}`,
     ...args,
   ))!;
-  if (!totals.count) fail(400, "No items available for transfer");
+  if (!totals.count) fail(400, t("driveTransfers.noItemsAvailableForTransfer"));
   if (
     await first(
       c.env,
@@ -113,10 +114,7 @@ transferRoutes.post("/", requirePermission("admin.drive.ownership.transfer"), as
       source,
     )
   )
-    fail(
-      409,
-      "Finish or cancel the source account's unfinished uploads before transferring ownership",
-    );
+    fail(409, t("driveTransfers.finishOrCancelTheSourceAccountSUnfinishedUploads"));
   integer(totals.size, "transfer_size");
   const destination = (await first<{
     quota_bytes: number;
@@ -128,7 +126,7 @@ transferRoutes.post("/", requirePermission("admin.drive.ownership.transfer"), as
     target,
   ))!;
   if (destination.used_bytes + destination.reserved_bytes + totals.size > destination.quota_bytes)
-    fail(413, "Destination storage is insufficient");
+    fail(413, t("driveTransfers.destinationStorageIsInsufficient"));
   const job = uuid();
   const trash = root
     ? await first<{ trashed_at: number | null }>(
@@ -249,10 +247,11 @@ for (const action of ["retry", "cancel"] as const)
       const data = await body(c, ["version", "reason"]),
         id = identifier(c.req.param("jobId")),
         job = await first<TransferJob>(c.env, "SELECT * FROM drive_admin_jobs WHERE id=?", id);
-      if (!job) fail(404, "Transfer not found");
-      if (["completed", "cancelled"].includes(job.status)) fail(409, "Transfer already finished");
+      if (!job) fail(404, t("driveTransfers.transferNotFound"));
+      if (["completed", "cancelled"].includes(job.status))
+        fail(409, t("driveTransfers.transferAlreadyFinished"));
       if (action === "cancel" && job.processed_items > 0)
-        fail(409, "A partially completed transfer must be resumed to preserve folder ownership");
+        fail(409, t("driveTransfers.aPartiallyCompletedTransferMustBeResumedToPreserve"));
       await adminMutate(
         c,
         "admin.drive.ownership.transfer",
@@ -338,11 +337,15 @@ async function runChunk(env: DriveEnv, job: TransferJob): Promise<boolean> {
     job.target_user_id,
   );
   if (!(await first(env, `SELECT 1 WHERE ${authorized.sql}`, ...authorized.args))) {
-    await stop(env, job, "Transfer administrator no longer has the required permission");
+    await stop(env, job, t("driveTransfers.transferAdministratorNoLongerHasTheRequiredPermission"));
     return false;
   }
   if (!(await first(env, `SELECT 1 WHERE ${target.sql}`, ...target.args))) {
-    await stop(env, job, "Destination is unavailable or its storage limit is insufficient");
+    await stop(
+      env,
+      job,
+      t("driveTransfers.destinationIsUnavailableOrItsStorageLimitIsInsufficient"),
+    );
     return false;
   }
   const entries = await rows<{
@@ -356,7 +359,7 @@ async function runChunk(env: DriveEnv, job: TransferJob): Promise<boolean> {
     job.id,
   );
   if (!entries.length) {
-    await stop(env, job, "Folder hierarchy no longer matches the transfer snapshot");
+    await stop(env, job, t("driveTransfers.folderHierarchyNoLongerMatchesTheTransferSnapshot"));
     return false;
   }
   const size = entries.reduce((sum, entry) => sum + entry.size, 0),
@@ -367,7 +370,7 @@ async function runChunk(env: DriveEnv, job: TransferJob): Promise<boolean> {
     job.source_user_id,
   );
   if (!(await first(env, `SELECT 1 WHERE ${matches.sql}`, ...matches.args))) {
-    await stop(env, job, "A source item changed; resolve the ownership conflict before retrying");
+    await stop(env, job, t("driveTransfers.aSourceItemChangedResolveTheOwnershipConflictBefore"));
     return false;
   }
   const operation = uuid(),
@@ -472,8 +475,10 @@ async function runChunk(env: DriveEnv, job: TransferJob): Promise<boolean> {
       {
         source_key: `drive-transfer:${job.id}`,
         type: "drive.shared",
-        title: "Drive ownership transfer completed",
-        body: `${job.total_items} Drive items were transferred to the destination account. Public links were revoked.`,
+        title: t("driveTransfers.driveOwnershipTransferCompleted"),
+        body: t("driveTransfers.driveItemsWereTransferredToTheDestinationAccountPublic", {
+          total_items: job.total_items,
+        }),
         target_path: null,
         recipient_ids: [...new Set([job.source_user_id, job.target_user_id])],
       },
@@ -490,7 +495,11 @@ async function runChunk(env: DriveEnv, job: TransferJob): Promise<boolean> {
       job.id,
     );
     if (current?.version === job.version)
-      await stop(env, job, "Authorization, storage or the source snapshot changed during transfer");
+      await stop(
+        env,
+        job,
+        t("driveTransfers.authorizationStorageOrTheSourceSnapshotChangedDuringTransfer"),
+      );
     return false;
   }
   return !completed;
@@ -519,7 +528,7 @@ export async function recoverAdminTransfers(env: DriveEnv, id?: string) {
         await stop(
           env,
           current,
-          "Transfer could not continue. Review the source hierarchy and retry.",
+          t("driveTransfers.transferCouldNotContinueReviewTheSourceHierarchyAnd"),
         );
     }
   }

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Button,
@@ -27,11 +28,14 @@ import { MailOperation } from "../lib/mail-helpers";
 import { ApiError } from "../lib/api";
 
 const sharingRoles = [
-  { value: "free_busy", label: "See only free/busy" },
-  { value: "reader", label: "See event details" },
-  { value: "writer_without_private", label: "Edit public event details" },
-  { value: "writer", label: "Make changes to events" },
-  { value: "manager", label: "Make changes and manage sharing" },
+  { value: "free_busy", label: t("componentsCalendarSettings.seeOnlyFreeBusy") },
+  { value: "reader", label: t("componentsCalendarSettings.seeEventDetails") },
+  {
+    value: "writer_without_private",
+    label: t("componentsCalendarSettings.editPublicEventDetails"),
+  },
+  { value: "writer", label: t("componentsCalendarSettings.makeChangesToEvents") },
+  { value: "manager", label: t("componentsCalendarSettings.makeChangesAndManageSharing") },
 ];
 interface Grant {
   display_name?: string | null;
@@ -79,13 +83,13 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
       });
       setPerson(null);
       setQuery("");
-      notify.success("Calendar shared.");
+      notify.success(t("componentsCalendarSettings.calendarShared"));
       reload();
     });
   return (
     <div className="calendar-sharing-settings">
-      <h3>Share with specific people</h3>
-      <p>Choose who can see this calendar and make changes.</p>
+      <h3>{t("componentsCalendarSettings.shareWithSpecificPeople")}</h3>
+      <p>{t("componentsCalendarSettings.chooseWhoCanSeeThisCalendarAndMakeChanges")}</p>
       {grants.data?.acl.map((grant) => (
         <div className="calendar-grant" key={grant.id}>
           <span className="calendar-person-initial">
@@ -94,19 +98,19 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
           <div>
             <strong>
               {grant.scope_type === "organization"
-                ? "Everyone in the workspace"
+                ? t("componentsCalendarSettings.everyoneInTheWorkspace")
                 : grant.scope_type === "public"
-                  ? "Public calendar"
+                  ? t("componentsCalendarSettings.publicCalendar")
                   : grant.display_name || grant.email_address || grant.scope_key}
             </strong>
             <span>
               {grant.scope_type === "user"
-                ? (grant.email_address ?? "Workspace account")
+                ? (grant.email_address ?? t("componentsCalendarSettings.workspaceAccount"))
                 : grant.scope_type}
             </span>
           </div>
           <SelectControl
-            aria-label={`Access for ${grant.scope_key}`}
+            aria-label={t("componentsCalendarSettings.accessFor", { scope_key: grant.scope_key })}
             value={grant.role}
             options={
               ["organization", "public"].includes(grant.scope_type)
@@ -126,7 +130,7 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
           />
           <CalendarIconButton
             icon="close"
-            label={`Remove access for ${grant.scope_key}`}
+            label={t("componentsCalendarSettings.removeAccessFor", { scope_key: grant.scope_key })}
             disabled={action.busy}
             onClick={() => {
               void action.run(async () => {
@@ -142,8 +146,8 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
       {calendar.can("sharing.internal") && (
         <div className="calendar-add-access">
           <CalendarField
-            label="Add people"
-            placeholder="Search by name or email"
+            label={t("componentsCalendarSettings.addPeople")}
+            placeholder={t("componentsCalendarSettings.searchByNameOrEmail")}
             value={person?.email_address ?? query}
             onChange={(event) => {
               setPerson(null);
@@ -154,7 +158,7 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
           {!person && query.trim().length >= 2 && (
             <div className="calendar-people-results" aria-live="polite">
               {people.loading ? (
-                <p>Searching…</p>
+                <p>{t("componentsCalendarSettings.searching")}</p>
               ) : people.data?.people.length ? (
                 people.data.people.map((value) => (
                   <button type="button" key={value.id} onClick={() => setPerson(value)}>
@@ -168,13 +172,13 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
                   </button>
                 ))
               ) : (
-                <p>No matching accounts.</p>
+                <p>{t("componentsCalendarSettings.noMatchingAccounts")}</p>
               )}
             </div>
           )}
           <div className="calendar-add-access-actions">
             <SelectControl
-              aria-label="New person's permissions"
+              aria-label={t("componentsCalendarSettings.newPersonSPermissions")}
               value={role}
               options={sharingRoles}
               onValueChange={setRole}
@@ -186,7 +190,7 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
               }}
             >
               <Icon name="plus" />
-              Add
+              {t("componentsCalendarSettings.add")}
             </Button>
           </div>
         </div>
@@ -194,7 +198,7 @@ export function CalendarAccessSettings({ cal }: { cal: CalendarRecord }) {
       <CalendarNotice error={action.error || grants.error || people.error} />
       {calendar.can("sharing.external") && (
         <section className="calendar-access-links">
-          <h3>Share with a link</h3>
+          <h3>{t("componentsCalendarSettings.shareWithALink")}</h3>
           <CalendarShareLinks calendarId={cal.id} />
         </section>
       )}
@@ -222,11 +226,15 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
   if (id === "working-hours") return <CalendarWorkingHours onClose={onClose} />;
   return (
     <CalendarModal
-      title={id === "new" ? "Create a calendar" : (cal?.name ?? "Calendar")}
+      title={
+        id === "new"
+          ? t("componentsCalendarSettings.createACalendar")
+          : (cal?.name ?? t("componentsCalendarSettings.calendar"))
+      }
       description={
         id === "new"
-          ? "Keep a project, team or part of your day in its own calendar."
-          : "Calendar details, appearance and sharing."
+          ? t("componentsCalendarSettings.keepAProjectTeamOrPartOfYourDay")
+          : t("componentsCalendarSettings.calendarDetailsAppearanceAndSharing")
       }
       onClose={onClose}
       busy={action.busy}
@@ -236,13 +244,13 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
         <div
           className="calendar-editor-tabs"
           role="tablist"
-          aria-label="Calendar settings sections"
+          aria-label={t("componentsCalendarSettings.calendarSettingsSections")}
         >
           <button role="tab" aria-selected={tab === "general"} onClick={() => setTab("general")}>
-            General
+            {t("componentsCalendarSettings.general")}
           </button>
           <button role="tab" aria-selected={tab === "sharing"} onClick={() => setTab("sharing")}>
-            Sharing & access
+            {t("componentsCalendarSettings.sharingAccess")}
           </button>
         </div>
       )}
@@ -298,23 +306,27 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
                   });
               }
               calendar.refresh(true);
-              notify.success(id === "new" ? "Calendar created." : "Calendar settings saved.");
+              notify.success(
+                id === "new"
+                  ? t("componentsCalendarSettings.calendarCreated")
+                  : t("componentsCalendarSettings.calendarSettingsSaved"),
+              );
               onClose();
             });
           }}
         >
           <div className="calendar-settings-fields">
             <CalendarField
-              label="Name"
+              label={t("common.name")}
               required
               value={name}
               maxLength={255}
               disabled={!editable}
               onChange={(event) => setName(event.target.value)}
             />
-            <CalendarField label="Description">
+            <CalendarField label={t("componentsCalendarSettings.description")}>
               <Textarea
-                aria-label="Calendar description"
+                aria-label={t("componentsCalendarSettings.calendarDescription")}
                 rows={3}
                 value={description}
                 maxLength={10000}
@@ -324,7 +336,7 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
             </CalendarField>
             <CalendarTimeZoneField value={zone} disabled={!editable} onChange={setZone} />
             {cal && (
-              <CalendarField label="Color">
+              <CalendarField label={t("componentsCalendarSettings.color")}>
                 <div className="calendar-color-options">
                   {calendarColors.map((option) => (
                     <button
@@ -345,10 +357,14 @@ export function CalendarSettingsDialog({ id, onClose }: { id: string; onClose: (
           <CalendarNotice error={action.error} />
           <div className="calendar-dialog-actions">
             <Button variant="ghost" onClick={onClose} disabled={action.busy}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={action.busy || !name.trim()}>
-              {action.busy ? "Saving…" : id === "new" ? "Create calendar" : "Save"}
+              {action.busy
+                ? t("common.saving")
+                : id === "new"
+                  ? t("componentsCalendarSettings.createCalendar")
+                  : t("common.save")}
             </Button>
           </div>
         </form>

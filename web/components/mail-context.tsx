@@ -1,3 +1,4 @@
+import { t, plural } from "../../shared/i18n/index.ts";
 import { inboxUnread } from "../../src/mail/ui-query";
 import {
   createContext,
@@ -77,7 +78,7 @@ export const useMailMenu = () => useContext(MenuContext)!;
 const MailContext = createContext<MailContextValue | null>(null);
 export function useMail() {
   const context = useContext(MailContext);
-  if (!context) throw new Error("Mail context is unavailable");
+  if (!context) throw new Error(t("componentsMailContext.mailContextIsUnavailable"));
   return context;
 }
 export function MailProvider({ children }: { children: ReactNode }) {
@@ -108,8 +109,12 @@ export function MailProvider({ children }: { children: ReactNode }) {
     } | null>(null),
     [noticeBusy, setNoticeBusy] = useState(false);
   const feedback = useCallback(
-    (text: string, action?: () => Promise<void>, label = "Undo", timeout = 8000) =>
-      setNotice({ text, action, label, expires: Date.now() + timeout }),
+    (
+      text: string,
+      action?: () => Promise<void>,
+      label = t("componentsMailContext.undo"),
+      timeout = 8000,
+    ) => setNotice({ text, action, label, expires: Date.now() + timeout }),
     [],
   );
   useEffect(() => {
@@ -177,7 +182,11 @@ export function MailProvider({ children }: { children: ReactNode }) {
         cache.replace("/api/mail/preferences", result);
       } catch (failure) {
         prefs.reload();
-        feedback(failure instanceof Error ? failure.message : "Settings could not be saved.");
+        feedback(
+          failure instanceof Error
+            ? failure.message
+            : t("componentsMailContext.settingsCouldNotBeSaved"),
+        );
       }
     },
     [cache, preferences, prefs.reload, feedback],
@@ -482,12 +491,12 @@ export function MailProvider({ children }: { children: ReactNode }) {
         ...folder,
         name: folder.system_key
           ? ({
-              inbox: "Inbox",
-              sent: "Sent",
-              drafts: "Drafts",
-              archive: "Archive",
-              spam: "Spam",
-              trash: "Trash",
+              inbox: t("componentsMailContext.inbox"),
+              sent: t("componentsMailContext.sent"),
+              drafts: t("componentsMailContext.drafts"),
+              archive: t("componentsMailContext.archive"),
+              spam: t("componentsMailContext.spam"),
+              trash: t("componentsMailContext.trash"),
             }[folder.system_key] ?? folder.name)
           : folder.name,
       })),
@@ -509,7 +518,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
         caps.error ||
         folders.error ||
         (requested && boxes.data && !box
-          ? "This mailbox is unavailable. Choose another mailbox."
+          ? t("componentsMailContext.thisMailboxIsUnavailableChooseAnotherMailbox")
           : ""),
       revision,
       preferences,
@@ -534,7 +543,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
           composerRef.current &&
           (composerRef.current.id !== id || composerRef.current.box !== box.id)
         ) {
-          feedback("Close your current draft before opening another.");
+          feedback(t("componentsMailContext.closeYourCurrentDraftBeforeOpeningAnother"));
           return;
         }
         if (composerRef.current) window.dispatchEvent(new Event("officeflare:focus-composer"));
@@ -605,20 +614,22 @@ export function MailProvider({ children }: { children: ReactNode }) {
                       setNotice(null);
                     } catch (error) {
                       feedback(
-                        error instanceof Error ? error.message : "Unable to undo this action.",
+                        error instanceof Error
+                          ? error.message
+                          : t("componentsMailContext.unableToUndoThisAction"),
                       );
                     } finally {
                       setNoticeBusy(false);
                     }
                   }}
                 >
-                  {noticeBusy ? "Working…" : notice.label}
+                  {noticeBusy ? t("componentsMailContext.working") : notice.label}
                 </Button>
               )}
               <Button
                 variant="inverse"
                 size="icon"
-                aria-label="Dismiss message"
+                aria-label={t("componentsMailContext.dismissMessage")}
                 onClick={() => setNotice(null)}
               >
                 <Icon name="close" />
@@ -631,15 +642,15 @@ export function MailProvider({ children }: { children: ReactNode }) {
   );
 }
 const links = [
-  ["/mail", "Inbox", "inbox"],
-  ["/mail/starred", "Starred", "star"],
-  ["/mail/snoozed", "Snoozed", "clock"],
-  ["/mail/sent", "Sent", "arrow"],
-  ["/mail/drafts", "Drafts", "file"],
-  ["/mail/scheduled", "Outbox", "clock"],
-  ["/mail/archive", "Archive", "archive"],
-  ["/mail/spam", "Spam", "shield"],
-  ["/mail/trash", "Trash", "trash"],
+  ["/mail", t("componentsMailContext.inbox"), "inbox"],
+  ["/mail/starred", t("componentsMailContext.starred"), "star"],
+  ["/mail/snoozed", t("componentsMailContext.snoozed"), "clock"],
+  ["/mail/sent", t("componentsMailContext.sent"), "arrow"],
+  ["/mail/drafts", t("componentsMailContext.drafts"), "file"],
+  ["/mail/scheduled", t("componentsMailContext.outbox"), "clock"],
+  ["/mail/archive", t("componentsMailContext.archive"), "archive"],
+  ["/mail/spam", t("componentsMailContext.spam"), "shield"],
+  ["/mail/trash", t("componentsMailContext.trash"), "trash"],
 ] as const;
 export function MailSidebar() {
   const mail = useMail(),
@@ -649,10 +660,10 @@ export function MailSidebar() {
     extraId = useId(),
     custom = mail.folders.filter((folder) => !folder.system_key);
   const extra = [
-    ["/mail/all", "All mail", "mail"],
-    ["/mail/archive", "Archive", "archive"],
-    ["/mail/spam", "Spam", "shield"],
-    ["/mail/trash", "Trash", "trash"],
+    ["/mail/all", t("componentsMailContext.allMail"), "mail"],
+    ["/mail/archive", t("componentsMailContext.archive"), "archive"],
+    ["/mail/spam", t("componentsMailContext.spam"), "shield"],
+    ["/mail/trash", t("componentsMailContext.trash"), "trash"],
   ] as const;
   const extraActive = extra.some(([path]) => path === location.pathname);
   const [more, setMore] = useState(extraActive);
@@ -678,7 +689,12 @@ export function MailSidebar() {
         <Icon name={icon} />
         <span>{name}</span>
         {!!count(path) && (
-          <small aria-label={`${count(path)} ${path === "/mail/drafts" ? "drafts" : "messages"}`}>
+          <small
+            aria-label={plural(
+              path === "/mail/drafts" ? "counts.drafts" : "counts.messages",
+              count(path) ?? 0,
+            )}
+          >
             {count(path)}
           </small>
         )}
@@ -688,13 +704,15 @@ export function MailSidebar() {
     <div className="mail-sidebar-content">
       <div className="workspace-create-action mail-sidebar-actions">
         {mail.boxes.length > 1 && (
-          <MailField className="mail-box-picker" label="Mailbox">
+          <MailField className="mail-box-picker" label={t("componentsMailContext.mailbox2")}>
             <MailSelect
-              aria-label="Select mailbox"
+              aria-label={t("componentsMailContext.selectMailbox")}
               value={mail.box?.id ?? ""}
               onValueChange={mail.selectBox}
               options={[
-                ...(!mail.box ? [{ value: "", label: "Choose a mailbox" }] : []),
+                ...(!mail.box
+                  ? [{ value: "", label: t("componentsMailContext.chooseAMailbox") }]
+                  : []),
                 ...mail.boxes.map((box) => ({ value: box.id, label: box.name })),
               ]}
             />
@@ -711,10 +729,10 @@ export function MailSidebar() {
           }}
         >
           <Icon name="plus" />
-          Compose
+          {t("componentsMailContext.compose")}
         </Button>
       </div>
-      <nav className="workspace-nav" aria-label="Mail navigation">
+      <nav className="workspace-nav" aria-label={t("componentsMailContext.mailNavigation")}>
         <div className="mail-nav-group">
           {nav(primary)}
           <Button
@@ -725,7 +743,7 @@ export function MailSidebar() {
             onClick={() => setMore(!more)}
           >
             <Icon name="down" style={{ transform: more ? "rotate(180deg)" : undefined }} />
-            <span>{more ? "Less" : "More"}</span>
+            <span>{more ? t("componentsMailContext.less") : t("componentsMailContext.more")}</span>
           </Button>
         </div>
         <div id={extraId} className="mail-nav-group" hidden={!more}>
@@ -733,7 +751,7 @@ export function MailSidebar() {
         </div>
         <div className="mail-nav-group mail-custom-folders">
           <div className="mail-folder-heading">
-            <h2>Folders</h2>
+            <h2>{t("componentsMailContext.folders")}</h2>
             {mail.box?.access?.write && <FolderManager />}
           </div>
           {custom.map((folder) => (
@@ -751,7 +769,9 @@ export function MailSidebar() {
           ))}
           {!mail.loading && !custom.length && (
             <p className="mail-folder-empty">
-              {mail.box?.access?.write ? "Create folders to organize mail." : "No custom folders."}
+              {mail.box?.access?.write
+                ? t("componentsMailContext.createFoldersToOrganizeMail")
+                : t("componentsMailContext.noCustomFolders")}
             </p>
           )}
         </div>
@@ -772,7 +792,7 @@ export function FolderManager() {
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Manage folders"
+        aria-label={t("componentsMailContext.manageFolders")}
         onClick={() => {
           setOpen(true);
           action.setError("");
@@ -782,8 +802,8 @@ export function FolderManager() {
       </Button>
       <MailModal
         open={open}
-        title="Mailbox folders"
-        description="Folders are shared by everyone with access to this mailbox."
+        title={t("componentsMailContext.mailboxFolders")}
+        description={t("componentsMailContext.foldersAreSharedByEveryoneWithAccessToThis")}
         busy={action.busy}
         onClose={() => setOpen(false)}
       >
@@ -803,7 +823,11 @@ export function FolderManager() {
           }}
         >
           <MailInput
-            label={editing ? "Rename folder" : "New folder"}
+            label={
+              editing
+                ? t("componentsMailContext.renameFolder")
+                : t("componentsMailContext.newFolder")
+            }
             value={name}
             maxLength={100}
             required
@@ -811,7 +835,7 @@ export function FolderManager() {
           />
           <div className="mail-actions">
             <Button type="submit" variant="primary" disabled={action.busy}>
-              {editing ? "Save name" : "Add folder"}
+              {editing ? t("componentsMailContext.saveName") : t("componentsMailContext.addFolder")}
             </Button>
             {editing && (
               <Button
@@ -820,7 +844,7 @@ export function FolderManager() {
                   setName("");
                 }}
               >
-                Cancel edit
+                {t("componentsMailContext.cancelEdit")}
               </Button>
             )}
           </div>
@@ -840,10 +864,10 @@ export function FolderManager() {
                       setName(folder.name);
                     }}
                   >
-                    Rename
+                    {t("componentsMailContext.rename")}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setDeleting(folder)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </div>
@@ -852,9 +876,9 @@ export function FolderManager() {
       </MailModal>
       <Confirm
         open={!!deleting}
-        title="Delete folder?"
-        description="Only empty custom folders can be deleted. Move the messages first."
-        label="Delete folder"
+        title={t("componentsMailContext.deleteFolder")}
+        description={t("componentsMailContext.onlyEmptyCustomFoldersCanBeDeletedMoveThe")}
+        label={t("componentsMailContext.deleteFolder2")}
         destructive
         onClose={() => setDeleting(null)}
         onConfirm={async () => {

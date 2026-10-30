@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { putStream } from "./objects";
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
@@ -27,7 +28,7 @@ export async function startImport(
 ) {
   await authorize(env, actor, mailboxId, "read");
   await authorize(env, actor, mailboxId, "write");
-  if (!["eml", "mbox"].includes(format)) fail(400, "Unsupported import format");
+  if (!["eml", "mbox"].includes(format)) fail(400, t("mailData.unsupportedImportFormat"));
   const jobId = id(),
     source = "imports/" + mailboxId + "/" + jobId + "/" + format;
   await putStream(env.MAIL_BUCKET, source, raw, {
@@ -91,10 +92,10 @@ export async function processDataJob(env: Env, mailboxId: string, jobId: string)
     }
     if (job.kind.startsWith("import")) {
       const source = await env.MAIL_BUCKET.get(job.source_r2_key!);
-      if (!source) fail(503, "Import source unavailable");
+      if (!source) fail(503, t("mailData.importSourceUnavailable"));
       const raw = new Uint8Array(await source.arrayBuffer());
       const messages = job.kind === "import_eml" ? [raw] : splitMbox(raw);
-      if (!messages.length) fail(400, "No messages in import");
+      if (!messages.length) fail(400, t("mailData.noMessagesInImport"));
       for (
         let index = job.progress;
         index < Math.min(messages.length, job.progress + 10);
@@ -175,7 +176,7 @@ export async function processDataJob(env: Env, mailboxId: string, jobId: string)
         const files = [];
         for (const file of details.attachments) {
           const source = await env.MAIL_BUCKET.get(file.r2_key);
-          if (!source) fail(503, "Backup attachment unavailable");
+          if (!source) fail(503, t("mailData.backupAttachmentUnavailable"));
           const key = prefix + "." + file.id + ".attachment";
           await env.MAIL_BUCKET.put(key, source.body, {
             httpMetadata: source.httpMetadata,
@@ -185,7 +186,7 @@ export async function processDataJob(env: Env, mailboxId: string, jobId: string)
         let original: string | null = null;
         if (details.raw_r2_key) {
           const source = await env.MAIL_BUCKET.get(details.raw_r2_key);
-          if (!source) fail(503, "Backup original unavailable");
+          if (!source) fail(503, t("mailData.backupOriginalUnavailable"));
           original = prefix + ".eml";
           await env.MAIL_BUCKET.put(original, source.body);
         }
@@ -202,7 +203,7 @@ export async function processDataJob(env: Env, mailboxId: string, jobId: string)
         let raw: Uint8Array;
         if (details.raw_r2_key) {
           const object = await env.MAIL_BUCKET.get(details.raw_r2_key);
-          if (!object) fail(503, "Export original unavailable");
+          if (!object) fail(503, t("mailData.exportOriginalUnavailable"));
           raw = new Uint8Array(await object.arrayBuffer());
         } else raw = new TextEncoder().encode(await renderMime(env, details, body));
         await env.MAIL_BUCKET.put(
@@ -234,7 +235,7 @@ export async function processDataJob(env: Env, mailboxId: string, jobId: string)
   } catch (error) {
     await coordinator.failDataJob(
       jobId,
-      error instanceof Error ? error.message : "Import/export failed",
+      error instanceof Error ? error.message : t("mailData.importExportFailed"),
     );
     throw error;
   }
@@ -306,7 +307,7 @@ export async function renderMime(
   ];
   for (const file of message.attachments) {
     const object = await env.MAIL_BUCKET.get(file.r2_key);
-    if (!object) fail(503, "Export attachment unavailable");
+    if (!object) fail(503, t("mailData.exportAttachmentUnavailable"));
     const bytes = new Uint8Array(await object.arrayBuffer());
     let binary = "";
     for (let n = 0; n < bytes.length; n += 8192)
@@ -348,7 +349,7 @@ export async function exportStream(env: Env, prefix: string) {
           }
           if (index < keys.length) {
             const object = await env.MAIL_BUCKET.get(keys[index++]!);
-            if (!object) throw new Error("Export piece unavailable");
+            if (!object) throw new Error(t("mailData.exportPieceUnavailable"));
             reader = object.body.getReader();
             continue;
           }
@@ -393,7 +394,7 @@ export async function startRestore(
     source.status !== "completed" ||
     JSON.parse(source.actor_json).user_id !== actor.user_id
   )
-    fail(403, "Backup is unavailable");
+    fail(403, t("mailData.backupIsUnavailable"));
   const jobId = id();
   await mailbox(env, targetMailbox).createDataJob({
     id: jobId,
@@ -433,7 +434,7 @@ async function restorePage(
   await authorize(env, actor, mailboxId, "write");
   if (cursor.restore_settings) await authorize(env, actor, mailboxId, "manage");
   const manifestObject = await env.MAIL_BUCKET.get(job.source_r2_key! + "manifest.json");
-  if (!manifestObject) fail(503, "Backup manifest unavailable");
+  if (!manifestObject) fail(503, t("mailData.backupManifestUnavailable"));
   const manifest = await manifestObject.json<{
     format: string;
     folders: { id: string; name: string; system_key: string | null }[];
@@ -442,7 +443,7 @@ async function restorePage(
     blocked_senders: { email_address: string }[];
     signature_images?: { id: string; key: string }[];
   }>();
-  if (manifest.format !== "officeflare-mail-v1") fail(400, "Unsupported backup format");
+  if (manifest.format !== "officeflare-mail-v1") fail(400, t("mailData.unsupportedBackupFormat"));
   if (!cursor.initialized) {
     cursor.folder_map = {};
     const currentFolders = await coordinator.folders();
@@ -458,9 +459,9 @@ async function restorePage(
         manifest.settings;
       for (const image of manifest.signature_images ?? []) {
         if (!/^[a-f0-9-]{36}$/.test(image.id) || image.key !== `signature-${image.id}.image`)
-          fail(400, "Invalid signature image in backup");
+          fail(400, t("mailData.invalidSignatureImageInBackup"));
         const object = await env.MAIL_BUCKET.get(job.source_r2_key! + image.key);
-        if (!object) fail(503, "Backup signature image unavailable");
+        if (!object) fail(503, t("mailData.backupSignatureImageUnavailable"));
         await env.MAIL_BUCKET.put(imageAssetKey(mailboxId, image.id), object.body, {
           httpMetadata: object.httpMetadata,
           customMetadata: object.customMetadata,
@@ -510,7 +511,7 @@ async function restorePage(
   let count = 0;
   for (const entry of page.objects.filter((o) => o.key.endsWith(".message.json"))) {
     const object = await env.MAIL_BUCKET.get(entry.key);
-    if (!object) fail(503, "Backup message unavailable");
+    if (!object) fail(503, t("mailData.backupMessageUnavailable"));
     const source = await object.json<
       MessageRow & {
         attachments: Attachment[];
@@ -544,7 +545,7 @@ async function restorePage(
           digest.slice(20, 32),
         ].join("-");
       const object = await env.MAIL_BUCKET.get(file.r2_key);
-      if (!object) fail(503, "Backup attachment unavailable");
+      if (!object) fail(503, t("mailData.backupAttachmentUnavailable"));
       const target = "attachments/" + mailboxId + "/" + targetId + "/" + fileId;
       await env.MAIL_BUCKET.put(target, object.body, {
         httpMetadata: object.httpMetadata,
@@ -554,7 +555,7 @@ async function restorePage(
     let original: string | null = null;
     if (source.raw_r2_key) {
       const object = await env.MAIL_BUCKET.get(source.raw_r2_key);
-      if (!object) fail(503, "Backup original unavailable");
+      if (!object) fail(503, t("mailData.backupOriginalUnavailable"));
       original = "originals/" + mailboxId + "/" + targetId + ".eml";
       await env.MAIL_BUCKET.put(original, object.body);
     }
@@ -623,7 +624,7 @@ async function backupManifest(env: Env, mailboxId: string, prefix: string, count
     const imageId = /^([a-f0-9-]{36})@officeflare\.image$/.exec(cid)?.[1];
     if (!imageId) continue;
     const object = await env.MAIL_BUCKET.get(imageAssetKey(mailboxId, imageId));
-    if (!object) fail(503, "Signature image unavailable during backup");
+    if (!object) fail(503, t("mailData.signatureImageUnavailableDuringBackup"));
     const key = `signature-${imageId}.image`;
     await env.MAIL_BUCKET.put(prefix + key, object.body, {
       httpMetadata: object.httpMetadata,
@@ -664,6 +665,6 @@ function splitMbox(raw: Uint8Array): Uint8Array[] {
     }
   }
   if (start < raw.length) ranges.push({ start, end: raw.length });
-  if (ranges.length > 10000) fail(413, "Import has too many messages; split the file");
+  if (ranges.length > 10000) fail(413, t("mailData.importHasTooManyMessagesSplitTheFile"));
   return ranges.map(({ start, end }) => unquoteMboxMessage(raw.subarray(start, end)));
 }

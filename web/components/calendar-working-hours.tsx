@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
 import { Button, CheckboxControl, Input, useNotifications } from "./ui";
 import {
@@ -42,13 +43,22 @@ function WorkingHoursResource({ onClose }: { onClose?: () => void }) {
     return <WorkingHoursForm hours={resource.data.working_hours} onClose={onClose} />;
   const state = (
     <>
-      {resource.loading && <LoadingSkeleton kind="form" label="Loading working hours…" />}
+      {resource.loading && (
+        <LoadingSkeleton
+          kind="form"
+          label={t("componentsCalendarWorkingHours.loadingWorkingHours")}
+        />
+      )}
       <CalendarNotice error={resource.error} />
-      {resource.error && <Button onClick={() => setRevision((old) => old + 1)}>Try again</Button>}
+      {resource.error && (
+        <Button onClick={() => setRevision((old) => old + 1)}>
+          {t("componentsCalendarWorkingHours.tryAgain")}
+        </Button>
+      )}
     </>
   );
   return onClose ? (
-    <CalendarModal title="Working hours" onClose={onClose}>
+    <CalendarModal title={t("componentsCalendarWorkingHours.workingHours")} onClose={onClose}>
       {state}
     </CalendarModal>
   ) : (
@@ -72,7 +82,10 @@ function RangeFields({
             <div className="calendar-working-range" key={at}>
               <Input
                 type="time"
-                aria-label={`${label} start ${at + 1}`}
+                aria-label={t("componentsCalendarWorkingHours.start", {
+                  label: label,
+                  value2: at + 1,
+                })}
                 required
                 value={range.start}
                 onChange={(event) =>
@@ -83,10 +96,13 @@ function RangeFields({
                   )
                 }
               />
-              <span>–</span>
+              <span>{t("componentsCalendarWorkingHours.text")}</span>
               <Input
                 type={range.end === "24:00" ? "text" : "time"}
-                aria-label={`${label} end ${at + 1}`}
+                aria-label={t("componentsCalendarWorkingHours.end", {
+                  label: label,
+                  value2: at + 1,
+                })}
                 required
                 value={range.end}
                 onChange={(event) =>
@@ -99,18 +115,23 @@ function RangeFields({
               />
               <CalendarIconButton
                 icon="close"
-                label={`Remove ${label} interval ${at + 1}`}
+                label={t("componentsCalendarWorkingHours.removeInterval", {
+                  label: label,
+                  value2: at + 1,
+                })}
                 onClick={() => onChange(values.filter((_, index) => index !== at))}
               />
             </div>
           ))
         ) : (
-          <span className="calendar-field-hint">Unavailable</span>
+          <span className="calendar-field-hint">
+            {t("componentsCalendarWorkingHours.unavailable")}
+          </span>
         )}
       </div>
       <CalendarIconButton
         icon="plus"
-        label={`Add ${label} interval`}
+        label={t("componentsCalendarWorkingHours.addInterval", { label: label })}
         disabled={values.length >= 10}
         onClick={() => onChange([...values, { start: "09:00", end: "18:00" }])}
       />
@@ -138,14 +159,14 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
     });
     setVersion(saved.working_hours.version);
     draft.replace(valuesFor(saved.working_hours));
-    notify.success("Working hours saved.");
+    notify.success(t("componentsCalendarWorkingHours.workingHoursSaved"));
     onClose?.();
   };
   const fields = (
     <>
       <SettingsSection
-        title="Weekly working hours"
-        description="Find a time uses these hours when the working-hours filter is enabled. They do not automatically block your calendar."
+        title={t("componentsCalendarWorkingHours.weeklyWorkingHours")}
+        description={t("componentsCalendarWorkingHours.findATimeUsesTheseHoursWhenTheWorking")}
       >
         <div className="calendar-working-time-zone">
           <CalendarTimeZoneField
@@ -154,33 +175,41 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
           />
         </div>
         <div className="calendar-working-days">
-          {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(
-            (label, index) => {
-              const day = String(index),
-                values = value.weekly[day] ?? [];
-              const change = (values: Range[]) =>
-                setValue((old) => ({ ...old, weekly: { ...old.weekly, [day]: values } }));
-              return (
-                <div className="calendar-working-day" key={day}>
-                  <label>
-                    <CheckboxControl
-                      checked={!!values.length}
-                      onCheckedChange={(checked) =>
-                        change(checked ? [{ start: "09:00", end: "18:00" }] : [])
-                      }
-                    />
-                    {label.slice(0, 3)}
-                  </label>
-                  <RangeFields label={label} values={values} onChange={change} />
-                </div>
-              );
-            },
-          )}
+          {[
+            t("componentsCalendarWorkingHours.sunday"),
+            t("componentsCalendarWorkingHours.monday"),
+            t("componentsCalendarWorkingHours.tuesday"),
+            t("componentsCalendarWorkingHours.wednesday"),
+            t("componentsCalendarWorkingHours.thursday"),
+            t("componentsCalendarWorkingHours.friday"),
+            t("componentsCalendarWorkingHours.saturday"),
+          ].map((label, index) => {
+            const day = String(index),
+              values = value.weekly[day] ?? [];
+            const change = (values: Range[]) =>
+              setValue((old) => ({ ...old, weekly: { ...old.weekly, [day]: values } }));
+            return (
+              <div className="calendar-working-day" key={day}>
+                <label>
+                  <CheckboxControl
+                    checked={!!values.length}
+                    onCheckedChange={(checked) =>
+                      change(checked ? [{ start: "09:00", end: "18:00" }] : [])
+                    }
+                  />
+                  {label.slice(0, 3)}
+                </label>
+                <RangeFields label={label} values={values} onChange={change} />
+              </div>
+            );
+          })}
         </div>
       </SettingsSection>
       <SettingsSection
-        title="Date exceptions"
-        description="Override your usual hours for a specific date. Leave the hours empty for a day off; remove the exception to use your weekly schedule again."
+        title={t("componentsCalendarWorkingHours.dateExceptions")}
+        description={t(
+          "componentsCalendarWorkingHours.overrideYourUsualHoursForASpecificDateLeave",
+        )}
       >
         {Object.entries(value.exceptions)
           .sort(([a], [b]) => a.localeCompare(b))
@@ -200,11 +229,15 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
                     }))
                   }
                 >
-                  Remove exception
+                  {t("componentsCalendarWorkingHours.removeException")}
                 </Button>
               </div>
               <div className="calendar-working-day">
-                <span>{values.length ? "Custom hours" : "Day off"}</span>
+                <span>
+                  {values.length
+                    ? t("componentsCalendarWorkingHours.customHours")
+                    : t("componentsCalendarWorkingHours.dayOff")}
+                </span>
                 <RangeFields
                   label={date}
                   values={values}
@@ -221,7 +254,7 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
         <div className="calendar-settings-add-date">
           <Input
             type="date"
-            aria-label="Exception date"
+            aria-label={t("componentsCalendarWorkingHours.exceptionDate")}
             min="1970-01-01"
             max="2100-12-31"
             value={exceptionDate}
@@ -234,11 +267,13 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
             disabled={!exceptionDate}
             onClick={() => {
               if (!validDate(exceptionDate)) {
-                setDateError("Choose a valid date between 1970 and 2100.");
+                setDateError(
+                  t("componentsCalendarWorkingHours.chooseAValidDateBetween1970And2100"),
+                );
                 return;
               }
               if (exceptionDate in value.exceptions) {
-                setDateError("This date already has an exception.");
+                setDateError(t("componentsCalendarWorkingHours.thisDateAlreadyHasAnException"));
                 return;
               }
               setValue((old) => ({
@@ -249,7 +284,7 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
               setDateError("");
             }}
           >
-            Add date
+            {t("componentsCalendarWorkingHours.addDate")}
           </Button>
         </div>
         <CalendarNotice error={dateError} />
@@ -264,7 +299,7 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
     );
   return (
     <CalendarModal
-      title="Working hours"
+      title={t("componentsCalendarWorkingHours.workingHours")}
       onClose={onClose}
       busy={action.busy}
       className="calendar-settings-modal"
@@ -279,10 +314,10 @@ function WorkingHoursForm({ hours, onClose }: { hours: Hours; onClose?: () => vo
         <CalendarNotice error={action.error} />
         <div className="calendar-dialog-actions">
           <Button variant="ghost" onClick={onClose} disabled={action.busy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" type="submit" disabled={!draft.dirty || action.busy}>
-            Save
+            {t("common.save")}
           </Button>
         </div>
       </form>

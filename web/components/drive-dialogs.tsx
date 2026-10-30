@@ -1,3 +1,6 @@
+import { enumLabel } from "../../shared/i18n/labels.ts";
+import { LocalizedMessage } from "./i18n";
+import { t, plural } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
 import {
   AlertDialog,
@@ -37,9 +40,9 @@ import { useAccount } from "./account-context";
 import { DriveOwnerPhotosProvider, DrivePersonAvatar } from "./drive-owner";
 
 export const roles = [
-  { value: "viewer", label: "Viewer" },
-  { value: "commenter", label: "Commenter" },
-  { value: "editor", label: "Editor" },
+  { value: "viewer", label: t("componentsDriveDialogs.viewer") },
+  { value: "commenter", label: t("componentsDriveDialogs.commenter") },
+  { value: "editor", label: t("componentsDriveDialogs.editor") },
 ];
 export async function freshItem(id: string, trash = false) {
   return (
@@ -53,8 +56,8 @@ export function DriveRenameDialog({ item, onClose }: { item: DriveItem; onClose:
     notify = useNotifications();
   return (
     <DriveModal
-      title="Rename"
-      description="Choose a name for this file or folder."
+      title={t("componentsDriveDialogs.rename")}
+      description={t("componentsDriveDialogs.chooseANameForThisFileOrFolder")}
       onClose={onClose}
       busy={action.busy}
     >
@@ -68,12 +71,12 @@ export function DriveRenameDialog({ item, onClose }: { item: DriveItem; onClose:
             });
             drive.refresh();
             onClose();
-            notify.success("Name updated.");
+            notify.success(t("componentsDriveDialogs.nameUpdated"));
           });
         }}
       >
         <DriveField
-          label="Name"
+          label={t("common.name")}
           autoFocus
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -83,10 +86,10 @@ export function DriveRenameDialog({ item, onClose }: { item: DriveItem; onClose:
         <DriveNotice error={action.error} />
         <div className="drive-modal-actions">
           <Button onClick={onClose} disabled={action.busy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" type="submit" disabled={action.busy || !name.trim()}>
-            {action.busy ? "Saving…" : "Save"}
+            {action.busy ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       </form>
@@ -107,7 +110,7 @@ export function DriveDestinationDialog({
     action = useDriveAction();
   const [trail, setTrail] = useState<DriveItem[]>([]),
     [view, setView] = useState("my"),
-    [name, setName] = useState(`Copy of ${items[0]!.name}`);
+    [name, setName] = useState(t("componentsDriveDialogs.copyOf", { name: items[0]!.name }));
   const parent = trail.at(-1),
     query = new URLSearchParams({
       view: parent ? "all" : view,
@@ -145,27 +148,34 @@ export function DriveDestinationDialog({
               parent_id: parent?.id ?? null,
               ...(copy
                 ? {
-                    name: items.length === 1 ? name.trim() : `Copy of ${item.name}`,
+                    name:
+                      items.length === 1
+                        ? name.trim()
+                        : t("componentsDriveDialogs.copyOf", { name: item.name }),
                   }
                 : {}),
             },
           });
           succeeded++;
         } catch (failure) {
-          failures.push(`${item.name}: ${failure instanceof Error ? failure.message : "Failed"}`);
+          failures.push(
+            `${item.name}: ${failure instanceof Error ? failure.message : t("componentsDriveDialogs.failed")}`,
+          );
         }
       drive.refresh();
-      if (succeeded)
-        notify.success(
-          `${succeeded} ${succeeded === 1 ? "item" : "items"} ${copy ? "copied" : "moved"}.`,
-        );
+      if (succeeded) notify.success(plural(copy ? "drive.copied" : "drive.moved", succeeded));
       if (failures.length) throw new Error(failures.join("\n"));
       onClose();
     });
   return (
     <DriveModal
-      title={copy ? "Make a copy" : "Move to"}
-      description={`${items.length === 1 ? items[0]!.name : `${items.length} selected items`} · Choose a destination folder.`}
+      title={copy ? t("componentsDriveDialogs.makeACopy") : t("componentsDriveDialogs.moveTo")}
+      description={t("componentsDriveDialogs.chooseADestinationFolder", {
+        value1:
+          items.length === 1
+            ? items[0]!.name
+            : t("componentsDriveDialogs.selectedItems", { length: items.length }),
+      })}
       onClose={onClose}
       busy={action.busy}
     >
@@ -177,20 +187,28 @@ export function DriveDestinationDialog({
           setTrail([]);
         }}
       >
-        <Tabs.List className="drive-picker-tabs" aria-label="Destination drive">
-          <Tabs.Tab value="my">My drive</Tabs.Tab>
-          <Tabs.Tab value="shared">Shared folders</Tabs.Tab>
+        <Tabs.List
+          className="drive-picker-tabs"
+          aria-label={t("componentsDriveDialogs.destinationDrive")}
+        >
+          <Tabs.Tab value="my">{t("componentsDriveDialogs.myDrive")}</Tabs.Tab>
+          <Tabs.Tab value="shared">{t("componentsDriveDialogs.sharedFolders")}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value={view}>
           <div className="drive-picker-path">
             <DriveIconButton
               icon="back"
-              label="Parent folder"
+              label={t("componentsDriveDialogs.parentFolder")}
               disabled={!trail.length}
               onClick={() => setTrail((old) => old.slice(0, -1))}
             />
             <Icon name="folder" />
-            <strong>{parent?.name ?? (view === "my" ? "My drive" : "Shared with me")}</strong>
+            <strong>
+              {parent?.name ??
+                (view === "my"
+                  ? t("componentsDriveDialogs.myDrive")
+                  : t("componentsDriveDialogs.sharedWithMe"))}
+            </strong>
           </div>
           <div className="drive-folder-picker">
             <DriveState loading={folders.loading} error={folders.error} retry={folders.reload} />
@@ -211,7 +229,9 @@ export function DriveDestinationDialog({
             {!folders.loading &&
               !folders.error &&
               ![...(folders.data?.items ?? []), ...more].filter(eligible).length && (
-                <p className="drive-muted">No available subfolders. You can use this location.</p>
+                <p className="drive-muted">
+                  {t("componentsDriveDialogs.noAvailableSubfoldersYouCanUseThisLocation")}
+                </p>
               )}
             {cursor && (
               <Button
@@ -226,7 +246,7 @@ export function DriveDestinationDialog({
                   })
                 }
               >
-                Load more folders
+                {t("componentsDriveDialogs.loadMoreFolders")}
               </Button>
             )}
           </div>
@@ -234,7 +254,7 @@ export function DriveDestinationDialog({
       </Tabs.Root>
       {copy && items.length === 1 && (
         <DriveField
-          label="Copy name"
+          label={t("componentsDriveDialogs.copyName")}
           value={name}
           onChange={(event) => setName(event.target.value)}
           required
@@ -243,20 +263,26 @@ export function DriveDestinationDialog({
       )}
       {!allowed && (
         <p className="drive-muted">
-          Choose a folder you can edit{!copy && " under the same owner"}.
+          {t("componentsDriveDialogs.chooseAFolderYouCanEdit", {
+            value1: copy ? "" : t("componentsDriveDialogs.underTheSameOwner"),
+          })}
         </p>
       )}
       <DriveNotice error={action.error} />
       <div className="drive-modal-actions">
         <Button onClick={onClose} disabled={action.busy}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           variant="primary"
           onClick={submit}
           disabled={action.busy || !allowed || (copy && !name.trim())}
         >
-          {action.busy ? "Working…" : copy ? "Copy here" : "Move here"}
+          {action.busy
+            ? t("componentsDriveDialogs.working")
+            : copy
+              ? t("componentsDriveDialogs.copyHere")
+              : t("componentsDriveDialogs.moveHere")}
         </Button>
       </div>
     </DriveModal>
@@ -295,7 +321,7 @@ export function DriveConfirmDialog({
         <DriveNotice error={action.error} />
         <div className="drive-modal-actions">
           <Button disabled={action.busy} onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant={destructive ? "danger" : "primary"}
@@ -307,7 +333,7 @@ export function DriveConfirmDialog({
               })
             }
           >
-            {action.busy ? "Working…" : confirm}
+            {action.busy ? t("componentsDriveDialogs.working") : confirm}
           </Button>
         </div>
       </AlertDialogPopup>
@@ -343,26 +369,26 @@ function DrivePeoplePicker({
           </div>
           <DriveIconButton
             icon="close"
-            label="Remove selected account"
+            label={t("componentsDriveDialogs.removeSelectedAccount")}
             onClick={() => onSelect(null)}
           />
         </div>
       ) : (
         <>
           <DriveField
-            label="Add people"
-            placeholder="Search by name or email"
+            label={t("componentsDriveDialogs.addPeople")}
+            placeholder={t("componentsDriveDialogs.searchByNameOrEmail")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             autoComplete="off"
           />
           <div className="drive-people-results" aria-live="polite">
             {result.loading ? (
-              <p>Searching accounts…</p>
+              <p>{t("componentsDriveDialogs.searchingAccounts")}</p>
             ) : result.error ? (
               <DriveNotice error={result.error} />
             ) : result.data && !result.data.people.length ? (
-              <p>No matching Drive accounts.</p>
+              <p>{t("componentsDriveDialogs.noMatchingDriveAccounts")}</p>
             ) : (
               result.data?.people.map((person) => (
                 <Button
@@ -435,18 +461,18 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
   const storageKey = (id: string) => `officeflare.drive.link.${account.user?.id}.${id}`;
   const copyUrl = async (url: string) => {
     await navigator.clipboard.writeText(url);
-    notify.success("Link copied.");
+    notify.success(t("componentsDriveDialogs.linkCopied"));
   };
   const owner = item.owner?.id === account.user?.id ? (account.user ?? item.owner) : item.owner;
   return (
     <DriveOwnerPhotosProvider>
       <DriveModal
         wide
-        title={`Share “${item.name}”`}
+        title={t("componentsDriveDialogs.share", { name: item.name })}
         description={
           item.kind === "folder"
-            ? "Folder access also applies to files and subfolders inside it."
-            : "Choose who can access this file."
+            ? t("componentsDriveDialogs.folderAccessAlsoAppliesToFilesAndSubfoldersInside")
+            : t("componentsDriveDialogs.chooseWhoCanAccessThisFile")
         }
         onClose={onClose}
         busy={action.busy}
@@ -458,9 +484,12 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
             action.setError("");
           }}
         >
-          <Tabs.List className="drive-share-tabs" aria-label="Sharing options">
-            <Tabs.Tab value="people">People with access</Tabs.Tab>
-            <Tabs.Tab value="links">Public links</Tabs.Tab>
+          <Tabs.List
+            className="drive-share-tabs"
+            aria-label={t("componentsDriveDialogs.sharingOptions")}
+          >
+            <Tabs.Tab value="people">{t("componentsDriveDialogs.peopleWithAccess")}</Tabs.Tab>
+            <Tabs.Tab value="links">{t("componentsDriveDialogs.publicLinks")}</Tabs.Tab>
           </Tabs.List>
           <Tabs.Panel value="people">
             {item.actions?.internal_share !== false && (
@@ -468,15 +497,19 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
             )}
             {item.actions?.internal_share === false && (
               <p className="drive-muted">
-                Adding or changing internal access is restricted by your role or workspace policy.
-                You can still remove direct grants.
+                {t("componentsDriveDialogs.addingOrChangingInternalAccessIsRestrictedByYour")}
               </p>
             )}
             {person && (
               <div className="drive-invite-options">
-                <DriveSelect label="Access role" value={role} options={roles} onChange={setRole} />
+                <DriveSelect
+                  label={t("componentsDriveDialogs.accessRole")}
+                  value={role}
+                  options={roles}
+                  onChange={setRole}
+                />
                 <DriveField
-                  label="Access expires"
+                  label={t("componentsDriveDialogs.accessExpires")}
                   type="datetime-local"
                   value={expiry}
                   onChange={(event) => setExpiry(event.target.value)}
@@ -498,25 +531,25 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                           setPerson(null);
                           setExpiry("");
                         }),
-                      "Access granted.",
+                      t("componentsDriveDialogs.accessGranted"),
                     )
                   }
                 >
-                  Share
+                  {t("componentsDriveDialogs.share2")}
                 </Button>
               </div>
             )}
-            <h3 className="drive-section-label">People with access</h3>
+            <h3 className="drive-section-label">{t("componentsDriveDialogs.peopleWithAccess")}</h3>
             <div className="drive-access-person">
               <DrivePersonAvatar person={owner} />
               <div>
                 <strong>
-                  {owner?.display_name || owner?.email_address || "Owner"}
-                  {owner?.id === account.user?.id && " (you)"}
+                  {owner?.display_name || owner?.email_address || t("componentsDriveDialogs.owner")}
+                  {owner?.id === account.user?.id && t("componentsDriveDialogs.you")}
                 </strong>
                 <span>{owner?.email_address}</span>
               </div>
-              <span className="drive-muted">Owner</span>
+              <span className="drive-muted">{t("componentsDriveDialogs.owner")}</span>
             </div>
             <DriveState
               loading={permissions.loading && !permissions.data}
@@ -537,16 +570,32 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 <div>
                   <strong>{grant.display_name || grant.email_address}</strong>
                   <span>{grant.email_address}</span>
-                  {!!grant.inherited && <small>Inherited from {grant.source_name}</small>}
-                  {grant.expires_at && <small>Expires {driveDate(grant.expires_at, true)}</small>}
+                  {!!grant.inherited && (
+                    <small>
+                      <LocalizedMessage
+                        id="componentsDriveDialogs.inheritedFrom"
+                        values={{ source_name: grant.source_name }}
+                      />
+                    </small>
+                  )}
+                  {grant.expires_at && (
+                    <small>
+                      <LocalizedMessage
+                        id="componentsDriveDialogs.expires"
+                        values={{ driveDate: driveDate(grant.expires_at, true) }}
+                      />
+                    </small>
+                  )}
                 </div>
                 {grant.inherited ? (
-                  <span className="drive-role-label">{grant.role}</span>
+                  <span className="drive-role-label">{enumLabel(grant.role)}</span>
                 ) : (
                   <>
                     <DriveSelect
-                      label={`Role for ${grant.display_name || grant.email_address}`}
-                      value={grant.role}
+                      label={t("componentsDriveDialogs.roleFor", {
+                        value1: grant.display_name || grant.email_address,
+                      })}
+                      value={enumLabel(grant.role)}
                       options={roles}
                       disabled={action.busy || item.actions?.internal_share === false}
                       onChange={(next) =>
@@ -560,7 +609,7 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                                 expires_at: grant.expires_at,
                               },
                             }),
-                          "Access updated.",
+                          t("componentsDriveDialogs.accessUpdated"),
                         )
                       }
                     />
@@ -575,7 +624,7 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                               `/api/drive/items/${item.id}/permissions/${grant.user_id}?version=${current.version}`,
                               { method: "DELETE" },
                             ),
-                          "Access removed.",
+                          t("componentsDriveDialogs.accessRemoved"),
                         )
                       }
                       onTransfer={() =>
@@ -592,12 +641,16 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
             ))}
             {!!requests.data?.requests.length && (
               <>
-                <h3 className="drive-section-label">Access requests</h3>
+                <h3 className="drive-section-label">
+                  {t("componentsDriveDialogs.accessRequests")}
+                </h3>
                 {requests.data.requests.map((request) => (
                   <div className="drive-request" key={request.id}>
                     <strong>{request.display_name || request.email_address}</strong>
                     <span>
-                      {request.email_address} · {request.role}
+                      {request.email_address}
+                      {t("componentsDriveDialogs.text")}
+                      {enumLabel(request.role)}
                     </span>
                     {request.message && <p>{request.message}</p>}
                     <div>
@@ -614,11 +667,11 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                                   approved: false,
                                 },
                               }),
-                            "Request declined.",
+                            t("componentsDriveDialogs.requestDeclined"),
                           )
                         }
                       >
-                        Decline
+                        {t("componentsDriveDialogs.decline")}
                       </Button>
                       <Button
                         size="sm"
@@ -635,11 +688,11 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                                   role: request.role,
                                 },
                               }),
-                            "Request approved.",
+                            t("componentsDriveDialogs.requestApproved"),
                           )
                         }
                       >
-                        Approve
+                        {t("componentsDriveDialogs.approve")}
                       </Button>
                     </div>
                   </div>
@@ -649,7 +702,7 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
             <div className="drive-share-note">
               <Icon name="shield" />
               <span>
-                Access is restricted to these accounts. Public links are managed separately.
+                {t("componentsDriveDialogs.accessIsRestrictedToTheseAccountsPublicLinksAre")}
               </span>
             </div>
           </Tabs.Panel>
@@ -659,31 +712,36 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 <Icon name="link" width="24" height="24" />
               </span>
               <div>
-                <h3>Share outside your workspace</h3>
+                <h3>{t("componentsDriveDialogs.shareOutsideYourWorkspace")}</h3>
                 <p>
-                  Anyone with an active link can view{" "}
-                  {item.kind === "folder" ? "this folder and its contents" : "this file"}. Public
-                  access is read only.
+                  {t("componentsDriveDialogs.anyoneWithAnActiveLinkCanViewPublicAccess", {
+                    value1:
+                      item.kind === "folder"
+                        ? t("componentsDriveDialogs.thisFolderAndItsContents")
+                        : t("componentsDriveDialogs.thisFile"),
+                  })}
                 </p>
               </div>
             </div>
             {item.actions?.public_share === false && (
               <p className="drive-muted">
-                Creating or changing public links is restricted by your role or workspace policy.
-                Existing links can still be revoked.
+                {t("componentsDriveDialogs.creatingOrChangingPublicLinksIsRestrictedByYour")}
               </p>
             )}
             {drive.capabilities?.public_link_max_days ? (
               <p className="drive-muted">
-                Links must expire within {drive.capabilities.public_link_max_days} days of creation.
+                <LocalizedMessage
+                  id="componentsDriveDialogs.linksMustExpireWithinDaysOfCreation"
+                  values={{ public_link_max_days: drive.capabilities.public_link_max_days }}
+                />
               </p>
             ) : null}
             <div className="drive-link-fields">
               <DriveField
                 label={
                   drive.capabilities?.public_link_password_required
-                    ? "Link password (required)"
-                    : "Link password (optional)"
+                    ? t("componentsDriveDialogs.linkPasswordRequired")
+                    : t("componentsDriveDialogs.linkPasswordOptional")
                 }
                 type="password"
                 autoComplete="new-password"
@@ -691,13 +749,13 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 onChange={(event) => setPassword(event.target.value)}
                 minLength={8}
                 maxLength={128}
-                hint="Use at least 8 characters."
+                hint={t("componentsDriveDialogs.useAtLeast8Characters")}
               />
               <DriveField
                 label={
                   drive.capabilities?.public_link_max_days
-                    ? "Link expires (required)"
-                    : "Link expires (optional)"
+                    ? t("componentsDriveDialogs.linkExpiresRequired")
+                    : t("componentsDriveDialogs.linkExpiresOptional")
                 }
                 type="datetime-local"
                 value={linkExpiry}
@@ -709,7 +767,7 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 checked={allowDownload}
                 onCheckedChange={(value) => setAllowDownload(!!value)}
               />
-              Allow file preview and download
+              {t("componentsDriveDialogs.allowFilePreviewAndDownload")}
             </CheckboxLabel>
             <div className="drive-modal-actions drive-link-create-actions">
               <Button
@@ -743,35 +801,35 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                     setCreatedUrl(url);
                     setCreatedLinkId(result.link.id);
                     setPassword("");
-                  }, "Public link created.")
+                  }, t("componentsDriveDialogs.publicLinkCreated"))
                 }
               >
                 <Icon name="plus" />
-                Create public link
+                {t("componentsDriveDialogs.createPublicLink")}
               </Button>
             </div>
             {createdUrl && (
               <div className="drive-created-link">
                 <DriveField
-                  label="New share link"
+                  label={t("componentsDriveDialogs.newShareLink")}
                   value={createdUrl}
                   readOnly
                   onFocus={(event) => event.target.select()}
                 />
                 <Button onClick={() => void action.run(() => copyUrl(createdUrl))}>
                   <Icon name="copy" />
-                  Copy link
+                  {t("componentsDriveDialogs.copyLink")}
                 </Button>
               </div>
             )}
-            <h3 className="drive-section-label">Existing links</h3>
+            <h3 className="drive-section-label">{t("componentsDriveDialogs.existingLinks")}</h3>
             <DriveState
               loading={links.loading && !links.data}
               error={links.error}
               retry={links.reload}
             />
             {links.data && !links.data.links.filter((link) => !link.revoked_at).length && (
-              <p className="drive-muted">No active public links.</p>
+              <p className="drive-muted">{t("componentsDriveDialogs.noActivePublicLinks")}</p>
             )}
             {links.data?.links
               .filter((link) => !link.revoked_at)
@@ -789,34 +847,38 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                     <div>
                       <strong>
                         {expired
-                          ? "Expired link"
+                          ? t("componentsDriveDialogs.expiredLink")
                           : link.password_protected
-                            ? "Password protected link"
-                            : "Anyone with the link"}
+                            ? t("componentsDriveDialogs.passwordProtectedLink")
+                            : t("componentsDriveDialogs.anyoneWithTheLink")}
                       </strong>
                       <span>
                         {link.expires_at
-                          ? `Expires ${driveDate(link.expires_at, true)}`
-                          : "No expiration"}{" "}
-                        · {link.allow_download ? "Downloads allowed" : "Metadata only"}
+                          ? t("componentsDriveDialogs.expires", {
+                              driveDate: driveDate(link.expires_at, true),
+                            })
+                          : t("componentsDriveDialogs.noExpiration")}{" "}
+                        {t("componentsDriveDialogs.text2")}
+                        {link.allow_download
+                          ? t("componentsDriveDialogs.downloadsAllowed")
+                          : t("componentsDriveDialogs.metadataOnly")}
                       </span>
                       {!url && (
                         <small>
-                          The URL is available only when a link is created. Create a new link to
-                          share again.
+                          {t("componentsDriveDialogs.theUrlIsAvailableOnlyWhenALinkIs")}
                         </small>
                       )}
                     </div>
                     {url && !expired && (
                       <DriveIconButton
                         icon="copy"
-                        label="Copy public link"
+                        label={t("componentsDriveDialogs.copyPublicLink")}
                         onClick={() => void action.run(() => copyUrl(url))}
                       />
                     )}
                     <DriveIconButton
                       icon="close"
-                      label="Revoke public link"
+                      label={t("componentsDriveDialogs.revokePublicLink")}
                       onClick={() => setRevoke(link)}
                     />
                   </div>
@@ -833,17 +895,17 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
             }
           >
             <Icon name="link" />
-            Copy workspace link
+            {t("componentsDriveDialogs.copyWorkspaceLink")}
           </Button>
           <Button variant="primary" disabled={action.busy} onClick={onClose}>
-            Done
+            {t("common.done")}
           </Button>
         </div>
         {revoke && (
           <DriveConfirmDialog
-            title="Revoke this public link?"
-            description="Anyone using this link will lose access immediately."
-            confirm="Revoke link"
+            title={t("componentsDriveDialogs.revokeThisPublicLink")}
+            description={t("componentsDriveDialogs.anyoneUsingThisLinkWillLoseAccessImmediately")}
+            confirm={t("componentsDriveDialogs.revokeLink")}
             destructive
             onClose={() => setRevoke(null)}
             action={async () => {
@@ -859,15 +921,18 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 /* Storage unavailable. */
               }
               drive.refresh();
-              notify.success("Public link revoked.");
+              notify.success(t("componentsDriveDialogs.publicLinkRevoked"));
             }}
           />
         )}
         {transfer && (
           <DriveConfirmDialog
-            title="Transfer ownership?"
-            description={`“${item.name}” and its contents will belong to ${transfer.display_name || transfer.email_address}. You will become an editor. Existing public links will be revoked.`}
-            confirm="Transfer ownership"
+            title={t("componentsDriveDialogs.transferOwnership")}
+            description={t("componentsDriveDialogs.andItsContentsWillBelongToYouWillBecome", {
+              name: item.name,
+              value2: transfer.display_name || transfer.email_address,
+            })}
+            confirm={t("componentsDriveDialogs.transferOwnership2")}
             onClose={() => setTransfer(null)}
             action={async () => {
               const current = await freshItem(item.id);
@@ -876,7 +941,7 @@ export function DriveShareDialog({ item, onClose }: { item: DriveItem; onClose: 
                 body: { version: current.version, user_id: transfer.id },
               });
               drive.refresh();
-              notify.success("Ownership transferred.");
+              notify.success(t("componentsDriveDialogs.ownershipTransferred"));
               onClose();
             }}
           />
@@ -903,7 +968,9 @@ function MenuForPerson({
     <Menu.Root>
       <Menu.Trigger
         render={<Button size="icon" variant="ghost" />}
-        aria-label={`Access options for ${grant.display_name || grant.email_address}`}
+        aria-label={t("componentsDriveDialogs.accessOptionsFor", {
+          value1: grant.display_name || grant.email_address,
+        })}
         disabled={disabled}
       >
         <Icon name="more" />
@@ -911,12 +978,12 @@ function MenuForPerson({
       <MenuPopup data-ui-theme="neutral" positionerProps={{ align: "end" }}>
         <Menu.Item disabled={!canTransfer} onClick={onTransfer}>
           <Icon name="user" />
-          Transfer ownership
+          {t("componentsDriveDialogs.transferOwnership2")}
         </Menu.Item>
         <Menu.Separator />
         <Menu.Item onClick={onRemove} data-variant="danger">
           <Icon name="close" />
-          Remove access
+          {t("componentsDriveDialogs.removeAccess")}
         </Menu.Item>
       </MenuPopup>
     </Menu.Root>

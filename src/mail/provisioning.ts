@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { and, eq, exists, ne, notExists, sql, type SQL } from "drizzle-orm";
 import type { AuthContext } from "../auth/types";
 import { now, uuid } from "../auth/types";
@@ -120,7 +121,7 @@ export async function personalMailPlan(
       Array.isArray(input) ||
       Object.keys(input).some((key) => !["domain_id", "local_part"].includes(key)))
   )
-    invalid("Invalid mail address settings");
+    invalid(t("mailProvisioning.invalidMailAddressSettings"));
   const data = (input ?? {}) as { domain_id?: unknown; local_part?: unknown },
     db = c.get("db"),
     { domains } = await mailOptions(c),
@@ -130,7 +131,7 @@ export async function personalMailPlan(
       ? domains.find((domain) => domain.id === data.domain_id)
       : (domains.find((domain) => domain.name === owner.email_address.split("@")[1]) ??
         domains.find((domain) => domain.is_default === 1));
-  if (data.domain_id != null && !selected) invalid("Mail domain is unavailable");
+  if (data.domain_id != null && !selected) invalid(t("mailProvisioning.mailDomainIsUnavailable"));
   const digest = await hash("personal-mailbox:" + owner.id),
     id =
       existing.mailbox?.id ??
@@ -169,7 +170,7 @@ export async function personalMailPlan(
       )
       .get())
   )
-    conflict("This mail address is already assigned. Choose another address.");
+    conflict(t("mailProvisioning.thisMailAddressIsAlreadyAssignedChooseAnotherAddress"));
   const guard = address
     ? and(
         exists(

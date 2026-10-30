@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { sql } from "drizzle-orm";
 import { uuid } from "../auth/types";
 import type { Permission } from "../authorization/permissions";
@@ -9,7 +10,8 @@ import { fail, text } from "./input";
 import type { Condition, DriveContext } from "./types";
 
 export const reason = (value: unknown) =>
-  text(value, "reason", 1000).trim() || fail(400, "Enter a reason for this administrative action");
+  text(value, "reason", 1000).trim() ||
+  fail(400, t("driveAdminStore.enterAReasonForThisAdministrativeAction"));
 export const noTransfer = (owner: string) =>
   condition(
     "NOT EXISTS(SELECT 1 FROM drive_admin_jobs WHERE (source_user_id=? OR target_user_id=?) AND status IN ('queued','running','failed'))",
@@ -45,8 +47,8 @@ export async function adminMutate(
   if (result[0]!.meta.changes !== 1) {
     const access = adminClaim(c, key);
     if (!(await first(c.env, `SELECT 1 WHERE ${access.sql}`, ...access.args)))
-      fail(403, "Administrative permission was revoked");
-    fail(412, "Drive configuration or item changed. Reload and try again.");
+      fail(403, t("driveAdminStore.administrativePermissionWasRevoked"));
+    fail(412, t("driveAdminStore.driveConfigurationOrItemChangedReloadAndTryAgain"));
   }
   if (c.env.NOTIFICATION_QUEUE)
     c.executionCtx.waitUntil(

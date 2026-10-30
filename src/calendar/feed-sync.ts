@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n/index.ts";
 import { now, uuid } from "../auth/types";
 import { digest } from "../auth/crypto";
 import { active, combine, condition, first, permission, rows } from "./access";
@@ -169,24 +170,28 @@ export async function syncCalendarFeed(
       } catch {
         throw new FeedError(
           "INVALID_FEED",
-          "The URL did not return a supported iCalendar file (up to 2 MiB and 2,000 entries). Check the subscription URL.",
+          t("calendarFeedSync.theUrlDidNotReturnASupportedIcalendarFile"),
         );
       }
       const invalid = parsed.entries.filter((entry) => entry.status === "error");
       if (invalid.length)
         throw new FeedError(
           "INVALID_ENTRIES",
-          `${invalid.length} calendar entries are invalid or unsupported. The previous events have been kept. First error: ${invalid[0]!.message}`,
+          t("calendarFeedSync.calendarEntriesAreInvalidOrUnsupportedThePreviousEvents", {
+            length: invalid.length,
+            message: invalid[0]!.message,
+          }),
         );
       if (parsed.plans.filter((plan) => plan.event.recurrence_json !== "[]").length > 100)
         throw new FeedError(
           "TOO_MANY_SERIES",
-          "The calendar exceeds the limit of 100 recurring series. Use a smaller calendar feed.",
+          t("calendarFeedSync.theCalendarExceedsTheLimitOf100RecurringSeries"),
         );
       eventCount = parsed.plans.length;
       warnings = [...new Set(parsed.entries.flatMap((entry) => entry.warnings))];
       const skipped = parsed.entries.filter((entry) => entry.status === "skipped").length;
-      if (skipped) warnings.push(`${skipped} non-event components were skipped.`);
+      if (skipped)
+        warnings.push(t("calendarFeedSync.nonEventComponentsWereSkipped", { skipped: skipped }));
       const old = await rows<Event>(
         env,
         "SELECT * FROM calendar_events WHERE organizer_calendar_id=? AND authority='remote' AND (trashed_at IS NULL OR i_cal_uid IN(SELECT value FROM json_each(?)))",
@@ -308,7 +313,7 @@ export async function syncCalendarFeed(
         ? error
         : new FeedError(
             "SYNC_FAILED",
-            "Unable to synchronize this calendar. Previous events have been kept; Officeflare will retry automatically.",
+            t("calendarFeedSync.unableToSynchronizeThisCalendarPreviousEventsHaveBeen"),
           );
     const next = stamp + Math.min(86400, 300 * 2 ** Math.min(feed.failure_count, 9));
     // URL replacement, disconnect and lease expiry fence off obsolete results.

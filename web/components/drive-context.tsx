@@ -1,3 +1,4 @@
+import { t, plural } from "../../shared/i18n/index.ts";
 import {
   createContext,
   useCallback,
@@ -49,7 +50,7 @@ interface DriveContextValue {
 const DriveContext = createContext<DriveContextValue | null>(null);
 export function useDrive() {
   const value = useContext(DriveContext);
-  if (!value) throw new Error("DriveProvider is required");
+  if (!value) throw new Error(t("componentsDriveContext.driveproviderIsRequired"));
   return value;
 }
 export function DriveNewMenu() {
@@ -67,22 +68,22 @@ export function DriveNewMenu() {
         disabled={!drive.target.writable}
       >
         <Icon name="plus" width="18" height="18" />
-        New
+        {t("componentsDriveContext.new")}
         <Icon name="down" width="12" height="12" />
       </Menu.Trigger>
       <MenuPopup data-ui-theme="neutral">
         <Menu.Item onClick={drive.newFolder}>
           <Icon name="folder" />
-          New folder
+          {t("componentsDriveContext.newFolder")}
         </Menu.Item>
         <Menu.Separator />
         <Menu.Item onClick={() => drive.chooseFiles()}>
           <Icon name="upload" />
-          File upload
+          {t("componentsDriveContext.fileUpload")}
         </Menu.Item>
         <Menu.Item onClick={() => drive.chooseFiles(true)}>
           <Icon name="folder" />
-          Folder upload
+          {t("componentsDriveContext.folderUpload")}
         </Menu.Item>
       </MenuPopup>
     </Menu.Root>
@@ -187,7 +188,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                 )) {
                   update(entry.id, {
                     state: "error",
-                    error: "Upload could not be cancelled. Retry to check its status.",
+                    error: t("componentsDriveContext.uploadCouldNotBeCancelledRetryToCheckIts"),
                   });
                   return;
                 }
@@ -212,15 +213,17 @@ export function DriveProvider({ children }: { children: ReactNode }) {
   }, [entries, refresh, update]);
   const enqueue = (files: File[], parent: string | null, item?: DriveItem) => {
     if (!can(item ? "update" : "create")) {
-      notify.error("Your role or Drive policy does not allow this upload.");
+      notify.error(t("componentsDriveContext.yourRoleOrDrivePolicyDoesNotAllowThis"));
       return;
     }
     const maximum = capabilities.data?.max_file_bytes ?? 0;
     const accepted = files.filter((file) => file.size <= maximum);
     if (accepted.length !== files.length)
-      notify.error(`Files must be ${formatBytes(maximum)} or smaller.`);
+      notify.error(
+        t("componentsDriveContext.filesMustBeOrSmaller", { formatBytes: formatBytes(maximum) }),
+      );
     if (item && files.length !== 1) {
-      notify.error("Choose one file to replace this version.");
+      notify.error(t("componentsDriveContext.chooseOneFileToReplaceThisVersion"));
       return;
     }
     setEntries((old) => [
@@ -333,8 +336,8 @@ export function DriveProvider({ children }: { children: ReactNode }) {
       />
       {folderOpen && (
         <DriveModal
-          title="New folder"
-          description="Organize your files in a folder."
+          title={t("componentsDriveContext.newFolder")}
+          description={t("componentsDriveContext.organizeYourFilesInAFolder")}
           busy={folderAction.busy}
           onClose={() => setFolderOpen(false)}
         >
@@ -348,12 +351,12 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                 });
                 refresh();
                 setFolderOpen(false);
-                notify.success("Folder created.");
+                notify.success(t("componentsDriveContext.folderCreated"));
               });
             }}
           >
             <DriveField
-              label="Folder name"
+              label={t("componentsDriveContext.folderName")}
               value={folderName}
               onChange={(event) => setFolderName(event.target.value)}
               autoFocus
@@ -364,14 +367,14 @@ export function DriveProvider({ children }: { children: ReactNode }) {
             <DriveNotice error={folderAction.error} />
             <div className="drive-modal-actions">
               <Button disabled={folderAction.busy} onClick={() => setFolderOpen(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
                 variant="primary"
                 disabled={folderAction.busy || !folderName.trim()}
               >
-                {folderAction.busy ? "Creating…" : "Create"}
+                {folderAction.busy ? t("common.creating") : t("common.create")}
               </Button>
             </div>
           </form>
@@ -381,26 +384,30 @@ export function DriveProvider({ children }: { children: ReactNode }) {
         <section
           data-ui-theme="neutral"
           className={`drive-upload-tray${collapsed ? " is-collapsed" : ""}`}
-          aria-label="Uploads"
+          aria-label={t("componentsDriveContext.uploads")}
         >
           <header>
             <span>
               <Icon name="upload" />
               {running
-                ? `Uploading ${running} ${running === 1 ? "file" : "files"}`
+                ? plural("drive.uploading", running)
                 : entries.some((entry) => entry.state === "error")
-                  ? "Some uploads need attention"
-                  : "Uploads complete"}
+                  ? t("componentsDriveContext.someUploadsNeedAttention")
+                  : t("componentsDriveContext.uploadsComplete")}
             </span>
             <div>
               <DriveIconButton
                 icon={collapsed ? "expand" : "minimize"}
-                label={collapsed ? "Expand uploads" : "Minimize uploads"}
+                label={
+                  collapsed
+                    ? t("componentsDriveContext.expandUploads")
+                    : t("componentsDriveContext.minimizeUploads")
+                }
                 onClick={() => setCollapsed(!collapsed)}
               />
               <DriveIconButton
                 icon="close"
-                label="Dismiss completed uploads"
+                label={t("componentsDriveContext.dismissCompletedUploads")}
                 disabled={!!running}
                 onClick={() => setEntries([])}
               />
@@ -415,17 +422,26 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                     <strong title={entry.file.name}>{entry.file.name}</strong>
                     <span>
                       {entry.state === "done"
-                        ? "Uploaded"
+                        ? t("componentsDriveContext.uploaded")
                         : entry.state === "cancelled"
-                          ? "Cancelled"
+                          ? t("componentsDriveContext.cancelled")
                           : entry.state === "error"
                             ? entry.error
-                            : `${formatBytes(entry.sent)} of ${formatBytes(entry.file.size)}${entry.state === "queued" ? " · Waiting" : ""}`}
+                            : t("componentsDriveContext.of", {
+                                formatBytes: formatBytes(entry.sent),
+                                value2: formatBytes(entry.file.size),
+                                value3:
+                                  entry.state === "queued"
+                                    ? t("componentsDriveContext.waiting")
+                                    : "",
+                              })}
                     </span>
                     {entry.state === "uploading" && (
                       <Progress.Root
                         value={entry.file.size ? (entry.sent / entry.file.size) * 100 : 100}
-                        aria-label={`Uploading ${entry.file.name}`}
+                        aria-label={t("componentsDriveContext.uploading2", {
+                          name: entry.file.name,
+                        })}
                       >
                         <Progress.Track>
                           <Progress.Indicator />
@@ -438,13 +454,13 @@ export function DriveProvider({ children }: { children: ReactNode }) {
                   ) : entry.state === "error" ? (
                     <DriveIconButton
                       icon="refresh"
-                      label={`Retry ${entry.file.name}`}
+                      label={t("componentsDriveContext.retry", { name: entry.file.name })}
                       onClick={() => update(entry.id, { state: "queued" })}
                     />
                   ) : ["queued", "uploading"].includes(entry.state) ? (
                     <DriveIconButton
                       icon="close"
-                      label={`Cancel ${entry.file.name}`}
+                      label={t("componentsDriveContext.cancel", { name: entry.file.name })}
                       onClick={() => cancel(entry)}
                     />
                   ) : null}
@@ -455,7 +471,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
           {!running && entries.some((entry) => entry.state === "done") && (
             <footer>
               <Button variant="ghost" size="sm" onClick={() => navigate("/drive/recent")}>
-                View recent files
+                {t("componentsDriveContext.viewRecentFiles")}
                 <Icon name="arrow" />
               </Button>
             </footer>

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n/index.ts";
 import { useMemo, type ReactNode } from "react";
 import { Toast } from "./styled-primitives";
 import { Button } from "./button";
@@ -27,7 +28,7 @@ function Notifications() {
   const { toasts } = Toast.useToastManager();
   return (
     <Toast.Portal>
-      <Toast.Viewport className="app-notifications">
+      <Toast.Viewport aria-label={t("common.notifications")} className="app-notifications">
         {toasts.map((toast) => (
           <Toast.Root
             key={toast.id}
@@ -43,7 +44,7 @@ function Notifications() {
               <Toast.Title />
               <Toast.Close
                 render={<Button variant="ghost" size="sm" />}
-                aria-label="Dismiss notification"
+                aria-label={t("componentsUiNotifications.dismissNotification")}
                 aria-hidden={false}
               >
                 <Icon name="close" />
