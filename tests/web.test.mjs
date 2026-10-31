@@ -43,6 +43,7 @@ test("React Router assets and API routes coexist in the Workers runtime", async 
     "/profile",
     "/profile/security",
     "/profile/sessions",
+    "/profile/preferences",
     "/missing/nested-page",
   ]) {
     const response = await mf.dispatchFetch(`https://office.test${path}`, {

@@ -83,6 +83,7 @@ export const returnToWorkspace = (path: unknown) =>
     "/profile/security",
     "/profile/sessions",
     "/profile/notifications",
+    "/profile/preferences",
     "/notifications",
   ].includes(path) ||
     /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) ||

@@ -4795,6 +4795,8 @@ export const ko = defineTranslations(en, {
   "routesWorkspace.navigation": "{sidebarName} 탐색",
   "routesWorkspace.notificationSettings": "알림 설정",
   "routesWorkspace.notifications": "알림",
+  "routesWorkspace.preferences": "환경설정",
+  "routesPreferences.description": "워크스페이스 사용 환경을 설정하세요.",
   "routesWorkspace.officeflare": "{title} · Officeflare",
   "routesWorkspace.officeflareHome": "Officeflare 홈",
   "routesWorkspace.openNavigation": "탐색 열기",
