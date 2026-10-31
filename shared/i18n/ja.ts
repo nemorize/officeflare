@@ -4863,6 +4863,8 @@ export const ja = defineTranslations(en, {
   "routesWorkspace.navigation": "{sidebarName}のナビゲーション",
   "routesWorkspace.notificationSettings": "通知の設定",
   "routesWorkspace.notifications": "通知",
+  "routesWorkspace.preferences": "環境設定",
+  "routesPreferences.description": "ワークスペースの利用環境を設定します。",
   "routesWorkspace.officeflare": "{title} · Officeflare",
   "routesWorkspace.officeflareHome": "Officeflareのホーム",
   "routesWorkspace.openNavigation": "ナビゲーションを開く",

@@ -4789,6 +4789,8 @@ export const en = defineMessages({
   "routesWorkspace.navigation": "{sidebarName} navigation",
   "routesWorkspace.notificationSettings": "Notification settings",
   "routesWorkspace.notifications": "Notifications",
+  "routesWorkspace.preferences": "Preferences",
+  "routesPreferences.description": "Customize your workspace experience.",
   "routesWorkspace.officeflare": "{title} · Officeflare",
   "routesWorkspace.officeflareHome": "Officeflare home",
   "routesWorkspace.openNavigation": "Open navigation",

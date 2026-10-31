@@ -35,6 +35,7 @@ const account: WorkspaceNavigationItem[] = [
   { path: "/profile/security", name: t("routesWorkspace.security"), icon: "shield" },
   { path: "/profile/sessions", name: t("routesWorkspace.sessions"), icon: "laptop" },
   { path: "/profile/notifications", name: t("routesWorkspace.notifications"), icon: "bell" },
+  { path: "/profile/preferences", name: t("routesWorkspace.preferences"), icon: "controls" },
 ];
 const notificationMenu: WorkspaceNavigationItem[] = [
   { path: "/notifications", name: t("routesWorkspace.allNotifications"), icon: "bell" },

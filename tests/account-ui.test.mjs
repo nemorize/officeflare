@@ -171,6 +171,7 @@ test("login returns only to known workspace routes", () => {
     "/profile",
     "/profile/security",
     "/profile/sessions",
+    "/profile/preferences",
   ])
     assert.equal(returnToWorkspace(path), path);
   for (const path of [

@@ -22,6 +22,9 @@ const UIPreviewPage = import.meta.env.DEV ? lazy(() => import("./routes/ui-previ
 const ProfilePage = lazy(() =>
   import("./routes/profile").then((module) => ({ default: module.ProfilePage })),
 );
+const PreferencesPage = lazy(() =>
+  import("./routes/preferences").then((module) => ({ default: module.PreferencesPage })),
+);
 const SecurityPage = lazy(() =>
   import("./routes/security").then((module) => ({ default: module.SecurityPage })),
 );
@@ -228,6 +231,7 @@ const router = createBrowserRouter(
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/security" element={<SecurityPage />} />
         <Route path="/profile/sessions" element={<SessionsPage />} />
+        <Route path="/profile/preferences" element={<PreferencesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         {["/calendar", "/calendar/shared", "/calendar/trash"].map((path) => (
           <Route
