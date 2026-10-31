@@ -1,8 +1,18 @@
 import { en } from "./en.ts";
+import { ko } from "./ko.ts";
+import { ja } from "./ja.ts";
+import { defaultLocale, type Locale } from "./locale.ts";
 import type { ParameterNames, TranslationShape } from "./resource.ts";
 export { defineMessages, defineTranslations } from "./resource.ts";
 
-export const locale = "en";
+const resources = { en, ko, ja } satisfies Record<Locale, TranslationShape<typeof en>>;
+let localeResolver: () => Locale = () => defaultLocale;
+/** Browsers select one locale; Workers resolve it from the current request context. */
+export const getLocale = (): Locale => localeResolver();
+export function setLocaleResolver(resolve: () => Locale): void {
+  localeResolver = resolve;
+}
+export { defaultLocale } from "./locale.ts";
 export type MessageKey = keyof typeof en;
 export type Messages = TranslationShape<typeof en>;
 export type InterpolationValue = string | number;
@@ -33,7 +43,7 @@ type PluralParameterNames<K extends PluralMessageKey> = Exclude<
   "count"
 >;
 
-export const messageTemplate = <K extends MessageKey>(key: K): (typeof en)[K] => en[key];
+export const messageTemplate = (key: MessageKey): string => resources[getLocale()][key];
 export const isMessageKey = (key: string): key is MessageKey => Object.hasOwn(en, key);
 export const isStaticMessageKey = (key: string): key is StaticMessageKey =>
   isMessageKey(key) && !/\{[A-Za-z_]\w*\}/.test(messageTemplate(key));
@@ -52,7 +62,9 @@ function format(template: string, parameters: Readonly<Record<string, unknown>>)
   );
 }
 
-const pluralRules = new Intl.PluralRules(locale);
+const pluralRules = Object.fromEntries(
+  Object.keys(resources).map((locale) => [locale, new Intl.PluralRules(locale)]),
+) as Record<Locale, Intl.PluralRules>;
 export function plural<
   const K extends PluralMessageKey,
   const Parameters extends Record<PluralParameterNames<NoInfer<K>>, InterpolationValue>,
@@ -63,7 +75,7 @@ export function plural<
     ? []
     : [parameters: ExactParameters<PluralParameterNames<K>, Parameters>]
 ): string {
-  const form = pluralRules.select(count) === "one" ? "one" : "other";
+  const form = pluralRules[getLocale()].select(count) === "one" ? "one" : "other";
   return format(messageTemplate(`${key}.${form}`), { ...parameters, count });
 }
 
@@ -74,10 +86,12 @@ export function messageParts<
   key: K,
   parameters: ExactMessageParameters<K, Parameters>,
 ): (string | Parameters[keyof Parameters])[] {
-  return en[key].split(/(\{[A-Za-z_]\w*\})/g).map((part) => {
-    const name = part.slice(1, -1);
-    return /^\{[A-Za-z_]\w*\}$/.test(part) && hasOwn(parameters, name) ? parameters[name] : part;
-  });
+  return messageTemplate(key)
+    .split(/(\{[A-Za-z_]\w*\})/g)
+    .map((part) => {
+      const name = part.slice(1, -1);
+      return /^\{[A-Za-z_]\w*\}$/.test(part) && hasOwn(parameters, name) ? parameters[name] : part;
+    });
 }
 
 export function t<
@@ -89,5 +103,5 @@ export function t<
     ? []
     : [parameters: ExactMessageParameters<K, Parameters>]
 ): string {
-  return format(en[key], parameters ?? {});
+  return format(messageTemplate(key), parameters ?? {});
 }

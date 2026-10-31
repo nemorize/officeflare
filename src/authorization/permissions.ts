@@ -1,14 +1,32 @@
 import { t } from "../../shared/i18n/index.ts";
 export const permissionGroups = {
-  services: t("permissions.serviceAccess"),
-  users: t("permissions.userAdministration"),
-  security: t("permissions.accountSecurity"),
-  roles: t("permissions.roleAdministration"),
-  assignments: t("permissions.roleAssignments"),
-  mail: t("permissions.mailAdministration"),
-  drive: t("permissions.driveUsage"),
-  driveAdmin: t("permissions.driveAdministration"),
-  calendar: t("permissions.calendarUsage"),
+  get services() {
+    return t("permissions.serviceAccess");
+  },
+  get users() {
+    return t("permissions.userAdministration");
+  },
+  get security() {
+    return t("permissions.accountSecurity");
+  },
+  get roles() {
+    return t("permissions.roleAdministration");
+  },
+  get assignments() {
+    return t("permissions.roleAssignments");
+  },
+  get mail() {
+    return t("permissions.mailAdministration");
+  },
+  get drive() {
+    return t("permissions.driveUsage");
+  },
+  get driveAdmin() {
+    return t("permissions.driveAdministration");
+  },
+  get calendar() {
+    return t("permissions.calendarUsage");
+  },
 } as const;
 export interface PermissionDefinition {
   label: string;
@@ -24,339 +42,581 @@ const assignmentRead = ["admin.users.roles.read"] as const;
 // Service access never grants access to another user's mailbox or files.
 export const permissionCatalog = {
   "console.access": {
-    label: t("permissions.accessConsole"),
-    description: t("permissions.openSystemSettingsManagementActionsRequireTheirOwnPermissions"),
+    get label() {
+      return t("permissions.accessConsole");
+    },
+    get description() {
+      return t("permissions.openSystemSettingsManagementActionsRequireTheirOwnPermissions");
+    },
     group: "services",
     requires: [],
   },
   "mail.access": {
-    label: t("permissions.accessMail"),
-    description: t("permissions.useMailWithOwnedOrExplicitlySharedMailboxesDoes"),
+    get label() {
+      return t("permissions.accessMail");
+    },
+    get description() {
+      return t("permissions.useMailWithOwnedOrExplicitlySharedMailboxesDoes");
+    },
     group: "services",
     requires: [],
   },
   "calendar.access": {
-    label: t("permissions.accessCalendar"),
-    description: t("permissions.openTheCalendarWorkspace"),
+    get label() {
+      return t("permissions.accessCalendar");
+    },
+    get description() {
+      return t("permissions.openTheCalendarWorkspace");
+    },
     group: "services",
     requires: [],
   },
   "calendar.calendars.create": {
-    label: t("permissions.createCalendars"),
-    description: t("permissions.createAdditionalCalendarsSharingRemainsSubjectToCalendarAccess"),
+    get label() {
+      return t("permissions.createCalendars");
+    },
+    get description() {
+      return t("permissions.createAdditionalCalendarsSharingRemainsSubjectToCalendarAccess");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.events.create": {
-    label: t("permissions.createCalendarEvents"),
-    description: t("permissions.createAndDuplicateEventsInCalendarsWhereYouHave"),
+    get label() {
+      return t("permissions.createCalendarEvents");
+    },
+    get description() {
+      return t("permissions.createAndDuplicateEventsInCalendarsWhereYouHave");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.events.update": {
-    label: t("permissions.editCalendarEvents"),
-    description: t("permissions.editMoveAndRestoreEventsWhereCalendarWritingAccess"),
+    get label() {
+      return t("permissions.editCalendarEvents");
+    },
+    get description() {
+      return t("permissions.editMoveAndRestoreEventsWhereCalendarWritingAccess");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.events.delete": {
-    label: t("permissions.deleteCalendarEvents"),
-    description: t("permissions.cancelEventsAndRecurringOccurrencesWhereCalendarWritingAccess"),
+    get label() {
+      return t("permissions.deleteCalendarEvents");
+    },
+    get description() {
+      return t("permissions.cancelEventsAndRecurringOccurrencesWhereCalendarWritingAccess");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.sharing.internal": {
-    label: t("permissions.shareCalendarsInternally"),
-    description: t("permissions.manageCalendarGrantsWhereYouHaveManagementAccess"),
+    get label() {
+      return t("permissions.shareCalendarsInternally");
+    },
+    get description() {
+      return t("permissions.manageCalendarGrantsWhereYouHaveManagementAccess");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.sharing.external": {
-    label: t("permissions.shareCalendarLinks"),
-    description: t("permissions.createAndManageExternalViewingAndRegistrationLinks"),
+    get label() {
+      return t("permissions.shareCalendarLinks");
+    },
+    get description() {
+      return t("permissions.createAndManageExternalViewingAndRegistrationLinks");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.events.invite": {
-    label: t("permissions.inviteCalendarAttendees"),
-    description: t("permissions.invitePeopleAndManageRegistrationsInWritableEvents"),
+    get label() {
+      return t("permissions.inviteCalendarAttendees");
+    },
+    get description() {
+      return t("permissions.invitePeopleAndManageRegistrationsInWritableEvents");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "calendar.groups.manage": {
-    label: t("permissions.manageCalendarGroups"),
-    description: t("permissions.manageGroupsOwnedByYourAccount"),
+    get label() {
+      return t("permissions.manageCalendarGroups");
+    },
+    get description() {
+      return t("permissions.manageGroupsOwnedByYourAccount");
+    },
     group: "calendar",
     requires: ["calendar.access"],
   },
   "admin.calendar.settings.read": {
-    label: t("permissions.readCalendarSettings"),
-    description: t("permissions.readWorkspaceSharingAndSystemSenderSettings"),
+    get label() {
+      return t("permissions.readCalendarSettings");
+    },
+    get description() {
+      return t("permissions.readWorkspaceSharingAndSystemSenderSettings");
+    },
     group: "calendar",
     requires: ["console.access"],
   },
   "admin.calendar.settings.manage": {
-    label: t("permissions.manageCalendarSettings"),
-    description: t("permissions.changeWorkspaceSharingPolicyAndTheSystemInvitationSender"),
+    get label() {
+      return t("permissions.manageCalendarSettings");
+    },
+    get description() {
+      return t("permissions.changeWorkspaceSharingPolicyAndTheSystemInvitationSender");
+    },
     group: "calendar",
     requires: ["admin.calendar.settings.read"],
   },
   "drive.access": {
-    label: t("permissions.accessDrive"),
-    description: t("permissions.useOwnedAndExplicitlySharedFilesAndFoldersDoes"),
+    get label() {
+      return t("permissions.accessDrive");
+    },
+    get description() {
+      return t("permissions.useOwnedAndExplicitlySharedFilesAndFoldersDoes");
+    },
     group: "services",
     requires: [],
   },
   "drive.files.create": {
-    label: t("permissions.createDriveFilesAndFolders"),
-    description: t("permissions.uploadFilesCreateFoldersAndCopyAccessibleItemsFolder"),
+    get label() {
+      return t("permissions.createDriveFilesAndFolders");
+    },
+    get description() {
+      return t("permissions.uploadFilesCreateFoldersAndCopyAccessibleItemsFolder");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.files.update": {
-    label: t("permissions.editDriveFiles"),
-    description: t("permissions.replaceContentRenameMoveRestoreAndManageFileVersions"),
+    get label() {
+      return t("permissions.editDriveFiles");
+    },
+    get description() {
+      return t("permissions.replaceContentRenameMoveRestoreAndManageFileVersions");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.files.delete": {
-    label: t("permissions.deleteOwnedDriveItems"),
-    description: t("permissions.trashOwnedItemsAndPermanentlyDeleteItemsAlreadyIn"),
+    get label() {
+      return t("permissions.deleteOwnedDriveItems");
+    },
+    get description() {
+      return t("permissions.trashOwnedItemsAndPermanentlyDeleteItemsAlreadyIn");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.files.download": {
-    label: t("permissions.downloadDriveFiles"),
-    description: t("permissions.downloadAndCopyFilesYouOwnOrCanAccess"),
+    get label() {
+      return t("permissions.downloadDriveFiles");
+    },
+    get description() {
+      return t("permissions.downloadAndCopyFilesYouOwnOrCanAccess");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.comments.create": {
-    label: t("permissions.commentInDrive"),
-    description: t("permissions.addAndManageCommentsWhereTheItemSharingRole"),
+    get label() {
+      return t("permissions.commentInDrive");
+    },
+    get description() {
+      return t("permissions.addAndManageCommentsWhereTheItemSharingRole");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.sharing.internal": {
-    label: t("permissions.shareDriveItemsInternally"),
-    description: t("permissions.shareOwnedItemsWithWorkspaceAccountsAndTransferOwnership"),
+    get label() {
+      return t("permissions.shareDriveItemsInternally");
+    },
+    get description() {
+      return t("permissions.shareOwnedItemsWithWorkspaceAccountsAndTransferOwnership");
+    },
     group: "drive",
     requires: ["drive.access"],
   },
   "drive.sharing.public": {
-    label: t("permissions.createPublicDriveLinks"),
-    description: t("permissions.createAndUpdatePublicLinksForOwnedItemsSubject"),
+    get label() {
+      return t("permissions.createPublicDriveLinks");
+    },
+    get description() {
+      return t("permissions.createAndUpdatePublicLinksForOwnedItemsSubject");
+    },
     group: "drive",
     requires: ["drive.access"],
-    impact: t("permissions.allowsExternalAccessToSharedFiles"),
+    get impact() {
+      return t("permissions.allowsExternalAccessToSharedFiles");
+    },
   },
   "admin.drive.settings.read": {
-    label: t("permissions.viewDriveSettings"),
-    description: t("permissions.inspectWorkspaceStorageSharingAndRetentionPolicies"),
+    get label() {
+      return t("permissions.viewDriveSettings");
+    },
+    get description() {
+      return t("permissions.inspectWorkspaceStorageSharingAndRetentionPolicies");
+    },
     group: "driveAdmin",
     requires: ["console.access"],
   },
   "admin.drive.settings.manage": {
-    label: t("permissions.manageDriveSettings"),
-    description: t("permissions.changeWorkspaceDrivePoliciesAndDefaultStorageLimits"),
+    get label() {
+      return t("permissions.manageDriveSettings");
+    },
+    get description() {
+      return t("permissions.changeWorkspaceDrivePoliciesAndDefaultStorageLimits");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.settings.read"],
-    impact: t("permissions.changesApplyToExistingLinksAndAccountsUsingDefaults"),
+    get impact() {
+      return t("permissions.changesApplyToExistingLinksAndAccountsUsingDefaults");
+    },
   },
   "admin.drive.accounts.read": {
-    label: t("permissions.viewDriveAccounts"),
-    description: t("permissions.inspectUserStorageUsageLimitsAndDriveAvailabilityIncluding"),
+    get label() {
+      return t("permissions.viewDriveAccounts");
+    },
+    get description() {
+      return t("permissions.inspectUserStorageUsageLimitsAndDriveAvailabilityIncluding");
+    },
     group: "driveAdmin",
     requires: ["console.access"],
   },
   "admin.drive.accounts.manage": {
-    label: t("permissions.manageDriveAccounts"),
-    description: t("permissions.setStorageOverridesAndSuspendOrRestrictDriveWrites"),
+    get label() {
+      return t("permissions.manageDriveAccounts");
+    },
+    get description() {
+      return t("permissions.setStorageOverridesAndSuspendOrRestrictDriveWrites");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.accounts.read"],
   },
   "admin.drive.items.read": {
-    label: t("permissions.viewDriveInventory"),
-    description: t("permissions.inspectFileAndFolderMetadataAndTrashDoesNot"),
+    get label() {
+      return t("permissions.viewDriveInventory");
+    },
+    get description() {
+      return t("permissions.inspectFileAndFolderMetadataAndTrashDoesNot");
+    },
     group: "driveAdmin",
     requires: ["console.access"],
   },
   "admin.drive.sharing.read": {
-    label: t("permissions.viewDriveSharing"),
-    description: t("permissions.inspectInternalGrantsAndPublicLinkMetadataAcrossThe"),
+    get label() {
+      return t("permissions.viewDriveSharing");
+    },
+    get description() {
+      return t("permissions.inspectInternalGrantsAndPublicLinkMetadataAcrossThe");
+    },
     group: "driveAdmin",
     requires: ["console.access"],
   },
   "admin.drive.sharing.manage": {
-    label: t("permissions.manageDriveSharing"),
-    description: t("permissions.changeOrRevokeInternalGrantsAndRevokePublicLinks"),
+    get label() {
+      return t("permissions.manageDriveSharing");
+    },
+    get description() {
+      return t("permissions.changeOrRevokeInternalGrantsAndRevokePublicLinks");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.sharing.read", "admin.drive.accounts.read"],
-    impact: t("permissions.changesRecipientsAccess"),
+    get impact() {
+      return t("permissions.changesRecipientsAccess");
+    },
   },
   "admin.drive.audit.read": {
-    label: t("permissions.viewDriveAuditLogs"),
-    description: t("permissions.searchFileActivityAndImmutableAdministratorRecordsAcrossThe"),
+    get label() {
+      return t("permissions.viewDriveAuditLogs");
+    },
+    get description() {
+      return t("permissions.searchFileActivityAndImmutableAdministratorRecordsAcrossThe");
+    },
     group: "driveAdmin",
     requires: ["console.access"],
   },
   "admin.drive.ownership.transfer": {
-    label: t("permissions.transferDriveOwnership"),
-    description: t("permissions.handOverFilesOrAnAccountSInventoryIncluding"),
+    get label() {
+      return t("permissions.transferDriveOwnership");
+    },
+    get description() {
+      return t("permissions.handOverFilesOrAnAccountSInventoryIncluding");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.accounts.read", "admin.drive.items.read"],
-    impact: t("permissions.grantsTheRecipientOwnershipAndRevokesPublicLinks"),
+    get impact() {
+      return t("permissions.grantsTheRecipientOwnershipAndRevokesPublicLinks");
+    },
   },
   "admin.drive.trash.restore": {
-    label: t("permissions.restoreDriveTrash"),
-    description: t("permissions.restoreTrashedItemsWithoutOpeningFileContents"),
+    get label() {
+      return t("permissions.restoreDriveTrash");
+    },
+    get description() {
+      return t("permissions.restoreTrashedItemsWithoutOpeningFileContents");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.items.read"],
   },
   "admin.drive.trash.purge": {
-    label: t("permissions.permanentlyDeleteDriveTrash"),
-    description: t("permissions.permanentlyDeleteItemsAlreadyInTrashAndQueueTheir"),
+    get label() {
+      return t("permissions.permanentlyDeleteDriveTrash");
+    },
+    get description() {
+      return t("permissions.permanentlyDeleteItemsAlreadyInTrashAndQueueTheir");
+    },
     group: "driveAdmin",
     requires: ["admin.drive.items.read"],
-    impact: t("permissions.permanentlyRemovesFilesAndTheirVersions"),
+    get impact() {
+      return t("permissions.permanentlyRemovesFilesAndTheirVersions");
+    },
   },
   "admin.users.read": {
-    label: t("permissions.viewAdministrativeUserRecords"),
-    description: t("permissions.inspectAccountDetailsStatusAndSignInActivityIn"),
+    get label() {
+      return t("permissions.viewAdministrativeUserRecords");
+    },
+    get description() {
+      return t("permissions.inspectAccountDetailsStatusAndSignInActivityIn");
+    },
     group: "users",
     requires: ["console.access"],
   },
   "admin.users.create": {
-    label: t("permissions.createUserAccounts"),
-    description: t("permissions.createAccountsWithApprovedRolesAndAPersonalMailbox"),
+    get label() {
+      return t("permissions.createUserAccounts");
+    },
+    get description() {
+      return t("permissions.createAccountsWithApprovedRolesAndAPersonalMailbox");
+    },
     group: "users",
     requires: userRead,
   },
   "admin.users.profile.update": {
-    label: t("permissions.editUserProfiles"),
-    description: t("permissions.changeUserDisplayNamesAndProfilePhotos"),
+    get label() {
+      return t("permissions.editUserProfiles");
+    },
+    get description() {
+      return t("permissions.changeUserDisplayNamesAndProfilePhotos");
+    },
     group: "users",
     requires: userRead,
   },
   "admin.users.email.update": {
-    label: t("permissions.changeLoginEmailAddresses"),
-    description: t("permissions.changeAUserSSignInAddress"),
+    get label() {
+      return t("permissions.changeLoginEmailAddresses");
+    },
+    get description() {
+      return t("permissions.changeAUserSSignInAddress");
+    },
     group: "security",
     requires: userRead,
-    impact: t("permissions.endsTheUserSSessions"),
+    get impact() {
+      return t("permissions.endsTheUserSSessions");
+    },
   },
   "admin.users.status.update": {
-    label: t("permissions.enableOrDisableAccounts"),
-    description: t("permissions.changeAccountAvailabilityYouCannotDisableYourOwnAccount"),
+    get label() {
+      return t("permissions.enableOrDisableAccounts");
+    },
+    get description() {
+      return t("permissions.changeAccountAvailabilityYouCannotDisableYourOwnAccount");
+    },
     group: "security",
     requires: userRead,
-    impact: t("permissions.endsTheUserSSessions"),
+    get impact() {
+      return t("permissions.endsTheUserSSessions");
+    },
   },
   "admin.users.credentials.reset": {
-    label: t("permissions.resetUserPasswords"),
-    description: t("permissions.setTemporaryPasswordsAndChangeThePasswordChangeRequirement"),
+    get label() {
+      return t("permissions.resetUserPasswords");
+    },
+    get description() {
+      return t("permissions.setTemporaryPasswordsAndChangeThePasswordChangeRequirement");
+    },
     group: "security",
     requires: userRead,
-    impact: t("permissions.endsTheUserSSessions"),
+    get impact() {
+      return t("permissions.endsTheUserSSessions");
+    },
   },
   "admin.users.delete": {
-    label: t("permissions.deleteUserAccounts"),
-    description: t("permissions.removeAccountsAndRevokeTheirCredentials"),
+    get label() {
+      return t("permissions.deleteUserAccounts");
+    },
+    get description() {
+      return t("permissions.removeAccountsAndRevokeTheirCredentials");
+    },
     group: "security",
     requires: userRead,
-    impact: t("permissions.removesWorkspaceAccess"),
+    get impact() {
+      return t("permissions.removesWorkspaceAccess");
+    },
   },
   "admin.roles.read": {
-    label: t("permissions.viewRolesAndPermissions"),
-    description: t("permissions.viewRoleDefinitionsMembershipCountsAndThePermissionCatalog"),
+    get label() {
+      return t("permissions.viewRolesAndPermissions");
+    },
+    get description() {
+      return t("permissions.viewRoleDefinitionsMembershipCountsAndThePermissionCatalog");
+    },
     group: "roles",
     requires: ["console.access"],
   },
   "admin.roles.create": {
-    label: t("permissions.createRoles"),
-    description: t("permissions.createRolesUsingPermissionsYouHold"),
+    get label() {
+      return t("permissions.createRoles");
+    },
+    get description() {
+      return t("permissions.createRolesUsingPermissionsYouHold");
+    },
     group: "roles",
     requires: roleRead,
   },
   "admin.roles.update": {
-    label: t("permissions.editRoles"),
-    description: t("permissions.editCustomRolesWhosePermissionsYouHold"),
+    get label() {
+      return t("permissions.editRoles");
+    },
+    get description() {
+      return t("permissions.editCustomRolesWhosePermissionsYouHold");
+    },
     group: "roles",
     requires: roleRead,
-    impact: t("permissions.changesEveryAssignedUserSAccessImmediately"),
+    get impact() {
+      return t("permissions.changesEveryAssignedUserSAccessImmediately");
+    },
   },
   "admin.roles.delete": {
-    label: t("permissions.deleteRoles"),
-    description: t("permissions.deleteCustomRolesWhosePermissionsYouHold"),
+    get label() {
+      return t("permissions.deleteRoles");
+    },
+    get description() {
+      return t("permissions.deleteCustomRolesWhosePermissionsYouHold");
+    },
     group: "roles",
     requires: roleRead,
-    impact: t("permissions.removesTheRoleFromAllAssignedUsers"),
+    get impact() {
+      return t("permissions.removesTheRoleFromAllAssignedUsers");
+    },
   },
   "admin.roles.defaults.manage": {
-    label: t("permissions.manageDefaultRoles"),
-    description: t("permissions.chooseServiceOnlyRolesSelectedForNewUsersExisting"),
+    get label() {
+      return t("permissions.manageDefaultRoles");
+    },
+    get description() {
+      return t("permissions.chooseServiceOnlyRolesSelectedForNewUsersExisting");
+    },
     group: "roles",
     requires: roleRead,
   },
   "admin.users.roles.read": {
-    label: t("permissions.viewAssignedRoles"),
-    description: t("permissions.inspectAUserSRoleAssignmentsAndTheAccess"),
+    get label() {
+      return t("permissions.viewAssignedRoles");
+    },
+    get description() {
+      return t("permissions.inspectAUserSRoleAssignmentsAndTheAccess");
+    },
     group: "assignments",
     requires: ["admin.users.read", "admin.roles.read"],
   },
   "admin.users.roles.assign": {
-    label: t("permissions.assignRoles"),
-    description: t("permissions.addRolesWhosePermissionsYouHoldToAUser"),
+    get label() {
+      return t("permissions.assignRoles");
+    },
+    get description() {
+      return t("permissions.addRolesWhosePermissionsYouHoldToAUser");
+    },
     group: "assignments",
     requires: assignmentRead,
-    impact: t("permissions.grantsAccessImmediately"),
+    get impact() {
+      return t("permissions.grantsAccessImmediately");
+    },
   },
   "admin.users.roles.remove": {
-    label: t("permissions.removeAssignedRoles"),
-    description: t("permissions.removeRolesWhosePermissionsYouHoldFromAUser"),
+    get label() {
+      return t("permissions.removeAssignedRoles");
+    },
+    get description() {
+      return t("permissions.removeRolesWhosePermissionsYouHoldFromAUser");
+    },
     group: "assignments",
     requires: assignmentRead,
-    impact: t("permissions.revokesAccessImmediately"),
+    get impact() {
+      return t("permissions.revokesAccessImmediately");
+    },
   },
   "admin.mail.providers.read": {
-    label: t("permissions.viewSendingProviderSettings"),
-    description: t("permissions.inspectSendingProviderSettingsFromMailDomainConfiguration"),
+    get label() {
+      return t("permissions.viewSendingProviderSettings");
+    },
+    get description() {
+      return t("permissions.inspectSendingProviderSettingsFromMailDomainConfiguration");
+    },
     group: "mail",
     requires: ["console.access"],
   },
   "admin.mail.providers.manage": {
-    label: t("permissions.manageSendingProviders"),
-    description: t("permissions.configureDomainSpecificSendingProvidersWhileManagingMailDomains"),
+    get label() {
+      return t("permissions.manageSendingProviders");
+    },
+    get description() {
+      return t("permissions.configureDomainSpecificSendingProvidersWhileManagingMailDomains");
+    },
     group: "mail",
     requires: ["admin.mail.providers.read"],
   },
   "admin.mail.domains.read": {
-    label: t("permissions.viewMailDomains"),
-    description: t("permissions.inspectMailDomainsAndInboundRoutingConfiguration"),
+    get label() {
+      return t("permissions.viewMailDomains");
+    },
+    get description() {
+      return t("permissions.inspectMailDomainsAndInboundRoutingConfiguration");
+    },
     group: "mail",
     requires: ["console.access"],
   },
   "admin.mail.domains.manage": {
-    label: t("permissions.manageMailDomains"),
-    description: t("permissions.configureDomainsAddressesAndInboundRouting"),
+    get label() {
+      return t("permissions.manageMailDomains");
+    },
+    get description() {
+      return t("permissions.configureDomainsAddressesAndInboundRouting");
+    },
     group: "mail",
     requires: ["admin.mail.domains.read"],
   },
   "admin.mail.mailboxes.read": {
-    label: t("permissions.viewMailboxConfiguration"),
-    description: t("permissions.listWorkspaceMailboxConfigurationWithoutAccessToMessageContents"),
+    get label() {
+      return t("permissions.viewMailboxConfiguration");
+    },
+    get description() {
+      return t("permissions.listWorkspaceMailboxConfigurationWithoutAccessToMessageContents");
+    },
     group: "mail",
     requires: ["console.access"],
   },
   "admin.mail.mailboxes.manage": {
-    label: t("permissions.manageMailboxConfiguration"),
-    description: t("permissions.provisionMailboxesAndChangeTheirStatusDoesNotGrant"),
+    get label() {
+      return t("permissions.manageMailboxConfiguration");
+    },
+    get description() {
+      return t("permissions.provisionMailboxesAndChangeTheirStatusDoesNotGrant");
+    },
     group: "mail",
     requires: ["admin.mail.mailboxes.read"],
   },
   "admin.mail.audit.read": {
-    label: t("permissions.viewMailAuditHistory"),
-    description: t("permissions.inspectResourceActivityForMailboxesYouManageDoesNot"),
+    get label() {
+      return t("permissions.viewMailAuditHistory");
+    },
+    get description() {
+      return t("permissions.inspectResourceActivityForMailboxesYouManageDoesNot");
+    },
     group: "mail",
     requires: ["console.access", "mail.access"],
   },

@@ -1,3 +1,4 @@
+import { LanguageSettings } from "../components/language-settings";
 import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -217,6 +218,7 @@ export function ProfilePage() {
         <h1>{t("routesProfile.profile")}</h1>
         <p>{t("routesProfile.manageYourPersonalInformation")}</p>
       </header>
+      <LanguageSettings />
       <ProfileImageSettings />
       {loading ? (
         <p className="account-loading" role="status">

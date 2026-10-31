@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 export type ProfileValue = string | number | boolean | string[] | null;
 export interface ProfileField {
   id: string;
@@ -10,6 +10,7 @@ export interface ProfileField {
   options: { value: string; label: Record<string, string> }[] | null;
 }
 export const label = (translations: Record<string, string> | null | undefined, fallback: string) =>
+  translations?.[getLocale()] ||
   translations?.en ||
   Object.values(translations ?? {}).find((value) => typeof value === "string" && value) ||
   fallback;

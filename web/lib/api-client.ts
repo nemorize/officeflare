@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 export class ApiError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -34,6 +34,7 @@ export function createApiClient(deps: {
             ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
             : (options.signal ?? AbortSignal.timeout(15_000)),
         headers: {
+          "Accept-Language": getLocale(),
           ...(options.body
             ? {
                 "Content-Type": binaryBody

@@ -4808,4 +4808,13 @@ export const en = defineMessages({
   "shell.enableJavaScript": "Enable JavaScript in your browser to use Officeflare.",
   "shell.title": "Sign in · Officeflare",
   "workspace.navigation": "{name} navigation",
+  "language.title": "Language",
+  "language.system": "System",
+  "language.english": "English",
+  "language.korean": "한국어",
+  "language.japanese": "日本語",
+  "language.description":
+    "System follows your browser’s preferred languages. English is used when none are supported.",
+  "language.applyHint": "Saving a different display language reloads the page.",
+  "language.invalid": "Unsupported language preference",
 });

@@ -9,7 +9,10 @@ export const api = createApiClient({
   fetch: (...args) => fetch(...args),
 });
 
+import type { LanguagePreference } from "../../shared/i18n/locale.ts";
+
 export interface AccountUser {
+  language: LanguagePreference;
   id: string;
   email_address: string;
   display_name: string | null;

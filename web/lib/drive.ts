@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import type { ApiOptions } from "./api-client";
 
 export type DriveRole = "owner" | "editor" | "commenter" | "viewer";
@@ -124,11 +124,11 @@ export const canComment = (item: DriveItem) =>
 export function formatBytes(value: number) {
   if (!value) return t("libDrive.0B");
   const unit = Math.min(4, Math.floor(Math.log(Math.max(1, value)) / Math.log(1024)));
-  return `${new Intl.NumberFormat("en", { maximumFractionDigits: unit ? 1 : 0 }).format(value / 1024 ** unit)} ${[t("libDrive.b"), t("libDrive.kb"), t("libDrive.mb"), t("libDrive.gb"), t("libDrive.tb")][unit]}`;
+  return `${new Intl.NumberFormat(getLocale(), { maximumFractionDigits: unit ? 1 : 0 }).format(value / 1024 ** unit)} ${[t("libDrive.b"), t("libDrive.kb"), t("libDrive.mb"), t("libDrive.gb"), t("libDrive.tb")][unit]}`;
 }
 export function driveDate(value: number, full = false) {
   return new Intl.DateTimeFormat(
-    "en",
+    getLocale(),
     full
       ? { dateStyle: "medium", timeStyle: "short" }
       : { month: "short", day: "numeric", year: "numeric" },

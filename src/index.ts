@@ -1,3 +1,4 @@
+import { withRequestLanguage } from "./i18n";
 import { t } from "../shared/i18n/index.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -63,7 +64,8 @@ app.onError((error, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch: (request, env, context) =>
+    withRequestLanguage(request, () => app.fetch(request, env, context)),
   email: receive,
   queue: async (batch, env) => {
     if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications"))

@@ -4,7 +4,7 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { fileURLToPath } from "node:url";
 import { readFile, readdir } from "node:fs/promises";
 import type { Plugin } from "vite";
-import { locale, messageTemplate, isStaticMessageKey } from "./shared/i18n/index.ts";
+import { defaultLocale, messageTemplate, isStaticMessageKey } from "./shared/i18n/index.ts";
 
 function localizedHtml(): Plugin {
   return {
@@ -13,7 +13,7 @@ function localizedHtml(): Plugin {
       return html.replace(/\{\{i18n:([\w.]+)\}\}/g, (_, key: string) => {
         if (key !== "locale" && !isStaticMessageKey(key))
           throw new Error(`Unknown HTML translation: ${key}`);
-        const value = key === "locale" ? locale : messageTemplate(key);
+        const value = key === "locale" ? defaultLocale : messageTemplate(key);
         return value
           .replaceAll("&", "&amp;")
           .replaceAll('"', "&quot;")

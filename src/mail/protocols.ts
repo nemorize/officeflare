@@ -771,22 +771,30 @@ const field = { type: "string" };
 const tools = [
   {
     name: "list_mailboxes",
-    description: t("mailProtocols.listMailboxesAvailableToThisCredential"),
+    get description() {
+      return t("mailProtocols.listMailboxesAvailableToThisCredential");
+    },
     inputSchema: toolSchema({}, []),
   },
   {
     name: "search_messages",
-    description: t("mailProtocols.searchAMailbox"),
+    get description() {
+      return t("mailProtocols.searchAMailbox");
+    },
     inputSchema: toolSchema({ mailbox_id: field, query: field }, ["mailbox_id", "query"]),
   },
   {
     name: "get_message",
-    description: t("mailProtocols.readAnAuthorizedMessage"),
+    get description() {
+      return t("mailProtocols.readAnAuthorizedMessage");
+    },
     inputSchema: toolSchema({ mailbox_id: field, message_id: field }, ["mailbox_id", "message_id"]),
   },
   {
     name: "create_draft",
-    description: t("mailProtocols.createAPrivateDraftForReview"),
+    get description() {
+      return t("mailProtocols.createAPrivateDraftForReview");
+    },
     inputSchema: toolSchema(
       {
         mailbox_id: field,
@@ -799,7 +807,9 @@ const tools = [
   },
   {
     name: "request_send",
-    description: t("mailProtocols.requestHumanReviewOfTheCurrentDraftDoesNot"),
+    get description() {
+      return t("mailProtocols.requestHumanReviewOfTheCurrentDraftDoesNot");
+    },
     inputSchema: toolSchema({ mailbox_id: field, draft_id: field }, ["mailbox_id", "draft_id"]),
   },
 ];

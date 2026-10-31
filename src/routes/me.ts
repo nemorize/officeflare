@@ -1,6 +1,8 @@
+import { t } from "../../shared/i18n/index.ts";
+import { isLanguagePreference } from "../../shared/i18n/locale.ts";
 import { and, desc, eq, exists, gt, isNull } from "drizzle-orm";
 import { Hono } from "hono";
-import { body, password, unauthorized } from "../auth/input";
+import { body, conflict, invalid, password, unauthorized } from "../auth/input";
 import { hashPassword } from "../auth/crypto";
 import {
   accessClaim,
@@ -26,6 +28,25 @@ me.get("/", requireAccess, (c) => c.json({ user: publicUser(c.get("identity").us
 me.get("/permissions", requireAccess, async (c) =>
   c.json({ permissions: await permissionsFor(c.get("db"), c.get("identity").user.id) }),
 );
+
+me.put("/language", requireAccess, async (c) => {
+  const data = await body(c, ["language"]);
+  if (!isLanguagePreference(data.language)) invalid(t("language.invalid"));
+  const { user, session } = c.get("identity");
+  const db = c.get("db"),
+    operation = uuid();
+  const result = await db.batch([
+    accessClaim(c, operation),
+    db
+      .update(users)
+      .set({ language: data.language, updated_at: now() })
+      .where(and(eq(users.id, user.id), accessWon(db, session.id, operation)))
+      .returning(),
+  ]);
+  const updated = result[1][0];
+  if (!updated) conflict(t("routesProfile.accountOrProfilePolicyChangedReloadAndRetry"));
+  return c.json({ user: publicUser(updated) });
+});
 
 // A password-reset or one-use reauthentication grant is the Bearer token here.
 me.put("/password", async (c) => {

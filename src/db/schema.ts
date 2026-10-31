@@ -22,6 +22,9 @@ export const users = sqliteTable(
     id: text().primaryKey().notNull(),
     email_address: text().notNull(),
     display_name: text(),
+    language: text({ enum: ["system", "en", "ko", "ja"] })
+      .notNull()
+      .default("system"),
     profile_image_key: text(),
     created_at: timestamp("created_at"),
     updated_at: timestamp("updated_at"),

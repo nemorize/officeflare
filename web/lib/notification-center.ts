@@ -1,3 +1,4 @@
+import { getLocale } from "../../shared/i18n/index.ts";
 export interface NotificationItem {
   id: string;
   type: string;
@@ -51,4 +52,7 @@ export const notificationTarget = (path: string | null) =>
     ? path
     : null;
 export const notificationDate = (timestamp: number) =>
-  new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+  new Date(timestamp * 1000).toLocaleString(getLocale(), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });

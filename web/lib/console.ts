@@ -115,6 +115,7 @@ export const roleTemplates = [
   },
 ];
 export interface AdminUser {
+  language: import("../../shared/i18n/locale.ts").LanguagePreference;
   id: string;
   email_address: string;
   display_name: string | null;

@@ -1,6 +1,7 @@
+import { browserLanguage } from "../lib/browser-language";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type AccountUser } from "../lib/api";
-import { useSession } from "../lib/session";
+import { sessions, useSession } from "../lib/session";
 
 const AccountContext = createContext<{
   user: AccountUser | null;
@@ -15,22 +16,30 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AccountUser | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const sessionId = auth.session?.tokens.session_id;
+  const update = useCallback(
+    (next: AccountUser) => {
+      if (sessions.getSnapshot().session?.tokens.session_id !== sessionId) return;
+      browserLanguage.setPreference(next.language);
+      setUser(next);
+    },
+    [sessionId],
+  );
   const reload = useCallback(async () => {
     const result = await api<{ user: AccountUser }>("/api/me");
-    setUser(result.user);
-  }, []);
+    update(result.user);
+  }, [update]);
   useEffect(() => {
     const controller = new AbortController();
     setUser(null);
     void api<{ user: AccountUser }>("/api/me", { signal: controller.signal })
       .then((result) => {
-        if (!controller.signal.aborted) setUser(result.user);
+        if (!controller.signal.aborted) update(result.user);
       })
       .catch(() => {
         /* Account pages show request errors; navigation can use the restored email. */
       });
     return () => controller.abort();
-  }, [sessionId]);
+  }, [sessionId, update]);
   useEffect(() => {
     const controller = new AbortController();
     let url: string | null = null;
@@ -50,7 +59,5 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [user?.id, user?.profile_image_key]);
-  return (
-    <AccountContext value={{ user, imageUrl, reload, update: setUser }}>{children}</AccountContext>
-  );
+  return <AccountContext value={{ user, imageUrl, reload, update }}>{children}</AccountContext>;
 }

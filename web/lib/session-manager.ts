@@ -1,3 +1,4 @@
+import type { LanguagePreference } from "../../shared/i18n/locale.ts";
 import { t } from "../../shared/i18n/index.ts";
 import type { Session } from "./auth";
 
@@ -28,7 +29,10 @@ export interface SessionDependencies {
   // The callback is synchronous so an IndexedDB transaction can serialize it across tabs.
   lock: <T>(action: () => T) => Promise<T>;
   refresh: (token: string, requestId: string) => Promise<Session>;
-  currentUser: (access: string) => Promise<{ user: { email_address: string } }>;
+  currentUser: (
+    access: string,
+  ) => Promise<{ user: { email_address: string; language?: LanguagePreference } }>;
+  onUser?: (user: { email_address: string; language?: LanguagePreference }) => void;
   logout: (access: string) => Promise<void>;
   now: () => number;
   requestId: () => string;
@@ -300,6 +304,8 @@ export class SessionManager {
         if (revision === this.revision) this.authenticated(current);
         return current;
       });
+      if (active?.tokens.session_id === stored.tokens.session_id && revision === this.revision)
+        this.deps.onUser?.(profile.user);
       if (!active && revision === this.revision) this.signedOut();
       return active;
     };

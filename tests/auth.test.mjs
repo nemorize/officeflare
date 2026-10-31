@@ -148,6 +148,57 @@ test("Bearer account API in the Workers runtime", async (t) => {
       data: { method_id: methodId, code: supplied },
     });
 
+  await t.test(
+    "account language defaults to system and persists independently of profile policy",
+    async () => {
+      await seed("language-user");
+      await seed("language-other");
+      const token = (await login("language-user")).access_token;
+      assert.equal((await request("/api/me", { token })).user.language, "system");
+      await request("/api/me/language", { method: "PUT", data: { language: "ko" }, expected: 401 });
+      for (const language of ["en", "ko", "ja", "system"]) {
+        const result = await request("/api/me/language", {
+          method: "PUT",
+          token,
+          data: { language },
+        });
+        assert.equal(result.user.language, language);
+        assert.equal((await request("/api/me", { token })).user.language, language);
+        assert.equal(
+          (await db.select().from(users).where(eq(users.id, "language-other")).get()).language,
+          "system",
+        );
+      }
+      for (const language of ["fr", "ko-KR", "", null, 42]) {
+        await request("/api/me/language", {
+          method: "PUT",
+          token,
+          data: { language },
+          expected: 400,
+        });
+        assert.equal((await request("/api/me", { token })).user.language, "system");
+      }
+      await request("/api/me/language", { method: "PUT", token, data: {}, expected: 400 });
+      await request("/api/me/language", {
+        method: "PUT",
+        token,
+        data: { language: "ja", user_id: "language-other" },
+        expected: 400,
+      });
+      const invalid = await request("/api/me/language", {
+        method: "PUT",
+        token,
+        data: { language: "fr" },
+        expected: 400,
+        headers: { "Accept-Language": "ja-JP" },
+      });
+      assert.equal(invalid.error, "対応していない言語設定です");
+      await request("/api/me/language", { method: "PUT", token, data: { language: "ko" } });
+      const newToken = (await login("language-user")).access_token;
+      assert.equal((await request("/api/me", { token: newToken })).user.language, "ko");
+    },
+  );
+
   await t.test("login, token purpose, JWT validation, rotation and logout", async () => {
     await seed("basic");
     await db.update(users).set({ email_address: "BASIC@OFFICE.TEST" }).where(eq(users.id, "basic"));
