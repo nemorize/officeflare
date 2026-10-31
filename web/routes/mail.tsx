@@ -1,5 +1,5 @@
 import { LocalizedMessage } from "../components/i18n";
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import { useEffect, useMemo, memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { mailViewOptions, mailGrouped, folderMoveLeavesMailView } from "../../src/mail/ui-query";
@@ -1078,7 +1078,7 @@ const MailMessageRow = memo(function MailMessageRow({
         </span>
         <time title={mailDate(message.scheduled_at ?? message.received_at)}>
           {new Date((message.scheduled_at ?? message.received_at) * 1000).toLocaleDateString(
-            undefined,
+            getLocale(),
             {
               month: "short",
               day: "numeric",
@@ -1088,7 +1088,7 @@ const MailMessageRow = memo(function MailMessageRow({
             message.submission_status === "scheduled" &&
             message.scheduled_at && (
               <small className="mail-row-schedule-time">
-                {new Date(message.scheduled_at * 1000).toLocaleTimeString(undefined, {
+                {new Date(message.scheduled_at * 1000).toLocaleTimeString(getLocale(), {
                   hour: "numeric",
                   minute: "2-digit",
                 })}

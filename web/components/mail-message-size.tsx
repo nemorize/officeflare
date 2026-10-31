@@ -1,5 +1,5 @@
 import { LocalizedMessage } from "./i18n";
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import type { MessageSizeBreakdown } from "../../src/mail/size";
 import { bytes } from "../lib/mail";
 import { Button, Icon, Popover, PopoverPopup } from "./ui";
@@ -17,7 +17,7 @@ export function MailMessageSize({
   const percentLabel =
     percentage === null
       ? null
-      : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(percentage)}%`;
+      : `${new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(percentage)}%`;
   const usage =
     percentage === null
       ? "unknown"

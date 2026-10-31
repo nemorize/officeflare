@@ -1,4 +1,5 @@
-import { t } from "../../shared/i18n/index.ts";
+import type { AccountUser } from "./api";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 export interface Session {
   token_type: "Bearer";
   access_token: string;
@@ -45,6 +46,7 @@ async function request<T>(
     cache: "no-store",
     signal: AbortSignal.timeout(15_000),
     headers: {
+      "Accept-Language": getLocale(),
       ...(data ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
@@ -75,5 +77,7 @@ export const logout = (access: string) => request<void>("/api/auth/logout", unde
 export const refresh = (token: string, requestId: string) =>
   request<Session>("/api/auth/refresh", { request_id: requestId }, token);
 
-export const currentUser = (access: string) =>
-  request<{ user: { id: string; email_address: string } }>("/api/me", undefined, access, "GET");
+export const currentUser = async (access: string) => {
+  const result = await request<{ user: AccountUser }>("/api/me", undefined, access, "GET");
+  return result;
+};

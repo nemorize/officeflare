@@ -550,6 +550,7 @@ export function publicUser(user: User) {
     email_address: user.email_address,
     display_name: user.display_name,
     profile_image_key: user.profile_image_key,
+    language: user.language,
     created_at: user.created_at,
     updated_at: user.updated_at,
     password_changed_at: user.password_changed_at,

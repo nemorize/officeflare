@@ -4883,4 +4883,13 @@ export const ja = defineTranslations(en, {
     "Officeflareを使用するには、ブラウザーでJavaScriptを有効にしてください。",
   "shell.title": "ログイン · Officeflare",
   "workspace.navigation": "{name}のナビゲーション",
+  "language.title": "言語",
+  "language.system": "システム",
+  "language.english": "English",
+  "language.korean": "한국어",
+  "language.japanese": "日本語",
+  "language.description":
+    "システムはブラウザーの優先言語に従います。対応する言語がない場合は英語を使用します。",
+  "language.applyHint": "表示言語を変更して保存すると、ページが再読み込みされます。",
+  "language.invalid": "対応していない言語設定です",
 });

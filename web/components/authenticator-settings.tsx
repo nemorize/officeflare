@@ -1,5 +1,5 @@
 import { LocalizedMessage } from "./i18n";
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -301,7 +301,7 @@ export function AuthenticatorSettings() {
                     {t("componentsAuthenticatorSettings.scanThisQrCodeInYourAuthenticatorAppOr", {
                       toLocaleTimeString: new Date(
                         setup.setup_expires_at * 1000,
-                      ).toLocaleTimeString("en", {
+                      ).toLocaleTimeString(getLocale(), {
                         hour: "numeric",
                         minute: "2-digit",
                       }),

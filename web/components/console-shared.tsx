@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertDialog,
@@ -17,7 +17,10 @@ import "./console-shared.css";
 export const adminDate = (timestamp: number | null) =>
   timestamp === null
     ? t("common.never")
-    : new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+    : new Date(timestamp * 1000).toLocaleString(getLocale(), {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
 export function ConsolePageHeader({
   title,
   description,

@@ -4814,4 +4814,13 @@ export const ko = defineTranslations(en, {
   "shell.enableJavaScript": "Officeflare를 사용하려면 브라우저에서 JavaScript를 활성화하세요.",
   "shell.title": "로그인 · Officeflare",
   "workspace.navigation": "{name} 탐색",
+  "language.title": "언어",
+  "language.system": "시스템",
+  "language.english": "English",
+  "language.korean": "한국어",
+  "language.japanese": "日本語",
+  "language.description":
+    "시스템은 브라우저의 선호 언어를 따릅니다. 지원되는 언어가 없으면 영어를 사용합니다.",
+  "language.applyHint": "표시 언어를 변경하여 저장하면 페이지가 새로고침됩니다.",
+  "language.invalid": "지원되지 않는 언어 설정입니다",
 });

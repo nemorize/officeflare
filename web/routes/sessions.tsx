@@ -1,5 +1,5 @@
 import { LocalizedMessage } from "../components/i18n";
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { AlertDialog, AlertDialogPopup, Button, Icon, useNotifications } from "@/components/ui";
 import { api, errorMessage } from "../lib/api";
@@ -14,7 +14,10 @@ interface AccountSession {
   user_agent: string | null;
 }
 const date = (timestamp: number) =>
-  new Date(timestamp * 1000).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+  new Date(timestamp * 1000).toLocaleString(getLocale(), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 function device(agent: string | null) {
   if (!agent) return t("routesSessions.browserSession");
   const browser = /Edg\//.test(agent)

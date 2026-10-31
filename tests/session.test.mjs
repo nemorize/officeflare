@@ -274,12 +274,15 @@ test("a delayed initial restore cannot overwrite a new login", async () => {
   const gate = f.holdProfile(),
     pending = manager.restore();
   await drain();
+  const identities = [];
+  f.dependencies.onUser = (user) => identities.push(user);
   const newer = f.tokens("session-two");
   await manager.accept(newer, "new@office.test");
   gate.resolve();
   await pending;
   assert.equal(manager.getSnapshot().session.tokens.session_id, "session-two");
   assert.equal(manager.getSnapshot().session.email, "new@office.test");
+  assert.deepEqual(identities, []);
 });
 
 test("a login in another tab while logout prepares cannot be revoked or removed", async () => {

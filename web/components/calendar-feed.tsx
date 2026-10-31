@@ -1,5 +1,5 @@
 import { LocalizedMessage } from "./i18n";
-import { t } from "../../shared/i18n/index.ts";
+import { getLocale, t } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, useState } from "react";
 import { Button, CheckboxControl, Input, useNotifications } from "./ui";
 import {
@@ -28,7 +28,7 @@ interface Feed {
   warnings: string[];
 }
 const stamp = (value: number | null) =>
-  value ? new Date(value * 1000).toLocaleString() : t("componentsCalendarFeed.notYet");
+  value ? new Date(value * 1000).toLocaleString(getLocale()) : t("componentsCalendarFeed.notYet");
 export function CalendarFeedDialog({
   cal: initial,
   onClose,
