@@ -1,7 +1,7 @@
 import { t } from "../shared/i18n/index.ts";
 import { lazy, StrictMode, Suspense } from "react";
 import "./lib/browser-theme";
-import { createRoot, type Root } from "react-dom/client";
+import { root } from "./lib/app-root";
 import {
   createBrowserRouter,
   createRoutesFromElements,
@@ -105,8 +105,6 @@ const CalendarInvitationPage = lazy(() =>
   })),
 );
 
-const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
-if (import.meta.hot) import.meta.hot.data.root = root;
 const router = createBrowserRouter(
   createRoutesFromElements(
     <>
