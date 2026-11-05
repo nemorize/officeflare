@@ -9,6 +9,7 @@ import {
   retryableSubmission,
   htmlFrame,
   mailFrameHeight,
+  mailFrameLink,
 } from "../web/lib/mail-helpers.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
@@ -139,6 +140,55 @@ test("email sizing permits only its nonce-authorized observer and rejects forged
   assert.equal(mailFrameHeight({ ...data, height: "300" }, nonce, source, source), null);
   assert.equal(mailFrameHeight({ ...data, height: 1_000_000 }, nonce, source, source), 24_000);
 });
+test("mail link requests verify the opaque frame, nonce and absolute destination", () => {
+  const nonce = "a".repeat(32),
+    source = {};
+  const request = {
+    type: "officeflare:mail-link",
+    nonce,
+    url: "https://EXAMPLE.com/path?q=1#part",
+  };
+  const read = (data = request, sender = source, expected = source, origin = "null") =>
+    mailFrameLink(data, nonce, sender, expected, origin);
+  assert.equal(read(), "https://example.com/path?q=1#part");
+  assert.equal(read({ ...request, url: "http://example.com" }), "http://example.com/");
+  assert.equal(
+    read({ ...request, url: "mailto:team@example.com?subject=Hello" }),
+    "mailto:team@example.com?subject=Hello",
+  );
+  assert.equal(read(request, {}), null);
+  assert.equal(read(request, source, null), null);
+  assert.equal(read(request, source, source, "https://example.com"), null);
+  assert.equal(read({ ...request, nonce: "old-message" }), null);
+  assert.equal(read({ ...request, type: "officeflare:mail-body-height" }), null);
+  assert.equal(read(null), null);
+  for (const url of [
+    "javascript:alert(document.cookie)",
+    "JaVaScRiPt:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "blob:https://example.com/id",
+    "file:///etc/passwd",
+    "vbscript:msgbox(1)",
+    "/api/auth/logout",
+    "//evil.test/path",
+    "https://trusted.test@evil.test/path",
+    "https://user:secret@evil.test/",
+    "https://exam\tple.com/",
+    "https://example.com/\nother",
+    "https://example.com/\u202eevil",
+    "https://example.com/" + "a".repeat(8192),
+    "",
+    42,
+    {},
+  ])
+    assert.equal(read({ ...request, url }), null, String(url));
+  assert.equal(
+    read({ ...request, url: "https://example.com/<img src=x onerror=alert(1)>" }),
+    "https://example.com/%3Cimg%20src=x%20onerror=alert(1)%3E",
+  );
+  assert.match(read({ ...request, url: "https://例え.テスト/" }), /^https:\/\/xn--/);
+});
+
 test("new mail routes restore safely after login without accepting arbitrary paths", () => {
   for (const path of [
     "/mail/settings",

@@ -1224,6 +1224,10 @@ export const en = defineMessages({
   "componentsMailBody.attemptS": "{provider} · {connection_id} · {attempt_count} attempt(s)",
   "componentsMailBody.cancelSend": "Cancel send",
   "componentsMailBody.checkStatus": "Check status",
+  "componentsMailBody.checkLinkBeforeOpening":
+    "Do you want to open this address? Check the destination before continuing.",
+  "componentsMailBody.openEmailLink": "Open email link?",
+  "componentsMailBody.openLinkInNewTab": "Open in new tab",
   "componentsMailBody.draftReopenedTheProviderMayAlreadyHaveAcceptedThis":
     "Draft reopened. The provider may already have accepted this email.",
   "componentsMailBody.formattedEmailBody": "Formatted email body",

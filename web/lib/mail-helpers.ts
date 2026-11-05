@@ -73,19 +73,66 @@ export function mailFailure(failure: unknown) {
     ? failure.message
     : t("libMailHelpers.unableToCompleteTheRequest");
 }
-export function htmlFrame(html: string, resizeNonce?: string) {
+export function htmlFrame(html: string, resizeNonce?: string, parentOrigin = "*") {
   if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce))
     throw new Error(t("libMailHelpers.invalidFrameNonce"));
   const policy = resizeNonce ? " script-src 'nonce-" + resizeNonce + "';" : "";
-  // Only this nonce-authorized script can run; the frame keeps an opaque origin.
-  const resize = resizeNonce
-    ? '<script nonce="' +
-      resizeNonce +
-      '">(()=>{const nonce="' +
-      resizeNonce +
-      '";const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce,height},"*")};new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);addEventListener("load",report);report()})()</script>'
+  const targetOrigin = JSON.stringify(parentOrigin).replaceAll("<", "\\u003c");
+  // The frame keeps an opaque origin and cannot open popups or navigate its parent.
+  // Only this nonce-authorized script can forward a real link click for confirmation.
+  const script = resizeNonce
+    ? `<script nonce="${resizeNonce}">(()=>{
+      const nonce="${resizeNonce}",targetOrigin=${targetOrigin};
+      const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce,height},targetOrigin)};
+      const follow=event=>{
+        const target=event.target?.nodeType===1?event.target:event.target?.parentElement;
+        const link=target?.closest("a[href]");
+        if(!link||(event.type==="click"?event.button!==0:event.button!==1))return;
+        event.preventDefault();event.stopPropagation();
+        if(!event.isTrusted)return;
+        parent.postMessage({type:"officeflare:mail-link",nonce,url:link.getAttribute("href")},targetOrigin);
+      };
+      new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);
+      addEventListener("load",report);
+      addEventListener("click",follow,true);
+      addEventListener("auxclick",follow,true);
+      report();
+    })()</script>`
     : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src^="/api/mail/"]{opacity:0}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${resize}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src^="/api/mail/"]{opacity:0}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${script}</body></html>`;
+}
+export function mailFrameLink(
+  data: unknown,
+  nonce: string,
+  source: unknown,
+  expectedSource: unknown,
+  origin: string,
+): string | null {
+  if (
+    !expectedSource ||
+    source !== expectedSource ||
+    origin !== "null" ||
+    !data ||
+    typeof data !== "object"
+  )
+    return null;
+  const message = data as { type?: string; nonce?: string; url?: unknown };
+  if (
+    message.type !== "officeflare:mail-link" ||
+    message.nonce !== nonce ||
+    typeof message.url !== "string" ||
+    message.url.length > 8192 ||
+    /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(message.url)
+  )
+    return null;
+  try {
+    const url = new URL(message.url);
+    if (!["https:", "http:", "mailto:"].includes(url.protocol) || url.username || url.password)
+      return null;
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 export function mailFrameHeight(
   data: unknown,

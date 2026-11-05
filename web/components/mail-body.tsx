@@ -8,6 +8,7 @@ import {
   mailErrorDescription,
   htmlFrame,
   mailFrameHeight,
+  mailFrameLink,
   mailboxPath,
   mailDate,
   cancelableSubmission,
@@ -18,7 +19,7 @@ import {
 } from "../lib/mail";
 import { useMail } from "./mail-context";
 import { MailNotice, useMailAction, useMailResource } from "./mail-common";
-import { Button } from "./ui";
+import { AlertDialog, AlertDialogPopup, Button } from "./ui";
 export const MailHtml = memo(
   function MailHtml({
     message,
@@ -37,12 +38,14 @@ export const MailHtml = memo(
         [...crypto.getRandomValues(new Uint8Array(16))]
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join(""),
-      [message.id, content],
+      [message.id, message.body_revision, content],
     );
     const [html, setHtml] = useState(content),
       [error, setError] = useState("");
     const [attempt, setAttempt] = useState(0);
-    const document = useMemo(() => htmlFrame(html, nonce), [html, nonce]);
+    const [link, setLink] = useState<string | null>(null);
+    const cancelLink = useRef<HTMLButtonElement>(null);
+    const document = useMemo(() => htmlFrame(html, nonce, window.location.origin), [html, nonce]);
     useEffect(() => {
       const controller = new AbortController();
       setHtml(content);
@@ -73,15 +76,63 @@ export const MailHtml = memo(
     }, [message.id, message.body_revision, content, path, attempt, cache]);
     useLayoutEffect(() => {
       setHeight(128);
-      const resize = (event: MessageEvent) => {
+      setLink(null);
+      const receive = (event: MessageEvent) => {
         const next = mailFrameHeight(event.data, nonce, event.source, frame.current?.contentWindow);
         if (next !== null) setHeight(next);
+        const destination = mailFrameLink(
+          event.data,
+          nonce,
+          event.source,
+          frame.current?.contentWindow,
+          event.origin,
+        );
+        if (destination) setLink((current) => current ?? destination);
       };
-      window.addEventListener("message", resize);
-      return () => window.removeEventListener("message", resize);
+      window.addEventListener("message", receive);
+      return () => window.removeEventListener("message", receive);
     }, [nonce]);
     return (
       <>
+        {link && (
+          <AlertDialog.Root
+            open
+            onOpenChange={(open) => {
+              if (!open) setLink(null);
+            }}
+          >
+            <AlertDialogPopup initialFocus={cancelLink}>
+              <AlertDialog.Title>{t("componentsMailBody.openEmailLink")}</AlertDialog.Title>
+              <AlertDialog.Description>
+                {t("componentsMailBody.checkLinkBeforeOpening")}
+              </AlertDialog.Description>
+              <p className="mail-link-destination">
+                <bdi dir="ltr">{link}</bdi>
+              </p>
+              <div className="mail-link-actions">
+                <Button ref={cancelLink} size="md" onClick={() => setLink(null)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  nativeButton={false}
+                  render={
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      referrerPolicy="no-referrer"
+                    />
+                  }
+                  onClick={() => setLink(null)}
+                >
+                  {t("componentsMailBody.openLinkInNewTab")}
+                </Button>
+              </div>
+            </AlertDialogPopup>
+          </AlertDialog.Root>
+        )}
         <MailNotice error={error} />
         {error && (
           <Button variant="ghost" size="sm" onClick={() => setAttempt((value) => value + 1)}>

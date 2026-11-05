@@ -1237,6 +1237,10 @@ export const ko = defineTranslations(en, {
   "componentsMailBody.attemptS": "{provider} · {connection_id} · 시도 {attempt_count}회",
   "componentsMailBody.cancelSend": "보내기 취소",
   "componentsMailBody.checkStatus": "상태 확인",
+  "componentsMailBody.checkLinkBeforeOpening":
+    "이 주소로 이동하시겠습니까? 계속하기 전에 실제 이동할 주소를 확인해 주세요.",
+  "componentsMailBody.openEmailLink": "메일 링크를 여시겠습니까?",
+  "componentsMailBody.openLinkInNewTab": "새 창에서 열기",
   "componentsMailBody.draftReopenedTheProviderMayAlreadyHaveAcceptedThis":
     "임시보관 메일을 다시 열었습니다. 제공자가 이미 이 이메일을 수락했을 수 있습니다.",
   "componentsMailBody.formattedEmailBody": "서식 있는 이메일 본문",

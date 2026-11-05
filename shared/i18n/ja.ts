@@ -1256,6 +1256,10 @@ export const ja = defineTranslations(en, {
   "componentsMailBody.attemptS": "{provider} · {connection_id} · 試行{attempt_count}回",
   "componentsMailBody.cancelSend": "送信をキャンセル",
   "componentsMailBody.checkStatus": "状態を確認",
+  "componentsMailBody.checkLinkBeforeOpening":
+    "このアドレスを開きますか？続行する前に実際の移動先を確認してください。",
+  "componentsMailBody.openEmailLink": "メール内のリンクを開きますか？",
+  "componentsMailBody.openLinkInNewTab": "新しいタブで開く",
   "componentsMailBody.draftReopenedTheProviderMayAlreadyHaveAcceptedThis":
     "下書きを開き直しました。プロバイダーがすでにこのメールを受理している可能性があります。",
   "componentsMailBody.formattedEmailBody": "書式付きメール本文",
