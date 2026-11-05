@@ -10,7 +10,7 @@ import {
   inboxUnread,
   folderMoveLeavesMailView,
 } from "../src/mail/ui-query.ts";
-import { htmlFrame } from "../web/lib/mail-helpers.ts";
+import { htmlFrame, mailFrameLink } from "../web/lib/mail-helpers.ts";
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("a bootstrap seeds the six initial resources without follow-up data requests", async () => {
@@ -144,6 +144,61 @@ test("prepared mail displays embedded images without client image messages and s
     reports.map((report) => report.height),
     [90, 190, 190],
   );
+});
+
+test("trusted link clicks request parent confirmation without navigating the sandbox", () => {
+  const nonce = "c".repeat(32),
+    handlers = {},
+    requests = [],
+    source = {};
+  const html = htmlFrame('<a href="https://example.com">Go</a>', nonce, "https://office.test"),
+    script = html.match(/<script nonce="[^"]+">([\s\S]+)<\/script>/)[1];
+  vm.runInNewContext(script, {
+    document: { body: { getBoundingClientRect: () => ({ height: 50 }) } },
+    parent: { postMessage: (message, origin) => requests.push({ message, origin }) },
+    addEventListener: (name, handler) => {
+      handlers[name] = handler;
+    },
+    ResizeObserver: class {
+      observe() {}
+    },
+    requestAnimationFrame: (fn) => fn(),
+  });
+  requests.length = 0;
+  const anchor = { getAttribute: () => "https://example.com" };
+  let prevented = 0,
+    stopped = 0;
+  const event = {
+    type: "click",
+    button: 0,
+    isTrusted: true,
+    target: { nodeType: 1, closest: (selector) => (selector === "a[href]" ? anchor : null) },
+    preventDefault() {
+      prevented++;
+    },
+    stopPropagation() {
+      stopped++;
+    },
+  };
+  handlers.click(event);
+  assert.equal(prevented, 1);
+  assert.equal(stopped, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].origin, "https://office.test");
+  assert.equal(
+    mailFrameLink(requests[0].message, nonce, source, source, "null"),
+    "https://example.com/",
+  );
+  handlers.click({ ...event, isTrusted: false });
+  assert.equal(requests.length, 1, "Synthetic clicks cannot request navigation");
+  handlers.auxclick({ ...event, type: "auxclick", button: 2 });
+  assert.equal(requests.length, 1, "Context menu clicks keep their normal behavior");
+  handlers.auxclick({ ...event, type: "auxclick", button: 1 });
+  assert.equal(requests.length, 2);
+  handlers.click({ ...event, target: { parentElement: event.target } });
+  assert.equal(requests.length, 3, "Text and nested link elements remain clickable");
+  handlers.click({ ...event, target: { nodeType: 1, closest: () => null } });
+  assert.equal(requests.length, 3);
 });
 
 test("conversation headers accept new mail and deletions without reloading unrelated bodies", async () => {

@@ -1,3 +1,28 @@
+.mail-link-destination {
+  margin-block: 16px;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 12px;
+  user-select: text;
+}
+.mail-link-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block-start: 24px;
+}
+.mail-link-actions > [data-ui-button] {
+  flex-shrink: 0;
+  height: var(--ui-control-height);
+}
+
 .mail-send-status {
   display: flex;
   flex-wrap: wrap;
