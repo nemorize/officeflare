@@ -220,8 +220,8 @@ export {
   mailFailure,
   mailErrorDescription,
   htmlFrame,
-  mailFrameHeight,
-  mailFrameLink,
+  mailLinkUrl,
+  observeMailDocument,
   MailOperation,
 } from "./mail-helpers";
 export async function downloadMail(path: string, name: string) {

@@ -10,25 +10,40 @@ import { t } from "../../shared/i18n/index.ts";
 
 export type MailRenderPart = "body" | "quoted";
 export const mailRenderKey = (bodyKey: string, part: MailRenderPart = "body") =>
+  `${bodyKey}.render-v2${part === "quoted" ? "-quoted" : ""}.json`;
+export const legacyMailRenderKey = (bodyKey: string, part: MailRenderPart = "body") =>
   `${bodyKey}.render-v1${part === "quoted" ? "-quoted" : ""}.json`;
-
+export const mailRenderImagePrefix = (bodyKey: string) => `${bodyKey}.render-images/`;
+export const mailRenderImageKey = (bodyKey: string, id: string) =>
+  mailRenderImagePrefix(bodyKey) + id;
+export interface StoredMailImage {
+  id: string;
+  size: number;
+  contentType: string;
+}
 export interface PreparedMailRendering extends MailRendering {
+  format: 2;
+  images: Record<string, StoredMailImage | null>;
+}
+interface LegacyRendering extends MailRendering {
   images: Record<string, string>;
 }
-
 const missingImage =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const imageBytes = 5 * 1024 ** 2,
   messageBytes = 20 * 1024 ** 2,
   imageLimit = 96;
-
-function embeddedImage(body: Uint8Array, contentType: string) {
-  let binary = "";
-  for (let index = 0; index < body.length; index += 8192)
-    binary += String.fromCharCode(...body.subarray(index, index + 8192));
-  return `data:${contentType};base64,${btoa(binary)}`;
+const dataImages = /data:image\/(?:png|jpeg|gif|webp|avif|svg\+xml);base64,[a-z\d+/=\r\n]+/gi;
+function decodedImage(value: string) {
+  const comma = value.indexOf(","),
+    contentType = value.slice(5, value.indexOf(";"));
+  if (value.length > (imageBytes * 4) / 3 + 256)
+    throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
+  return validatedImage(
+    Uint8Array.from(atob(value.slice(comma + 1)), (c) => c.charCodeAt(0)),
+    contentType,
+  );
 }
-
 function imagePattern(sources: string[]) {
   return new RegExp(
     sources
@@ -38,9 +53,72 @@ function imagePattern(sources: string[]) {
     "g",
   );
 }
+function createImageWriter(bucket: R2Bucket, bodyKey: string) {
+  const pending = new Map<string, Promise<StoredMailImage>>();
+  return async (body: Uint8Array, contentType: string): Promise<StoredMailImage> => {
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", body as Uint8Array<ArrayBuffer>),
+    );
+    const id = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    let write = pending.get(id);
+    if (!write) {
+      write = bucket
+        .put(mailRenderImageKey(bodyKey, id), body, { httpMetadata: { contentType } })
+        .then(() => ({ id, size: body.length, contentType }));
+      pending.set(id, write);
+    }
+    return write;
+  };
+}
+function extractDataImages(html: string, resourcePath: string) {
+  const embedded = new Map<string, string>();
+  const sources = new Map<string, string>();
+  return {
+    html: html.replace(dataImages, (value) => {
+      let source = sources.get(value);
+      if (!source) {
+        source = `${resourcePath}/inline/${sources.size}`;
+        sources.set(value, source);
+        embedded.set(source, value);
+      }
+      return source;
+    }),
+    embedded,
+  };
+}
 
-// Keep one durable, revision-specific artifact. Cache API entries alone can be evicted
-// or live in a different region from the reader.
+// Old Base64 manifests are converted locally without fetching the sender again.
+async function upgradeRendering(
+  bucket: R2Bucket,
+  bodyKey: string,
+  resourcePath: string,
+  legacy: LegacyRendering,
+) {
+  const extracted = extractDataImages(legacy.html, resourcePath);
+  const images: PreparedMailRendering["images"] = {};
+  const saveImage = createImageWriter(bucket, bodyKey);
+  let failures = legacy.failures,
+    index = 0,
+    bytes = 0;
+  for (const [source, value] of [...Object.entries(legacy.images), ...extracted.embedded]) {
+    images[source] = null;
+    if (value === missingImage) continue;
+    let image: ReturnType<typeof decodedImage>;
+    try {
+      if (index++ >= imageLimit) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
+      image = decodedImage(value);
+      bytes += image.body.length;
+      if (bytes > messageBytes) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
+    } catch {
+      failures++;
+      continue;
+    }
+    // Storage failures must leave the old manifest intact for a safe retry.
+    images[source] = await saveImage(image.body, image.contentType);
+  }
+  return { format: 2 as const, html: extracted.html, assets: legacy.assets, images, failures };
+}
+
 export async function prepareMailRendering(
   bucket: R2Bucket,
   message: { id: string; body_r2_key: string; attachments: Attachment[] },
@@ -55,9 +133,27 @@ export async function prepareMailRendering(
   } = {},
 ): Promise<PreparedMailRendering> {
   const part = options.part ?? "body",
-    key = mailRenderKey(message.body_r2_key, part),
-    object = await bucket.get(key),
-    previous = object ? await object.json<PreparedMailRendering>() : undefined;
+    key = mailRenderKey(message.body_r2_key, part);
+  const path = `/api/mail/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(message.id)}`,
+    resourcePath = path + "/render";
+  const object = await bucket.get(key);
+  let previous = object ? await object.json<PreparedMailRendering>() : undefined;
+  if (!previous) {
+    const legacyKey = legacyMailRenderKey(message.body_r2_key, part),
+      legacy = await bucket.get(legacyKey);
+    if (legacy) {
+      previous = await upgradeRendering(
+        bucket,
+        message.body_r2_key,
+        resourcePath,
+        await legacy.json<LegacyRendering>(),
+      );
+      await bucket.put(key, JSON.stringify(previous), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      await bucket.delete(legacyKey);
+    }
+  }
   if (previous && (!options.retryFailures || !previous.failures)) return previous;
   let source = options.source;
   if (source === undefined) {
@@ -66,41 +162,53 @@ export async function prepareMailRendering(
     const body = await bodyObject.json<{ html: string; quoted_body?: { html: string } }>();
     source = part === "quoted" ? (body.quoted_body?.html ?? "") : body.html;
   }
-  const path = `/api/mail/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(message.id)}`,
-    resourcePath = path + "/render",
-    cid = Object.fromEntries(
-      message.attachments
-        .filter((file) => file.content_id && file.content_type.startsWith("image/"))
-        .map((file) => [file.content_id!, `${path}/attachments/${file.id}`]),
-    ),
-    deadline = AbortSignal.timeout(12_000),
-    fetcher = options.fetcher ?? runtimeRemoteFetcher,
-    boundedFetch: RemoteFetcher = (input, init) =>
-      fetcher(input, {
-        ...init,
-        signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
-      }),
-    rendering = await renderMailHtml(
-      source.slice(0, 2 * 1024 ** 2),
-      cid,
-      resourcePath,
-      ownHost,
-      options.cache,
-      boundedFetch,
-    );
-  const resources = [
+  const cid = Object.fromEntries(
+    message.attachments
+      .filter((file) => file.content_id && file.content_type.startsWith("image/"))
+      .map((file) => [file.content_id!, `${path}/attachments/${file.id}`]),
+  );
+  const deadline = AbortSignal.timeout(12_000),
+    fetcher = options.fetcher ?? runtimeRemoteFetcher;
+  const dns = new Map<string, Promise<Response>>();
+  const boundedFetch: RemoteFetcher = async (input, init) => {
+    const url = String(input),
+      signal = init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+    if (url.startsWith("https://cloudflare-dns.com/dns-query?")) {
+      let pending = dns.get(url);
+      if (!pending) {
+        pending = fetcher(input, { ...init, signal });
+        dns.set(url, pending);
+      }
+      return (await pending).clone();
+    }
+    return fetcher(input, { ...init, signal });
+  };
+  const rendering = await renderMailHtml(
+    source.slice(0, 2 * 1024 ** 2),
+    cid,
+    resourcePath,
+    ownHost,
+    options.cache,
+    boundedFetch,
+  );
+  const extracted = extractDataImages(rendering.html, resourcePath);
+  type Resource = {
+    source: string;
+    asset?: MailRendering["assets"][number];
+    file?: Attachment;
+    embedded?: string;
+  };
+  const resources: Resource[] = [
     ...rendering.assets.map((asset) => ({ source: `${resourcePath}/assets/${asset.id}`, asset })),
     ...message.attachments
       .filter(
         (file) => file.content_id && rendering.html.includes(`${path}/attachments/${file.id}`),
       )
       .map((file) => ({ source: `${path}/attachments/${file.id}`, file })),
+    ...[...extracted.embedded].map(([source, embedded]) => ({ source, embedded })),
   ];
-  const images: Record<string, string> = {};
-  const occurrences = new Map(resources.map((resource) => [resource.source, 0]));
-  if (resources.length)
-    for (const [source] of rendering.html.matchAll(imagePattern([...occurrences.keys()])))
-      occurrences.set(source, occurrences.get(source)! + 1);
+  const images: PreparedMailRendering["images"] = {};
+  const saveImage = createImageWriter(bucket, message.body_r2_key);
   let next = 0,
     bytes = 0,
     failures = rendering.failures + (source.length > 2 * 1024 ** 2 ? 1 : 0);
@@ -108,32 +216,26 @@ export async function prepareMailRendering(
     Array.from({ length: Math.min(4, resources.length) }, async () => {
       while (next < resources.length) {
         const index = next++,
-          resource = resources[index]!,
-          copies = occurrences.get(resource.source)!;
-        images[resource.source] = missingImage;
-        if (!copies) continue;
+          resource = resources[index]!;
+        images[resource.source] = null;
+        let body: Uint8Array, contentType: string;
         try {
           if (index >= imageLimit || deadline.aborted || bytes >= messageBytes)
             throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
           const sameResource =
-            "file" in resource ||
+            !resource.asset ||
             previous?.assets.some(
-              (asset) => asset.id === resource.asset.id && asset.url === resource.asset.url,
+              (asset) => asset.id === resource.asset!.id && asset.url === resource.asset!.url,
             );
           const saved = sameResource ? previous?.images[resource.source] : undefined;
-          if (saved && saved !== missingImage) {
-            const size =
-              ((saved.length - saved.indexOf(",") - 1) * 0.75 -
-                (saved.endsWith("==") ? 2 : saved.endsWith("=") ? 1 : 0)) *
-              copies;
-            if (bytes + size > messageBytes)
-              throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
-            bytes += size;
+          if (saved) {
+            bytes += saved.size;
+            if (bytes > messageBytes) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
             images[resource.source] = saved;
             continue;
           }
-          let body: Uint8Array, contentType: string;
-          if ("file" in resource) {
+          if (resource.embedded) ({ body, contentType } = decodedImage(resource.embedded));
+          else if (resource.file) {
             const object = await bucket.get(resource.file.r2_key);
             if (!object || object.size > imageBytes)
               throw new Error(t("mailRemote.unsupportedRemoteImage"));
@@ -143,7 +245,7 @@ export async function prepareMailRendering(
             ));
           } else {
             const response = await loadMailRenderImage(
-              resource.asset,
+              resource.asset!,
               ownHost,
               options.cache,
               boundedFetch,
@@ -151,49 +253,72 @@ export async function prepareMailRendering(
             body = new Uint8Array(await response.arrayBuffer());
             contentType = response.headers.get("Content-Type")!;
           }
-          // Count repeated uses as well: embedding one large image many times
-          // must not expand a small message into an unbounded HTML response.
-          const size = body.length * copies;
-          if (bytes + size > messageBytes)
+          if (bytes + body.length > messageBytes)
             throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
-          bytes += size;
-          images[resource.source] = embeddedImage(body, contentType);
+          bytes += body.length;
         } catch {
           failures++;
+          continue;
         }
+        images[resource.source] = await saveImage(body, contentType);
       }
     }),
   );
-  const prepared = { ...rendering, images, failures };
+  const prepared: PreparedMailRendering = {
+    ...rendering,
+    format: 2,
+    html: extracted.html,
+    images,
+    failures,
+  };
   await bucket.put(key, JSON.stringify(prepared), {
     httpMetadata: { contentType: "application/json" },
   });
   return prepared;
 }
 
-export function embeddedMailRendering(rendering: PreparedMailRendering) {
+export function linkedMailRendering(
+  rendering: PreparedMailRendering,
+  resourcePath: string,
+  query: string,
+) {
   const sources = Object.keys(rendering.images);
   if (!sources.length) return rendering.html;
-  // One pass avoids matching /assets/1 inside /assets/10 or rewriting inserted data.
-  return rendering.html.replace(imagePattern(sources), (source) => rendering.images[source]!);
+  return rendering.html.replace(imagePattern(sources), (source) => {
+    const image = rendering.images[source];
+    return image ? `${resourcePath}/assets/${image.id}?${query}` : "";
+  });
 }
-
-export function preparedMailImage(
+export function preparedMailImageId(
   rendering: PreparedMailRendering,
   resourcePath: string,
   id: string,
 ) {
-  if (!rendering.assets.some((asset) => asset.id === id)) return null;
-  const image = rendering.images[`${resourcePath}/assets/${id}`];
-  if (!image || image === missingImage) return null;
-  const [header, encoded] = image.split(","),
-    body = Uint8Array.from(atob(encoded!), (character) => character.charCodeAt(0));
-  return new Response(body, {
+  if (/^[a-f0-9]{64}$/.test(id))
+    return Object.values(rendering.images).some((image) => image?.id === id) ? id : null;
+  return rendering.images[`${resourcePath}/assets/${id}`]?.id ?? null;
+}
+export async function loadPreparedMailImage(
+  bucket: R2Bucket,
+  bodyKey: string,
+  id: string,
+  etag?: string,
+) {
+  if (!/^[a-f0-9]{64}$/.test(id)) return null;
+  const object = await bucket.get(
+    mailRenderImageKey(bodyKey, id),
+    etag ? { onlyIf: new Headers({ "If-None-Match": etag }) } : undefined,
+  );
+  if (!object) return null;
+  return new Response("body" in object ? object.body : null, {
+    status: "body" in object ? 200 : 304,
     headers: {
-      "Content-Type": header!.slice(5, -7),
-      "Cache-Control": "private, no-store",
+      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      ETag: object.httpEtag,
+      "Cache-Control": "private, max-age=300, immutable",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox",
+      "Referrer-Policy": "no-referrer",
     },
   });
 }

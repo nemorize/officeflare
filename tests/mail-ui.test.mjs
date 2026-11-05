@@ -8,8 +8,7 @@ import {
   cancelableSubmission,
   retryableSubmission,
   htmlFrame,
-  mailFrameHeight,
-  mailFrameLink,
+  mailLinkUrl,
 } from "../web/lib/mail-helpers.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
@@ -113,54 +112,37 @@ test("sending controls never retry ambiguous acceptance or cancel a processing s
 test("HTML email uses a restrictive frame policy that blocks remote images and scripts", () => {
   const frame = htmlFrame('<p>Mail body</p><img src="https://tracking.test/image">');
   assert.match(frame, /default-src 'none'/);
-  assert.match(frame, /img-src blob: data:/);
+  assert.match(frame, /img-src 'none'/);
   assert.match(frame, /form-action 'none'/);
   assert.match(frame, /base-uri 'none'/);
-  assert.doesNotMatch(frame, /script-src.*unsafe-inline/);
+  assert.doesNotMatch(frame, /script-src[^;]*unsafe-inline/);
 });
-test("email sizing permits only its nonce-authorized observer and rejects forged size messages", () => {
-  const nonce = "a".repeat(32),
-    source = {};
-  const frame = htmlFrame(
-    '<script>alert("untrusted")</script><img src="https://tracking.test/image">',
-    nonce,
-  );
+test("mail frames allow only this message's R2 image endpoint", () => {
+  const path = "/api/mail/mailboxes/box/messages/message/render/assets/";
+  const frame = htmlFrame('<img src="' + path + 'hash?grant=test">', "https://office.test", path);
   const policy = frame.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
-  assert.match(policy, /default-src 'none'/);
-  assert.match(policy, /img-src blob: data:/);
-  assert.match(policy, /script-src 'nonce-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/);
-  assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline|script-src[^;]*https:/);
-  assert.doesNotMatch(frame, /officeflare:mail-assets|data.assets/);
-  assert.throws(() => htmlFrame("", '"><script>'), /nonce/);
-  const data = { type: "officeflare:mail-body-height", nonce, height: 241.1 };
-  assert.equal(mailFrameHeight(data, nonce, source, source), 242);
-  assert.equal(mailFrameHeight(data, nonce, {}, source), null);
-  assert.equal(mailFrameHeight(data, "wrong", source, source), null);
-  assert.equal(mailFrameHeight({ ...data, height: Infinity }, nonce, source, source), null);
-  assert.equal(mailFrameHeight({ ...data, height: "300" }, nonce, source, source), null);
-  assert.equal(mailFrameHeight({ ...data, height: 1_000_000 }, nonce, source, source), 24_000);
+  assert.match(
+    policy,
+    /img-src https:\/\/office\.test\/api\/mail\/mailboxes\/box\/messages\/message\/render\/assets\//,
+  );
+  assert.doesNotMatch(policy, /img-src[^;]*(?:data:|blob:|\*)/);
+  assert.doesNotMatch(frame, /opacity:0/);
+  assert.match(htmlFrame("", "https://office.test", "/api/auth/"), /img-src 'none'/);
 });
-test("mail link requests verify the opaque frame, nonce and absolute destination", () => {
-  const nonce = "a".repeat(32),
-    source = {};
-  const request = {
-    type: "officeflare:mail-link",
-    nonce,
-    url: "https://EXAMPLE.com/path?q=1#part",
-  };
-  const read = (data = request, sender = source, expected = source, origin = "null") =>
-    mailFrameLink(data, nonce, sender, expected, origin);
+test("email frames contain no execution pipeline", () => {
+  const frame = htmlFrame("<p>Body</p>");
+  assert.match(frame, /script-src 'none'/);
+  assert.doesNotMatch(frame, /<script|nonce=|postMessage|officeflare:mail-assets/);
+});
+test("mail link destinations reject executable and malformed URLs", () => {
+  const request = { url: "https://EXAMPLE.com/path?q=1#part" };
+  const read = (data = request) => mailLinkUrl(data?.url);
   assert.equal(read(), "https://example.com/path?q=1#part");
   assert.equal(read({ ...request, url: "http://example.com" }), "http://example.com/");
   assert.equal(
     read({ ...request, url: "mailto:team@example.com?subject=Hello" }),
     "mailto:team@example.com?subject=Hello",
   );
-  assert.equal(read(request, {}), null);
-  assert.equal(read(request, source, null), null);
-  assert.equal(read(request, source, source, "https://example.com"), null);
-  assert.equal(read({ ...request, nonce: "old-message" }), null);
-  assert.equal(read({ ...request, type: "officeflare:mail-body-height" }), null);
   assert.equal(read(null), null);
   for (const url of [
     "javascript:alert(document.cookie)",
