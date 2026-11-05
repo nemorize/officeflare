@@ -27,7 +27,7 @@ export interface RenderCache {
   match(request: Request): Promise<Response | undefined>;
   put(request: Request, response: Response): Promise<void>;
 }
-const version = "v1";
+const version = "v2";
 const stylesheetLimit = 4,
   assetLimit = 96;
 const cacheRequest = (kind: string, key: string) =>
@@ -159,7 +159,9 @@ export async function renderMailHtml(
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
 ): Promise<MailRendering> {
   if (source.length > 2 * 1024 ** 2) throw new Error(t("mailRender.mailBodyIsTooLargeToRender"));
-  const fingerprint = await hash(resourcePath + "\n" + source);
+  const fingerprint = await hash(
+    resourcePath + "\n" + ownHost + "\n" + JSON.stringify(cid) + "\n" + source,
+  );
   const key = cacheRequest("html", fingerprint),
     existing = await cache?.match(key);
   if (existing) return existing.json<MailRendering>();

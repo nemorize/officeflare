@@ -2,6 +2,7 @@ import { t } from "../../shared/i18n/index.ts";
 import { incomingRoute } from "./routing";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { putStream } from "./objects";
+import { prepareMailRendering } from "./rendering";
 import { queueWebhooks } from "./jobs";
 import { attachEditorImages, composedBody, editorBody, inlineContentIds, textHtml } from "./editor";
 import PostalMime, { type Address as MimeAddress } from "postal-mime";
@@ -503,6 +504,15 @@ export async function ingest(env: Env, task: InboundTask) {
   await env.MAIL_BUCKET.put(keyBody, JSON.stringify(body), {
     httpMetadata: { contentType: "application/json" },
   });
+  // Prepare before publishing the message so the first reader never downloads
+  // external resources or converts individual attachments in the browser.
+  await prepareMailRendering(
+    env.MAIL_BUCKET,
+    { id: resourceId, body_r2_key: keyBody, attachments: files },
+    task.mailbox_id,
+    env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
+    { source: body.html },
+  );
   await mailbox(env, task.mailbox_id).storeMessage(partitionId, {
     id: resourceId,
     ingest_id: task.id,

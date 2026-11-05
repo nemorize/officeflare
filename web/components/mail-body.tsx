@@ -5,10 +5,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { useMailCache } from "./mail-resource-context";
 import { api } from "../lib/api";
 import {
-  bytes,
   mailErrorDescription,
   htmlFrame,
-  embeddedMailImage,
   mailFrameHeight,
   mailboxPath,
   mailDate,
@@ -21,7 +19,6 @@ import {
 import { useMail } from "./mail-context";
 import { MailNotice, useMailAction, useMailResource } from "./mail-common";
 import { Button } from "./ui";
-import { LoadingSkeleton } from "./loading-skeleton";
 export const MailHtml = memo(
   function MailHtml({
     message,
@@ -33,7 +30,6 @@ export const MailHtml = memo(
     content?: string;
   }) {
     const cache = useMailCache();
-    const images = useRef(new Map<string, string>());
     const frame = useRef<HTMLIFrameElement>(null),
       [height, setHeight] = useState(128);
     const nonce = useMemo(
@@ -46,102 +42,26 @@ export const MailHtml = memo(
     const [html, setHtml] = useState(content),
       [error, setError] = useState("");
     const [attempt, setAttempt] = useState(0);
-    const sendImages = () =>
-      frame.current?.contentWindow?.postMessage(
-        {
-          type: "officeflare:mail-assets",
-          nonce,
-          assets: [...images.current].map(([source, value]) => ({ source, value })),
-        },
-        "*",
-      );
     const document = useMemo(() => htmlFrame(html, nonce), [html, nonce]);
     useEffect(() => {
       const controller = new AbortController();
       setHtml(content);
       setError("");
-      images.current.clear();
-      const inline = message.attachments.filter(
-        (file) => file.content_id && file.content_type.startsWith("image/"),
-      );
       void (async () => {
-        let formatted = content,
-          failures = 0;
-        const sources: string[] = [];
         try {
-          if (content === message.body.html) {
-            const base = `${path}/messages/${message.id}/render`;
-            const key =
-              base +
-              (message.body_revision
-                ? "?revision=" + encodeURIComponent(message.body_revision)
-                : "");
-            await cache.load(key, attempt > 0);
-            if (controller.signal.aborted) return;
-            const snapshot = cache.snapshot(key);
-            if (snapshot.error) throw snapshot.error;
-            const rendering = snapshot.data as {
-              html: string;
-              assets: { source: string }[];
-              failures: number;
-            };
-            formatted = rendering.html;
-            failures = rendering.failures;
-            for (const asset of rendering.assets)
-              if (
-                asset.source.startsWith(base + "/assets/") &&
-                /^\d{1,2}$/.test(asset.source.slice((base + "/assets/").length))
-              )
-                sources.push(asset.source);
-          }
-          for (const file of inline) {
-            const source = `${path}/messages/${message.id}/attachments/${file.id}`;
-            if (formatted.includes(source)) sources.push(source);
-          }
+          const query = new URLSearchParams();
+          if (message.body_revision) query.set("revision", message.body_revision);
+          if (content !== message.body.html) query.set("part", "quoted");
+          if (attempt > 0) query.set("retry", "1");
+          const key = `${path}/messages/${message.id}/render?${query}`;
+          await cache.load(key, attempt > 0);
           if (controller.signal.aborted) return;
-          setHtml(formatted);
-          // Keep resource loading bounded, including newsletters with many images.
-          const replacements = new Map<string, string>();
-          let next = 0,
-            loadedBytes = 0;
-          const resourceSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]);
-          await Promise.all(
-            Array.from({ length: Math.min(6, sources.length) }, async () => {
-              while (
-                next < sources.length &&
-                !resourceSignal.aborted &&
-                loadedBytes < 20 * 1024 ** 2
-              ) {
-                const source = sources[next++]!;
-                try {
-                  const key =
-                    source +
-                    (message.body_revision
-                      ? "?revision=" + encodeURIComponent(message.body_revision)
-                      : "");
-                  await cache.load(key, attempt > 0);
-                  const snapshot = cache.snapshot(key);
-                  if (snapshot.error) throw snapshot.error;
-                  const blob = snapshot.data as Blob;
-                  if (controller.signal.aborted) return;
-                  loadedBytes += blob.size;
-                  if (loadedBytes > 20 * 1024 ** 2)
-                    throw new Error(t("componentsMailBody.mailImageBudgetExceeded"));
-                  // Opaque sandbox origins cannot read the parent's partitioned blob URLs.
-                  const embedded = await embeddedMailImage(blob);
-                  replacements.set(source, embedded);
-                  images.current.set(source, embedded);
-                  sendImages();
-                } catch {
-                  if (!controller.signal.aborted) failures++;
-                }
-              }
-            }),
-          );
-          if (next < sources.length && !controller.signal.aborted) failures++;
-          if (resourceSignal.aborted && !controller.signal.aborted) failures++;
-          if (controller.signal.aborted) return;
-          if (failures) setError(t("componentsMailBody.someImagesOrStylesCouldNotBeLoadedThe"));
+          const snapshot = cache.snapshot(key);
+          if (snapshot.error) throw snapshot.error;
+          const rendering = snapshot.data as { html: string; failures: number };
+          setHtml(rendering.html);
+          if (rendering.failures)
+            setError(t("componentsMailBody.someImagesOrStylesCouldNotBeLoadedThe"));
         } catch {
           if (!controller.signal.aborted)
             setError(t("componentsMailBody.theFormattedMessageCouldNotBeLoaded"));
@@ -176,7 +96,6 @@ export const MailHtml = memo(
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
           srcDoc={document}
-          onLoad={sendImages}
         />
       </>
     );

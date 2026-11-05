@@ -104,50 +104,46 @@ test("event bursts and events during catch-up are bounded and not lost", async (
   assert.equal(calls, 2);
 });
 
-test("progressive mail assets only accept a verified parent, nonce and embedded image", () => {
+test("prepared mail displays embedded images without client image messages and still reports its size", () => {
   const nonce = "b".repeat(32),
     handlers = {},
-    parent = { postMessage() {} };
-  let src = "/api/mail/mailboxes/b/messages/m/render/assets/0";
-  const image = {
-    getAttribute: () => src,
-    setAttribute: (_name, value) => {
-      src = value;
+    reports = [];
+  let height = 50,
+    resized;
+  const document = {
+    body: { getBoundingClientRect: () => ({ height }) },
+    querySelectorAll() {
+      assert.fail("The frame must not scan or rewrite image elements");
     },
   };
-  const document = {
-    body: { getBoundingClientRect: () => ({ height: 50 }) },
-    querySelectorAll: (selector) => (selector === "img[src]" ? [image] : []),
-  };
-  const html = htmlFrame("<p>Safe</p>", nonce),
+  const html = htmlFrame('<p>Safe</p><img src="data:image/png;base64,AP8BgA==">', nonce),
     script = html.match(/<script nonce="[^"]+">([\s\S]+)<\/script>/)[1];
   vm.runInNewContext(script, {
     document,
-    parent,
+    parent: { postMessage: (message) => reports.push(message) },
     addEventListener: (name, handler) => {
       handlers[name] = handler;
     },
     ResizeObserver: class {
+      constructor(callback) {
+        resized = callback;
+      }
       observe() {}
     },
     requestAnimationFrame: (fn) => fn(),
   });
-  const valid = {
-    type: "officeflare:mail-assets",
-    nonce,
-    assets: [{ source: src, value: "data:image/png;base64,AP8BgA==" }],
-  };
-  handlers.message({ source: {}, data: valid });
-  assert.ok(src.startsWith("/api/"));
-  handlers.message({ source: parent, data: { ...valid, nonce: "wrong" } });
-  assert.ok(src.startsWith("/api/"));
-  handlers.message({
-    source: parent,
-    data: { ...valid, assets: [{ source: src, value: "https://tracking.test/image" }] },
-  });
-  assert.ok(src.startsWith("/api/"));
-  handlers.message({ source: parent, data: valid });
-  assert.equal(src, valid.assets[0].value);
+  assert.equal(handlers.message, undefined);
+  assert.match(html, /src="data:image\/png;base64,AP8BgA=="/);
+  assert.equal(reports[0].nonce, nonce);
+  assert.equal(reports[0].type, "officeflare:mail-body-height");
+  assert.equal(reports[0].height, 90);
+  height = 150;
+  handlers.load();
+  resized();
+  assert.deepEqual(
+    reports.map((report) => report.height),
+    [90, 190, 190],
+  );
 });
 
 test("conversation headers accept new mail and deletions without reloading unrelated bodies", async () => {
@@ -169,7 +165,7 @@ test("conversation headers accept new mail and deletions without reloading unrel
   assert.equal(applyMailHeaders(next, [{ ...first, version: 1 }]).message.version, 2);
 });
 
-test("a read receipt during image loading preserves the binary asset and its render manifest", async () => {
+test("a read receipt during prepared HTML loading preserves embedded images", async () => {
   const { applyMailHeaders } = await import("../web/lib/mail-ui.ts");
   const headers = [{ id: "a", thread_id: "t", version: 2, is_read: 1 }];
   let finish;
@@ -179,20 +175,18 @@ test("a read receipt during image loading preserves the binary asset and its ren
         finish = resolve;
       }),
   );
-  const key = "/api/mail/mailboxes/b/messages/a/render/assets/0?revision=body";
-  const image = new Blob([new Uint8Array([0, 255])], { type: "image/png" });
+  const key = "/api/mail/mailboxes/b/messages/a/render?revision=body";
+  const rendering = { html: '<img src="data:image/png;base64,AP8=">', assets: [], failures: 0 };
   const loading = cache.load(key);
   await Promise.resolve();
   cache.update(
     (path) => path.startsWith("/api/mail/mailboxes/b/messages/"),
     (data) => applyMailHeaders(data, headers),
   );
-  finish(image);
+  finish(rendering);
   await loading;
-  assert.equal(cache.snapshot(key).data, image);
-  assert.equal(cache.snapshot(key).data.type, "image/png");
-  const manifest = { html: "<p>Body</p>", assets: [{ source: key }] };
-  assert.equal(applyMailHeaders(manifest, headers), manifest);
+  assert.equal(cache.snapshot(key).data, rendering);
+  assert.equal(applyMailHeaders(rendering, headers), rendering);
 });
 
 test("expired bootstrap revalidation owns its six child resources on revisit", async () => {

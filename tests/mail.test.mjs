@@ -3635,6 +3635,92 @@ test("rich mail preserves signatures, inline images and quoted HTML through edit
   assert.equal((await call(`/mailboxes/${otherBox.id}/settings`)).settings.signature_html, "");
 });
 
+test("received mail has durable remote and CID images before its first read", async (t) => {
+  const { remoteAssetCacheRequest, png } = await import("./mail-render-helpers.mjs");
+  const { mf, tokens, call, base, mailbox } = await fixture(t, "6000000000", true);
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET"),
+    cache = (await mf.getCaches()).default,
+    remoteKey = await remoteAssetCacheRequest("https://cdn.example.com/received.png", "image");
+  await cache.put(
+    remoteKey,
+    new Response(png, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" },
+    }),
+  );
+  const mime = [
+    "From: sender@example.test",
+    "To: owner@mail.test",
+    "Subject: Prepared on arrival",
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/related; boundary="images"',
+    "",
+    "--images",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    '<p>Ready before reading</p><img src="https://cdn.example.com/received.png"><img src="cid:logo@cid">',
+    "--images",
+    "Content-Type: image/png",
+    "Content-ID: <logo@cid>",
+    "Content-Disposition: inline; filename=logo.png",
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from(png).toString("base64"),
+    "--images--",
+    "",
+  ].join("\r\n");
+  const harness = await mf.getWorker("mail-harness");
+  const result = await harness.fetch("https://test/email", {
+    method: "POST",
+    headers: { "x-recipient": "owner@mail.test" },
+    body: mime,
+  });
+  assert.deepEqual(await result.json(), { rejected: null });
+  const page = await eventually(
+    () => call(base + "/messages"),
+    (r) => r.messages.length === 1,
+    "Inbound image message missing",
+  );
+  const id = page.messages[0].id;
+  const artifact = await bucket.get(`bodies/${mailbox.id}/${id}/inbound.json.render-v1.json`);
+  assert.ok(artifact, "Rendering must be durable before a message is visible");
+  assert.equal((await artifact.json()).failures, 0);
+  await cache.delete(remoteKey);
+  const rendering = await call(`${base}/messages/${id}/render`);
+  assert.equal(rendering.failures, 0);
+  assert.deepEqual(rendering.assets, []);
+  assert.equal(rendering.html.match(/src="data:image\/png;base64,/g).length, 2);
+  assert.doesNotMatch(rendering.html, /cdn\.example|cid:|\/attachments\//);
+
+  await t.test(
+    "legacy received mail is prepared on its first body view and reused afterwards",
+    async () => {
+      const bodyKey = `bodies/${mailbox.id}/${id}/inbound.json`,
+        renderKey = bodyKey + ".render-v1.json",
+        renderPath = `${base}/messages/${id}/render`,
+        original = await (await bucket.get(bodyKey)).text();
+      // Simulate a message received before server-side image preparation existed.
+      await bucket.delete(renderKey);
+      await call(renderPath, { token: tokens.outsider, expected: 403 });
+      await call(base + "/messages");
+      assert.equal(await bucket.head(renderKey), null);
+      await cache.put(
+        remoteKey,
+        new Response(png, {
+          headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" },
+        }),
+      );
+      const upgraded = await call(renderPath);
+      assert.equal(upgraded.failures, 0);
+      assert.deepEqual(upgraded.assets, []);
+      assert.equal(upgraded.html.match(/src="data:image\/png;base64,/g).length, 2);
+      assert.ok(await bucket.head(renderKey));
+      assert.equal(await (await bucket.get(bodyKey)).text(), original);
+      await cache.delete(remoteKey);
+      assert.deepEqual(await call(renderPath), upgraded);
+    },
+  );
+});
+
 test("formatted mail and cached images remain authorized, private, and tied to exact message resources", async (t) => {
   const { remoteAssetCacheRequest, png } = await import("./mail-render-helpers.mjs");
   const { mf, tokens, raw, call, admin, base, mailbox, draft } = await fixture(t);
@@ -3661,8 +3747,13 @@ test("formatted mail and cached images remain authorized, private, and tied to e
   assert.match(rendering.html, /\.newsletter\{color:purple\}/);
   assert.match(rendering.html, /class="newsletter"/);
   assert.doesNotMatch(rendering.html, /onclick|script|cdn\.example/);
-  assert.deepEqual(rendering.assets, [{ source: "/api/mail" + renderPath + "/assets/0" }]);
-  const image = await raw(rendering.assets[0].source, { token: tokens.owner });
+  assert.deepEqual(rendering.assets, []);
+  assert.match(rendering.html, /src="data:image\/png;base64,/);
+  // The durable artifact survives eviction of every transient Cache API entry.
+  assert.ok(await bucket.head(object.key + ".render-v1.json"));
+  await cache.delete(await remoteAssetCacheRequest("https://cdn.example.com/news.png", "image"));
+  assert.equal((await call(renderPath)).html, rendering.html);
+  const image = await raw("/api/mail" + renderPath + "/assets/0", { token: tokens.owner });
   assert.equal(image.status, 200, await image.clone().text());
   assert.equal(image.headers.get("Cache-Control"), "private, no-store");
   assert.equal(image.headers.get("X-Content-Type-Options"), "nosniff");

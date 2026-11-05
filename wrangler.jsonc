@@ -14,6 +14,7 @@
     "AUTH_AUDIENCE": "officeflare-api",
     "NOTIFICATION_QUEUE_NAME": "officeflare-notifications",
     "MAIL_PARTITION_TARGET_BYTES": "6000000000",
+    "MAIL_RENDER_ORIGIN": "https://office.headercat.com",
   },
   "secrets": {
     "required": ["AUTH_SIGNING_KEYS", "MFA_ENCRYPTION_KEYS"],

@@ -8,7 +8,7 @@ const output = join(directory, "helpers.mjs");
 try {
   await build({
     stdin: {
-      contents: `export * from './src/mail/render.ts';export * from './src/mail/remote.ts';`,
+      contents: `export * from './src/mail/render.ts';export * from './src/mail/remote.ts';export * from './src/mail/rendering.ts';`,
       resolveDir: resolve("."),
     },
     bundle: true,
@@ -31,6 +31,10 @@ try {
     renderMailHtml,
     loadMailRenderImage,
     remoteAssetCacheRequest,
+    prepareMailRendering,
+    embeddedMailRendering,
+    preparedMailImage,
+    mailRenderKey,
   } = helpers;
 } finally {
   await rm(directory, { recursive: true, force: true });
@@ -45,6 +49,10 @@ export {
   renderMailHtml,
   loadMailRenderImage,
   remoteAssetCacheRequest,
+  prepareMailRendering,
+  embeddedMailRendering,
+  preparedMailImage,
+  mailRenderKey,
 };
 export const png = Uint8Array.from(
   Buffer.from(

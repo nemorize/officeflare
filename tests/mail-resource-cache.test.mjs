@@ -190,6 +190,26 @@ test("binary image cache is bounded and never shares an old Blob by object keys"
   assert.ok(total <= 20 * 1024 ** 2);
 });
 
+test("prepared HTML shares the image memory budget while active views keep their data", async () => {
+  const cache = new MailResourceCache(async (path) =>
+    path === "/attachment"
+      ? new Blob([new Uint8Array(5 * 1024 ** 2)])
+      : { html: "a".repeat(3 * 1024 ** 2), failures: 0 },
+  );
+  await cache.load("/active/render");
+  const unsubscribe = cache.subscribe("/active/render", () => {});
+  await cache.load("/attachment");
+  for (let index = 0; index < 5; index++) await cache.load(`/message/${index}/render`);
+  const total = cache.paths().reduce((size, path) => {
+    const data = cache.snapshot(path).data;
+    return size + (data instanceof Blob ? data.size : (data?.html?.length ?? 0) * 2);
+  }, 0);
+  assert.ok(total <= 20 * 1024 ** 2);
+  assert.ok(cache.snapshot("/active/render").data);
+  assert.ok(cache.snapshot("/message/4/render").data);
+  unsubscribe();
+});
+
 test("pending mutations hold catch-up and confirmed versions remain session and mailbox scoped", async () => {
   const cache = new MailResourceCache(async () => ({}));
   const finish = cache.beginMutation(),

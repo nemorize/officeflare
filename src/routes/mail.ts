@@ -12,7 +12,7 @@ import { maxAttachmentBytes } from "../mail/size";
 import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
-import { loadMailRenderImage, renderMailHtml } from "../mail/render";
+import { embeddedMailRendering, preparedMailImage, prepareMailRendering } from "../mail/rendering";
 import {
   attachEditorImages,
   composedBody,
@@ -1399,18 +1399,15 @@ async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
   const messageId = c.req.param("id")!;
   await belongs(c.env, resource(c), locator(messageId));
   const message = await partition(c.env, locator(messageId)).get(messageId, actor(c).user_id);
-  const body = await readBody(c.env, message.body_r2_key);
-  const path = `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(messageId)}`;
-  const cid = Object.fromEntries(
-    message.attachments
-      .filter((file) => file.content_id)
-      .map((file) => [file.content_id!, `${path}/attachments/${file.id}`]),
-  );
-  const rendering = await renderMailHtml(
-    body.html,
-    cid,
-    `${path}/render`,
+  const part = c.req.query("part") === "quoted" ? "quoted" : "body";
+  // Existing mail is upgraded on its first body view. Later reads reuse the
+  // revision-specific rendering already stored by this request or ingestion.
+  const rendering = await prepareMailRendering(
+    c.env.MAIL_BUCKET,
+    message,
+    resource(c),
     new URL(c.req.url).hostname,
+    { part, retryFailures: c.req.query("retry") === "1" },
   );
   return { message, rendering };
 }
@@ -1429,43 +1426,17 @@ mail.get("/mailboxes/:m/messages/:id/render", async (c) => {
   await renderingStillAvailable(c, message);
   c.header("Cache-Control", "private, no-store");
   return c.json({
-    html: rendering.html,
-    assets: rendering.assets.map((asset) => ({
-      source: `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(message.id)}/render/assets/${asset.id}`,
-    })),
+    html: embeddedMailRendering(rendering),
+    assets: [],
     failures: rendering.failures,
   });
 });
 mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c) => {
   if (!/^\d{1,2}$/.test(c.req.param("asset"))) fail(404, t("routesMail.imageNotFound"));
   const { message, rendering } = await mailRendering(c);
-  const asset = rendering.assets.find((asset) => asset.id === c.req.param("asset"));
-  if (!asset) fail(404, t("routesMail.imageNotFound"));
-  let response: Response;
-  try {
-    response = await loadMailRenderImage(asset, new URL(c.req.url).hostname);
-  } catch (error) {
-    // Diagnose upstream failures without logging message identifiers or tracking URLs.
-    const reasons = new Set([
-      t("routesMail.dnsLookupFailed"),
-      t("routesMail.privateNetworkResourcesAreBlocked"),
-      t("routesMail.remoteResourceUnavailable"),
-      t("routesMail.unsupportedRemoteImage"),
-      t("routesMail.unsupportedRemoteResourceType"),
-      t("routesMail.remoteResourceIsTooLarge"),
-      t("routesMail.emptyRemoteResource"),
-      t("routesMail.invalidRemoteRedirect"),
-    ]);
-    console.warn(
-      "Mail image proxy failure",
-      error instanceof Error && reasons.has(error.message)
-        ? error.message
-        : error instanceof Error
-          ? error.name
-          : t("routesMail.unknownError"),
-    );
-    fail(502, t("routesMail.imageCouldNotBeLoadedSafely"));
-  }
+  const path = `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(message.id)}/render`;
+  const response = preparedMailImage(rendering, path, c.req.param("asset"));
+  if (!response) fail(404, t("routesMail.imageNotFound"));
   await renderingStillAvailable(c, message);
   return response;
 });

@@ -7,6 +7,7 @@ import uiCommands from "./partition-v3.sql";
 import readModels from "./partition-v4.sql";
 import { rebuildReadModels, rebuildDirtyThreads } from "./read-models";
 import { migrate } from "./migrations";
+import { mailRenderKey } from "./rendering";
 import { compileSearch } from "./search";
 import {
   epoch,
@@ -1153,6 +1154,11 @@ export class MailPartitionDO extends DurableObject<Env> {
       "SELECT r2_key FROM garbage WHERE delete_after<=? LIMIT 50",
       epoch(),
     )) {
+      if (item.r2_key.startsWith("bodies/"))
+        await this.env.MAIL_BUCKET.delete([
+          mailRenderKey(item.r2_key),
+          mailRenderKey(item.r2_key, "quoted"),
+        ]);
       await this.env.MAIL_BUCKET.delete(item.r2_key);
       this.sql.exec("DELETE FROM garbage WHERE r2_key=?", item.r2_key);
     }
