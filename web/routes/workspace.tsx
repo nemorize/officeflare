@@ -54,9 +54,7 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
   return (
     <Menu.Root>
       <Menu.Trigger
-        render={
-          <Button variant="ghost" size="icon" shape="circle" className="workspace-rail-account" />
-        }
+        render={<Button variant="ghost" size="icon" className="workspace-rail-account" />}
         aria-label={t("routesWorkspace.openProfileMenu")}
         disabled={busy}
       >
