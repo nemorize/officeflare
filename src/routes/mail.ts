@@ -12,7 +12,13 @@ import { maxAttachmentBytes } from "../mail/size";
 import { defaultMailPreferences, mailPreferences } from "../mail/preferences";
 import { HTTPException } from "hono/http-exception";
 import { putStream } from "../mail/objects";
-import { embeddedMailRendering, preparedMailImage, prepareMailRendering } from "../mail/rendering";
+import {
+  linkedMailRendering,
+  loadPreparedMailImage,
+  preparedMailImageId,
+  prepareMailRendering,
+} from "../mail/rendering";
+import { signMailImageGrant, verifyMailImageGrant } from "../mail/render-access";
 import {
   attachEditorImages,
   composedBody,
@@ -152,6 +158,27 @@ mail.get("/mailboxes/:m/events/ws", async (c) => {
       headers: { Upgrade: "websocket" },
     }),
   );
+});
+// Image elements cannot send the API Bearer header from the opaque mail frame.
+// Grants are restricted to one message revision and still check live permissions.
+mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c, next) => {
+  const token = c.req.query("grant");
+  if (!token) return next();
+  const grant = await verifyMailImageGrant(c.env, mailImageScope(c), token);
+  if (
+    grant.sessionId &&
+    !(await first(
+      c.env,
+      "SELECT id FROM user_sessions s WHERE s.id=? AND s.user_id=? AND s.auth_version=? AND s.revoked_at IS NULL AND s.expires_at>? AND (s.mfa_authenticated_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM user_mfa_methods m WHERE m.user_id=s.user_id AND m.verified_at IS NOT NULL AND m.revoked_at IS NULL))",
+      grant.sessionId,
+      grant.actor.user_id,
+      grant.actor.auth_version,
+      epoch(),
+    ))
+  )
+    fail(401, t("mailControl.invalidMailApiKey"));
+  c.set("mail_actor", grant.actor);
+  return mailImageResponse(c, grant.bodyKey);
 });
 mail.use("*", authenticateMail);
 mail.use("/mailboxes/:m/*", async (c, next) => {
@@ -1424,22 +1451,56 @@ async function renderingStillAvailable(
 mail.get("/mailboxes/:m/messages/:id/render", async (c) => {
   const { message, rendering } = await mailRendering(c);
   await renderingStillAvailable(c, message);
+  const path = mailImagePath(c);
+  const grant = await signMailImageGrant(c.env, mailImageScope(c), {
+    actor: actor(c),
+    bodyKey: message.body_r2_key,
+    sessionId: actor(c).api_key_id ? null : c.get("identity").session.id,
+    part: c.req.query("part") === "quoted" ? "quoted" : "body",
+  });
   c.header("Cache-Control", "private, no-store");
   return c.json({
-    html: embeddedMailRendering(rendering),
+    html: linkedMailRendering(rendering, path, "grant=" + grant),
     assets: [],
     failures: rendering.failures,
   });
 });
-mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c) => {
-  if (!/^\d{1,2}$/.test(c.req.param("asset"))) fail(404, t("routesMail.imageNotFound"));
-  const { message, rendering } = await mailRendering(c);
-  const path = `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(message.id)}/render`;
-  const response = preparedMailImage(rendering, path, c.req.param("asset"));
+function mailImagePath(c: Parameters<typeof authenticateMail>[0]) {
+  return `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(c.req.param("id")!)}/render`;
+}
+function mailImageScope(c: Parameters<typeof authenticateMail>[0]) {
+  return new URL(c.req.url).origin + mailImagePath(c);
+}
+async function mailImageResponse(c: Parameters<typeof authenticateMail>[0], bodyKey?: string) {
+  const asset = c.req.param("asset")!;
+  if (!/^(?:[a-f0-9]{64}|\d{1,2})$/.test(asset)) fail(404, t("routesMail.imageNotFound"));
+  await authorize(c.env, actor(c), resource(c), "read");
+  const messageId = c.req.param("id")!;
+  await belongs(c.env, resource(c), locator(messageId));
+  const message = await partition(c.env, locator(messageId)).get(messageId, actor(c).user_id);
+  if (bodyKey && message.body_r2_key !== bodyKey) fail(404, t("routesMail.imageNotFound"));
+  let imageId = asset;
+  if (!/^[a-f0-9]{64}$/.test(asset)) {
+    const rendering = await prepareMailRendering(
+      c.env.MAIL_BUCKET,
+      message,
+      resource(c),
+      new URL(c.req.url).hostname,
+    );
+    imageId = preparedMailImageId(rendering, mailImagePath(c), asset) ?? "";
+  }
+  const response = await loadPreparedMailImage(
+    c.env.MAIL_BUCKET,
+    message.body_r2_key,
+    imageId,
+    c.req.header("If-None-Match"),
+  );
   if (!response) fail(404, t("routesMail.imageNotFound"));
   await renderingStillAvailable(c, message);
+  c.header("Pragma", undefined);
   return response;
-});
+}
+mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c) => mailImageResponse(c));
 mail.get("/mailboxes/:m/messages/:id/original", async (c) => {
   await authorize(c.env, actor(c), resource(c), "read");
   await belongs(c.env, resource(c), locator(c.req.param("id")));

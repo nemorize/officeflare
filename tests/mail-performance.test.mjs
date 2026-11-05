@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import vm from "node:vm";
 import { MailResourceCache } from "../web/lib/mail-resource-cache.ts";
 import { hydrateMailResources, mergeMailView, MailChangeScheduler } from "../web/lib/mail-ui.ts";
 import {
@@ -10,7 +9,7 @@ import {
   inboxUnread,
   folderMoveLeavesMailView,
 } from "../src/mail/ui-query.ts";
-import { htmlFrame, mailFrameLink } from "../web/lib/mail-helpers.ts";
+import { htmlFrame, observeMailDocument } from "../web/lib/mail-helpers.ts";
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("a bootstrap seeds the six initial resources without follow-up data requests", async () => {
@@ -104,101 +103,85 @@ test("event bursts and events during catch-up are bounded and not lost", async (
   assert.equal(calls, 2);
 });
 
-test("prepared mail displays embedded images without client image messages and still reports its size", () => {
-  const nonce = "b".repeat(32),
-    handlers = {},
-    reports = [];
+test("mail frames use R2 URLs without executable scripts", () => {
+  const html = htmlFrame(
+    '<img src="/api/mail/mailboxes/b/messages/m/render/assets/hash?grant=test">',
+    "https://office.test",
+    "/api/mail/mailboxes/b/messages/m/render/assets/",
+  );
+  assert.match(
+    html,
+    /img-src https:\/\/office.test\/api\/mail\/mailboxes\/b\/messages\/m\/render\/assets\//,
+  );
+  assert.match(html, /script-src 'none'/);
+  assert.doesNotMatch(html, /<script|postMessage|data:image/);
+});
+test("the parent observes height and confirms trusted email links while frame scripts stay disabled", () => {
+  const handlers = {},
+    reports = [],
+    requests = [];
   let height = 50,
-    resized;
+    resized,
+    animation,
+    disconnected = false;
   const document = {
     body: { getBoundingClientRect: () => ({ height }) },
-    querySelectorAll() {
-      assert.fail("The frame must not scan or rewrite image elements");
+    addEventListener(name, handler) {
+      handlers[name] = handler;
+    },
+    removeEventListener(name, handler) {
+      if (handlers[name] === handler) delete handlers[name];
     },
   };
-  const html = htmlFrame('<p>Safe</p><img src="data:image/png;base64,AP8BgA==">', nonce),
-    script = html.match(/<script nonce="[^"]+">([\s\S]+)<\/script>/)[1];
-  vm.runInNewContext(script, {
+  const cleanup = observeMailDocument(
     document,
-    parent: { postMessage: (message) => reports.push(message) },
-    addEventListener: (name, handler) => {
-      handlers[name] = handler;
+    (height) => reports.push(height),
+    (url) => requests.push(url),
+    {
+      ResizeObserver: class {
+        constructor(callback) {
+          resized = callback;
+        }
+        observe() {}
+        disconnect() {
+          disconnected = true;
+        }
+      },
+      requestAnimationFrame(callback) {
+        animation = callback;
+        return 1;
+      },
+      cancelAnimationFrame() {},
     },
-    ResizeObserver: class {
-      constructor(callback) {
-        resized = callback;
-      }
-      observe() {}
-    },
-    requestAnimationFrame: (fn) => fn(),
-  });
-  assert.equal(handlers.message, undefined);
-  assert.match(html, /src="data:image\/png;base64,AP8BgA=="/);
-  assert.equal(reports[0].nonce, nonce);
-  assert.equal(reports[0].type, "officeflare:mail-body-height");
-  assert.equal(reports[0].height, 90);
-  height = 150;
-  handlers.load();
-  resized();
-  assert.deepEqual(
-    reports.map((report) => report.height),
-    [90, 190, 190],
   );
-});
-
-test("trusted link clicks request parent confirmation without navigating the sandbox", () => {
-  const nonce = "c".repeat(32),
-    handlers = {},
-    requests = [],
-    source = {};
-  const html = htmlFrame('<a href="https://example.com">Go</a>', nonce, "https://office.test"),
-    script = html.match(/<script nonce="[^"]+">([\s\S]+)<\/script>/)[1];
-  vm.runInNewContext(script, {
-    document: { body: { getBoundingClientRect: () => ({ height: 50 }) } },
-    parent: { postMessage: (message, origin) => requests.push({ message, origin }) },
-    addEventListener: (name, handler) => {
-      handlers[name] = handler;
-    },
-    ResizeObserver: class {
-      observe() {}
-    },
-    requestAnimationFrame: (fn) => fn(),
-  });
-  requests.length = 0;
-  const anchor = { getAttribute: () => "https://example.com" };
-  let prevented = 0,
-    stopped = 0;
+  assert.deepEqual(reports, [96]);
+  height = 150;
+  resized();
+  animation();
+  assert.deepEqual(reports, [96, 190]);
+  let prevented = 0;
   const event = {
     type: "click",
     button: 0,
     isTrusted: true,
-    target: { nodeType: 1, closest: (selector) => (selector === "a[href]" ? anchor : null) },
+    target: { nodeType: 1, closest: () => ({ getAttribute: () => "https://example.com" }) },
     preventDefault() {
       prevented++;
     },
-    stopPropagation() {
-      stopped++;
-    },
+    stopPropagation() {},
   };
   handlers.click(event);
+  assert.deepEqual(requests, ["https://example.com/"]);
   assert.equal(prevented, 1);
-  assert.equal(stopped, 1);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].origin, "https://office.test");
-  assert.equal(
-    mailFrameLink(requests[0].message, nonce, source, source, "null"),
-    "https://example.com/",
-  );
   handlers.click({ ...event, isTrusted: false });
-  assert.equal(requests.length, 1, "Synthetic clicks cannot request navigation");
   handlers.auxclick({ ...event, type: "auxclick", button: 2 });
-  assert.equal(requests.length, 1, "Context menu clicks keep their normal behavior");
+  assert.equal(requests.length, 1);
   handlers.auxclick({ ...event, type: "auxclick", button: 1 });
   assert.equal(requests.length, 2);
-  handlers.click({ ...event, target: { parentElement: event.target } });
-  assert.equal(requests.length, 3, "Text and nested link elements remain clickable");
-  handlers.click({ ...event, target: { nodeType: 1, closest: () => null } });
-  assert.equal(requests.length, 3);
+  cleanup();
+  assert.equal(disconnected, true);
+  assert.equal(handlers.click, undefined);
+  assert.equal(handlers.auxclick, undefined);
 });
 
 test("conversation headers accept new mail and deletions without reloading unrelated bodies", async () => {
@@ -220,7 +203,7 @@ test("conversation headers accept new mail and deletions without reloading unrel
   assert.equal(applyMailHeaders(next, [{ ...first, version: 1 }]).message.version, 2);
 });
 
-test("a read receipt during prepared HTML loading preserves embedded images", async () => {
+test("a read receipt during prepared HTML loading preserves R2 image URLs", async () => {
   const { applyMailHeaders } = await import("../web/lib/mail-ui.ts");
   const headers = [{ id: "a", thread_id: "t", version: 2, is_read: 1 }];
   let finish;
@@ -231,7 +214,11 @@ test("a read receipt during prepared HTML loading preserves embedded images", as
       }),
   );
   const key = "/api/mail/mailboxes/b/messages/a/render?revision=body";
-  const rendering = { html: '<img src="data:image/png;base64,AP8=">', assets: [], failures: 0 };
+  const rendering = {
+    html: '<img src="/api/mail/mailboxes/b/messages/a/render/assets/hash?grant=test">',
+    assets: [],
+    failures: 0,
+  };
   const loading = cache.load(key);
   await Promise.resolve();
   cache.update(

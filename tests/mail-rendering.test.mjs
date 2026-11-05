@@ -2,38 +2,53 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   prepareMailRendering,
-  embeddedMailRendering,
-  preparedMailImage,
+  linkedMailRendering,
+  preparedMailImageId,
+  loadPreparedMailImage,
   mailRenderKey,
+  legacyMailRenderKey,
+  mailRenderImageKey,
+  signMailImageGrant,
+  verifyMailImageGrant,
   memoryCache,
   remoteFixture,
   png,
 } from "./mail-render-helpers.mjs";
-
 function bucketFixture() {
-  const values = new Map();
+  const values = new Map(),
+    metadata = new Map();
   return {
     values,
-    async get(key) {
+    async get(key, options) {
       const value = values.get(key);
       if (value === undefined) return null;
-      const body = new Response(value);
+      const bytes = new Uint8Array(await new Response(value).arrayBuffer());
+      const etag = '"' + bytes.length + '"';
+      const object = { size: bytes.length, httpEtag: etag, httpMetadata: metadata.get(key) };
+      if (options?.onlyIf?.get("If-None-Match") === etag) return object;
       return {
-        size: (await body.clone().arrayBuffer()).byteLength,
-        json: () => body.json(),
-        arrayBuffer: () => body.arrayBuffer(),
+        ...object,
+        body: new Response(bytes).body,
+        json: async () => JSON.parse(new TextDecoder().decode(bytes)),
+        arrayBuffer: async () => bytes.buffer,
       };
     },
-    async put(key, value) {
+    async put(key, value, options) {
       values.set(key, value);
+      metadata.set(key, options?.httpMetadata);
+    },
+    async delete(key) {
+      values.delete(key);
+      metadata.delete(key);
     },
   };
 }
 const message = { id: "message", body_r2_key: "bodies/box/message/inbound.json", attachments: [] },
   path = "/api/mail/mailboxes/box/messages/message/render",
   imageResponse = () => new Response(png, { headers: { "Content-Type": "image/png" } });
+const linked = (result) => linkedMailRendering(result, path, "grant=test");
 
-test("preparation embeds remote CSS backgrounds and validated CID images and survives cache eviction", async () => {
+test("remote backgrounds, CID and data images become small HTML URLs backed by binary R2 objects", async () => {
   const bucket = bucketFixture(),
     cache = memoryCache();
   const fixture = remoteFixture((url) =>
@@ -49,28 +64,118 @@ test("preparation embeds remote CSS backgrounds and validated CID images and sur
     ],
   };
   const prepared = await prepareMailRendering(bucket, input, "box", "office.test", {
-    source:
-      '<link rel="stylesheet" href="https://cdn.example.com/style.css"><div class="card"><img src="https://cdn.example.com/hero.png"><img src="cid:logo@cid"></div>',
+    source: `<link rel="stylesheet" href="https://cdn.example.com/style.css"><div class="card"><img src="https://cdn.example.com/hero.png"><img src="cid:logo@cid"><img src="data:image/png;base64,${Buffer.from(png).toString("base64")}"></div>`,
     cache,
     fetcher: fixture.fetcher,
   });
   assert.equal(prepared.failures, 0);
-  const html = embeddedMailRendering(prepared);
-  assert.match(html, /background:url\(data:image\/png;base64,/);
-  assert.equal(html.match(/src="data:image\/png;base64,/g).length, 2);
-  assert.doesNotMatch(html, /cid:|cdn\.example|\/api\/mail/);
-  assert.ok(bucket.values.has(mailRenderKey(input.body_r2_key)));
+  assert.match(
+    linked(prepared),
+    /background:url\(\/api\/mail\/mailboxes\/box\/messages\/message\/render\/assets\/[a-f0-9]{64}\?grant=test\)/,
+  );
+  assert.equal(linked(prepared).match(/src="\/api\/mail\//g).length, 3);
+  assert.doesNotMatch(linked(prepared), /data:|base64|cid:|cdn\.example|\/attachments\//);
+  assert.doesNotMatch(bucket.values.get(mailRenderKey(input.body_r2_key)), /data:image|base64/);
+  const id = preparedMailImageId(prepared, path, "0");
+  assert.match(id, /^[a-f0-9]{64}$/);
+  assert.deepEqual(
+    new Uint8Array(
+      await (await loadPreparedMailImage(bucket, input.body_r2_key, id)).arrayBuffer(),
+    ),
+    png,
+  );
   cache.values.clear();
   bucket.values.delete("inline-logo");
   const saved = await prepareMailRendering(bucket, input, "box", "office.test", {
-    fetcher: () => assert.fail("Prepared messages must not fetch remote resources again"),
+    fetcher: () => assert.fail("Stored images must not be downloaded again"),
   });
-  assert.equal(embeddedMailRendering(saved), html);
-  assert.deepEqual(new Uint8Array(await preparedMailImage(saved, path, "0").arrayBuffer()), png);
-  assert.equal(preparedMailImage(saved, path, "00"), null);
+  assert.equal(linked(saved), linked(prepared));
+  assert.equal(preparedMailImageId(saved, path, "00"), null);
+  assert.equal(
+    fixture.calls.filter((call) => call.url.hostname === "cloudflare-dns.com").length,
+    2,
+  );
 });
 
-test("partial failures persist, render safely and retry only missing images", async () => {
+test("Base64 manifests upgrade on read without any upstream image requests", async () => {
+  const bucket = bucketFixture();
+  const data = "data:image/png;base64," + Buffer.from(png).toString("base64");
+  await bucket.put(
+    legacyMailRenderKey(message.body_r2_key),
+    JSON.stringify({
+      html: `<style>.x{background:url(${path}/assets/0)}</style><img src="${path}/assets/0"><img src="${data}">`,
+      assets: [{ id: "0", url: "https://cdn.example.com/hero.png" }],
+      failures: 0,
+      images: { [path + "/assets/0"]: data },
+    }),
+  );
+  const converted = await prepareMailRendering(bucket, message, "box", "office.test", {
+    fetcher: () => assert.fail("Legacy conversion must reuse saved bytes"),
+  });
+  assert.equal(converted.format, 2);
+  assert.doesNotMatch(linked(converted), /data:|base64/);
+  assert.ok(bucket.values.has(mailRenderKey(message.body_r2_key)));
+  assert.equal(bucket.values.has(legacyMailRenderKey(message.body_r2_key)), false);
+  const id = preparedMailImageId(converted, path, "0");
+  assert.deepEqual(
+    new Uint8Array(
+      await (await loadPreparedMailImage(bucket, message.body_r2_key, id)).arrayBuffer(),
+    ),
+    png,
+  );
+});
+
+test("R2 image responses support browser caching and conditional reads", async () => {
+  const bucket = bucketFixture();
+  const result = await prepareMailRendering(bucket, message, "box", "office.test", {
+    source: '<img src="https://cdn.example.com/a.png">',
+    cache: memoryCache(),
+    fetcher: remoteFixture(imageResponse).fetcher,
+  });
+  const id = preparedMailImageId(result, path, "0");
+  const response = await loadPreparedMailImage(bucket, message.body_r2_key, id);
+  assert.equal(response.headers.get("Cache-Control"), "private, max-age=300, immutable");
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+  const unchanged = await loadPreparedMailImage(
+    bucket,
+    message.body_r2_key,
+    id,
+    response.headers.get("ETag"),
+  );
+  assert.equal(unchanged.status, 304);
+  assert.equal(await unchanged.text(), "");
+  assert.equal(await loadPreparedMailImage(bucket, message.body_r2_key, "00"), null);
+});
+
+test("failed R2 writes preserve the legacy rendering and do not commit a broken upgrade", async () => {
+  const bucket = bucketFixture();
+  const legacyKey = legacyMailRenderKey(message.body_r2_key);
+  await bucket.put(
+    legacyKey,
+    JSON.stringify({
+      html: `<img src="${path}/assets/0">`,
+      assets: [{ id: "0", url: "https://cdn.example.com/image.png" }],
+      failures: 0,
+      images: {
+        [path + "/assets/0"]: "data:image/png;base64," + Buffer.from(png).toString("base64"),
+      },
+    }),
+  );
+  const put = bucket.put;
+  bucket.put = async (key, ...args) => {
+    if (key.includes(".render-images/")) throw new Error("R2 write failed");
+    return put(key, ...args);
+  };
+  await assert.rejects(
+    prepareMailRendering(bucket, message, "box", "office.test"),
+    /R2 write failed/,
+  );
+  assert.ok(bucket.values.has(legacyKey));
+  assert.equal(bucket.values.has(mailRenderKey(message.body_r2_key)), false);
+});
+
+test("partial failures persist and retries reuse successful R2 files", async () => {
   const bucket = bucketFixture(),
     cache = memoryCache();
   let available = false;
@@ -81,108 +186,33 @@ test("partial failures persist, render safely and retry only missing images", as
   );
   const options = {
     source:
-      '<img src="https://cdn.example.com/good.png"><img src="https://cdn.example.com/bad.png"><p>Body still visible</p>',
+      '<img src="https://cdn.example.com/good.png"><img src="https://cdn.example.com/bad.png"><p>Body</p>',
     cache,
     fetcher: fixture.fetcher,
   };
-  const partial = await prepareMailRendering(bucket, message, "box", "office.test", options);
-  assert.equal(partial.failures, 1);
-  assert.match(embeddedMailRendering(partial), /Body still visible/);
-  assert.doesNotMatch(embeddedMailRendering(partial), /\/api\/mail|https:/);
+  const first = await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(first.failures, 1);
+  assert.match(linked(first), /src=""/);
+  assert.doesNotMatch(linked(first), /data:|https:/);
   const calls = fixture.calls.length;
   await prepareMailRendering(bucket, message, "box", "office.test", options);
   assert.equal(fixture.calls.length, calls);
-  assert.equal(preparedMailImage(partial, path, "1"), null);
   available = true;
   cache.values.clear();
-  const retried = await prepareMailRendering(bucket, message, "box", "office.test", {
+  const retry = await prepareMailRendering(bucket, message, "box", "office.test", {
     ...options,
     retryFailures: true,
   });
-  assert.equal(retried.failures, 0);
+  assert.equal(retry.failures, 0);
   assert.equal(fixture.calls.filter((call) => call.url.pathname === "/good.png").length, 1);
   assert.equal(fixture.calls.filter((call) => call.url.pathname === "/bad.png").length, 2);
 });
 
-test("embedding handles double digit asset IDs without corrupting data URLs", async () => {
+test("repeating a large image uses one R2 file and keeps the HTML small", async () => {
   const bucket = bucketFixture(),
-    fixture = remoteFixture(imageResponse);
-  const result = await prepareMailRendering(bucket, message, "box", "office.test", {
-    source: Array.from(
-      { length: 13 },
-      (_, index) => `<img src="https://cdn.example.com/${index}.png">`,
-    ).join(""),
-    cache: memoryCache(),
-    fetcher: fixture.fetcher,
-  });
-  assert.equal(result.failures, 0);
-  const sources = [...embeddedMailRendering(result).matchAll(/src="([^"]+)"/g)].map(
-    (match) => match[1],
-  );
-  assert.equal(sources.length, 13);
-  assert.equal(new Set(sources).size, 1);
-});
-
-test("CID validation rejects spoofed bytes and the aggregate budget bounds embedded images", async () => {
-  const bucket = bucketFixture(),
-    files = [];
-  for (let index = 0; index < 7; index++) {
-    const bytes =
-      index === 6 ? new TextEncoder().encode("not an image") : new Uint8Array(4 * 1024 ** 2);
-    if (index !== 6) bytes.set(png);
-    await bucket.put(`file-${index}`, bytes);
-    files.push({
-      id: String(index),
-      content_id: String(index),
-      content_type: "image/png",
-      r2_key: `file-${index}`,
-    });
-  }
-  const result = await prepareMailRendering(
-    bucket,
-    { ...message, attachments: files },
-    "box",
-    "office.test",
-    {
-      source: files.map((file) => `<img src="cid:${file.content_id}">`).join(""),
-      cache: memoryCache(),
-      fetcher: () => assert.fail("Inline images do not use the network"),
-    },
-  );
-  assert.equal(result.failures, 2);
-  assert.equal((embeddedMailRendering(result).match(/data:image\/png;base64,/g) ?? []).length, 5);
-});
-
-test("quoted content and changed body revisions use independent durable artifacts", async () => {
-  const bucket = bucketFixture();
-  await bucket.put(
-    message.body_r2_key,
-    JSON.stringify({ html: "<p>Body</p>", quoted_body: { html: "<p>Quote</p>" } }),
-  );
-  const options = { cache: memoryCache() };
-  const body = await prepareMailRendering(bucket, message, "box", "office.test", options);
-  const quote = await prepareMailRendering(bucket, message, "box", "office.test", {
-    ...options,
-    part: "quoted",
-  });
-  assert.match(body.html, />Body</);
-  assert.match(quote.html, />Quote</);
-  const changed = await prepareMailRendering(
-    bucket,
-    { ...message, body_r2_key: "bodies/box/message/new.json" },
-    "box",
-    "office.test",
-    { ...options, source: "<p>Changed</p>" },
-  );
-  assert.match(changed.html, />Changed</);
-  assert.equal(bucket.values.size, 4);
-});
-
-test("repeated large images cannot expand the HTML beyond the message budget", async () => {
-  const bucket = bucketFixture(),
-    body = new Uint8Array(4 * 1024 ** 2);
-  body.set(png);
-  await bucket.put("large-logo", body);
+    bytes = new Uint8Array(4 * 1024 ** 2);
+  bytes.set(png);
+  await bucket.put("large-logo", bytes);
   const result = await prepareMailRendering(
     bucket,
     {
@@ -193,11 +223,41 @@ test("repeated large images cannot expand the HTML beyond the message budget", a
     },
     "box",
     "office.test",
-    {
-      source: '<img src="cid:logo">'.repeat(100),
-      cache: memoryCache(),
-    },
+    { source: '<img src="cid:logo">'.repeat(100), cache: memoryCache() },
   );
-  assert.equal(result.failures, 1);
-  assert.ok(embeddedMailRendering(result).length < 100_000);
+  assert.equal(result.failures, 0);
+  assert.ok(linked(result).length < 20_000);
+  assert.equal(
+    [...bucket.values.keys()].filter((key) => key.includes(".render-images/")).length,
+    1,
+  );
+});
+
+test("mail image grants are stable, scoped, expiring and cannot authorize other resources", async (t) => {
+  const env = { AUTH_SIGNING_KEYS: "private-test-signing-ring" },
+    grant = {
+      actor: { user_id: "user", auth_version: 1, api_key_id: null },
+      bodyKey: message.body_r2_key,
+      sessionId: "session",
+      part: "body",
+    };
+  const token = await signMailImageGrant(env, "https://office.test" + path, grant);
+  assert.equal(await signMailImageGrant(env, "https://office.test" + path, grant), token);
+  const verified = await verifyMailImageGrant(env, "https://office.test" + path, token);
+  assert.deepEqual(verified.actor, grant.actor);
+  await assert.rejects(
+    verifyMailImageGrant(env, "https://office.test" + path + "-other", token),
+    /MAIL:401/,
+  );
+  await assert.rejects(
+    verifyMailImageGrant({ AUTH_SIGNING_KEYS: "another-key" }, "https://office.test" + path, token),
+    /MAIL:401/,
+  );
+  await assert.rejects(
+    verifyMailImageGrant(env, "https://office.test" + path, token + "x"),
+    /MAIL:401/,
+  );
+  const now = Date.now();
+  t.mock.method(Date, "now", () => now + 901_000);
+  await assert.rejects(verifyMailImageGrant(env, "https://office.test" + path, token), /MAIL:401/);
 });

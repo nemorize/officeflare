@@ -7,8 +7,7 @@ import { api } from "../lib/api";
 import {
   mailErrorDescription,
   htmlFrame,
-  mailFrameHeight,
-  mailFrameLink,
+  observeMailDocument,
   mailboxPath,
   mailDate,
   cancelableSubmission,
@@ -33,30 +32,30 @@ export const MailHtml = memo(
     const cache = useMailCache();
     const frame = useRef<HTMLIFrameElement>(null),
       [height, setHeight] = useState(128);
-    const nonce = useMemo(
-      () =>
-        [...crypto.getRandomValues(new Uint8Array(16))]
-          .map((byte) => byte.toString(16).padStart(2, "0"))
-          .join(""),
-      [message.id, message.body_revision, content],
-    );
-    const [html, setHtml] = useState(content),
-      [error, setError] = useState("");
+    const cleanupFrame = useRef<() => void>(() => {});
     const [attempt, setAttempt] = useState(0);
+    const query = new URLSearchParams();
+    if (message.body_revision) query.set("revision", message.body_revision);
+    if (content !== message.body.html) query.set("part", "quoted");
+    if (attempt > 0) query.set("retry", "1");
+    const key = `${path}/messages/${message.id}/render?${query}`;
+    const cached = cache.snapshot(key).data as { html: string; failures: number } | null;
+    const [html, setHtml] = useState(cached?.html ?? content),
+      [error, setError] = useState("");
     const [link, setLink] = useState<string | null>(null);
     const cancelLink = useRef<HTMLButtonElement>(null);
-    const document = useMemo(() => htmlFrame(html, nonce, window.location.origin), [html, nonce]);
+    const document = useMemo(
+      () =>
+        htmlFrame(html, window.location.origin, `${path}/messages/${message.id}/render/assets/`),
+      [html, path, message.id],
+    );
     useEffect(() => {
       const controller = new AbortController();
-      setHtml(content);
+      const snapshot = cache.snapshot(key).data as { html: string } | null;
+      setHtml(snapshot?.html ?? content);
       setError("");
       void (async () => {
         try {
-          const query = new URLSearchParams();
-          if (message.body_revision) query.set("revision", message.body_revision);
-          if (content !== message.body.html) query.set("part", "quoted");
-          if (attempt > 0) query.set("retry", "1");
-          const key = `${path}/messages/${message.id}/render?${query}`;
           await cache.load(key, attempt > 0);
           if (controller.signal.aborted) return;
           const snapshot = cache.snapshot(key);
@@ -73,25 +72,20 @@ export const MailHtml = memo(
       return () => {
         controller.abort();
       };
-    }, [message.id, message.body_revision, content, path, attempt, cache]);
+    }, [key, content, attempt, cache]);
     useLayoutEffect(() => {
       setHeight(128);
       setLink(null);
-      const receive = (event: MessageEvent) => {
-        const next = mailFrameHeight(event.data, nonce, event.source, frame.current?.contentWindow);
-        if (next !== null) setHeight(next);
-        const destination = mailFrameLink(
-          event.data,
-          nonce,
-          event.source,
-          frame.current?.contentWindow,
-          event.origin,
+      return () => cleanupFrame.current();
+    }, [document]);
+    const attachFrame = () => {
+      cleanupFrame.current();
+      const bodyDocument = frame.current?.contentDocument;
+      if (bodyDocument?.body)
+        cleanupFrame.current = observeMailDocument(bodyDocument, setHeight, (destination) =>
+          setLink((current) => current ?? destination),
         );
-        if (destination) setLink((current) => current ?? destination);
-      };
-      window.addEventListener("message", receive);
-      return () => window.removeEventListener("message", receive);
-    }, [nonce]);
+    };
     return (
       <>
         {link && (
@@ -144,9 +138,10 @@ export const MailHtml = memo(
           style={{ height }}
           className="mail-html-frame"
           title={t("componentsMailBody.formattedEmailBody")}
-          sandbox="allow-scripts"
+          sandbox="allow-same-origin"
           referrerPolicy="no-referrer"
           srcDoc={document}
+          onLoad={attachFrame}
         />
       </>
     );

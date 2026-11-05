@@ -8,7 +8,7 @@ const output = join(directory, "helpers.mjs");
 try {
   await build({
     stdin: {
-      contents: `export * from './src/mail/render.ts';export * from './src/mail/remote.ts';export * from './src/mail/rendering.ts';`,
+      contents: `export * from './src/mail/render.ts';export * from './src/mail/remote.ts';export * from './src/mail/rendering.ts';export * from './src/mail/render-access.ts';`,
       resolveDir: resolve("."),
     },
     bundle: true,
@@ -32,8 +32,13 @@ try {
     loadMailRenderImage,
     remoteAssetCacheRequest,
     prepareMailRendering,
-    embeddedMailRendering,
-    preparedMailImage,
+    linkedMailRendering,
+    preparedMailImageId,
+    loadPreparedMailImage,
+    legacyMailRenderKey,
+    mailRenderImageKey,
+    signMailImageGrant,
+    verifyMailImageGrant,
     mailRenderKey,
   } = helpers;
 } finally {
@@ -50,8 +55,13 @@ export {
   loadMailRenderImage,
   remoteAssetCacheRequest,
   prepareMailRendering,
-  embeddedMailRendering,
-  preparedMailImage,
+  linkedMailRendering,
+  preparedMailImageId,
+  loadPreparedMailImage,
+  legacyMailRenderKey,
+  mailRenderImageKey,
+  signMailImageGrant,
+  verifyMailImageGrant,
   mailRenderKey,
 };
 export const png = Uint8Array.from(

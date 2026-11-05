@@ -73,60 +73,31 @@ export function mailFailure(failure: unknown) {
     ? failure.message
     : t("libMailHelpers.unableToCompleteTheRequest");
 }
-export function htmlFrame(html: string, resizeNonce?: string, parentOrigin = "*") {
-  if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce))
-    throw new Error(t("libMailHelpers.invalidFrameNonce"));
-  const policy = resizeNonce ? " script-src 'nonce-" + resizeNonce + "';" : "";
-  const targetOrigin = JSON.stringify(parentOrigin).replaceAll("<", "\\u003c");
-  // The frame keeps an opaque origin and cannot open popups or navigate its parent.
-  // Only this nonce-authorized script can forward a real link click for confirmation.
-  const script = resizeNonce
-    ? `<script nonce="${resizeNonce}">(()=>{
-      const nonce="${resizeNonce}",targetOrigin=${targetOrigin};
-      const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce,height},targetOrigin)};
-      const follow=event=>{
-        const target=event.target?.nodeType===1?event.target:event.target?.parentElement;
-        const link=target?.closest("a[href]");
-        if(!link||(event.type==="click"?event.button!==0:event.button!==1))return;
-        event.preventDefault();event.stopPropagation();
-        if(!event.isTrusted)return;
-        parent.postMessage({type:"officeflare:mail-link",nonce,url:link.getAttribute("href")},targetOrigin);
-      };
-      new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);
-      addEventListener("load",report);
-      addEventListener("click",follow,true);
-      addEventListener("auxclick",follow,true);
-      report();
-    })()</script>`
-    : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src^="/api/mail/"]{opacity:0}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${script}</body></html>`;
+export function htmlFrame(html: string, parentOrigin = "*", imagePath = "") {
+  let imagePolicy = "'none'";
+  try {
+    const origin = new URL(parentOrigin);
+    if (
+      ["https:", "http:"].includes(origin.protocol) &&
+      /^\/api\/mail\/mailboxes\/[a-z0-9%_-]+\/messages\/[a-z0-9%_.-]+\/render\/assets\/$/i.test(
+        imagePath,
+      )
+    )
+      imagePolicy = origin.origin + imagePath;
+  } catch {}
+  // Scripts stay disabled. The parent observes the document and handles links;
+  // a same-origin frame lets normal HTTP image caching survive reopening it.
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; img-src ${imagePolicy}; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}</body></html>`;
 }
-export function mailFrameLink(
-  data: unknown,
-  nonce: string,
-  source: unknown,
-  expectedSource: unknown,
-  origin: string,
-): string | null {
+export function mailLinkUrl(value: unknown): string | null {
   if (
-    !expectedSource ||
-    source !== expectedSource ||
-    origin !== "null" ||
-    !data ||
-    typeof data !== "object"
-  )
-    return null;
-  const message = data as { type?: string; nonce?: string; url?: unknown };
-  if (
-    message.type !== "officeflare:mail-link" ||
-    message.nonce !== nonce ||
-    typeof message.url !== "string" ||
-    message.url.length > 8192 ||
-    /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(message.url)
+    typeof value !== "string" ||
+    value.length > 8192 ||
+    /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(value)
   )
     return null;
   try {
-    const url = new URL(message.url);
+    const url = new URL(value);
     if (!["https:", "http:", "mailto:"].includes(url.protocol) || url.username || url.password)
       return null;
     return url.href;
@@ -134,23 +105,45 @@ export function mailFrameLink(
     return null;
   }
 }
-export function mailFrameHeight(
-  data: unknown,
-  nonce: string,
-  source: unknown,
-  expectedSource: unknown,
-): number | null {
-  if (!expectedSource || source !== expectedSource || !data || typeof data !== "object")
-    return null;
-  const message = data as { type?: string; nonce?: string; height?: unknown };
-  if (
-    message.type !== "officeflare:mail-body-height" ||
-    message.nonce !== nonce ||
-    typeof message.height !== "number" ||
-    !Number.isFinite(message.height)
-  )
-    return null;
-  return Math.max(96, Math.min(24_000, Math.ceil(message.height)));
+export function observeMailDocument(
+  document: Document,
+  resize: (height: number) => void,
+  openLink: (url: string) => void,
+  runtime = { ResizeObserver, requestAnimationFrame, cancelAnimationFrame },
+) {
+  let animation: number | undefined;
+  const report = () => {
+    const height = document.body.getBoundingClientRect().height + 40;
+    if (Number.isFinite(height)) resize(Math.max(96, Math.min(24_000, Math.ceil(height))));
+  };
+  const observer = new runtime.ResizeObserver(() => {
+    if (animation !== undefined) return;
+    animation = runtime.requestAnimationFrame(() => {
+      animation = undefined;
+      report();
+    });
+  });
+  const follow = (event: MouseEvent) => {
+    const target = event.target as Node | null;
+    const element = target?.nodeType === 1 ? (target as Element) : target?.parentElement;
+    const anchor = element?.closest("a[href]");
+    if (!anchor || (event.type === "click" ? event.button !== 0 : event.button !== 1)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.isTrusted) return;
+    const url = mailLinkUrl(anchor.getAttribute("href"));
+    if (url) openLink(url);
+  };
+  document.addEventListener("click", follow, true);
+  document.addEventListener("auxclick", follow, true);
+  observer.observe(document.body);
+  report();
+  return () => {
+    observer.disconnect();
+    if (animation !== undefined) runtime.cancelAnimationFrame(animation);
+    document.removeEventListener("click", follow, true);
+    document.removeEventListener("auxclick", follow, true);
+  };
 }
 // getRandomValues is also available on HTTP origins, unlike randomUUID.
 const operationKey = () =>
