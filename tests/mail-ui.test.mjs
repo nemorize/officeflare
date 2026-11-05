@@ -9,7 +9,6 @@ import {
   retryableSubmission,
   htmlFrame,
   mailFrameHeight,
-  embeddedMailImage,
 } from "../web/lib/mail-helpers.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
@@ -118,20 +117,6 @@ test("HTML email uses a restrictive frame policy that blocks remote images and s
   assert.match(frame, /base-uri 'none'/);
   assert.doesNotMatch(frame, /script-src.*unsafe-inline/);
 });
-test("verified mail images embed without relying on a sandbox's access to parent blob URLs", async () => {
-  const image = await embeddedMailImage(
-    new Blob([new Uint8Array([0, 255, 1, 128])], { type: "image/png" }),
-  );
-  assert.equal(image, "data:image/png;base64,AP8BgA==");
-  await assert.rejects(
-    embeddedMailImage(new Blob(["<script>alert(1)</script>"], { type: "text/html" })),
-    /Unsupported/,
-  );
-  await assert.rejects(
-    embeddedMailImage(new Blob([new Uint8Array(5 * 1024 ** 2 + 1)], { type: "image/png" })),
-    /Unsupported/,
-  );
-});
 test("email sizing permits only its nonce-authorized observer and rejects forged size messages", () => {
   const nonce = "a".repeat(32),
     source = {};
@@ -144,6 +129,7 @@ test("email sizing permits only its nonce-authorized observer and rejects forged
   assert.match(policy, /img-src blob: data:/);
   assert.match(policy, /script-src 'nonce-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/);
   assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline|script-src[^;]*https:/);
+  assert.doesNotMatch(frame, /officeflare:mail-assets|data.assets/);
   assert.throws(() => htmlFrame("", '"><script>'), /nonce/);
   const data = { type: "officeflare:mail-body-height", nonce, height: 241.1 };
   assert.equal(mailFrameHeight(data, nonce, source, source), 242);

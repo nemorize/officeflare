@@ -6,6 +6,7 @@ import { inlineContentIds, imageAssetKey } from "./editor";
 import { mboxMessage, unquoteMboxMessage } from "./mbox";
 import { hash, text } from "./input";
 import { ingest, readBody, flushOutbox } from "./service";
+import { prepareMailRendering } from "./rendering";
 import {
   epoch,
   fail,
@@ -591,6 +592,14 @@ async function restorePage(
       is_spam: !!source.is_spam,
       snoozed_until: source.snoozed_until,
     };
+    if (input.direction === "inbound")
+      await prepareMailRendering(
+        env.MAIL_BUCKET,
+        input,
+        mailboxId,
+        env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
+        { source: body.html },
+      );
     await coordinator.storeMessage(partitionId, input);
     await partition(env, partitionId).applyInboundFlags(
       targetId,

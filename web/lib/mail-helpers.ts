@@ -73,15 +73,6 @@ export function mailFailure(failure: unknown) {
     ? failure.message
     : t("libMailHelpers.unableToCompleteTheRequest");
 }
-export async function embeddedMailImage(blob: Blob): Promise<string> {
-  if (!/^image\/[a-z0-9.+-]+$/i.test(blob.type) || blob.size > 5 * 1024 ** 2)
-    throw new Error(t("libMailHelpers.unsupportedMailImage"));
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 8192)
-    binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
-  return `data:${blob.type};base64,${btoa(binary)}`;
-}
 export function htmlFrame(html: string, resizeNonce?: string) {
   if (resizeNonce && !/^[a-f0-9]{32,64}$/.test(resizeNonce))
     throw new Error(t("libMailHelpers.invalidFrameNonce"));
@@ -92,7 +83,7 @@ export function htmlFrame(html: string, resizeNonce?: string) {
       resizeNonce +
       '">(()=>{const nonce="' +
       resizeNonce +
-      '";const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce,height},"*")};new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);addEventListener("load",report);addEventListener("message",event=>{const data=event.data;if(event.source!==parent||!data||data.type!=="officeflare:mail-assets"||data.nonce!==nonce||!Array.isArray(data.assets))return;for(const asset of data.assets){if(!asset||typeof asset.source!=="string"||!/^data:image\\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(asset.value))continue;for(const image of document.querySelectorAll("img[src]"))if(image.getAttribute("src")===asset.source)image.setAttribute("src",asset.value);for(const element of document.querySelectorAll("[style]"))element.setAttribute("style",element.getAttribute("style").replaceAll(asset.source,asset.value));for(const style of document.querySelectorAll("style"))style.textContent=style.textContent.replaceAll(asset.source,asset.value)}report()});report()})()</script>'
+      '";const report=()=>{const height=Math.ceil(document.body.getBoundingClientRect().height+40);parent.postMessage({type:"officeflare:mail-body-height",nonce,height},"*")};new ResizeObserver(()=>requestAnimationFrame(report)).observe(document.body);addEventListener("load",report);report()})()</script>'
     : "";
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';${policy}"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src^="/api/mail/"]{opacity:0}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}${resize}</body></html>`;
 }

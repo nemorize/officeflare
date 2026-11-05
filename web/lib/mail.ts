@@ -221,7 +221,6 @@ export {
   mailErrorDescription,
   htmlFrame,
   mailFrameHeight,
-  embeddedMailImage,
   MailOperation,
 } from "./mail-helpers";
 export async function downloadMail(path: string, name: string) {

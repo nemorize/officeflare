@@ -50,6 +50,12 @@ interface Entry {
 }
 type Loader = (path: string, signal: AbortSignal) => Promise<unknown>;
 const empty: ResourceSnapshot = { data: null, loading: false, error: null };
+const resourceBytes = (data: unknown) =>
+  data instanceof Blob
+    ? data.size
+    : data && typeof data === "object" && "html" in data && typeof data.html === "string"
+      ? data.html.length * 2
+      : 0;
 
 /** Owned by one session/permission scope; never shares private data across accounts. */
 export class MailResourceCache {
@@ -132,10 +138,9 @@ export class MailResourceCache {
         for (const update of entry.updates) data = update(data);
         entry.updated = this.now();
         this.publish(entry, { data, loading: false, error: null });
-        // Image bodies are session-local and bounded independently of metadata entries.
+        // Prepared HTML includes image data, so it shares the image memory budget.
         let bytes = [...this.entries.values()].reduce(
-          (total, value) =>
-            total + (value.snapshot.data instanceof Blob ? value.snapshot.data.size : 0),
+          (total, value) => total + resourceBytes(value.snapshot.data),
           0,
         );
         if (bytes > 20 * 1024 ** 2)
@@ -144,9 +149,9 @@ export class MailResourceCache {
               key !== path &&
               !value.listeners.size &&
               !value.request &&
-              value.snapshot.data instanceof Blob
+              resourceBytes(value.snapshot.data) > 0
             ) {
-              bytes -= value.snapshot.data.size;
+              bytes -= resourceBytes(value.snapshot.data);
               this.entries.delete(key);
               if (bytes <= 20 * 1024 ** 2) break;
             }
