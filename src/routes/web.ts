@@ -7,6 +7,7 @@ export function renderPage(title: string) {
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
         <title>${title}</title>
       </head>
       <body>
