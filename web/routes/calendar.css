@@ -81,7 +81,7 @@
   padding: 0;
   margin: 1px auto;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
   font-size: 10px;
   cursor: pointer;
   background: transparent;
@@ -365,7 +365,7 @@
   min-width: 27px;
   padding: 0 6px;
   border: 0;
-  border-radius: 18px;
+  border-radius: var(--ui-radius-control);
   background: transparent;
   font-size: 11px;
   cursor: pointer;
@@ -560,7 +560,7 @@
   letter-spacing: -0.8px;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
 }
 .calendar-time-day-heading:hover > strong {
   background: var(--ui-hover);
@@ -792,7 +792,7 @@
   min-width: 36px;
   font-size: 23px;
   font-weight: 400;
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
 }
 .calendar-agenda-date > span {
   font-size: 10px;
@@ -1206,7 +1206,7 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--ui-control-border);
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
   background: transparent;
   font-size: 11px;
   cursor: pointer;
@@ -1323,7 +1323,7 @@
   place-items: center;
   width: 27px;
   height: 27px;
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
   border: 2px solid transparent;
   background: var(--calendar-color);
   color: white;

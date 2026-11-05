@@ -73,7 +73,7 @@
   background: var(--ui-primary);
   border-color: var(--ui-primary);
   color: var(--ui-on-primary);
-  border-radius: 999px;
+  border-radius: var(--ui-radius-control);
 }
 [data-ui-button][data-variant="primary"]:hover:not(:disabled) {
   background: var(--ui-primary-hover);
@@ -100,7 +100,7 @@
 [data-ui-button][data-variant="plain"],
 [data-ui-button][data-variant="text"] {
   border: 0;
-  border-radius: 0;
+  border-radius: var(--ui-radius-control);
   background: transparent;
   padding: 0;
   text-align: start;
@@ -1238,12 +1238,9 @@ textarea[data-ui="input"] {
   }
 }
 
-[data-ui-button][data-shape="circle"] {
-  border-radius: 50%;
-}
 [data-ui-button][data-variant="swatch"] {
   border: 2px solid var(--ui-border);
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
   width: 32px;
   height: 32px;
   min-height: 32px;
@@ -1268,7 +1265,7 @@ textarea[data-ui="input"] {
 [data-ui="toggle"][data-variant="star"],
 [data-ui="toggle"][data-variant="star"]:hover {
   border-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--ui-radius-control);
   background: transparent;
   color: var(--ui-muted);
 }
@@ -1310,14 +1307,14 @@ textarea[data-ui="input"] {
 [data-ui="button-group"] > [data-ui-button]:first-child,
 [data-ui="button-group"]
   > [data-ui-button]:first-child:is(:hover, :active, :focus, [data-popup-open]) {
-  border-start-start-radius: 999px;
-  border-end-start-radius: 999px;
+  border-start-start-radius: var(--ui-radius-control);
+  border-end-start-radius: var(--ui-radius-control);
 }
 [data-ui="button-group"] > [data-ui-button]:last-child,
 [data-ui="button-group"]
   > [data-ui-button]:last-child:is(:hover, :active, :focus, [data-popup-open]) {
-  border-start-end-radius: 999px;
-  border-end-end-radius: 999px;
+  border-start-end-radius: var(--ui-radius-control);
+  border-end-end-radius: var(--ui-radius-control);
 }
 [data-ui="button-group"] > [data-ui-button]:focus-visible {
   z-index: 1;
@@ -1334,7 +1331,7 @@ textarea[data-ui="input"] {
   max-width: 100%;
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
-  border-radius: 999px;
+  border-radius: var(--ui-radius-control);
 }
 [data-ui="chip"][data-invalid] {
   border-color: var(--ui-danger);
@@ -1345,12 +1342,12 @@ textarea[data-ui="input"] {
   text-overflow: ellipsis;
 }
 [data-ui="chip"] > [data-ui-button]:first-child {
-  border-start-start-radius: 999px;
-  border-end-start-radius: 999px;
+  border-start-start-radius: var(--ui-radius-control);
+  border-end-start-radius: var(--ui-radius-control);
 }
 [data-ui="chip"] > [data-ui-button]:last-child {
-  border-start-end-radius: 999px;
-  border-end-end-radius: 999px;
+  border-start-end-radius: var(--ui-radius-control);
+  border-end-end-radius: var(--ui-radius-control);
 }
 @media (max-width: 760px) {
   [data-ui-button][data-variant="swatch"] {

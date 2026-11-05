@@ -14,7 +14,6 @@ export interface ButtonProps extends ComponentPropsWithRef<typeof BaseButton> {
     | "inverse"
     | "swatch";
   mobileIcon?: boolean;
-  shape?: "default" | "circle";
   size?: "sm" | "md" | "lg" | "touch" | "icon";
 }
 
@@ -22,7 +21,6 @@ export interface ButtonProps extends ComponentPropsWithRef<typeof BaseButton> {
 export function Button({
   variant = "secondary",
   size = "md",
-  shape = "default",
   mobileIcon = false,
   ...props
 }: ButtonProps) {
@@ -32,7 +30,6 @@ export function Button({
       data-ui-button=""
       data-variant={variant}
       data-size={size}
-      data-shape={shape}
       data-mobile-icon={mobileIcon || undefined}
       {...props}
     />
