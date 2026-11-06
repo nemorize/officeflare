@@ -109,7 +109,12 @@ export function observeMailDocument(
   document: Document,
   resize: (height: number) => void,
   openLink: (url: string) => void,
-  runtime = { ResizeObserver, requestAnimationFrame, cancelAnimationFrame },
+  runtime = {
+    ResizeObserver,
+    requestAnimationFrame: (callback: FrameRequestCallback) =>
+      window.requestAnimationFrame(callback),
+    cancelAnimationFrame: (handle: number) => window.cancelAnimationFrame(handle),
+  },
 ) {
   let animation: number | undefined;
   const report = () => {

@@ -184,6 +184,70 @@ test("the parent observes height and confirms trusted email links while frame sc
   assert.equal(handlers.auxclick, undefined);
 });
 
+test("default mail resize scheduling and cleanup preserve the Window receiver", (t) => {
+  const reports = [];
+  let height = 80,
+    resized,
+    animation,
+    scheduled = 0,
+    canceled,
+    disconnected = false;
+  const window = {
+    requestAnimationFrame(callback) {
+      assert.equal(this, window, "requestAnimationFrame requires its Window receiver");
+      animation = callback;
+      return ++scheduled;
+    },
+    cancelAnimationFrame(handle) {
+      assert.equal(this, window, "cancelAnimationFrame requires its Window receiver");
+      canceled = handle;
+    },
+  };
+  const globals = {
+    window,
+    ResizeObserver: class {
+      constructor(callback) {
+        resized = callback;
+      }
+      observe() {}
+      disconnect() {
+        disconnected = true;
+      }
+    },
+    requestAnimationFrame: window.requestAnimationFrame,
+    cancelAnimationFrame: window.cancelAnimationFrame,
+  };
+  for (const [name, value] of Object.entries(globals)) {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+    t.after(() => {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globalThis[name];
+    });
+    Object.defineProperty(globalThis, name, { configurable: true, value });
+  }
+  const document = {
+    body: { getBoundingClientRect: () => ({ height }) },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const cleanup = observeMailDocument(
+    document,
+    (height) => reports.push(height),
+    () => {},
+  );
+  assert.deepEqual(reports, [120]);
+  height = 240;
+  resized();
+  resized();
+  assert.equal(scheduled, 1);
+  animation();
+  assert.deepEqual(reports, [120, 280]);
+  resized();
+  cleanup();
+  assert.equal(disconnected, true);
+  assert.equal(canceled, 2);
+});
+
 test("conversation headers accept new mail and deletions without reloading unrelated bodies", async () => {
   const { applyMailHeaders } = await import("../web/lib/mail-ui.ts");
   const body = { html: "<p>Kept body</p>" },
