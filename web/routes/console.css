@@ -262,11 +262,11 @@ details.console-role-summary > .console-permission-picker {
 .console-mobile-nav {
   display: none;
 }
-.console-drive-tabs {
+.console-tabs {
   overflow-x: auto;
   margin-block-end: 24px;
 }
-.console-drive-tabs > [data-ui="tabs-list"] {
+.console-tabs > [data-ui="tabs-list"] {
   width: max-content;
   min-width: 100%;
 }

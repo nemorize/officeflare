@@ -307,7 +307,7 @@ export function DriveConsoleLayout() {
       </header>
       {selected && (
         <Tabs.Root value={selected} onValueChange={(value) => navigate(`/console/drive/${value}`)}>
-          <div className="console-drive-tabs">
+          <div className="console-tabs">
             <Tabs.List aria-label={t("routesConsoleDrive.driveNavigation")}>
               {pages.map((page) => (
                 <Tabs.Tab key={page.page} value={page.page}>

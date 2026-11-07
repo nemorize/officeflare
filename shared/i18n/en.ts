@@ -2166,6 +2166,7 @@ export const en = defineMessages({
   "libConsole.driveReadOnlyUser": "Drive read-only user",
   "libConsole.driveUser": "Drive user",
   "libConsole.enterARoleNameWithUpTo100Characters": "Enter a role name with up to 100 characters.",
+  "libConsole.mail": "Mail",
   "libConsole.mailDomains": "Mail domains",
   "libConsole.mailUser": "Mail user",
   "libConsole.missingRequiredPermissions": "Missing required permissions: {join}",
@@ -3321,6 +3322,9 @@ export const en = defineMessages({
     "Enable this provider connection before enabling sending for the domain.",
   "routesConsoleMail.enterToChange": "Enter to change",
   "routesConsoleMail.exampleCom": "example.com",
+  "routesConsoleMail.mailNavigation": "Mail navigation",
+  "routesConsoleMail.manageMailDomainsAndSharedMailboxes":
+    "Manage mail domains, delivery settings, and shared mailboxes.",
   "routesConsoleMail.mailDomain": "Mail domain",
   "routesConsoleMail.mailDomains": "Mail domains",
   "routesConsoleMail.mailDomains2": "← Mail domains",

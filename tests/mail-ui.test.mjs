@@ -179,6 +179,7 @@ test("new mail routes restore safely after login without accepting arbitrary pat
     "/mail/spam",
     "/mail/snoozed",
     "/mail/folders/abcd-1234",
+    "/console/mail",
     "/console/mail/domains",
     "/console/mail/domains/new",
     "/console/mail/domains/abcd-1234",

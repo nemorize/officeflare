@@ -27,6 +27,19 @@ export const rolePermissions = Object.keys(permissionCatalog).filter((key) =>
 export const driveAdminPermissions = Object.keys(permissionCatalog).filter((key) =>
   key.startsWith("admin.drive."),
 );
+export const mailConsolePages = [
+  {
+    page: "domains",
+    label: t("libConsole.mailDomains"),
+    permission: "admin.mail.domains.read",
+  },
+  {
+    page: "mailboxes",
+    label: t("libConsole.sharedMailboxes"),
+    permission: "admin.mail.mailboxes.read",
+  },
+];
+export const mailConsolePermissions = mailConsolePages.map((page) => page.permission);
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [
   {
     path: "/console/users",
@@ -41,16 +54,10 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     permissions: ["admin.roles.read"],
   },
   {
-    path: "/console/mail/domains",
-    name: t("libConsole.mailDomains"),
+    path: "/console/mail",
+    name: t("libConsole.mail"),
     icon: "mail",
-    permissions: ["admin.mail.domains.read"],
-  },
-  {
-    path: "/console/mail/mailboxes",
-    name: t("libConsole.sharedMailboxes"),
-    icon: "inbox",
-    permissions: ["admin.mail.mailboxes.read"],
+    permissions: mailConsolePermissions,
   },
   {
     path: "/console/drive",

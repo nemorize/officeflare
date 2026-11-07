@@ -49,6 +49,22 @@ test("console entry and administrative records are separate from service access"
   assert.equal(canGrant(["unknown"], ["unknown"]), false);
 });
 
+test("mail administration shares one console entry for either or both read permissions", () => {
+  for (const grants of [
+    ["admin.mail.domains.read"],
+    ["admin.mail.mailboxes.read"],
+    ["admin.mail.domains.read", "admin.mail.mailboxes.read"],
+  ])
+    assert.deepEqual(
+      consoleMenu(permissionClosure(grants)).map((item) => item.path),
+      ["/console/mail"],
+    );
+  for (const grants of [["mail.access"], ["admin.mail.providers.read"]])
+    assert.ok(
+      consoleMenu(permissionClosure(grants)).every((item) => item.path !== "/console/mail"),
+    );
+});
+
 test("permission selections complete their parents and remove dependent children", () => {
   const selected = togglePermission(["mail.access"], "admin.users.roles.assign", true);
   assert.deepEqual(missingPrerequisites(selected), []);

@@ -1,8 +1,9 @@
 import { LocalizedMessage } from "../components/i18n";
 import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { api } from "../lib/api";
+import { mailConsolePages } from "../lib/console";
 import { type DomainProvider, type Domain, type Mailbox } from "../lib/mail";
 import { useAccess } from "../components/console-access";
 import {
@@ -18,17 +19,53 @@ import {
   MailFieldset,
 } from "../components/mail-common";
 import { MailRules } from "../components/mail-rules";
-import { Button, useNotifications } from "../components/ui";
+import { Button, Tabs, useNotifications } from "../components/ui";
 import { Check, ConsolePageHeader } from "../components/console-shared";
 import { SharedMailboxes } from "./console-shared-mailboxes";
 import "./console.css";
 import "./mail.css";
-export function MailConsolePage({ page }: { page: string }) {
+export function MailConsoleLayout() {
+  const { permissions } = useAccess(),
+    navigate = useNavigate(),
+    location = useLocation();
+  const pages = mailConsolePages.filter((page) => permissions.includes(page.permission));
+  const requested = location.pathname.split("/")[3],
+    selected = pages.find((page) => page.page === requested)?.page ?? pages[0]?.page;
   return (
-    <section className="account-page console-page mail-console-page">
-      {page === "mailboxes" ? <SharedMailboxes /> : <Domains />}
+    <section className="account-page console-page mail-console-page" data-ui-theme="neutral">
+      <ConsolePageHeader
+        title={t("libConsole.mail")}
+        description={t("routesConsoleMail.manageMailDomainsAndSharedMailboxes")}
+      />
+      {selected && (
+        <Tabs.Root value={selected} onValueChange={(value) => navigate(`/console/mail/${value}`)}>
+          <div className="console-tabs">
+            <Tabs.List aria-label={t("routesConsoleMail.mailNavigation")}>
+              {pages.map((page) => (
+                <Tabs.Tab key={page.page} value={page.page}>
+                  {page.label}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </div>
+          <Tabs.Panel value={selected}>
+            <Outlet />
+          </Tabs.Panel>
+        </Tabs.Root>
+      )}
     </section>
   );
+}
+export function MailConsolePage({ page }: { page: string }) {
+  const { permissions } = useAccess();
+  if (page === "home")
+    return (
+      <Navigate
+        replace
+        to={`/console/mail/${mailConsolePages.find((page) => permissions.includes(page.permission))?.page ?? "domains"}`}
+      />
+    );
+  return page === "mailboxes" ? <SharedMailboxes /> : <Domains />;
 }
 function useMailboxDirectory() {
   const permissions = useAccess().permissions;
@@ -53,6 +90,7 @@ function Domains() {
   return (
     <>
       <ConsolePageHeader
+        level={2}
         title={t("routesConsoleMail.mailDomains")}
         description={t(
           "routesConsoleMail.configureCommonDomainsDeliveryProvidersAndInboundRouting",
@@ -155,11 +193,12 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
       permissions.includes("admin.mail.providers.read") ? "/api/mail/provider-connections" : null,
     );
   return (
-    <section className="account-page console-page console-detail-page mail-console-page">
+    <div className="console-detail-page">
       <Link to="/console/mail/domains" className="console-back">
         {t("routesConsoleMail.mailDomains2")}
       </Link>
       <ConsolePageHeader
+        level={2}
         title={
           creating
             ? t("routesConsoleMail.registerMailDomain")
@@ -243,7 +282,7 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }
 function DomainEditor({

@@ -78,6 +78,7 @@ export function SharedMailboxes() {
   return (
     <>
       <ConsolePageHeader
+        level={2}
         title={t("routesConsoleSharedMailboxes.sharedMailboxes")}
         description={t("routesConsoleSharedMailboxes.manageTeamAddressesAndThePeopleWhoUseThem")}
       >
@@ -173,11 +174,12 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
     ),
     directory = useMailResource<{ users: Person[] }>("/api/mail/mailbox-users");
   return (
-    <section className="account-page console-page console-detail-page mail-console-page">
+    <div className="console-detail-page">
       <Link to="/console/mail/mailboxes" className="console-back">
         {t("routesConsoleSharedMailboxes.sharedMailboxes2")}
       </Link>
       <ConsolePageHeader
+        level={2}
         title={
           creating
             ? t("routesConsoleSharedMailboxes.newSharedMailbox")
@@ -209,7 +211,7 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
             onSaved={config.reload}
           />
         )}
-    </section>
+    </div>
   );
 }
 function SharedMailboxForm({

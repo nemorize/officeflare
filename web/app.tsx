@@ -15,7 +15,13 @@ import { UIProvider } from "@/components/ui";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
 import { workspaceApps } from "./lib/workspace-navigation";
 import { ConsoleGate, ConsoleHome, ServiceGate, WorkspaceHome } from "./components/console-access";
-import { userPermissions, rolePermissions, driveAdminPermissions } from "./lib/console";
+import {
+  userPermissions,
+  rolePermissions,
+  driveAdminPermissions,
+  mailConsolePages,
+  mailConsolePermissions,
+} from "./lib/console";
 import "./styles.css";
 
 const UIPreviewPage = import.meta.env.DEV ? lazy(() => import("./routes/ui-preview")) : null;
@@ -84,6 +90,9 @@ const MailDataPage = lazy(() =>
 );
 const MailConsolePage = lazy(() =>
   import("./routes/console-mail").then((module) => ({ default: module.MailConsolePage })),
+);
+const MailConsoleLayout = lazy(() =>
+  import("./routes/console-mail").then((module) => ({ default: module.MailConsoleLayout })),
 );
 const SharedMailboxEditorPage = lazy(() =>
   import("./routes/console-shared-mailboxes").then((module) => ({
@@ -333,49 +342,59 @@ const router = createBrowserRouter(
               }
             />
           </Route>
-          {["domains", "mailboxes"].map((page) => (
+          <Route
+            path="mail"
+            element={
+              <ConsoleGate permissions={mailConsolePermissions}>
+                <MailConsoleLayout />
+              </ConsoleGate>
+            }
+          >
+            <Route index element={<MailConsolePage page="home" />} />
+            {mailConsolePages.map(({ page, permission }) => (
+              <Route
+                key={page}
+                path={page}
+                element={
+                  <ConsoleGate permissions={[permission]}>
+                    <MailConsolePage key={page} page={page} />
+                  </ConsoleGate>
+                }
+              />
+            ))}
             <Route
-              key={page}
-              path={`mail/${page}`}
+              path="domains/new"
               element={
-                <ConsoleGate permissions={[`admin.mail.${page}.read`]}>
-                  <MailConsolePage key={page} page={page} />
+                <ConsoleGate permissions={["admin.mail.domains.manage"]}>
+                  <MailDomainEditorPage key="new" creating />
                 </ConsoleGate>
               }
             />
-          ))}
-          <Route
-            path="mail/domains/new"
-            element={
-              <ConsoleGate permissions={["admin.mail.domains.manage"]}>
-                <MailDomainEditorPage key="new" creating />
-              </ConsoleGate>
-            }
-          />
-          <Route
-            path="mail/domains/:id"
-            element={
-              <ConsoleGate permissions={["admin.mail.domains.read"]}>
-                <MailDomainEditorPage />
-              </ConsoleGate>
-            }
-          />
-          <Route
-            path="mail/mailboxes/new"
-            element={
-              <ConsoleGate permissions={["admin.mail.mailboxes.manage"]}>
-                <SharedMailboxEditorPage key="new" creating />
-              </ConsoleGate>
-            }
-          />
-          <Route
-            path="mail/mailboxes/:id"
-            element={
-              <ConsoleGate permissions={["admin.mail.mailboxes.read"]}>
-                <SharedMailboxEditorPage />
-              </ConsoleGate>
-            }
-          />
+            <Route
+              path="domains/:id"
+              element={
+                <ConsoleGate permissions={["admin.mail.domains.read"]}>
+                  <MailDomainEditorPage />
+                </ConsoleGate>
+              }
+            />
+            <Route
+              path="mailboxes/new"
+              element={
+                <ConsoleGate permissions={["admin.mail.mailboxes.manage"]}>
+                  <SharedMailboxEditorPage key="new" creating />
+                </ConsoleGate>
+              }
+            />
+            <Route
+              path="mailboxes/:id"
+              element={
+                <ConsoleGate permissions={["admin.mail.mailboxes.read"]}>
+                  <SharedMailboxEditorPage />
+                </ConsoleGate>
+              }
+            />
+          </Route>
         </Route>
         <Route
           path="*"

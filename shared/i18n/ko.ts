@@ -2180,6 +2180,7 @@ export const ko = defineTranslations(en, {
   "libConsole.driveReadOnlyUser": "드라이브 읽기 전용 사용자",
   "libConsole.driveUser": "드라이브 사용자",
   "libConsole.enterARoleNameWithUpTo100Characters": "역할 이름을 100자 이내로 입력하세요.",
+  "libConsole.mail": "메일",
   "libConsole.mailDomains": "메일 도메인",
   "libConsole.mailUser": "메일 사용자",
   "libConsole.missingRequiredPermissions": "필수 권한이 누락되었습니다: {join}",
@@ -3337,6 +3338,9 @@ export const ko = defineTranslations(en, {
     "도메인의 발송 기능을 활성화하려면 먼저 이 제공업체 연결을 활성화하세요.",
   "routesConsoleMail.enterToChange": "변경하려면 입력",
   "routesConsoleMail.exampleCom": "example.com",
+  "routesConsoleMail.mailNavigation": "메일 탐색",
+  "routesConsoleMail.manageMailDomainsAndSharedMailboxes":
+    "메일 도메인, 송수신 설정, 공유 사서함을 관리합니다.",
   "routesConsoleMail.mailDomain": "메일 도메인",
   "routesConsoleMail.mailDomains": "메일 도메인",
   "routesConsoleMail.mailDomains2": "← 메일 도메인",

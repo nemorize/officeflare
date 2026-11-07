@@ -2211,6 +2211,7 @@ export const ja = defineTranslations(en, {
   "libConsole.driveReadOnlyUser": "ドライブの読み取り専用ユーザー",
   "libConsole.driveUser": "ドライブのユーザー",
   "libConsole.enterARoleNameWithUpTo100Characters": "ロール名を100文字以内で入力してください。",
+  "libConsole.mail": "メール",
   "libConsole.mailDomains": "メールのドメイン",
   "libConsole.mailUser": "メールのユーザー",
   "libConsole.missingRequiredPermissions": "必要な権限が不足しています: {join}",
@@ -3387,6 +3388,9 @@ export const ja = defineTranslations(en, {
     "ドメインの送信を有効にする前に、このプロバイダー接続を有効にしてください。",
   "routesConsoleMail.enterToChange": "変更する場合に入力",
   "routesConsoleMail.exampleCom": "example.com",
+  "routesConsoleMail.mailNavigation": "メールナビゲーション",
+  "routesConsoleMail.manageMailDomainsAndSharedMailboxes":
+    "メールドメイン、配信設定、共有メールボックスを管理します。",
   "routesConsoleMail.mailDomain": "メールのドメイン",
   "routesConsoleMail.mailDomains": "メールのドメイン",
   "routesConsoleMail.mailDomains2": "← メールドメイン",

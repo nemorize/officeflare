@@ -25,15 +25,20 @@ export function ConsolePageHeader({
   title,
   description,
   children,
+  level = 1,
 }: {
   title: string;
   description: ReactNode;
   children?: ReactNode;
+  level?: 1 | 2;
 }) {
+  const Heading = level === 1 ? "h1" : "h2";
   return (
-    <header className="account-page-header console-page-header">
+    <header
+      className={`${level === 1 ? "account-page-header" : "account-panel-header"} console-page-header`}
+    >
       <div>
-        <h1>{title}</h1>
+        <Heading>{title}</Heading>
         <p>{description}</p>
       </div>
       {children}
