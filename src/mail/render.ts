@@ -9,6 +9,7 @@ import {
   fetchRemoteAsset,
   remoteUrl,
   validatedImage,
+  isHeifType,
   runtimeRemoteFetcher,
   type RemoteFetcher,
 } from "./remote";
@@ -27,7 +28,7 @@ export interface RenderCache {
   match(request: Request): Promise<Response | undefined>;
   put(request: Request, response: Response): Promise<void>;
 }
-const version = "v2";
+const version = "v3";
 const stylesheetLimit = 4,
   assetLimit = 96;
 const cacheRequest = (kind: string, key: string) =>
@@ -130,6 +131,7 @@ async function cachedRemote(
   ownHost: string,
   cache: RenderCache | undefined,
   fetcher: RemoteFetcher,
+  images?: ImagesBinding,
 ) {
   const request = await remoteAssetCacheRequest(url, kind),
     existing = await cache?.match(request);
@@ -139,7 +141,7 @@ async function cachedRemote(
       contentType: existing.headers.get("Content-Type")!,
       url: existing.headers.get("X-Mail-Resource-Url") ?? url,
     };
-  const result = await fetchRemoteAsset(url, kind, ownHost, fetcher);
+  const result = await fetchRemoteAsset(url, kind, ownHost, fetcher, images);
   await cache
     ?.put(
       request,
@@ -229,12 +231,16 @@ export async function renderMailHtml(
     if (value.startsWith("data:")) {
       try {
         const match =
-          /^data:(image\/(?:png|jpeg|gif|webp|avif|svg\+xml));base64,([a-z\d+/=\r\n]+)$/i.exec(
+          /^data:(image\/(?:png|jpeg|gif|webp|avif|svg\+xml|heic|heif));base64,([a-z\d+/=\r\n]+)$/i.exec(
             value,
           );
         if (!match || match[2]!.length > 700_000) return null;
         const bytes = Uint8Array.from(atob(match[2]!), (character) => character.charCodeAt(0));
-        const valid = validatedImage(bytes, match[1]!.toLowerCase());
+        const contentType = match[1]!.toLowerCase();
+        // HEIC is converted by prepareMailRendering before any HTML is returned.
+        const valid = isHeifType(contentType)
+          ? { body: bytes, contentType }
+          : validatedImage(bytes, contentType);
         let encoded = "";
         for (let index = 0; index < valid.body.length; index += 8192)
           encoded += String.fromCharCode(...valid.body.subarray(index, index + 8192));
@@ -469,8 +475,9 @@ export async function loadMailRenderImage(
   ownHost: string,
   cache: RenderCache | undefined = frameCache(),
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
+  images?: ImagesBinding,
 ): Promise<Response> {
-  const result = await cachedRemote(asset.url, "image", ownHost, cache, fetcher);
+  const result = await cachedRemote(asset.url, "image", ownHost, cache, fetcher, images);
   return new Response(result.body, {
     headers: {
       "Content-Type": result.contentType,

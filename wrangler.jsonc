@@ -49,6 +49,7 @@
     { "binding": "DRIVE_BUCKET", "bucket_name": "officeflare-drive" },
   ],
   "send_email": [{ "name": "EMAIL" }],
+  "images": { "binding": "MAIL_IMAGES" },
   "queues": {
     "producers": [
       { "binding": "MAIL_QUEUE", "queue": "officeflare-mail" },

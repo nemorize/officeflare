@@ -5,6 +5,7 @@ import {
   publicAddress,
   boundedBody,
   validatedImage,
+  renderableImage,
   fetchRemoteAsset,
   safeMailCss,
   renderMailHtml,
@@ -12,10 +13,59 @@ import {
   memoryCache,
   remoteFixture,
   png,
+  webp,
+  heic,
+  imageBindingFixture,
 } from "./mail-render-helpers.mjs";
 const origin = "office.test",
   path = "/api/mail/mailboxes/box/messages/message/render";
 const imageResponse = () => new Response(png, { headers: { "Content-Type": "image/png" } });
+
+test("HEIC downloads are converted to validated WebP before entering the shared cache", async () => {
+  const images = imageBindingFixture(),
+    cache = memoryCache();
+  const fixture = remoteFixture(
+    () => new Response(heic, { headers: { "Content-Type": "image/heic" } }),
+  );
+  const asset = { id: "0", url: "https://cdn.example.com/photo.heic" };
+  const first = await loadMailRenderImage(asset, origin, cache, fixture.fetcher, images);
+  assert.equal(first.headers.get("Content-Type"), "image/webp");
+  assert.deepEqual(new Uint8Array(await first.arrayBuffer()), webp);
+  assert.deepEqual(
+    images.calls.map((call) => call.kind),
+    ["info", "output"],
+  );
+  for (const call of images.calls) assert.deepEqual(call.body, heic);
+  assert.deepEqual(images.calls[1].options, { format: "image/webp", quality: 85 });
+  await loadMailRenderImage(asset, origin, cache, fixture.fetcher, images);
+  assert.equal(images.calls.length, 2);
+  assert.equal(fixture.calls.filter((call) => call.url.hostname === "cdn.example.com").length, 1);
+});
+
+test("HEIC conversion enforces input pixels, output bytes and output type", async () => {
+  const oversized = imageBindingFixture({ width: 100_000, height: 100_000 });
+  await assert.rejects(renderableImage(heic, "image/heic", oversized), /Unsupported/);
+  assert.equal(oversized.calls.length, 1);
+  await assert.rejects(
+    renderableImage(heic, "image/heif", imageBindingFixture({ output: png })),
+    /Unsupported/,
+  );
+  await assert.rejects(
+    renderableImage(
+      heic,
+      "image/heic",
+      imageBindingFixture({ output: new Uint8Array(5 * 1024 ** 2 + 1) }),
+    ),
+    /too large/,
+  );
+  await assert.rejects(renderableImage(heic, "image/heic"), /MAIL_IMAGES/);
+  const normal = imageBindingFixture();
+  assert.deepEqual(await renderableImage(png, "image/png", normal), {
+    body: png,
+    contentType: "image/png",
+  });
+  assert.equal(normal.calls.length, 0);
+});
 
 test("remote resources accept public HTTPS names and reject local addresses, credentials and alternate ports", () => {
   assert.equal(

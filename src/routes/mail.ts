@@ -1434,7 +1434,7 @@ async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
     message,
     resource(c),
     new URL(c.req.url).hostname,
-    { part, retryFailures: c.req.query("retry") === "1" },
+    { part, retryFailures: c.req.query("retry") === "1", images: c.env.MAIL_IMAGES },
   );
   return { message, rendering };
 }
@@ -1486,6 +1486,7 @@ async function mailImageResponse(c: Parameters<typeof authenticateMail>[0], body
       message,
       resource(c),
       new URL(c.req.url).hostname,
+      { images: c.env.MAIL_IMAGES },
     );
     imageId = preparedMailImageId(rendering, mailImagePath(c), asset) ?? "";
   }

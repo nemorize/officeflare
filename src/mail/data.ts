@@ -598,7 +598,7 @@ async function restorePage(
         input,
         mailboxId,
         env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
-        { source: body.html },
+        { source: body.html, images: env.MAIL_IMAGES },
       );
     await coordinator.storeMessage(partitionId, input);
     await partition(env, partitionId).applyInboundFlags(
