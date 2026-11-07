@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { mailSendLimit, workspaceMailPolicy } from "./policy";
 import type { Context } from "hono";
 import type { AuthContext } from "../auth/types";
 import { createMiddleware } from "hono/factory";
@@ -41,7 +42,9 @@ function administrativeRequest(c: Context<MailAppEnv>) {
   const path = c.req.path.replace(/^\/api\/mail/, ""),
     method = c.req.method;
   return (
-    /^\/(provider-connections|domains|addresses|mailbox-users)(\/|$)/.test(path) ||
+    /^\/(admin|provider-connections|provider-catalog|domains|addresses|mailbox-users)(\/|$)/.test(
+      path,
+    ) ||
     /^\/mailboxes\/[^/]+\/configuration$/.test(path) ||
     (method === "GET" && /^\/mailboxes\/[^/]+\/addresses$/.test(path)) ||
     (path === "/mailboxes" && (method === "POST" || c.req.query("all") === "true")) ||
@@ -176,7 +179,12 @@ export async function sender(env: Env, actor: MailActor, mailboxId: string, addr
     mailboxId,
   );
   if (!result?.connection_id) fail(409, t("mailControl.sendingAddressOrDomainIsDisabled"));
-  return { ...result, ...(await connection(env, result.connection_id)) };
+  const policy = await workspaceMailPolicy(env);
+  return {
+    ...result,
+    ...(await connection(env, result.connection_id)),
+    max_send_bytes: mailSendLimit(result.max_send_bytes, policy.max_send_bytes),
+  };
 }
 
 // Keep D1 permission checks in the same statement as D1 mutations. DO/R2 work uses

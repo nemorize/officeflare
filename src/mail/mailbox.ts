@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { workspaceMailPolicy } from "./policy";
 import { DurableObject } from "cloudflare:workers";
 import schema from "./mailbox.sql";
 import removeContacts from "./mailbox-v2.sql";
@@ -536,9 +537,10 @@ export class MailboxDO extends DurableObject<Env> {
       "SELECT completed_at FROM maintenance_state WHERE id=1",
     )!;
     if (maintenance.completed_at <= epoch() - 3600) {
+      const policy = await workspaceMailPolicy(this.env);
       for (const entry of this.partitions())
         await partition(this.env, entry.id).maintenance(
-          Number(this.settings().retention_days) || null,
+          Number(this.settings().retention_days ?? policy.default_retention_days) || null,
         );
       this.sql.exec("DELETE FROM allocations WHERE expires_at<?", epoch());
       this.sql.exec("DELETE FROM request_keys WHERE expires_at<?", epoch());

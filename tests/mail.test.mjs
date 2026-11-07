@@ -4223,3 +4223,240 @@ test("Inbox combines received and custom-folder mail across list, conversations,
       );
     });
 });
+
+test("workspace mail administration separates metadata permissions from mailbox contents", async (t) => {
+  const { admin, call, db, tokens, base, mailbox, domain } = await fixture(t);
+  await db
+    .prepare(
+      "DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='mail.access'",
+    )
+    .run();
+  for (const path of [
+    "/admin/overview",
+    "/admin/mailboxes",
+    "/admin/flow",
+    "/admin/settings",
+    "/admin/activity",
+    "/provider-catalog",
+  ]) {
+    await admin(path);
+    await call(path, { expected: 403 });
+  }
+  await admin(base + "/messages", { expected: 403 });
+  const overview = await admin("/admin/overview");
+  assert.deepEqual((await admin("/provider-connections")).connections[0].domain_ids, [domain.id]);
+  assert.equal(overview.summary.domains, 1);
+  assert.equal(overview.summary.mailboxes, 1);
+  const storage = (await admin(`/admin/mailboxes/${mailbox.id}/storage`)).storage;
+  assert.ok(storage.database_bytes > 0);
+  assert.equal(storage.message_count, 0);
+  const boxes = (await admin("/admin/mailboxes?kind=shared&q=Owner")).items;
+  assert.equal(boxes.length, 1);
+  assert.equal(boxes[0].id, mailbox.id);
+  assert.equal(boxes[0].database_bytes, storage.database_bytes);
+  assert.equal(boxes[0].owner_email, "owner@office.test");
+  assert.equal((await admin("/admin/mailboxes?kind=personal")).items.length, 0);
+  await admin("/admin/mailboxes?kind=invalid", { expected: 400 });
+  await admin("/admin/flow?status=invalid", { expected: 400 });
+  await admin("/admin/flow?after=invalid", { expected: 400 });
+  await admin("/admin/activity?cursor=invalid", { expected: 400 });
+  const audits = await admin("/admin/activity?limit=1");
+  assert.ok(audits.next_cursor);
+  const next = await admin(
+    "/admin/activity?limit=1&cursor=" + encodeURIComponent(audits.next_cursor),
+  );
+  assert.ok(next.items[0].sequence < audits.items[0].sequence);
+  await admin("/admin/activity?limit=2&cursor=" + encodeURIComponent(audits.next_cursor), {
+    expected: 400,
+  });
+  const key = (
+    await call("/api-keys", {
+      method: "POST",
+      data: {
+        name: "Scoped",
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        scopes: [{ mailbox_id: mailbox.id, action: "read" }],
+      },
+      expected: 201,
+    })
+  ).key;
+  await call("/admin/mailboxes", { token: key.token, expected: 403 });
+  await db
+    .prepare("INSERT INTO roles(id,key,label) VALUES('mail-meta','mail-meta','Metadata reader')")
+    .run();
+  await db.batch(
+    permissionClosure(["admin.mail.flow.read"]).map((key) =>
+      db
+        .prepare("INSERT INTO role_permissions(role_id,permission_key) VALUES('mail-meta',?)")
+        .bind(key),
+    ),
+  );
+  await db.prepare("DELETE FROM user_roles WHERE user_id='reader'").run();
+  await db.prepare("INSERT INTO user_roles(user_id,role_id) VALUES('reader','mail-meta')").run();
+  await call("/admin/flow", { token: tokens.reader });
+  await call("/admin/settings", { token: tokens.reader, expected: 403 });
+  await call(base + "/messages", { token: tokens.reader, expected: 403 });
+  await db
+    .prepare(
+      "DELETE FROM role_permissions WHERE role_id='mail-meta' AND permission_key='console.access'",
+    )
+    .run();
+  await call("/admin/flow", { token: tokens.reader, expected: 403 });
+});
+
+test("workspace mail policies enforce send limits and existing external routing rules with version checks", async (t) => {
+  const { admin, call, domain, address, draft, base, mf } = await fixture(t, "6000000000", true);
+  const original = (await admin("/admin/settings")).settings;
+  assert.equal(original.max_send_bytes, null);
+  assert.equal(original.external_forwarding_enabled, 1);
+  const rule = {
+    name: "External route",
+    conditions: [{ field: "to", operator: "contains", value: "forward" }],
+    action: "forward",
+    forward_to: "external@example.test",
+  };
+  await admin(`/domains/${domain.id}/rules`, { method: "POST", data: rule, expected: 201 });
+  const settings = (
+    await admin("/admin/settings", {
+      method: "PATCH",
+      data: {
+        version: original.version,
+        max_send_bytes: 20000,
+        default_retention_days: 7,
+        external_forwarding_enabled: false,
+      },
+    })
+  ).settings;
+  assert.equal(settings.version, original.version + 1);
+  await admin("/admin/settings", {
+    method: "PATCH",
+    data: { version: original.version, max_send_bytes: null },
+    expected: 409,
+  });
+  await admin("/admin/settings", {
+    method: "PATCH",
+    data: { version: settings.version, default_retention_days: 0 },
+    expected: 400,
+  });
+  await call("/admin/settings", {
+    method: "PATCH",
+    data: { version: settings.version, max_send_bytes: null },
+    expected: 403,
+  });
+  const addresses = await call(base + "/addresses");
+  assert.equal(addresses.addresses[0].max_send_bytes, 20000);
+  assert.equal(addresses.limits.max_send_bytes, 20000);
+  const oversized = await draft({ text: "x".repeat(25000) });
+  await call(base + "/drafts/" + oversized.id + "/submissions", {
+    method: "POST",
+    data: { version: oversized.draft.version, address_id: address.id },
+    expected: 413,
+  });
+  await admin(`/domains/${domain.id}/rules`, { method: "POST", data: rule, expected: 403 });
+  await admin(`/domains/${domain.id}/rules`, {
+    method: "POST",
+    data: {
+      ...rule,
+      name: "Internal route",
+      conditions: [{ field: "to", operator: "contains", value: "internal" }],
+      forward_to: "other@mail.test",
+    },
+    expected: 201,
+  });
+  const harness = await mf.getWorker("mail-harness");
+  const result = await harness.fetch("https://mail.test/", {
+    method: "POST",
+    headers: { "X-Recipient": "forward@mail.test" },
+    body: "From: sender@example.test\r\nTo: forward@mail.test\r\n\r\nMessage",
+  });
+  const received = await result.json();
+  assert.match(received.rejected, /External forwarding is blocked/);
+  assert.equal(received.forwarded, undefined);
+  const flow = (await admin("/admin/flow?status=rejected")).items;
+  assert.equal(flow.length, 1);
+  assert.equal(flow[0].error_code, "external_forwarding_blocked");
+  const activity = (await admin("/admin/activity")).items;
+  assert.ok(activity.some((entry) => entry.resource_path === "/api/mail/admin/settings"));
+  assert.ok(!JSON.stringify(activity).includes("max_send_bytes"));
+});
+
+test("mail flow projections track submissions idempotently without message content or credentials", async (t) => {
+  const { admin, call, address, draft, base, mf, mailbox } = await fixture(t, "6000000000", true);
+  const message = await draft({
+    subject: "Private subject must remain private",
+    text: "Confidential body",
+  });
+  const request = {
+    method: "POST",
+    headers: { "Idempotency-Key": "admin-flow-projection" },
+    data: {
+      version: message.draft.version,
+      address_id: address.id,
+      scheduled_at: Math.floor(Date.now() / 1000) + 3600,
+    },
+    expected: 202,
+  };
+  const submission = (await call(base + "/drafts/" + message.id + "/submissions", request))
+    .submission;
+  await call(base + "/drafts/" + message.id + "/submissions", request);
+  const flow = await eventually(
+    () => admin("/admin/flow?direction=outbound"),
+    (result) => result.items.some((entry) => entry.id === submission.id),
+    "Submission did not appear in mail flow",
+  );
+  assert.equal(flow.items.filter((entry) => entry.id === submission.id).length, 1);
+  assert.equal(flow.items[0].status, "scheduled");
+  for (const secret of [
+    "Private subject",
+    "Confidential body",
+    "snapshot_r2_key",
+    "actor_auth_version",
+    "api_key_id",
+    "recipient@example.test",
+  ])
+    assert.ok(!JSON.stringify(flow).includes(secret), secret);
+  await call(base + "/submissions/" + submission.id + "/cancel", { method: "POST" });
+  await eventually(
+    () => admin("/admin/flow?status=canceled"),
+    (result) => result.items.some((entry) => entry.id === submission.id),
+    "Cancellation did not update mail flow",
+  );
+  const storage = (await admin(`/admin/mailboxes/${mailbox.id}/storage`)).storage;
+  assert.equal(storage.message_count, 1);
+  const bindings = await mf.getBindings();
+  const partitionId = message.id.split(".")[0];
+  const store = bindings.MAIL_PARTITION.getByName(partitionId);
+  const snapshot = await store.adminFlow([message.id]);
+  assert.equal(snapshot[0].status, "canceled");
+  assert.ok(snapshot[0].revision > 0);
+  assert.ok(!("subject" in snapshot[0]));
+});
+
+test("mail-flow indexing outages do not prevent provider acceptance or duplicate sends", async (t) => {
+  const { admin, call, db, mf, base, address, draft } = await fixture(t, "6000000000", true);
+  const message = await draft({ subject: "Delivery survives an index outage" });
+  await db.prepare("ALTER TABLE mail_admin_flow RENAME TO mail_admin_flow_unavailable").run();
+  const request = {
+    method: "POST",
+    headers: { "Idempotency-Key": "index-outage-send" },
+    data: { version: message.draft.version, address_id: address.id },
+    expected: 202,
+  };
+  const submission = (await call(base + "/drafts/" + message.id + "/submissions", request))
+    .submission;
+  await eventually(
+    () => call(base + "/submissions/" + submission.id),
+    (result) => result.submission.status === "accepted",
+    "The mail-flow index outage blocked sending",
+  );
+  await db.prepare("ALTER TABLE mail_admin_flow_unavailable RENAME TO mail_admin_flow").run();
+  await call(base + "/drafts/" + message.id + "/submissions", request);
+  await eventually(
+    () => admin("/admin/flow"),
+    (result) =>
+      result.items.some((entry) => entry.id === submission.id && entry.status === "accepted"),
+    "The durable outbox did not recover mail-flow metadata",
+  );
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  assert.equal((await bucket.list({ prefix: "test-sent/" })).objects.length, 1);
+});

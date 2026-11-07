@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { refreshMailStorage, recordInboundFlow } from "./admin-store";
 import { processDataJob } from "./data";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { hash } from "./input";
@@ -50,6 +51,12 @@ export async function sendSubmission(
   }
   const job = await store.claim(submissionId);
   if (!job) return;
+  try {
+    await flushOutbox(env, mailboxId, partitionId);
+  } catch {
+    // The durable outbox retries progress updates independently of provider acceptance.
+    console.warn("Mail progress update deferred", submissionId);
+  }
   let snapshot: SubmissionSnapshot,
     providerConnection: Awaited<ReturnType<typeof sender>> | undefined;
   try {
@@ -310,6 +317,23 @@ export async function consume(batch: MessageBatch, env: Env) {
       await processTask(env, message.body);
       message.ack();
     } catch (error) {
+      if (
+        message.body &&
+        typeof message.body === "object" &&
+        "kind" in message.body &&
+        message.body.kind === "inbound"
+      ) {
+        const task = message.body as import("./types").InboundTask;
+        if (task.source !== "import")
+          await recordInboundFlow(
+            env,
+            task.id,
+            task.mailbox_id,
+            task.provider,
+            "retry_wait",
+            "inbound_processing_failed",
+          ).catch(() => {});
+      }
       console.error(
         "Mail task retry",
         message.id,
@@ -322,6 +346,26 @@ export async function consume(batch: MessageBatch, env: Env) {
 export async function recover(env: Env) {
   await recoverMailboxProvisioning(env);
   await cleanUploads(env);
+  const mailboxes = await all<{ id: string }>(
+    env,
+    "SELECT b.id FROM mail_mailboxes b LEFT JOIN mail_admin_storage s ON s.mailbox_id=b.id WHERE b.status='active' AND coalesce(s.updated_at,0)<? ORDER BY coalesce(s.updated_at,0),b.id LIMIT 3",
+    epoch() - 3600,
+  );
+  for (const entry of mailboxes) {
+    try {
+      await refreshMailStorage(env, entry.id);
+    } catch {
+      console.warn("Mail storage measurement deferred", entry.id);
+    }
+  }
+  await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM mail_admin_flow WHERE id IN (SELECT id FROM mail_admin_flow WHERE updated_at<? ORDER BY updated_at LIMIT 1000)",
+    ).bind(epoch() - 90 * 86400),
+    env.DB.prepare(
+      "DELETE FROM mail_admin_audit WHERE sequence IN (SELECT sequence FROM mail_admin_audit WHERE created_at<? ORDER BY sequence LIMIT 1000)",
+    ).bind(epoch() - 90 * 86400),
+  ]);
   let cursor: string | undefined;
   // Process a bounded page each run, rotate the listing cursor durably to avoid starving later keys.
   const cursorObject = await env.MAIL_BUCKET.get("maintenance/pending-cursor.json");

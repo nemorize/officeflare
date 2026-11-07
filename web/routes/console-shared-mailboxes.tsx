@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { useAccess } from "../components/console-access";
 import { useAccount } from "../components/account-context";
 import { Check, ConsolePageHeader } from "../components/console-shared";
-import { Button, Input, useNotifications } from "../components/ui";
+import { Button, useNotifications } from "../components/ui";
 import {
   MailAddressField,
   MailboxAliases,
@@ -63,106 +63,6 @@ function assignment(member: Member): Assignment {
         : "custom";
   return { user_id: member.user_id, role, ...(role === "custom" ? { permissions } : {}) };
 }
-export function SharedMailboxes() {
-  const permissions = useAccess().permissions,
-    resource = useMailResource<{ mailboxes: Mailbox[] }>(
-      "/api/mail/mailboxes?all=true&kind=shared",
-    ),
-    [search, setSearch] = useState("");
-  const boxes =
-    resource.data?.mailboxes.filter(
-      (box) =>
-        box.kind === "shared" &&
-        `${box.name} ${box.email_address ?? ""}`.toLowerCase().includes(search.toLowerCase()),
-    ) ?? [];
-  return (
-    <>
-      <ConsolePageHeader
-        level={2}
-        title={t("routesConsoleSharedMailboxes.sharedMailboxes")}
-        description={t("routesConsoleSharedMailboxes.manageTeamAddressesAndThePeopleWhoUseThem")}
-      >
-        {permissions.includes("admin.mail.mailboxes.manage") && (
-          <Button
-            nativeButton={false}
-            render={<Link to="/console/mail/mailboxes/new" />}
-            variant="primary"
-          >
-            {t("routesConsoleSharedMailboxes.newSharedMailbox")}
-          </Button>
-        )}
-      </ConsolePageHeader>
-      <div className="mail-field">
-        <Input
-          aria-label={t("routesConsoleSharedMailboxes.findSharedMailboxes")}
-          placeholder={t("routesConsoleSharedMailboxes.nameOrEmailAddress")}
-          value={search}
-          onValueChange={setSearch}
-        />
-      </div>
-      <MailState
-        loading={resource.loading && !resource.data}
-        error={resource.error}
-        retry={resource.reload}
-      />
-      {resource.data && (
-        <div className="mail-table-wrap">
-          <table className="mail-table">
-            <caption className="console-sr-only">
-              {t("routesConsoleSharedMailboxes.sharedMailboxes")}
-            </caption>
-            <thead>
-              <tr>
-                <th>{t("routesConsoleSharedMailboxes.mailbox")}</th>
-                <th>{t("routesConsoleSharedMailboxes.members")}</th>
-                <th>{t("common.status")}</th>
-                <th>
-                  <span className="console-sr-only">{t("common.actions")}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {boxes.map((box) => (
-                <tr key={box.id}>
-                  <td>
-                    <Link to={`/console/mail/mailboxes/${box.id}`}>
-                      <strong>{box.name}</strong>
-                      <small>
-                        {box.email_address ?? t("routesConsoleSharedMailboxes.addressNotSet")}
-                      </small>
-                    </Link>
-                  </td>
-                  <td>{box.member_count ?? 0}</td>
-                  <td>
-                    <span className="mail-badge">{enumLabel(box.status)}</span>
-                  </td>
-                  <td>
-                    <Button
-                      nativeButton={false}
-                      render={<Link to={`/console/mail/mailboxes/${box.id}`} />}
-                      size="sm"
-                    >
-                      {permissions.includes("admin.mail.mailboxes.manage")
-                        ? t("routesConsoleSharedMailboxes.manage")
-                        : t("routesConsoleSharedMailboxes.view")}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!boxes.length && (
-            <p className="mail-empty">
-              {search
-                ? t("routesConsoleSharedMailboxes.noSharedMailboxesMatchYourSearch")
-                : t("routesConsoleSharedMailboxes.noSharedMailboxesYetCreateATeamAddressAnd")}
-            </p>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
 export function SharedMailboxEditorPage({ creating = false }: { creating?: boolean }) {
   const { id = "" } = useParams(),
     permissions = useAccess().permissions,
@@ -176,7 +76,7 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
   return (
     <div className="console-detail-page">
       <Link to="/console/mail/mailboxes" className="console-back">
-        {t("routesConsoleSharedMailboxes.sharedMailboxes2")}
+        {t("mailAdmin.backToMailboxes")}
       </Link>
       <ConsolePageHeader
         level={2}
@@ -185,7 +85,11 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
             ? t("routesConsoleSharedMailboxes.newSharedMailbox")
             : (config.data?.mailbox.name ?? t("routesConsoleSharedMailboxes.sharedMailbox"))
         }
-        description={t("routesConsoleSharedMailboxes.setATeamAddressAndSharedAccessInOne")}
+        description={
+          config.data?.mailbox.kind === "personal"
+            ? t("mailAdmin.mailboxesDescription")
+            : t("routesConsoleSharedMailboxes.setATeamAddressAndSharedAccessInOne")
+        }
       />
       <MailState
         loading={
@@ -330,12 +234,25 @@ function SharedMailboxForm({
         title={t("routesConsoleSharedMailboxes.personalMailbox")}
         description={t("routesConsoleSharedMailboxes.personalMailBelongsWithTheUserAccount")}
       >
-        <Button
-          nativeButton={false}
-          render={<Link to={`/console/users/${encodeURIComponent(box.owner_user_id)}`} />}
-        >
-          {t("routesConsoleSharedMailboxes.manageUser")}
-        </Button>
+        <div className="console-mail-totals">
+          <div>
+            <span>{t("mailAdmin.owner")}</span>
+            <strong>{owner?.display_name || owner?.email_address}</strong>
+            <span>{owner?.email_address}</span>
+          </div>
+          <div>
+            <span>{t("common.status")}</span>
+            <strong>{enumLabel(box.status)}</strong>
+          </div>
+        </div>
+        {permissions.includes("admin.users.read") && (
+          <Button
+            nativeButton={false}
+            render={<Link to={`/console/users/${encodeURIComponent(box.owner_user_id)}`} />}
+          >
+            {t("routesConsoleSharedMailboxes.manageUser")}
+          </Button>
+        )}
       </MailSection>
     );
   return (

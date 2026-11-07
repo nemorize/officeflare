@@ -270,6 +270,52 @@ details.console-role-summary > .console-permission-picker {
   width: max-content;
   min-width: 100%;
 }
+.console-mail-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-end: 20px;
+}
+.console-mail-filters > .mail-field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.console-mail-filters > .mail-field:first-child {
+  flex-basis: 240px;
+}
+.console-mail-metric {
+  font-size: 24px;
+  font-weight: 600;
+}
+.console-mail-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+}
+.console-mail-totals > div {
+  display: grid;
+  gap: 8px;
+}
+.console-mail-totals span {
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.console-mail-totals strong {
+  font-size: 22px;
+}
+.console-mail-id {
+  overflow-wrap: anywhere;
+  max-width: 320px;
+}
+.console-mail-row-actions {
+  display: flex;
+  justify-content: end;
+  gap: 6px;
+}
+.console-mail-record-note {
+  margin-block-end: 16px;
+}
 .console-drive-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

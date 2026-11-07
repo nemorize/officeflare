@@ -476,7 +476,7 @@ function SettingsForm({
           >
             <MailInput
               label={t("routesMailManage.keepMessagesForDays")}
-              hint={t("routesMailManage.leaveEmptyToKeepMessagesUntilYouDeleteThem")}
+              hint={t("mailAdmin.inheritRetention")}
               type="number"
               min={1}
               max={3650}

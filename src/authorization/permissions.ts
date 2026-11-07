@@ -620,6 +620,56 @@ export const permissionCatalog = {
     group: "mail",
     requires: ["console.access", "mail.access"],
   },
+  "admin.mail.overview.read": {
+    get label() {
+      return t("mailAdmin.viewOverview");
+    },
+    get description() {
+      return t("mailAdmin.overviewDescription");
+    },
+    group: "mail",
+    requires: ["console.access"],
+  },
+  "admin.mail.flow.read": {
+    get label() {
+      return t("mailAdmin.viewFlow");
+    },
+    get description() {
+      return t("mailAdmin.flowDescription");
+    },
+    group: "mail",
+    requires: ["console.access"],
+  },
+  "admin.mail.settings.read": {
+    get label() {
+      return t("mailAdmin.viewPolicies");
+    },
+    get description() {
+      return t("mailAdmin.policiesDescription");
+    },
+    group: "mail",
+    requires: ["console.access"],
+  },
+  "admin.mail.settings.manage": {
+    get label() {
+      return t("mailAdmin.managePolicies");
+    },
+    get description() {
+      return t("mailAdmin.managePoliciesDescription");
+    },
+    group: "mail",
+    requires: ["admin.mail.settings.read"],
+  },
+  "admin.mail.activity.read": {
+    get label() {
+      return t("mailAdmin.viewActivity");
+    },
+    get description() {
+      return t("mailAdmin.activityDescription");
+    },
+    group: "mail",
+    requires: ["console.access"],
+  },
 } as const satisfies Record<string, PermissionDefinition>;
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";

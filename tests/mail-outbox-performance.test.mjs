@@ -208,3 +208,100 @@ test("outbox drains 50 events with one webhook lookup, one event RPC and one ack
   assert.equal(env.deliveries.length, 50);
   await assert.rejects(scheduleOutbox(env, "box", "p"), /storage unavailable/);
 });
+
+test("mailbox maintenance inherits workspace retention and preserves explicit mailbox settings", async (t) => {
+  const db = new DatabaseSync(":memory:");
+  t.after(() => db.close());
+  const applied = [];
+  let defaultRetention = 7;
+  const storage = {
+    sql: {
+      exec(query, ...args) {
+        const values = db.prepare(query).all(...args);
+        return { toArray: () => values };
+      },
+    },
+    transactionSync(fn) {
+      return fn();
+    },
+    async setAlarm() {},
+  };
+  const box = new MailboxDO(
+    { storage, blockConcurrencyWhile: (fn) => fn() },
+    {
+      DB: {
+        withSession: () => ({
+          prepare: () => ({ first: async () => ({ default_retention_days: defaultRetention }) }),
+        }),
+      },
+      MAIL_PARTITION: { getByName: () => ({ maintenance: async (days) => applied.push(days) }) },
+    },
+  );
+  db.exec(
+    "INSERT INTO mailbox_settings(id,mailbox_id) VALUES(1,'box'); INSERT INTO partitions(id,ordinal,status,created_at) VALUES('part',1,'active',0)",
+  );
+  await box.alarm();
+  assert.deepEqual(applied, [7]);
+  db.exec(
+    "UPDATE maintenance_state SET completed_at=0; UPDATE mailbox_settings SET retention_days=30",
+  );
+  defaultRetention = 1;
+  await box.alarm();
+  assert.deepEqual(applied, [7, 30]);
+  db.exec(
+    "UPDATE maintenance_state SET completed_at=0; UPDATE mailbox_settings SET retention_days=NULL",
+  );
+  defaultRetention = null;
+  await box.alarm();
+  assert.deepEqual(applied, [7, 30, null]);
+});
+
+test("an unavailable mail-flow index leaves outbox events pending for durable retry", async () => {
+  let emitted = false,
+    acknowledged = false;
+  const env = {
+    DB: {
+      prepare: () => ({
+        bind() {
+          return this;
+        },
+      }),
+      batch: async () => {
+        throw new Error("index temporarily unavailable");
+      },
+    },
+    store: {
+      outbox: async () => [
+        {
+          id: "event",
+          payload_json: JSON.stringify({ message_id: "part.message", operation: "submitted" }),
+        },
+      ],
+      adminFlow: async () => [
+        {
+          id: "submission",
+          direction: "outbound",
+          provider: "cloudflare",
+          status: "queued",
+          error_code: null,
+          attempt_count: 0,
+          scheduled_at: 1,
+          created_at: 1,
+          updated_at: 1,
+          revision: 2,
+        },
+      ],
+      markDispatchedMany: async () => {
+        acknowledged = true;
+      },
+    },
+    coordinator: {
+      emitMany: async () => {
+        emitted = true;
+      },
+    },
+  };
+  await assert.rejects(flushOutbox(env, "box", "part"), /index temporarily unavailable/);
+  assert.equal(emitted, false);
+  assert.equal(acknowledged, false);
+});

@@ -53,13 +53,18 @@ test("mail administration shares one console entry for either or both read permi
   for (const grants of [
     ["admin.mail.domains.read"],
     ["admin.mail.mailboxes.read"],
+    ["admin.mail.providers.read"],
+    ["admin.mail.overview.read"],
+    ["admin.mail.flow.read"],
+    ["admin.mail.settings.read"],
+    ["admin.mail.activity.read"],
     ["admin.mail.domains.read", "admin.mail.mailboxes.read"],
   ])
     assert.deepEqual(
       consoleMenu(permissionClosure(grants)).map((item) => item.path),
       ["/console/mail"],
     );
-  for (const grants of [["mail.access"], ["admin.mail.providers.read"]])
+  for (const grants of [["mail.access"], ["admin.mail.audit.read"]])
     assert.ok(
       consoleMenu(permissionClosure(grants)).every((item) => item.path !== "/console/mail"),
     );

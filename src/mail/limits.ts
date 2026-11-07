@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { mailSendLimit, workspaceMailPolicy } from "./policy";
 import { all } from "./control";
 import { integer } from "./input";
 import { provider, providers } from "./providers";
@@ -27,6 +28,7 @@ export const providerSendMaximum = () =>
       .map((entry) => entry.capabilities.max_send_bytes),
   );
 export async function mailboxSendingLimits(env: Env, mailboxId: string) {
+  const policy = await workspaceMailPolicy(env);
   const domains = await all<{ provider: string; max_send_bytes: number | null }>(
     env,
     "SELECT DISTINCT p.provider,d.max_send_bytes FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
@@ -36,7 +38,9 @@ export async function mailboxSendingLimits(env: Env, mailboxId: string) {
     .filter((entry) =>
       providers.some((adapter) => adapter.id === entry.provider && adapter.capabilities.send),
     )
-    .map((entry) => sendingLimits(entry.provider, entry.max_send_bytes));
+    .map((entry) =>
+      sendingLimits(entry.provider, mailSendLimit(entry.max_send_bytes, policy.max_send_bytes)),
+    );
   const max_send_bytes = Math.max(0, ...available.map((limits) => limits.max_send_bytes));
   // Mailboxes without a sender can still save attachments in drafts.
   return {

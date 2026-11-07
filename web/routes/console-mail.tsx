@@ -1,11 +1,20 @@
 import { LocalizedMessage } from "../components/i18n";
 import { t } from "../../shared/i18n/index.ts";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { api } from "../lib/api";
 import { mailConsolePages } from "../lib/console";
 import { type DomainProvider, type Domain, type Mailbox } from "../lib/mail";
-import { useAccess } from "../components/console-access";
+import { AccessDenied, useAccess } from "../components/console-access";
+import {
+  MailAuditLog,
+  MailboxDirectory,
+  MailFlowPage,
+  MailOverview,
+  MailPolicies,
+  MailProviders,
+} from "./console-mail-admin";
+import type { ProviderConnection } from "../lib/mail-admin";
 import {
   MailField,
   MailInput,
@@ -21,7 +30,6 @@ import {
 import { MailRules } from "../components/mail-rules";
 import { Button, Tabs, useNotifications } from "../components/ui";
 import { Check, ConsolePageHeader } from "../components/console-shared";
-import { SharedMailboxes } from "./console-shared-mailboxes";
 import "./console.css";
 import "./mail.css";
 export function MailConsoleLayout() {
@@ -30,12 +38,12 @@ export function MailConsoleLayout() {
     location = useLocation();
   const pages = mailConsolePages.filter((page) => permissions.includes(page.permission));
   const requested = location.pathname.split("/")[3],
-    selected = pages.find((page) => page.page === requested)?.page ?? pages[0]?.page;
+    selected = mailConsolePages.find((page) => page.page === requested)?.page ?? pages[0]?.page;
   return (
     <section className="account-page console-page mail-console-page" data-ui-theme="neutral">
       <ConsolePageHeader
         title={t("libConsole.mail")}
-        description={t("routesConsoleMail.manageMailDomainsAndSharedMailboxes")}
+        description={t("mailAdmin.titleDescription")}
       />
       {selected && (
         <Tabs.Root value={selected} onValueChange={(value) => navigate(`/console/mail/${value}`)}>
@@ -65,7 +73,23 @@ export function MailConsolePage({ page }: { page: string }) {
         to={`/console/mail/${mailConsolePages.find((page) => permissions.includes(page.permission))?.page ?? "domains"}`}
       />
     );
-  return page === "mailboxes" ? <SharedMailboxes /> : <Domains />;
+  const config = mailConsolePages.find((entry) => entry.page === page);
+  if (!config || !permissions.includes(config.permission)) return <AccessDenied />;
+  return page === "overview" ? (
+    <MailOverview />
+  ) : page === "mailboxes" ? (
+    <MailboxDirectory />
+  ) : page === "providers" ? (
+    <MailProviders />
+  ) : page === "flow" ? (
+    <MailFlowPage />
+  ) : page === "settings" ? (
+    <MailPolicies />
+  ) : page === "activity" ? (
+    <MailAuditLog />
+  ) : (
+    <Domains />
+  );
 }
 function useMailboxDirectory() {
   const permissions = useAccess().permissions;
@@ -168,15 +192,6 @@ function Domains() {
     </>
   );
 }
-type ProviderConnection = {
-  id: string;
-  provider: string;
-  name: string;
-  enabled: number;
-  version: number;
-  config: Record<string, string>;
-  secret_configured: boolean;
-};
 export function MailDomainEditorPage({ creating = false }: { creating?: boolean }) {
   const { id } = useParams(),
     navigate = useNavigate(),
@@ -310,92 +325,56 @@ function DomainEditor({
   defaultDomain: boolean;
   onSaved: (id: string) => void;
 }) {
-  const action = useMailAction();
+  const { permissions } = useAccess(),
+    canReadProviders = permissions.includes("admin.mail.providers.read"),
+    action = useMailAction();
   const initialProvider = (direction: "inbound" | "outbound") =>
     existing
       ? (existing[`${direction}_provider`] ??
         (existing[`${direction}_connection_id`] ? "cloudflare" : ""))
       : (providers[0]?.provider ?? "");
-  const [isDefault, setDefault] = useState(defaultDomain);
   const [name, setName] = useState(existing?.name ?? ""),
-    [inbound, setInbound] = useState(initialProvider("inbound")),
+    [isDefault, setDefault] = useState(defaultDomain);
+  const [inbound, setInbound] = useState(initialProvider("inbound")),
     [outbound, setOutbound] = useState(initialProvider("outbound"));
-  const initialOutboundConnection =
+  const [outboundId, setOutboundId] = useState<string | null>(
     existing?.outbound_connection_id ??
-    (initialProvider("outbound") === "cloudflare"
-      ? (providers.find((provider) => provider.provider === "cloudflare")?.default_connection_id ??
-        null)
-      : null);
-  const [outboundConnectionId, setOutboundConnectionId] = useState<string | null>(
-      initialOutboundConnection,
-    ),
-    [providerConfig, setProviderConfig] = useState<Record<string, string>>({}),
-    [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({}),
-    [providerSecretEdits, setProviderSecretEdits] = useState<Record<string, boolean>>({}),
-    [providerConnectionEnabled, setProviderConnectionEnabled] = useState(true),
-    [createdConnection, setCreatedConnection] = useState<ProviderConnection | null>(null);
-  const [providerConfigDirty, setProviderConfigDirty] = useState(false);
-  const [sendLimit, setSendLimit] = useState(
-    existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "",
+      providers.find((provider) => provider.provider === initialProvider("outbound"))
+        ?.default_connection_id ??
+      null,
   );
-  const selectedProvider = providers.find((provider) => provider.provider === outbound),
-    selectedConnection =
-      createdConnection?.id === outboundConnectionId && createdConnection.provider === outbound
-        ? createdConnection
-        : providerConnections.find(
-            (connection) =>
-              connection.id === outboundConnectionId && connection.provider === outbound,
-          ),
-    providerMaximum = selectedProvider?.capabilities.max_send_bytes ?? 0;
   const [receive, setReceive] = useState(!!existing?.inbound_enabled),
     [send, setSend] = useState(!!existing?.outbound_enabled),
     [plus, setPlus] = useState(existing ? !!existing.plus_addressing : true),
     [catchAll, setCatchAll] = useState(existing?.catch_all_mailbox_id ?? "");
-  useEffect(() => {
-    if (providerConfigDirty) return;
-    const saved =
-      createdConnection?.id === outboundConnectionId && createdConnection.provider === outbound
-        ? createdConnection
-        : providerConnections.find(
-            (connection) =>
-              connection.id === outboundConnectionId && connection.provider === outbound,
-          );
-    const definition = providers.find((provider) => provider.provider === outbound);
-    setProviderConfig(
-      saved?.config ??
-        Object.fromEntries(
-          (definition?.config_fields ?? [])
-            .filter((field) => field.options?.length)
-            .map((field) => [field.key, field.options![0]!]),
-        ),
+  const [sendLimit, setSendLimit] = useState(
+    existing?.max_send_bytes ? String(existing.max_send_bytes / 1024 ** 2) : "",
+  );
+  const selectedProvider = providers.find((provider) => provider.provider === outbound),
+    providerMaximum = selectedProvider?.capabilities.max_send_bytes ?? 0;
+  const available = (provider: string) =>
+    providerConnections.filter(
+      (connection) =>
+        connection.provider === provider &&
+        (provider === "cloudflare" ||
+          !connection.domain_ids?.length ||
+          connection.domain_ids.every((id) => id === existing?.id)),
     );
-    setProviderConnectionEnabled(saved ? !!saved.enabled : true);
-  }, [
-    outboundConnectionId,
-    outbound,
-    providerConnections,
-    providers,
-    providerConfigDirty,
-    createdConnection,
-  ]);
-  const providerName = (provider: string) =>
-    providers.find((entry) => entry.provider === provider)?.label ??
-    (provider === "cloudflare" ? t("routesConsoleMail.cloudflare") : provider);
+  const connections = available(outbound);
+  const selectedConnection = providerConnections.find((connection) => connection.id === outboundId);
   const providerOptions = (direction: "receive" | "send", selected: string) => [
     { value: "", label: t("routesConsoleMail.noProvider") },
     ...providers
       .filter((provider) => provider.capabilities[direction])
-      .map((provider) => ({ value: provider.provider, label: providerName(provider.provider) })),
+      .map((provider) => ({
+        value: provider.provider,
+        label: provider.label ?? provider.provider,
+      })),
     ...(selected &&
     !providers.some(
       (provider) => provider.provider === selected && provider.capabilities[direction],
     )
-      ? [
-          {
-            value: selected,
-            label: t("routesConsoleMail.unsupported", { providerName: providerName(selected) }),
-          },
-        ]
+      ? [{ value: selected, label: t("routesConsoleMail.unsupported", { providerName: selected }) }]
       : []),
   ];
   const submit = async () => {
@@ -405,89 +384,11 @@ function DomainEditor({
         ? existing.inbound_connection_id
         : (providers.find((provider) => provider.provider === inbound)?.default_connection_id ??
           null);
-    let outboundId = outbound
-      ? (outboundConnectionId ??
-        (outbound === "cloudflare" ? (selectedProvider?.default_connection_id ?? null) : null))
-      : null;
-    if (receive && !inboundId)
-      throw new Error(t("routesConsoleMail.chooseAConfiguredProviderForEachEnabledDirection"));
     if (
-      outbound &&
-      selectedProvider &&
-      canManageProviders &&
-      (selectedProvider.config_fields.length || selectedProvider.secret_fields.length)
-    ) {
-      if (providerConnectionsLoading)
-        throw new Error(t("routesConsoleMail.providerConnectionsAreStillLoadingTryAgainInA"));
-      if (providerConnectionsError)
-        throw new Error(t("routesConsoleMail.couldNotLoadProviderConnectionsReloadThePageBefore"));
-      const secretUpdates = Object.fromEntries(
-        selectedProvider.secret_fields
-          .filter((field) => providerSecrets[field.key]?.trim())
-          .map((field) => [field.key, providerSecrets[field.key]!.trim()]),
-      );
-      const secretsEntered = Object.keys(secretUpdates).length > 0;
-      if (outboundId && !selectedConnection)
-        throw new Error(
-          t("routesConsoleMail.couldNotLoadTheSelectedSendingProviderConnectionReload"),
-        );
-      if (!outboundId) {
-        if (send && !providerConnectionEnabled)
-          throw new Error(
-            t("routesConsoleMail.enableThisProviderConnectionBeforeEnablingSendingForThe"),
-          );
-        const result = await api<{ connection: ProviderConnection }>(
-          "/api/mail/provider-connections",
-          {
-            method: "POST",
-            body: {
-              provider: selectedProvider.provider,
-              name: `${name || t("routesConsoleMail.mailDomain")} · ${selectedProvider.label}`,
-              enabled: providerConnectionEnabled,
-              config: providerConfig,
-              ...(secretsEntered ? { secrets: secretUpdates } : {}),
-            },
-          },
-        );
-        outboundId = result.connection.id;
-        setOutboundConnectionId(outboundId);
-        setCreatedConnection(result.connection);
-        setProviderSecrets({});
-        setProviderSecretEdits({});
-        setProviderConfigDirty(false);
-      } else if (selectedConnection) {
-        if (send && !providerConnectionEnabled)
-          throw new Error(
-            t("routesConsoleMail.enableThisProviderConnectionBeforeEnablingSendingForThe"),
-          );
-        if (
-          providerConfigDirty ||
-          secretsEntered ||
-          providerConnectionEnabled !== !!selectedConnection.enabled
-        ) {
-          const result = await api<{ connection: ProviderConnection }>(
-            `/api/mail/provider-connections/${encodeURIComponent(selectedConnection.id)}`,
-            {
-              method: "PATCH",
-              body: {
-                version: selectedConnection.version,
-                name: `${name || t("routesConsoleMail.mailDomain")} · ${providerName(selectedProvider.provider)}`,
-                enabled: providerConnectionEnabled,
-                config: providerConfig,
-                ...(secretsEntered ? { secrets: secretUpdates } : {}),
-              },
-            },
-          );
-          setCreatedConnection(result.connection);
-          setProviderSecrets({});
-          setProviderSecretEdits({});
-          setProviderConfigDirty(false);
-        }
-      }
-    }
-    if (outbound && !outboundId)
-      throw new Error(t("routesConsoleMail.addCredentialsForThisSendingProviderBeforeAssigningIt"));
-    if (send && !outboundId)
+      (receive && !inboundId) ||
+      (outbound && !outboundId) ||
+      (send && (!outboundId || selectedConnection?.enabled === 0))
+    )
       throw new Error(t("routesConsoleMail.chooseAConfiguredProviderForEachEnabledDirection"));
     const result = await api<{ domain: Domain }>(
       `/api/mail/domains${existing ? `/${existing.id}` : ""}`,
@@ -515,7 +416,7 @@ function DomainEditor({
   return (
     <MailSection
       title={t("routesConsoleMail.domainSettings")}
-      description={t("routesConsoleMail.providerConfigurationAndDeliverySettingsApplyToThisDomain")}
+      description={t("mailAdmin.domainConnectionDescription")}
     >
       <MailForm
         className="mail-form"
@@ -549,155 +450,63 @@ function DomainEditor({
               <MailSelect
                 value={outbound}
                 onValueChange={(value) => {
-                  const next = providers.find((provider) => provider.provider === value),
-                    current =
-                      createdConnection?.provider === value
-                        ? createdConnection
-                        : existing?.outbound_provider === value
-                          ? providerConnections.find(
-                              (connection) => connection.id === existing.outbound_connection_id,
-                            )
-                          : undefined,
-                    nextConnectionId =
-                      current?.id ??
-                      (value === "cloudflare" ? (next?.default_connection_id ?? null) : null);
                   setOutbound(value);
-                  setOutboundConnectionId(nextConnectionId);
-                  setProviderConfigDirty(false);
-                  setProviderSecrets({});
-                  setProviderSecretEdits({});
-                  setProviderConnectionEnabled(current ? !!current.enabled : true);
+                  const definition = providers.find((provider) => provider.provider === value);
+                  setOutboundId(
+                    existing && value === initialProvider("outbound")
+                      ? existing.outbound_connection_id
+                      : (available(value).find((connection) => connection.enabled)?.id ??
+                          definition?.default_connection_id ??
+                          null),
+                  );
                   if (!value) {
                     setSend(false);
                     setSendLimit("");
-                  } else {
-                    const maximum = next?.capabilities.max_send_bytes ?? 0;
-                    if (sendLimit && Number(sendLimit) * 1024 ** 2 > maximum)
-                      setSendLimit(String(maximum / 1024 ** 2));
-                  }
+                  } else if (
+                    sendLimit &&
+                    Number(sendLimit) * 1024 ** 2 > (definition?.capabilities.max_send_bytes ?? 0)
+                  )
+                    setSendLimit(
+                      String((definition?.capabilities.max_send_bytes ?? 0) / 1024 ** 2),
+                    );
                 }}
                 options={providerOptions("send", outbound)}
               />
             </MailField>
           </div>
-          {outbound &&
-            selectedProvider &&
-            (selectedProvider.config_fields.length > 0 ||
-              selectedProvider.secret_fields.length > 0) && (
-              <>
-                {!canManageProviders ? (
-                  <p className="mail-hint">
-                    {t("routesConsoleMail.yourRoleNeedsTheManageSendingProvidersPermissionTo")}
-                  </p>
-                ) : providerConnectionsLoading ? (
-                  <MailState loading error="" kind="form" />
-                ) : providerConnectionsError ? (
-                  <MailState
-                    loading={false}
-                    error={providerConnectionsError}
-                    retry={reloadProviderConnections}
-                  />
-                ) : (
-                  <>
-                    {selectedProvider.config_fields.map((field) =>
-                      field.options ? (
-                        <MailField key={field.key} label={field.label} hint={field.help}>
-                          <MailSelect
-                            value={providerConfig[field.key] ?? field.options[0] ?? ""}
-                            onValueChange={(value) => {
-                              setProviderConfig((current) => ({ ...current, [field.key]: value }));
-                              setProviderConfigDirty(true);
-                            }}
-                            options={field.options.map((value) => ({
-                              value,
-                              label:
-                                value === "tls"
-                                  ? t("routesConsoleMail.tlsPort465")
-                                  : value === "starttls"
-                                    ? t("routesConsoleMail.starttlsPort587")
-                                    : value,
-                            }))}
-                          />
-                        </MailField>
-                      ) : (
-                        <MailInput
-                          key={field.key}
-                          label={field.label}
-                          hint={field.help}
-                          required={!!field.required}
-                          value={providerConfig[field.key] ?? ""}
-                          onChange={(event) => {
-                            setProviderConfig((current) => ({
-                              ...current,
-                              [field.key]: event.target.value,
-                            }));
-                            setProviderConfigDirty(true);
-                          }}
-                        />
-                      ),
-                    )}
-                    {selectedProvider.secret_fields.map((field) => {
-                      const saved = !!selectedConnection?.secret_configured,
-                        enabled = !saved || !!providerSecretEdits[field.key];
-                      return (
-                        <div className="mail-secret-field-row" key={field.key}>
-                          <MailInput
-                            label={field.label}
-                            hint={field.help}
-                            required={!!field.required && !saved}
-                            disabled={!enabled}
-                            placeholder={saved ? t("routesConsoleMail.enterToChange") : ""}
-                            type="password"
-                            autoComplete="new-password"
-                            value={providerSecrets[field.key] ?? ""}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setProviderSecrets((current) => ({ ...current, [field.key]: value }));
-                              if (value)
-                                setProviderSecretEdits((current) => ({
-                                  ...current,
-                                  [field.key]: true,
-                                }));
-                            }}
-                          />
-                          {saved && (
-                            <div className="mail-secret-change">
-                              <Check
-                                checked={!!providerSecretEdits[field.key]}
-                                onChange={(checked) => {
-                                  setProviderSecretEdits((current) => ({
-                                    ...current,
-                                    [field.key]: checked,
-                                  }));
-                                  if (!checked)
-                                    setProviderSecrets((current) => ({
-                                      ...current,
-                                      [field.key]: "",
-                                    }));
-                                }}
-                              >
-                                {t("routesConsoleMail.change")}
-                              </Check>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {selectedConnection && (
-                      <Check
-                        checked={providerConnectionEnabled}
-                        onChange={(checked) => {
-                          setProviderConnectionEnabled(checked);
-                          setProviderConfigDirty(true);
-                        }}
-                      >
-                        {t("routesConsoleMail.sendingProviderConnectionEnabled")}
-                      </Check>
-                    )}
-                  </>
-                )}
-              </>
-            )}
+          {outbound && (
+            <MailField
+              label={t("mailAdmin.sendingConnection")}
+              hint={t("mailAdmin.sendingConnectionHint")}
+            >
+              <MailSelect
+                value={outboundId ?? ""}
+                disabled={
+                  !canReadProviders || providerConnectionsLoading || !!providerConnectionsError
+                }
+                onValueChange={(value) => setOutboundId(value || null)}
+                options={[
+                  { value: "", label: t("mailAdmin.chooseConnection") },
+                  ...(outboundId && !connections.some((connection) => connection.id === outboundId)
+                    ? [{ value: outboundId, label: selectedProvider?.label ?? outbound }]
+                    : []),
+                  ...connections.map((connection) => ({
+                    value: connection.id,
+                    label: connection.name,
+                    disabled: !connection.enabled && connection.id !== outboundId,
+                  })),
+                ]}
+              />
+              {canManageProviders && (
+                <Link to="/console/mail/providers">{t("mailAdmin.manageProviderConnections")}</Link>
+              )}
+              <MailState
+                loading={providerConnectionsLoading}
+                error={providerConnectionsError}
+                retry={reloadProviderConnections}
+              />
+            </MailField>
+          )}
           <MailInput
             label={t("routesConsoleMail.maximumMessageSizeMib")}
             hint={
@@ -762,7 +571,7 @@ function DomainEditor({
             <Button
               type="submit"
               variant="primary"
-              disabled={action.busy || (canManageProviders && providerConnectionsLoading)}
+              disabled={action.busy || providerConnectionsLoading}
             >
               {action.busy
                 ? t("common.saving")

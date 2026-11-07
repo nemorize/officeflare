@@ -1,4 +1,6 @@
 import { t } from "../../shared/i18n/index.ts";
+import { adminMail, recordMailAdministration } from "../mail/admin";
+import { mailSendLimit, requireForwardingAllowed, workspaceMailPolicy } from "../mail/policy";
 import { measured } from "../observability/performance";
 import { mailViewOptions, mailGrouped } from "../mail/ui-query";
 import { queryThreads, mailboxSummary } from "../mail/views";
@@ -185,6 +187,10 @@ mail.get("/mailboxes/:m/messages/:id/render/assets/:asset", async (c, next) => {
   return mailImageResponse(c, grant.bodyKey);
 });
 mail.use("*", authenticateMail);
+mail.use("*", async (c, next) => {
+  await next();
+  await recordMailAdministration(c);
+});
 mail.use("/mailboxes/:m/*", async (c, next) => {
   const mailboxId = resource(c);
   await next();
@@ -212,6 +218,7 @@ mail.onError((error, c) => {
   console.error("Mail API failure", error);
   return c.json({ error: t("routesMail.internalServerError") }, 500);
 });
+mail.route("/admin", adminMail);
 mail.get("/preferences", async (c) => {
   if (actor(c).api_key_id) fail(403, t("routesMail.personalPreferencesRequireAUserSession"));
   const saved = await first<{ preferences_json: string }>(
@@ -294,9 +301,9 @@ const mailCapabilities = (env: Env) => ({
 mail.get("/capabilities", (c) => c.json(mailCapabilities(c.env)));
 mail.get("/provider-connections", async (c) => {
   await administrator(c, "admin.mail.providers.read");
-  const connections = await all<Connection>(
+  const connections = await all<Connection & { domain_ids_json: string }>(
     c.env,
-    "SELECT * FROM mail_provider_connections ORDER BY created_at,id",
+    "SELECT p.*,(SELECT json_group_array(d.id) FROM mail_domains d WHERE d.outbound_connection_id=p.id) domain_ids_json FROM mail_provider_connections p ORDER BY p.created_at,p.id",
   );
   return c.json({
     connections: connections.map((entry) => ({
@@ -307,6 +314,7 @@ mail.get("/provider-connections", async (c) => {
       version: entry.version,
       config: safeProviderConfig(entry.config_json),
       secret_configured: !!entry.secret_ciphertext,
+      domain_ids: JSON.parse(entry.domain_ids_json) as string[],
     })),
   });
 });
@@ -658,6 +666,7 @@ mail.post("/domains/:id/rules", async (c) => {
   const reason =
     data.reject_reason === undefined ? null : text(data.reject_reason, "reject_reason", 200);
   if (reason && /[\r\n]/.test(reason)) fail(400, t("routesMail.invalidRejectionReason"));
+  if (data.action === "forward") await requireForwardingAllowed(c.env, email(data.forward_to));
   const values = [
     text(data.name, "name", 100),
     integer(data.priority ?? 0, "priority", -1000, 1000),
@@ -1143,6 +1152,7 @@ mail.delete("/mailboxes/:m/members/:user", async (c) => {
   return c.body(null, 204);
 });
 async function mailboxAddresses(c: Parameters<typeof authenticateMail>[0]) {
+  const policy = await workspaceMailPolicy(c.env);
   try {
     await authorize(c.env, actor(c), resource(c), "read");
   } catch {
@@ -1175,7 +1185,7 @@ async function mailboxAddresses(c: Parameters<typeof authenticateMail>[0]) {
         send_available === 1 &&
         providers.some((entry) => entry.id === address.provider && entry.capabilities.send),
       ...(address.provider && providers.some((entry) => entry.id === address.provider)
-        ? sendingLimits(address.provider, max_send_bytes)
+        ? sendingLimits(address.provider, mailSendLimit(max_send_bytes, policy.max_send_bytes))
         : { max_send_bytes: 0, max_upload_bytes: 0 }),
     })),
     limits: await mailboxSendingLimits(c.env, resource(c)),

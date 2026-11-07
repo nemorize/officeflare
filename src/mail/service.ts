@@ -1,4 +1,6 @@
 import { t } from "../../shared/i18n/index.ts";
+import { publishMailFlow, recordInboundFlow } from "./admin-store";
+import { forwardingAllowed } from "./policy";
 import { incomingRoute } from "./routing";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { putStream } from "./objects";
@@ -624,27 +626,56 @@ export async function ingest(env: Env, task: InboundTask) {
   }
 }
 export async function receive(message: ForwardableEmailMessage, env: Env) {
+  const receiptId = id();
   const route = await incomingRoute(env, message);
   if (route?.action === "reject") {
+    await recordInboundFlow(env, receiptId, null, route.provider, "rejected", "domain_policy");
     message.setReject(route.reject_reason ?? t("mailService.rejectedByDomainPolicy"));
     return;
   }
   if (route?.action === "forward") {
-    await message.forward(route.forward_to!);
+    if (!(await forwardingAllowed(env, route.forward_to!))) {
+      await recordInboundFlow(
+        env,
+        receiptId,
+        null,
+        route.provider,
+        "rejected",
+        "external_forwarding_blocked",
+      );
+      message.setReject(t("mailAdmin.externalForwardingBlocked"));
+      return;
+    }
+    try {
+      await message.forward(route.forward_to!);
+      await recordInboundFlow(env, receiptId, null, route.provider, "forwarded");
+    } catch (error) {
+      await recordInboundFlow(env, receiptId, null, route.provider, "failed", "forwarding_failed");
+      throw error;
+    }
     return;
   }
   const target = await resolveRecipient(env, message.to);
   if (!target) {
+    await recordInboundFlow(env, receiptId, null, null, "rejected", "recipient_unavailable");
     message.setReject(t("mailService.recipientIsNotAvailable"));
     return;
   }
   if (message.rawSize > 25 * 1024 * 1024) {
+    await recordInboundFlow(
+      env,
+      receiptId,
+      target.mailbox_id,
+      target.provider,
+      "rejected",
+      "message_too_large",
+    );
     message.setReject(t("mailService.messageIsTooLarge"));
     return;
   }
   const task: InboundTask = {
     kind: "inbound",
-    id: id(),
+    id: receiptId,
     ...target,
     raw_r2_key: "",
     envelope_from: message.from,
@@ -663,6 +694,7 @@ export async function receive(message: ForwardableEmailMessage, env: Env) {
     httpMetadata: { contentType: "application/json" },
   });
   // The durable pending record recovers a queue publish failure without losing the original.
+  await recordInboundFlow(env, task.id, task.mailbox_id, task.provider, "queued");
   try {
     await env.MAIL_QUEUE.send(task);
   } catch (error) {
@@ -688,6 +720,21 @@ export async function flushOutbox(env: Env, mailboxId: string, partitionId: stri
     items = await store.outbox();
   if (!items.length) return;
   const payloads = items.map((item) => ({ ...JSON.parse(item.payload_json), event_id: item.id }));
+  const flowOperations = new Set([
+    "created",
+    "submitted",
+    "processing",
+    "accepted",
+    "failed",
+    "retry_wait",
+    "unknown",
+    "canceled",
+    "delivery",
+  ]);
+  const changed = payloads
+    .filter((payload) => flowOperations.has(payload.operation))
+    .map((payload) => payload.message_id as string);
+  if (changed.length) await publishMailFlow(env, mailboxId, await store.adminFlow(changed));
   const hooks = payloads.some((payload) => !payload.private_user_id)
     ? await all<{ id: string; owner_user_id: string }>(
         env,

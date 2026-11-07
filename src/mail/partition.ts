@@ -52,6 +52,40 @@ export class MailPartitionDO extends DurableObject<Env> {
   size() {
     return this.sql.databaseSize;
   }
+  adminStats() {
+    return {
+      message_count: row<{ total: number }>(
+        this.sql,
+        "SELECT coalesce(sum(total),0) total FROM mailbox_counts",
+      )!.total,
+      database_bytes: this.sql.databaseSize,
+      attachment_bytes: row<{ total: number }>(
+        this.sql,
+        "SELECT coalesce(sum(size_bytes),0) total FROM attachments",
+      )!.total,
+    };
+  }
+  adminFlow(messageIds: string[]) {
+    const selected = JSON.stringify([...new Set(messageIds)].slice(0, 50));
+    const records = rows<import("./admin-store").MailFlowRecord>(
+      this.sql,
+      `
+      SELECT 'inbound:'||coalesce(ingest_id,id) id,'inbound' direction,provider,'received' status,NULL error_code,0 attempt_count,NULL scheduled_at,created_at,updated_at,0 revision
+      FROM messages WHERE id IN (SELECT value FROM json_each(?)) AND direction='inbound' AND source='email'
+      UNION ALL
+      SELECT s.id,'outbound',s.provider,
+        CASE WHEN s.status='accepted' THEN coalesce(
+          (SELECT status FROM submission_recipients WHERE submission_id=s.id AND status IN ('failed','rejected','complained') ORDER BY event_at DESC LIMIT 1),
+          CASE WHEN NOT EXISTS(SELECT 1 FROM submission_recipients WHERE submission_id=s.id AND status<>'delivered') AND EXISTS(SELECT 1 FROM submission_recipients WHERE submission_id=s.id) THEN 'delivered' END,
+          s.status) ELSE s.status END,
+        s.error_code,s.attempt_count,s.scheduled_at,s.created_at,s.updated_at,0
+      FROM submissions s WHERE s.message_id IN (SELECT value FROM json_each(?))`,
+      selected,
+      selected,
+    );
+    const revision = this.state();
+    return records.map((record) => ({ ...record, revision, updated_at: epoch() }));
+  }
   internalMessage(messageId: string) {
     return row<MessageRow>(this.sql, "SELECT * FROM messages WHERE id=?", messageId);
   }
@@ -857,6 +891,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         job.connection_id,
         epoch(),
       );
+      this.change(job.message_id, "processing", job.actor_id);
     });
     return this.submission(submissionId);
   }
