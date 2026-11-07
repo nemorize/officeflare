@@ -96,6 +96,11 @@ export interface Message {
   provider_message_id: string | null;
   rfc_message_id: string | null;
 }
+export interface MailRendering {
+  html: string | null;
+  failures: number;
+  pending: boolean;
+}
 export interface MessageDetail extends Message {
   body: {
     text: string;
@@ -222,6 +227,8 @@ export {
   htmlFrame,
   mailLinkUrl,
   observeMailDocument,
+  renderMailDocument,
+  mailRenderingPath,
   MailOperation,
 } from "./mail-helpers";
 export async function downloadMail(path: string, name: string) {

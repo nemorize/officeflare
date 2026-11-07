@@ -71,6 +71,11 @@ export async function getMessage(
   await authorize(env, actor, mailboxId, "read");
   await belongs(env, mailboxId, locator(resourceId));
   const message = await partition(env, locator(resourceId)).get(resourceId, actor.user_id);
+  return messageDetail(env, mailboxId, message);
+}
+export type MessageDetailRow = Awaited<ReturnType<ReturnType<typeof partition>["get"]>>;
+export async function messageDetail(env: Env, mailboxId: string, message: MessageDetailRow) {
+  const resourceId = message.id;
   const content = await readBody(env, message.body_r2_key);
   const cid: Record<string, string> = {};
   for (const attachment of message.attachments)

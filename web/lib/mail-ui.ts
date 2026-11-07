@@ -1,4 +1,5 @@
 import type { MailResourceCache } from "./mail-resource-cache";
+import { mailRenderingPath } from "./mail-helpers.ts";
 import type {
   Mailbox,
   Folder,
@@ -7,6 +8,7 @@ import type {
   Capabilities,
   Message,
   MessageDetail,
+  MailRendering,
 } from "./mail";
 export interface MailBootstrap {
   mailboxes: Mailbox[];
@@ -52,10 +54,11 @@ export function hydrateMailResources(cache: MailResourceCache, path: string, dat
       cache.rememberMessages(base, result.page?.messages ?? []);
     }
   }
-  const base = path.match(/^(\/api\/mail\/mailboxes\/[^/]+)\/ui\//)?.[1];
+  const base = path.match(/^(\/api\/mail\/mailboxes\/[^/]+)\/(?:ui|messages)\//)?.[1];
   if (!base) return;
   const result = data as {
     message?: MessageDetail;
+    rendering?: MailRendering;
     messages?: Message[];
     addresses?: unknown;
     limits?: unknown;
@@ -66,6 +69,7 @@ export function hydrateMailResources(cache: MailResourceCache, path: string, dat
     ...(result.message ? [result.message] : []),
   ]);
   if (result.message) {
+    if (result.rendering) cache.replace(mailRenderingPath(base, result.message), result.rendering);
     cache.replace(base + "/messages/" + result.message.id, { message: result.message });
     if (result.message.draft)
       cache.replace(base + "/drafts/" + result.message.id, { message: result.message });

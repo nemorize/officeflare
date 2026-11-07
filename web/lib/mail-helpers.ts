@@ -89,6 +89,16 @@ export function htmlFrame(html: string, parentOrigin = "*", imagePath = "") {
   // a same-origin frame lets normal HTTP image caching survive reopening it.
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; img-src ${imagePolicy}; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';"><style>body{margin:20px;color:#252628;font:14px/1.7 system-ui;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[src=""]{visibility:hidden}pre{white-space:pre-wrap}table{max-width:100%}a{color:#526cb5}</style></head><body>${html}</body></html>`;
 }
+export function mailRenderingPath(
+  path: string,
+  message: { id: string; body_revision?: string },
+  quoted = false,
+) {
+  const query = new URLSearchParams({ defer: "1" });
+  if (message.body_revision) query.set("revision", message.body_revision);
+  if (quoted) query.set("part", "quoted");
+  return `${path}/messages/${message.id}/render?${query}`;
+}
 export function mailLinkUrl(value: unknown): string | null {
   if (
     typeof value !== "string" ||
@@ -149,6 +159,21 @@ export function observeMailDocument(
     document.removeEventListener("click", follow, true);
     document.removeEventListener("auxclick", follow, true);
   };
+}
+export function renderMailDocument(
+  frame: HTMLIFrameElement,
+  html: string,
+  resize: (height: number) => void,
+  openLink: (url: string) => void,
+) {
+  const document = frame.contentDocument;
+  if (!document) return () => {};
+  // Write the already sanitized HTML once, then measure immediately. An iframe
+  // load event waits for every image, which used to clip the body until then.
+  document.open();
+  document.write(html);
+  document.close();
+  return observeMailDocument(document, resize, openLink);
 }
 // getRandomValues is also available on HTTP origins, unlike randomUUID.
 const operationKey = () =>
