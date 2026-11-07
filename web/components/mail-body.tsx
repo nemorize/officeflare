@@ -7,7 +7,8 @@ import { api } from "../lib/api";
 import {
   mailErrorDescription,
   htmlFrame,
-  observeMailDocument,
+  renderMailDocument,
+  mailRenderingPath,
   mailboxPath,
   mailDate,
   cancelableSubmission,
@@ -15,6 +16,7 @@ import {
   submissionLabel,
   type MessageDetail,
   type Submission,
+  type MailRendering,
 } from "../lib/mail";
 import { useMail } from "./mail-context";
 import { MailNotice, useMailAction, useMailResource } from "./mail-common";
@@ -32,14 +34,9 @@ export const MailHtml = memo(
     const cache = useMailCache();
     const frame = useRef<HTMLIFrameElement>(null),
       [height, setHeight] = useState(128);
-    const cleanupFrame = useRef<() => void>(() => {});
     const [attempt, setAttempt] = useState(0);
-    const query = new URLSearchParams();
-    if (message.body_revision) query.set("revision", message.body_revision);
-    if (content !== message.body.html) query.set("part", "quoted");
-    if (attempt > 0) query.set("retry", "1");
-    const key = `${path}/messages/${message.id}/render?${query}`;
-    const cached = cache.snapshot(key).data as { html: string; failures: number } | null;
+    const key = mailRenderingPath(path, message, content !== message.body.html);
+    const cached = cache.snapshot(key).data as MailRendering | null;
     const [html, setHtml] = useState(cached?.html ?? content),
       [error, setError] = useState("");
     const [link, setLink] = useState<string | null>(null);
@@ -51,41 +48,47 @@ export const MailHtml = memo(
     );
     useEffect(() => {
       const controller = new AbortController();
-      const snapshot = cache.snapshot(key).data as { html: string } | null;
+      let timer: ReturnType<typeof setTimeout> | undefined,
+        polls = 0;
+      const snapshot = cache.snapshot(key).data as MailRendering | null;
       setHtml(snapshot?.html ?? content);
       setError("");
-      void (async () => {
+      const refresh = async (first = false) => {
         try {
-          await cache.load(key, attempt > 0);
+          const requestKey = first && attempt > 0 ? key + "&retry=1" : key;
+          await cache.load(requestKey, !first || attempt > 0);
           if (controller.signal.aborted) return;
-          const snapshot = cache.snapshot(key);
+          const snapshot = cache.snapshot(requestKey);
           if (snapshot.error) throw snapshot.error;
-          const rendering = snapshot.data as { html: string; failures: number };
-          setHtml(rendering.html);
-          if (rendering.failures)
+          const rendering = snapshot.data as MailRendering;
+          if (rendering.html !== null) setHtml(rendering.html);
+          if (rendering.pending && polls++ < 30)
+            timer = setTimeout(() => {
+              void refresh();
+            }, 1000);
+          else if (rendering.pending)
+            setError(t("componentsMailBody.theFormattedMessageCouldNotBeLoaded"));
+          else if (rendering.failures)
             setError(t("componentsMailBody.someImagesOrStylesCouldNotBeLoadedThe"));
+          else setError("");
         } catch {
           if (!controller.signal.aborted)
             setError(t("componentsMailBody.theFormattedMessageCouldNotBeLoaded"));
         }
-      })();
+      };
+      void refresh(true);
       return () => {
         controller.abort();
+        clearTimeout(timer);
       };
     }, [key, content, attempt, cache]);
     useLayoutEffect(() => {
-      setHeight(128);
       setLink(null);
-      return () => cleanupFrame.current();
-    }, [document]);
-    const attachFrame = () => {
-      cleanupFrame.current();
-      const bodyDocument = frame.current?.contentDocument;
-      if (bodyDocument?.body)
-        cleanupFrame.current = observeMailDocument(bodyDocument, setHeight, (destination) =>
+      if (frame.current)
+        return renderMailDocument(frame.current, document, setHeight, (destination) =>
           setLink((current) => current ?? destination),
         );
-    };
+    }, [document]);
     return (
       <>
         {link && (
@@ -140,8 +143,6 @@ export const MailHtml = memo(
           title={t("componentsMailBody.formattedEmailBody")}
           sandbox="allow-same-origin"
           referrerPolicy="no-referrer"
-          srcDoc={document}
-          onLoad={attachFrame}
         />
       </>
     );

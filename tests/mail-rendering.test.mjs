@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   prepareMailRendering,
+  readMailRendering,
   linkedMailRendering,
   preparedMailImageId,
   loadPreparedMailImage,
@@ -50,6 +51,84 @@ const message = { id: "message", body_r2_key: "bodies/box/message/inbound.json",
   path = "/api/mail/mailboxes/box/messages/message/render",
   imageResponse = () => new Response(png, { headers: { "Content-Type": "image/png" } });
 const linked = (result) => linkedMailRendering(result, path, "grant=test");
+
+test(
+  "readers return cached HTML before slow image repair finishes and share the repair task",
+  { timeout: 3000 },
+  async () => {
+    const bucket = bucketFixture(),
+      cache = memoryCache(),
+      tasks = [];
+    const options = {
+      source:
+        '<p>Visible now</p><img src="https://cdn.example.com/good.png"><img src="https://cdn.example.com/slow.png">',
+      cache,
+    };
+    const first = await prepareMailRendering(bucket, message, "box", "office.test", {
+      ...options,
+      fetcher: remoteFixture((url) =>
+        url.pathname === "/slow.png" ? new Response(null, { status: 503 }) : imageResponse(),
+      ).fetcher,
+    });
+    let finish;
+    const slow = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const readOptions = {
+      ...options,
+      retryFailures: true,
+      defer: (task) => tasks.push(task),
+      fetcher: remoteFixture((url) => {
+        assert.equal(url.pathname, "/slow.png");
+        return slow;
+      }).fetcher,
+    };
+    const current = await readMailRendering(bucket, message, "box", "office.test", readOptions);
+    assert.equal(current.pending, true);
+    assert.equal(current.rendering.html, first.html);
+    assert.equal(current.rendering.failures, 1);
+    await readMailRendering(bucket, message, "box", "office.test", readOptions);
+    assert.equal(tasks[0], tasks[1], "Concurrent readers must share one background job");
+    finish(imageResponse());
+    await tasks[0];
+    const ready = await readMailRendering(bucket, message, "box", "office.test", {
+      ...readOptions,
+      retryFailures: false,
+    });
+    assert.equal(ready.pending, false);
+    assert.equal(ready.rendering.failures, 0);
+  },
+);
+
+test(
+  "a first reader returns without waiting for preparation of old mail",
+  { timeout: 3000 },
+  async () => {
+    const bucket = bucketFixture(),
+      tasks = [];
+    await bucket.put(
+      message.body_r2_key,
+      JSON.stringify({ html: '<p>Old mail</p><img src="https://cdn.example.com/photo.png">' }),
+    );
+    let finish;
+    const slow = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const options = {
+      cache: memoryCache(),
+      fetcher: remoteFixture(() => slow).fetcher,
+      defer: (task) => tasks.push(task),
+    };
+    const current = await readMailRendering(bucket, message, "box", "office.test", options);
+    assert.equal(current.rendering, null);
+    assert.equal(current.pending, true);
+    finish(imageResponse());
+    await tasks[0];
+    const ready = await readMailRendering(bucket, message, "box", "office.test", options);
+    assert.equal(ready.pending, false);
+    assert.equal(ready.rendering.failures, 0);
+  },
+);
 
 test("remote, CID and embedded HEIC images are converted on the server and stored as WebP in R2", async () => {
   const bucket = bucketFixture(),

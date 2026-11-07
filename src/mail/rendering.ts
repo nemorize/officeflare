@@ -305,6 +305,42 @@ export async function prepareMailRendering(
   return prepared;
 }
 
+const preparing = new Map<string, Promise<void>>();
+/** A reader only waits for the stored manifest; downloads and conversions run after the response. */
+export async function readMailRendering(
+  bucket: R2Bucket,
+  message: { id: string; body_r2_key: string; attachments: Attachment[] },
+  mailboxId: string,
+  ownHost: string,
+  options: NonNullable<Parameters<typeof prepareMailRendering>[4]> & {
+    defer: (task: Promise<void>) => void;
+  },
+) {
+  const part = options.part ?? "body";
+  const key = mailRenderKey(message.body_r2_key, part);
+  const object = await bucket.get(key);
+  const rendering = object ? await object.json<PreparedMailRendering>() : null;
+  const taskKey = `${mailboxId}/${message.id}/${key}`;
+  let task = preparing.get(taskKey);
+  if (
+    !task &&
+    (!rendering ||
+      (rendering.failures && (options.retryFailures || (rendering.retryAfter ?? 0) <= Date.now())))
+  ) {
+    task = prepareMailRendering(bucket, message, mailboxId, ownHost, options)
+      .then(() => {})
+      .catch((error: unknown) =>
+        console.warn("Mail rendering preparation failed", { messageId: message.id, error }),
+      )
+      .finally(() => {
+        preparing.delete(taskKey);
+      });
+    preparing.set(taskKey, task);
+  }
+  if (task) options.defer(task);
+  return { rendering, pending: !!task };
+}
+
 export function linkedMailRendering(
   rendering: PreparedMailRendering,
   resourcePath: string,

@@ -17,6 +17,8 @@ import {
   loadPreparedMailImage,
   preparedMailImageId,
   prepareMailRendering,
+  readMailRendering,
+  type PreparedMailRendering,
 } from "../mail/rendering";
 import { signMailImageGrant, verifyMailImageGrant } from "../mail/render-access";
 import {
@@ -77,6 +79,8 @@ import {
   flushOutbox,
   scheduleOutbox,
   getMessage,
+  messageDetail,
+  type MessageDetailRow,
   queryMessages,
   readBody,
   submitDraft,
@@ -1416,16 +1420,60 @@ mail.post("/mailboxes/:m/search/rebuild", async (c) => {
   const jobId = await startExport(c.env, actor(c), resource(c), "reindex");
   return c.json({ job: { id: jobId, status: "queued" } }, 202);
 });
-mail.get("/mailboxes/:m/messages/:id", async (c) =>
-  c.json({
-    message: await getMessage(c.env, actor(c), resource(c), c.req.param("id")),
-  }),
-);
-async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
+async function readerMessage(c: Parameters<typeof authenticateMail>[0]) {
   await authorize(c.env, actor(c), resource(c), "read");
   const messageId = c.req.param("id")!;
   await belongs(c.env, resource(c), locator(messageId));
-  const message = await partition(c.env, locator(messageId)).get(messageId, actor(c).user_id);
+  return partition(c.env, locator(messageId)).get(messageId, actor(c).user_id);
+}
+async function publicRendering(
+  c: Parameters<typeof authenticateMail>[0],
+  message: MessageRow,
+  rendering: PreparedMailRendering | null,
+  pending = false,
+) {
+  if (!rendering) return { html: null, assets: [], failures: 0, pending };
+  const grant = await signMailImageGrant(c.env, mailImageScope(c), {
+    actor: actor(c),
+    bodyKey: message.body_r2_key,
+    sessionId: actor(c).api_key_id ? null : c.get("identity").session.id,
+    part: c.req.query("part") === "quoted" ? "quoted" : "body",
+  });
+  return {
+    html: linkedMailRendering(rendering, mailImagePath(c), "grant=" + grant),
+    assets: [],
+    failures: rendering.failures,
+    pending,
+  };
+}
+async function readerRendering(
+  c: Parameters<typeof authenticateMail>[0],
+  message: MessageDetailRow,
+) {
+  const result = await readMailRendering(
+    c.env.MAIL_BUCKET,
+    message,
+    resource(c),
+    new URL(c.req.url).hostname,
+    {
+      part: c.req.query("part") === "quoted" ? "quoted" : "body",
+      retryFailures: c.req.query("retry") === "1",
+      images: c.env.MAIL_IMAGES,
+      defer: (task) => c.executionCtx.waitUntil(task),
+    },
+  );
+  return publicRendering(c, message, result.rendering, result.pending);
+}
+mail.get("/mailboxes/:m/messages/:id", async (c) => {
+  const row = await readerMessage(c);
+  const [message, rendering] = await Promise.all([
+    messageDetail(c.env, resource(c), row),
+    readerRendering(c, row),
+  ]);
+  return c.json({ message, rendering });
+});
+async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
+  const message = await readerMessage(c);
   const part = c.req.query("part") === "quoted" ? "quoted" : "body";
   // Existing mail is upgraded on its first body view. Later reads reuse the
   // revision-specific rendering already stored by this request or ingestion.
@@ -1449,21 +1497,16 @@ async function renderingStillAvailable(
     fail(409, t("routesMail.messageContentChangedReloadTheMessage"));
 }
 mail.get("/mailboxes/:m/messages/:id/render", async (c) => {
+  if (c.req.query("defer") === "1") {
+    const message = await readerMessage(c);
+    const rendering = await readerRendering(c, message);
+    await renderingStillAvailable(c, message);
+    return c.json(rendering);
+  }
   const { message, rendering } = await mailRendering(c);
   await renderingStillAvailable(c, message);
-  const path = mailImagePath(c);
-  const grant = await signMailImageGrant(c.env, mailImageScope(c), {
-    actor: actor(c),
-    bodyKey: message.body_r2_key,
-    sessionId: actor(c).api_key_id ? null : c.get("identity").session.id,
-    part: c.req.query("part") === "quoted" ? "quoted" : "body",
-  });
   c.header("Cache-Control", "private, no-store");
-  return c.json({
-    html: linkedMailRendering(rendering, path, "grant=" + grant),
-    assets: [],
-    failures: rendering.failures,
-  });
+  return c.json(await publicRendering(c, message, rendering));
 });
 function mailImagePath(c: Parameters<typeof authenticateMail>[0]) {
   return `/api/mail/mailboxes/${encodeURIComponent(resource(c))}/messages/${encodeURIComponent(c.req.param("id")!)}/render`;
@@ -2594,18 +2637,21 @@ mail.get("/mailboxes/:m/ui/view", async (c) => {
 });
 mail.get("/mailboxes/:m/ui/conversation/:id", async (c) => {
   uiSession(c);
-  const message = await getMessage(c.env, actor(c), resource(c), c.req.param("id"));
+  const row = await readerMessage(c);
   const options = new URLSearchParams({
-    thread_id: message.thread_id,
+    thread_id: row.thread_id,
     include_snoozed: "true",
     limit: "50",
   });
   if (c.req.query("cursor")) options.set("cursor", c.req.query("cursor")!);
-  const page =
-    message.draft || c.req.query("conversation") === "false"
-      ? { messages: [message], next_cursor: null }
-      : await messagePage(c, resource(c), options, false);
-  return c.json({ message, ...page, messages: page.messages.map(listItem) });
+  const [message, rendering, page] = await Promise.all([
+    messageDetail(c.env, resource(c), row),
+    readerRendering(c, row),
+    row.draft || c.req.query("conversation") === "false"
+      ? Promise.resolve({ messages: [row], next_cursor: null })
+      : messagePage(c, resource(c), options, false),
+  ]);
+  return c.json({ message, rendering, ...page, messages: page.messages.map(listItem) });
 });
 mail.get("/mailboxes/:m/ui/compose-context", async (c) => {
   uiSession(c);

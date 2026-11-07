@@ -9,8 +9,29 @@ import {
   inboxUnread,
   folderMoveLeavesMailView,
 } from "../src/mail/ui-query.ts";
-import { htmlFrame, observeMailDocument } from "../web/lib/mail-helpers.ts";
+import { htmlFrame, observeMailDocument, mailRenderingPath } from "../web/lib/mail-helpers.ts";
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("a conversation response supplies prepared HTML without another rendering request", async () => {
+  const base = "/api/mail/mailboxes/box",
+    message = { id: "m", version: 1, body_revision: "inbound.json" };
+  const rendering = {
+    html: '<p>Ready</p><img src="/api/mail/image">',
+    failures: 0,
+    pending: false,
+  };
+  let requests = 0;
+  const cache = new MailResourceCache(async (path) => {
+    requests++;
+    const response = { message, messages: [message], rendering };
+    hydrateMailResources(cache, path, response);
+    return response;
+  });
+  await cache.load(base + "/ui/conversation/m?conversation=true");
+  await cache.load(mailRenderingPath(base, message));
+  assert.equal(requests, 1);
+  assert.equal(cache.snapshot(mailRenderingPath(base, message)).data, rendering);
+});
 
 test("a bootstrap seeds the six initial resources without follow-up data requests", async () => {
   let requests = 0;

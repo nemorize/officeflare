@@ -3685,6 +3685,11 @@ test("received mail has durable remote and CID images before its first read", as
   assert.ok(artifact, "Rendering must be durable before a message is visible");
   assert.equal((await artifact.json()).failures, 0);
   await cache.delete(remoteKey);
+  const reader = await call(`${base}/ui/conversation/${id}?conversation=false`);
+  assert.equal(reader.rendering.pending, false);
+  assert.equal(reader.rendering.failures, 0);
+  assert.match(reader.rendering.html, /\/render\/assets\/[a-f0-9]{64}\?grant=/);
+  assert.equal(reader.message.body_r2_key, undefined);
   const rendering = await call(`${base}/messages/${id}/render`);
   assert.equal(rendering.failures, 0);
   assert.deepEqual(rendering.assets, []);
@@ -3724,6 +3729,27 @@ test("received mail has durable remote and CID images before its first read", as
       );
     },
   );
+  await t.test("the reader returns old mail before background preparation finishes", async () => {
+    const bodyKey = `bodies/${mailbox.id}/${id}/inbound.json`;
+    await bucket.delete(bodyKey + ".render-v2.json");
+    await cache.put(
+      remoteKey,
+      new Response(png, {
+        headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" },
+      }),
+    );
+    const initial = await call(`${base}/ui/conversation/${id}?conversation=false`);
+    assert.equal(initial.rendering.pending, true);
+    assert.equal(initial.rendering.html, null);
+    assert.match(initial.message.body.html, /Ready before reading/);
+    const ready = await eventually(
+      () => call(`${base}/messages/${id}/render?defer=1`),
+      (result) => !result.pending,
+      "Background rendering did not finish",
+    );
+    assert.equal(ready.failures, 0);
+    assert.match(ready.html, /\/render\/assets\/[a-f0-9]{64}\?grant=/);
+  });
 });
 
 test("formatted mail and cached images remain authorized, private, and tied to exact message resources", async (t) => {
