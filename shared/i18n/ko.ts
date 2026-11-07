@@ -2571,6 +2571,8 @@ export const ko = defineTranslations(en, {
   "mailRemote.applicationResourcesCannotBeProxied": "애플리케이션 리소스는 프록시할 수 없습니다",
   "mailRemote.dnsLookupFailed": "DNS 조회에 실패했습니다",
   "mailRemote.emptyRemoteResource": "원격 리소스가 비어 있습니다",
+  "mailRemote.heicConversionRequiresTheMailImagesBinding":
+    "HEIC 이미지 변환에 MAIL_IMAGES 바인딩이 필요합니다",
   "mailRemote.invalidRemoteRedirect": "원격 리디렉션이 올바르지 않습니다",
   "mailRemote.invalidRemoteUrl": "원격 URL이 올바르지 않습니다",
   "mailRemote.invalidSvgImage": "SVG 이미지가 올바르지 않습니다",

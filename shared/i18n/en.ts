@@ -2555,6 +2555,8 @@ export const en = defineMessages({
   "mailRemote.applicationResourcesCannotBeProxied": "Application resources cannot be proxied",
   "mailRemote.dnsLookupFailed": "DNS lookup failed",
   "mailRemote.emptyRemoteResource": "Empty remote resource",
+  "mailRemote.heicConversionRequiresTheMailImagesBinding":
+    "HEIC conversion requires the MAIL_IMAGES binding",
   "mailRemote.invalidRemoteRedirect": "Invalid remote redirect",
   "mailRemote.invalidRemoteUrl": "Invalid remote URL",
   "mailRemote.invalidSvgImage": "Invalid SVG image",

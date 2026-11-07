@@ -4,7 +4,7 @@ import {
   type MailRendering,
   type RenderCache,
 } from "./render";
-import { runtimeRemoteFetcher, validatedImage, type RemoteFetcher } from "./remote";
+import { runtimeRemoteFetcher, renderableImage, type RemoteFetcher } from "./remote";
 import { fail, type Attachment } from "./types";
 import { t } from "../../shared/i18n/index.ts";
 
@@ -24,6 +24,8 @@ export interface StoredMailImage {
 export interface PreparedMailRendering extends MailRendering {
   format: 2;
   images: Record<string, StoredMailImage | null>;
+  retryAfter?: number;
+  retryAttempts?: number;
 }
 interface LegacyRendering extends MailRendering {
   images: Record<string, string>;
@@ -33,15 +35,17 @@ const missingImage =
 const imageBytes = 5 * 1024 ** 2,
   messageBytes = 20 * 1024 ** 2,
   imageLimit = 96;
-const dataImages = /data:image\/(?:png|jpeg|gif|webp|avif|svg\+xml);base64,[a-z\d+/=\r\n]+/gi;
-function decodedImage(value: string) {
+const dataImages =
+  /data:image\/(?:png|jpeg|gif|webp|avif|svg\+xml|heic|heif);base64,[a-z\d+/=\r\n]+/gi;
+function decodedImage(value: string, images?: ImagesBinding) {
   const comma = value.indexOf(","),
     contentType = value.slice(5, value.indexOf(";"));
   if (value.length > (imageBytes * 4) / 3 + 256)
     throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
-  return validatedImage(
+  return renderableImage(
     Uint8Array.from(atob(value.slice(comma + 1)), (c) => c.charCodeAt(0)),
     contentType,
+    images,
   );
 }
 function imagePattern(sources: string[]) {
@@ -93,6 +97,7 @@ async function upgradeRendering(
   bodyKey: string,
   resourcePath: string,
   legacy: LegacyRendering,
+  imageBinding?: ImagesBinding,
 ) {
   const extracted = extractDataImages(legacy.html, resourcePath);
   const images: PreparedMailRendering["images"] = {};
@@ -103,10 +108,10 @@ async function upgradeRendering(
   for (const [source, value] of [...Object.entries(legacy.images), ...extracted.embedded]) {
     images[source] = null;
     if (value === missingImage) continue;
-    let image: ReturnType<typeof decodedImage>;
+    let image: Awaited<ReturnType<typeof decodedImage>>;
     try {
       if (index++ >= imageLimit) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
-      image = decodedImage(value);
+      image = await decodedImage(value, imageBinding);
       bytes += image.body.length;
       if (bytes > messageBytes) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
     } catch {
@@ -130,6 +135,7 @@ export async function prepareMailRendering(
     source?: string;
     cache?: RenderCache;
     fetcher?: RemoteFetcher;
+    images?: ImagesBinding;
   } = {},
 ): Promise<PreparedMailRendering> {
   const part = options.part ?? "body",
@@ -147,6 +153,7 @@ export async function prepareMailRendering(
         message.body_r2_key,
         resourcePath,
         await legacy.json<LegacyRendering>(),
+        options.images,
       );
       await bucket.put(key, JSON.stringify(previous), {
         httpMetadata: { contentType: "application/json" },
@@ -154,7 +161,11 @@ export async function prepareMailRendering(
       await bucket.delete(legacyKey);
     }
   }
-  if (previous && (!options.retryFailures || !previous.failures)) return previous;
+  if (
+    previous &&
+    (!previous.failures || (!options.retryFailures && (previous.retryAfter ?? 0) > Date.now()))
+  )
+    return previous;
   let source = options.source;
   if (source === undefined) {
     const bodyObject = await bucket.get(message.body_r2_key);
@@ -220,7 +231,7 @@ export async function prepareMailRendering(
         images[resource.source] = null;
         let body: Uint8Array, contentType: string;
         try {
-          if (index >= imageLimit || deadline.aborted || bytes >= messageBytes)
+          if (index >= imageLimit || bytes >= messageBytes)
             throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
           const sameResource =
             !resource.asset ||
@@ -234,14 +245,17 @@ export async function prepareMailRendering(
             images[resource.source] = saved;
             continue;
           }
-          if (resource.embedded) ({ body, contentType } = decodedImage(resource.embedded));
+          if (deadline.aborted) throw deadline.reason;
+          if (resource.embedded)
+            ({ body, contentType } = await decodedImage(resource.embedded, options.images));
           else if (resource.file) {
             const object = await bucket.get(resource.file.r2_key);
             if (!object || object.size > imageBytes)
               throw new Error(t("mailRemote.unsupportedRemoteImage"));
-            ({ body, contentType } = validatedImage(
+            ({ body, contentType } = await renderableImage(
               new Uint8Array(await object.arrayBuffer()),
               resource.file.content_type.toLowerCase(),
+              options.images,
             ));
           } else {
             const response = await loadMailRenderImage(
@@ -249,6 +263,7 @@ export async function prepareMailRendering(
               ownHost,
               options.cache,
               boundedFetch,
+              options.images,
             );
             body = new Uint8Array(await response.arrayBuffer());
             contentType = response.headers.get("Content-Type")!;
@@ -256,8 +271,13 @@ export async function prepareMailRendering(
           if (bytes + body.length > messageBytes)
             throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
           bytes += body.length;
-        } catch {
+        } catch (error) {
           failures++;
+          console.warn("Mail image preparation failed", {
+            messageId: message.id,
+            source: resource.source,
+            reason: error instanceof Error ? error.message : String(error),
+          });
           continue;
         }
         images[resource.source] = await saveImage(body, contentType);
@@ -270,6 +290,14 @@ export async function prepareMailRendering(
     html: extracted.html,
     images,
     failures,
+    ...(failures
+      ? {
+          retryAttempts: Math.min((previous?.retryAttempts ?? 0) + 1, 7),
+          retryAfter:
+            Date.now() +
+            Math.min(60_000 * 2 ** Math.min(previous?.retryAttempts ?? 0, 6), 3600_000),
+        }
+      : {}),
   };
   await bucket.put(key, JSON.stringify(prepared), {
     httpMetadata: { contentType: "application/json" },

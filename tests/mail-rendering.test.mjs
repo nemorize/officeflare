@@ -13,6 +13,9 @@ import {
   memoryCache,
   remoteFixture,
   png,
+  heic,
+  webp,
+  imageBindingFixture,
 } from "./mail-render-helpers.mjs";
 function bucketFixture() {
   const values = new Map(),
@@ -47,6 +50,102 @@ const message = { id: "message", body_r2_key: "bodies/box/message/inbound.json",
   path = "/api/mail/mailboxes/box/messages/message/render",
   imageResponse = () => new Response(png, { headers: { "Content-Type": "image/png" } });
 const linked = (result) => linkedMailRendering(result, path, "grant=test");
+
+test("remote, CID and embedded HEIC images are converted on the server and stored as WebP in R2", async () => {
+  const bucket = bucketFixture(),
+    images = imageBindingFixture();
+  await bucket.put("heic-attachment", heic);
+  const input = {
+    ...message,
+    attachments: [
+      { id: "photo", content_id: "photo", content_type: "image/heic", r2_key: "heic-attachment" },
+    ],
+  };
+  const result = await prepareMailRendering(bucket, input, "box", "office.test", {
+    source: `<img src="https://cdn.example.com/photo.heic"><img src="cid:photo"><img src="data:image/heif;base64,${Buffer.from(heic).toString("base64")}">`,
+    cache: memoryCache(),
+    fetcher: remoteFixture(() => new Response(heic, { headers: { "Content-Type": "image/heic" } }))
+      .fetcher,
+    images,
+  });
+  assert.equal(result.failures, 0);
+  assert.equal(Object.keys(result.images).length, 3);
+  assert.doesNotMatch(linked(result), /data:|base64|\.heic|\/attachments\//);
+  const saved = Object.values(result.images)[0];
+  assert.equal(saved.contentType, "image/webp");
+  assert.deepEqual(
+    new Uint8Array(
+      await (await loadPreparedMailImage(bucket, input.body_r2_key, saved.id)).arrayBuffer(),
+    ),
+    webp,
+  );
+  const conversions = images.calls.length;
+  await prepareMailRendering(bucket, input, "box", "office.test", {
+    images,
+    fetcher: () => assert.fail("Saved conversion must be reused"),
+  });
+  assert.equal(images.calls.length, conversions);
+});
+
+test("old failed renderings recover automatically on read while successful R2 images are reused", async () => {
+  const bucket = bucketFixture(),
+    cache = memoryCache();
+  const options = {
+    source:
+      '<img src="https://cdn.example.com/good.png"><img src="https://cdn.example.com/photo.heic">',
+    cache,
+    fetcher: remoteFixture((url) =>
+      url.pathname.endsWith(".heic")
+        ? new Response(heic, { headers: { "Content-Type": "image/heic" } })
+        : imageResponse(),
+    ).fetcher,
+  };
+  const first = await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(first.failures, 1);
+  const { retryAfter, retryAttempts, ...old } = first;
+  await bucket.put(mailRenderKey(message.body_r2_key), JSON.stringify(old));
+  const retry = await prepareMailRendering(bucket, message, "box", "office.test", {
+    ...options,
+    images: imageBindingFixture(),
+    fetcher: remoteFixture((url) => {
+      assert.equal(url.pathname, "/photo.heic", "Good image must remain in R2");
+      return new Response(heic, { headers: { "Content-Type": "image/heic" } });
+    }).fetcher,
+  });
+  assert.equal(retry.failures, 0);
+  assert.equal(Object.values(retry.images).filter(Boolean).length, 2);
+  assert.equal(retry.retryAfter, undefined);
+});
+
+test("automatic retries back off and recover temporary failures without a manual retry", async (t) => {
+  const bucket = bucketFixture(),
+    cache = memoryCache();
+  let now = Date.now(),
+    available = false;
+  t.mock.method(Date, "now", () => now);
+  const fixture = remoteFixture(() =>
+    available ? imageResponse() : new Response(null, { status: 503 }),
+  );
+  const options = {
+    source: '<img src="https://cdn.example.com/photo.png">',
+    cache,
+    fetcher: fixture.fetcher,
+  };
+  const first = await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(first.retryAfter, now + 60_000);
+  const calls = fixture.calls.length;
+  await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(fixture.calls.length, calls);
+  now = first.retryAfter;
+  const second = await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(second.retryAfter, now + 120_000);
+  assert.equal(second.retryAttempts, 2);
+  available = true;
+  now = second.retryAfter;
+  const recovered = await prepareMailRendering(bucket, message, "box", "office.test", options);
+  assert.equal(recovered.failures, 0);
+  assert.equal(recovered.retryAfter, undefined);
+});
 
 test("remote backgrounds, CID and data images become small HTML URLs backed by binary R2 objects", async () => {
   const bucket = bucketFixture(),

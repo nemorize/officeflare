@@ -511,7 +511,7 @@ export async function ingest(env: Env, task: InboundTask) {
     { id: resourceId, body_r2_key: keyBody, attachments: files },
     task.mailbox_id,
     env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
-    { source: body.html },
+    { source: body.html, images: env.MAIL_IMAGES },
   );
   await mailbox(env, task.mailbox_id).storeMessage(partitionId, {
     id: resourceId,

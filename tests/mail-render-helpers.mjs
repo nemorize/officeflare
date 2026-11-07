@@ -26,6 +26,7 @@ try {
     publicAddress,
     boundedBody,
     validatedImage,
+    renderableImage,
     fetchRemoteAsset,
     safeMailCss,
     renderMailHtml,
@@ -49,6 +50,7 @@ export {
   publicAddress,
   boundedBody,
   validatedImage,
+  renderableImage,
   fetchRemoteAsset,
   safeMailCss,
   renderMailHtml,
@@ -70,6 +72,40 @@ export const png = Uint8Array.from(
     "base64",
   ),
 );
+export const webp = Uint8Array.from(
+  Buffer.from(
+    "UklGRjgAAABXRUJQVlA4ICwAAADQAQCdASoIAAgAAUAmJaACdLoB+AADsAD+8U2v/M0M8lHlw/8WcjEdl4AAAA==",
+    "base64",
+  ),
+);
+// The conversion unit tests assert that these opaque bytes reach Images intact.
+export const heic = Uint8Array.from(
+  Buffer.from("000000186674797068656963000000006d69663168656963", "hex"),
+);
+export function imageBindingFixture({ width = 8, height = 8, output = webp } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async info(stream) {
+      calls.push({ kind: "info", body: new Uint8Array(await new Response(stream).arrayBuffer()) });
+      return { format: "image/heic", fileSize: heic.length, width, height };
+    },
+    input(stream) {
+      return {
+        async output(options) {
+          calls.push({
+            kind: "output",
+            body: new Uint8Array(await new Response(stream).arrayBuffer()),
+            options,
+          });
+          return {
+            response: () => new Response(output, { headers: { "Content-Type": "image/webp" } }),
+          };
+        },
+      };
+    },
+  };
+}
 export function memoryCache() {
   const values = new Map();
   return {

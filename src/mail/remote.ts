@@ -227,11 +227,35 @@ export function validatedImage(
     throw new Error(t("mailRemote.unsupportedRemoteImage"));
   return { body, contentType: expected };
 }
+export const isHeifType = (contentType: string) => /^image\/(?:heic|heif)$/.test(contentType);
+export async function renderableImage(
+  body: Uint8Array,
+  contentType: string,
+  images?: ImagesBinding,
+): Promise<{ body: Uint8Array; contentType: string }> {
+  if (body.length > maximumBytes.image) throw new Error(t("mailRemote.remoteResourceIsTooLarge"));
+  if (!isHeifType(contentType)) return validatedImage(body, contentType);
+  if (!images) throw new Error(t("mailRemote.heicConversionRequiresTheMailImagesBinding"));
+  const stream = () => new Response(body as Uint8Array<ArrayBuffer>).body!;
+  const info = await images.info(stream());
+  if (
+    !("width" in info) ||
+    !Number.isSafeInteger(info.width) ||
+    !Number.isSafeInteger(info.height) ||
+    info.width <= 0 ||
+    info.height <= 0 ||
+    info.width * info.height > 40_000_000
+  )
+    throw new Error(t("mailRemote.unsupportedRemoteImage"));
+  const result = await images.input(stream()).output({ format: "image/webp", quality: 85 });
+  return validatedImage(await boundedBody(result.response(), maximumBytes.image), "image/webp");
+}
 export async function fetchRemoteAsset(
   value: string,
   kind: RemoteKind,
   ownHost: string,
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
+  images?: ImagesBinding,
 ): Promise<RemoteAsset> {
   let url = remoteUrl(value);
   const signal = AbortSignal.timeout(8000);
@@ -265,14 +289,17 @@ export async function fetchRemoteAsset(
       response.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
     if (
       (kind === "stylesheet" && contentType !== "text/css") ||
-      (kind === "image" && !/^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(contentType))
+      (kind === "image" &&
+        !/^image\/(png|jpeg|gif|webp|avif|svg\+xml|heic|heif)$/.test(contentType))
     ) {
       await response.body?.cancel();
       throw new Error(t("mailRemote.unsupportedRemoteResourceType"));
     }
     const body = await boundedBody(response, maximumBytes[kind]);
     return {
-      ...(kind === "image" ? validatedImage(body, contentType) : { body, contentType }),
+      ...(kind === "image"
+        ? await renderableImage(body, contentType, images)
+        : { body, contentType }),
       url: url.href,
     };
   }

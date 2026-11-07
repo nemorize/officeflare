@@ -2612,6 +2612,8 @@ export const ja = defineTranslations(en, {
     "アプリケーションのリソースをプロキシすることはできません",
   "mailRemote.dnsLookupFailed": "DNSルックアップに失敗しました",
   "mailRemote.emptyRemoteResource": "リモートリソースが空です",
+  "mailRemote.heicConversionRequiresTheMailImagesBinding":
+    "HEIC画像の変換にはMAIL_IMAGESバインディングが必要です",
   "mailRemote.invalidRemoteRedirect": "リモートのリダイレクトが正しくありません",
   "mailRemote.invalidRemoteUrl": "リモートURLが正しくありません",
   "mailRemote.invalidSvgImage": "SVGの画像が正しくありません",
