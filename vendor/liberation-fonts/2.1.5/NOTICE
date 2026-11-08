@@ -1,0 +1,19 @@
+Liberation Sans 2.1.5
+
+Upstream: https://github.com/liberationfonts/liberation-fonts/releases/tag/2.1.5
+Binary archive: https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz
+Archive SHA-256: 7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0
+License: SIL Open Font License 1.1; see LICENSE_LIBERATION.
+
+The four LiberationSans-*.ttf files are unmodified copies from the upstream
+binary archive. LICENSE_LIBERATION is the archive's original LICENSE file.
+
+vite.config.ts uses these files for PDF.js's standard font assets in both
+development and production. This replaces PDF.js's bundled Liberation Sans
+1.07.4 fonts and their GPLv2 license notice; other PDF.js assets retain their
+upstream files and licenses.
+
+PDF.js upgrades do not update these pinned fonts. To update Liberation Sans,
+add the four unmodified Sans fonts and license from an official release in a
+new version directory, update this provenance information and the path in
+vite.config.ts, and verify PDF rendering for all four styles.
