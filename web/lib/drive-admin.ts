@@ -101,7 +101,11 @@ export interface AdminPage<T> {
   next_cursor: string | null;
 }
 export const driveConsolePages = [
-  { page: "overview", label: t("libDriveAdmin.overview"), permission: "admin.drive.accounts.read" },
+  {
+    page: "overview",
+    label: t("consoleSettings.overview"),
+    permission: "admin.drive.accounts.read",
+  },
   {
     page: "accounts",
     label: t("libDriveAdmin.accountsStorage"),
@@ -109,8 +113,12 @@ export const driveConsolePages = [
   },
   { page: "items", label: t("libDriveAdmin.filesTrash"), permission: "admin.drive.items.read" },
   { page: "sharing", label: t("libDriveAdmin.sharing"), permission: "admin.drive.sharing.read" },
-  { page: "settings", label: t("libDriveAdmin.policies"), permission: "admin.drive.settings.read" },
-  { page: "activity", label: t("libDriveAdmin.auditLog"), permission: "admin.drive.audit.read" },
+  {
+    page: "settings",
+    label: t("consoleSettings.policies"),
+    permission: "admin.drive.settings.read",
+  },
+  { page: "activity", label: t("consoleSettings.audit"), permission: "admin.drive.audit.read" },
 ] as const;
 export const accountAvailability = (account: DriveAccount) =>
   account.deleted_at

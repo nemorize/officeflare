@@ -262,32 +262,6 @@ details.console-role-summary > .console-permission-picker {
 .console-mobile-nav {
   display: none;
 }
-.console-tabs {
-  overflow-x: auto;
-  margin-block-end: 24px;
-}
-.console-tabs > [data-ui="tabs-list"] {
-  width: max-content;
-  min-width: 100%;
-}
-.console-mail-filters {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-block-end: 20px;
-}
-.console-mail-filters > .mail-field {
-  flex: 1 1 160px;
-  min-width: 0;
-}
-.console-mail-filters > .mail-field:first-child {
-  flex-basis: 240px;
-}
-.console-mail-metric {
-  font-size: 24px;
-  font-weight: 600;
-}
 .console-mail-totals {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -308,81 +282,44 @@ details.console-role-summary > .console-permission-picker {
   overflow-wrap: anywhere;
   max-width: 320px;
 }
-.console-mail-row-actions {
-  display: flex;
-  justify-content: end;
-  gap: 6px;
-}
 .console-mail-record-note {
   margin-block-end: 16px;
 }
-.console-drive-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 16px;
-}
-.console-drive-summary-grid > .account-panel {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-.console-drive-summary-grid > .account-panel > p {
-  margin-block-start: auto;
-}
-.console-drive-filters {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-block: 20px;
-}
-.console-drive-filters > [data-ui="field-root"] {
-  flex: 1;
-  min-width: 160px;
-}
-.console-drive-form-grid,
-.console-drive-confirm-fields {
+.console-confirm-fields {
   display: grid;
   gap: 16px;
 }
-.console-drive-confirm[data-ui] {
+.console-confirm[data-ui] {
   width: min(480px, 100%);
   max-width: none;
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
 }
-.console-drive-confirm [data-ui="alert-dialog-title"] {
+.console-confirm [data-ui="alert-dialog-title"] {
   margin: 0;
 }
-.console-drive-confirm [data-ui="alert-dialog-description"] {
+.console-confirm [data-ui="alert-dialog-description"] {
   margin: 8px 0 0;
 }
-.console-drive-confirm-fields {
+.console-confirm-fields {
   margin-block-start: 20px;
 }
-.console-drive-confirm [data-ui="text-field"] {
+.console-confirm [data-ui="text-field"] {
   margin: 0;
   gap: 8px;
 }
-.console-drive-confirm [data-ui="input"] {
+.console-confirm [data-ui="input"] {
   max-width: none;
 }
-.console-drive-confirm [data-ui="select-trigger"] {
+.console-confirm [data-ui="select-trigger"] {
   width: 100%;
   justify-content: space-between;
 }
-.console-drive-confirm .account-actions {
+.console-confirm .account-actions {
   flex-wrap: wrap;
 }
 .console-drive-policy-review {
   margin-block: 20px;
-}
-.console-drive-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 .console-drive-job {
   display: flex;
@@ -404,13 +341,6 @@ details.console-role-summary > .console-permission-picker {
 @media (max-width: 640px) {
   .console-drive-job {
     flex-direction: column;
-  }
-  .console-drive-filters {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .console-drive-filters > [data-ui="field-root"] {
-    min-width: 0;
   }
 }
 @media (max-width: 900px) {

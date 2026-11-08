@@ -28,10 +28,14 @@ export const driveAdminPermissions = Object.keys(permissionCatalog).filter((key)
   key.startsWith("admin.drive."),
 );
 export const mailConsolePages = [
-  { page: "overview", label: t("mailAdmin.overview"), permission: "admin.mail.overview.read" },
+  {
+    page: "overview",
+    label: t("consoleSettings.overview"),
+    permission: "admin.mail.overview.read",
+  },
   {
     page: "domains",
-    label: t("libConsole.mailDomains"),
+    label: t("mailAdmin.domains"),
     permission: "admin.mail.domains.read",
   },
   {
@@ -40,8 +44,12 @@ export const mailConsolePages = [
     permission: "admin.mail.mailboxes.read",
   },
   { page: "flow", label: t("mailAdmin.flow"), permission: "admin.mail.flow.read" },
-  { page: "settings", label: t("mailAdmin.policies"), permission: "admin.mail.settings.read" },
-  { page: "activity", label: t("mailAdmin.audit"), permission: "admin.mail.activity.read" },
+  {
+    page: "settings",
+    label: t("consoleSettings.policies"),
+    permission: "admin.mail.settings.read",
+  },
+  { page: "activity", label: t("consoleSettings.audit"), permission: "admin.mail.activity.read" },
 ] as const;
 export const mailConsolePermissions = mailConsolePages.map((page) => page.permission);
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [

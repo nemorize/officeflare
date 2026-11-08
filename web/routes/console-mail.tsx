@@ -1,3 +1,17 @@
+import {
+  ConsoleField,
+  ConsoleInput,
+  ConsoleSection,
+  ConsoleState,
+  ConsoleSelect,
+  ConsoleSettingsHeader,
+  ConsoleDetail,
+  ConsoleSettingsLayout,
+  ConsoleFormActions,
+  ConsoleForm,
+  ConsoleFieldset,
+} from "../components/console-settings";
+import { Notice } from "../components/console-shared";
 import { LocalizedMessage } from "../components/i18n";
 import { t } from "../../shared/i18n/index.ts";
 import { useState } from "react";
@@ -13,21 +27,10 @@ import {
   MailOverview,
   MailPolicies,
 } from "./console-mail-admin";
-import {
-  MailField,
-  MailInput,
-  MailNotice,
-  MailSection,
-  MailState,
-  useMailAction,
-  useMailResource,
-  MailForm,
-  MailSelect,
-  MailFieldset,
-} from "../components/mail-common";
+import { useMailAction, useMailResource } from "../components/mail-common";
 import { MailRules } from "../components/mail-rules";
-import { Button, Tabs, useNotifications } from "../components/ui";
-import { Check, ConsolePageHeader } from "../components/console-shared";
+import { Button, useNotifications } from "../components/ui";
+import { Check } from "../components/console-shared";
 import "./console.css";
 import "./mail.css";
 export function MailConsoleLayout() {
@@ -35,31 +38,19 @@ export function MailConsoleLayout() {
     navigate = useNavigate(),
     location = useLocation();
   const pages = mailConsolePages.filter((page) => permissions.includes(page.permission));
-  const requested = location.pathname.split("/")[3],
-    selected = mailConsolePages.find((page) => page.page === requested)?.page ?? pages[0]?.page;
+  const requested = location.pathname.split("/")[3];
+  const selected = pages.find((page) => page.page === requested)?.page ?? pages[0]?.page ?? "";
   return (
-    <section className="account-page console-page mail-console-page" data-ui-theme="neutral">
-      <ConsolePageHeader
-        title={t("libConsole.mail")}
-        description={t("mailAdmin.titleDescription")}
-      />
-      {selected && (
-        <Tabs.Root value={selected} onValueChange={(value) => navigate(`/console/mail/${value}`)}>
-          <div className="console-tabs">
-            <Tabs.List aria-label={t("routesConsoleMail.mailNavigation")}>
-              {pages.map((page) => (
-                <Tabs.Tab key={page.page} value={page.page}>
-                  {page.label}
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-          </div>
-          <Tabs.Panel value={selected}>
-            <Outlet />
-          </Tabs.Panel>
-        </Tabs.Root>
-      )}
-    </section>
+    <ConsoleSettingsLayout
+      title={t("libConsole.mail")}
+      description={t("mailAdmin.titleDescription")}
+      pages={pages.map((page) => ({ path: page.page, name: page.label }))}
+      selected={selected}
+      onNavigate={(page) => navigate(`/console/mail/${page}`)}
+      navigationLabel={t("routesConsoleMail.mailNavigation")}
+    >
+      <Outlet />
+    </ConsoleSettingsLayout>
   );
 }
 export function MailConsolePage({ page }: { page: string }) {
@@ -109,9 +100,8 @@ function Domains() {
       : t("routesConsoleMail.noProvider");
   return (
     <>
-      <ConsolePageHeader
-        level={2}
-        title={t("routesConsoleMail.mailDomains")}
+      <ConsoleSettingsHeader
+        title={t("mailAdmin.domains")}
         description={t(
           "routesConsoleMail.configureCommonDomainsDeliveryProvidersAndInboundRouting",
         )}
@@ -122,26 +112,28 @@ function Domains() {
             render={<Link to="/console/mail/domains/new" />}
             variant="primary"
           >
-            {t("routesConsoleMail.registerDomain")}
+            {t("consoleSettings.addDomain")}
           </Button>
         )}
-      </ConsolePageHeader>
-      <MailState
+      </ConsoleSettingsHeader>
+      <ConsoleState
         loading={resource.loading && !resource.data}
         error={resource.error}
         retry={resource.reload}
       />
-      <div className="mail-domain-grid">
+      <div className="console-card-grid">
         {resource.data?.domains.map((domain) => (
-          <article key={domain.id} className="mail-domain-card">
-            <h2>
-              <span>{domain.name}</span>
-              {!!domain.is_default && (
-                <span className="mail-badge mail-domain-default">
-                  {t("routesConsoleMail.default")}
-                </span>
-              )}
-            </h2>
+          <ConsoleSection
+            key={domain.id}
+            title={
+              <>
+                <span>{domain.name}</span>
+                {!!domain.is_default && (
+                  <span className="console-badge">{t("routesConsoleMail.default")}</span>
+                )}
+              </>
+            }
+          >
             <p>
               <span className="mail-badge">
                 <LocalizedMessage
@@ -174,16 +166,16 @@ function Domains() {
               render={<Link to={`/console/mail/domains/${encodeURIComponent(domain.id)}`} />}
               size="sm"
             >
-              {manage ? t("routesConsoleMail.configureDomain") : t("routesConsoleMail.viewDomain")}
+              {manage ? t("consoleSettings.manage") : t("consoleSettings.view")}
             </Button>
-          </article>
+          </ConsoleSection>
         ))}
       </div>
       {resource.data && !resource.data.domains.length && (
-        <div className="mail-empty">
-          <h2>{t("routesConsoleMail.noMailDomainsRegistered")}</h2>
+        <ConsoleSection className="console-empty">
+          <h3>{t("routesConsoleMail.noMailDomainsRegistered")}</h3>
           <p>{t("routesConsoleMail.registerADomainAndConfigureCloudflareDeliveryUserAnd")}</p>
-        </div>
+        </ConsoleSection>
       )}
     </>
   );
@@ -201,28 +193,24 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
     manage = permissions.includes("admin.mail.domains.manage");
   const canManageProviders = permissions.includes("admin.mail.providers.manage");
   return (
-    <div className="console-detail-page">
-      <Link to="/console/mail/domains" className="console-back">
-        {t("routesConsoleMail.mailDomains2")}
-      </Link>
-      <ConsolePageHeader
-        level={2}
+    <ConsoleDetail backTo="/console/mail/domains" backLabel={t("mailAdmin.domains")}>
+      <ConsoleSettingsHeader
         title={
           creating
-            ? t("routesConsoleMail.registerMailDomain")
+            ? t("consoleSettings.addDomain")
             : (domain?.name ?? t("routesConsoleMail.mailDomain"))
         }
         description={t(
           "routesConsoleMail.configureTheSharedDomainDeliveryProvidersAndInboundRouting",
         )}
       />
-      <MailState
+      <ConsoleState
         loading={resource.loading && (!resource.data || (!creating && !domain))}
         error={resource.error}
         retry={resource.reload}
       />
       {resource.data && !resource.loading && !creating && !domain && (
-        <MailNotice error={t("routesConsoleMail.thisMailDomainCouldNotBeFound")} />
+        <Notice error={t("routesConsoleMail.thisMailDomainCouldNotBeFound")} />
       )}
       {resource.data && (creating || domain) && (
         <>
@@ -250,7 +238,7 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
           />
           {domain && (
             <>
-              <MailSection
+              <ConsoleSection
                 title={t("routesConsoleMail.addresses")}
                 description={t(
                   "routesConsoleMail.managePersonalAddressesWithUsersAndTeamAddressesWith",
@@ -268,7 +256,7 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
                     </Button>
                   )}
                 </div>
-              </MailSection>
+              </ConsoleSection>
               <details className="console-role-summary">
                 <summary>{t("routesConsoleMail.advancedInboundRouting")}</summary>
                 <MailRules
@@ -281,7 +269,7 @@ export function MailDomainEditorPage({ creating = false }: { creating?: boolean 
           )}
         </>
       )}
-    </div>
+    </ConsoleDetail>
   );
 }
 type ProviderValues = {
@@ -423,19 +411,18 @@ function DomainEditor({
     onSaved(result.domain.id);
   };
   return (
-    <MailSection
+    <ConsoleSection
       title={t("routesConsoleMail.domainSettings")}
       description={t("domainProviders.description")}
     >
-      <MailForm
-        className="mail-form"
+      <ConsoleForm
         onSubmit={(event) => {
           event.preventDefault();
           void action.run(submit);
         }}
       >
-        <MailFieldset disabled={action.busy || !canManage}>
-          <MailInput
+        <ConsoleFieldset disabled={action.busy || !canManage}>
+          <ConsoleInput
             label={t("routesConsoleMail.domain")}
             placeholder={t("routesConsoleMail.exampleCom")}
             required
@@ -450,15 +437,15 @@ function DomainEditor({
               saved = existing?.provider_settings[direction];
             const secretSaved = saved?.provider === values.provider && saved.secret_configured;
             return (
-              <div className="mail-form" key={direction}>
-                <MailField
+              <div className="console-form-fields" key={direction}>
+                <ConsoleField
                   label={
                     direction === "inbound"
                       ? t("routesConsoleMail.receivingProvider")
                       : t("routesConsoleMail.sendingProvider")
                   }
                 >
-                  <MailSelect
+                  <ConsoleSelect
                     value={values.provider}
                     disabled={!canManageProviders}
                     onValueChange={(value) => choose(direction, value)}
@@ -485,85 +472,89 @@ function DomainEditor({
                         : []),
                     ]}
                   />
-                </MailField>
-                <MailFieldset disabled={!canManageProviders}>
-                  {selected?.config_fields.map((field) =>
-                    field.options ? (
-                      <MailField key={field.key} label={field.label} hint={field.help}>
-                        <MailSelect
-                          value={values.config[field.key] ?? field.options[0] ?? ""}
-                          onValueChange={(value) =>
-                            update(direction, { config: { ...values.config, [field.key]: value } })
-                          }
-                          options={field.options.map((value) => ({
-                            value,
-                            label:
-                              value === "tls"
-                                ? t("routesConsoleMail.tlsPort465")
-                                : value === "starttls"
-                                  ? t("routesConsoleMail.starttlsPort587")
-                                  : value,
-                          }))}
-                        />
-                      </MailField>
-                    ) : (
-                      <MailInput
-                        key={field.key}
-                        label={field.label}
-                        hint={field.help}
-                        required={!!field.required}
-                        value={values.config[field.key] ?? ""}
-                        onChange={(event) =>
-                          update(direction, {
-                            config: { ...values.config, [field.key]: event.target.value },
-                          })
-                        }
-                      />
-                    ),
-                  )}
-                  {selected?.secret_fields.map((field) => {
-                    const editing = !secretSaved || !!values.editingSecrets[field.key];
-                    return (
-                      <div className="mail-secret-field-row" key={field.key}>
-                        <MailInput
+                </ConsoleField>
+                {!!(selected?.config_fields.length || selected?.secret_fields.length) && (
+                  <ConsoleFieldset disabled={!canManageProviders}>
+                    {selected?.config_fields.map((field) =>
+                      field.options ? (
+                        <ConsoleField key={field.key} label={field.label} hint={field.help}>
+                          <ConsoleSelect
+                            value={values.config[field.key] ?? field.options[0] ?? ""}
+                            onValueChange={(value) =>
+                              update(direction, {
+                                config: { ...values.config, [field.key]: value },
+                              })
+                            }
+                            options={field.options.map((value) => ({
+                              value,
+                              label:
+                                value === "tls"
+                                  ? t("routesConsoleMail.tlsPort465")
+                                  : value === "starttls"
+                                    ? t("routesConsoleMail.starttlsPort587")
+                                    : value,
+                            }))}
+                          />
+                        </ConsoleField>
+                      ) : (
+                        <ConsoleInput
+                          key={field.key}
                           label={field.label}
-                          hint={secretSaved ? t("mailAdmin.keepCredential") : field.help}
-                          required={!!field.required && !secretSaved}
-                          disabled={!editing}
-                          placeholder={secretSaved ? t("routesConsoleMail.enterToChange") : ""}
-                          type="password"
-                          autoComplete="new-password"
-                          value={values.secrets[field.key] ?? ""}
+                          hint={field.help}
+                          required={!!field.required}
+                          value={values.config[field.key] ?? ""}
                           onChange={(event) =>
                             update(direction, {
-                              secrets: { ...values.secrets, [field.key]: event.target.value },
+                              config: { ...values.config, [field.key]: event.target.value },
                             })
                           }
                         />
-                        {secretSaved && (
-                          <div className="mail-secret-change">
-                            <Check
-                              checked={!!values.editingSecrets[field.key]}
-                              onChange={(checked) =>
-                                update(direction, {
-                                  editingSecrets: {
-                                    ...values.editingSecrets,
-                                    [field.key]: checked,
-                                  },
-                                  ...(!checked
-                                    ? { secrets: { ...values.secrets, [field.key]: "" } }
-                                    : {}),
-                                })
-                              }
-                            >
-                              {t("routesConsoleMail.change")}
-                            </Check>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </MailFieldset>
+                      ),
+                    )}
+                    {selected?.secret_fields.map((field) => {
+                      const editing = !secretSaved || !!values.editingSecrets[field.key];
+                      return (
+                        <div className="mail-secret-field-row" key={field.key}>
+                          <ConsoleInput
+                            label={field.label}
+                            hint={secretSaved ? t("mailAdmin.keepCredential") : field.help}
+                            required={!!field.required && !secretSaved}
+                            disabled={!editing}
+                            placeholder={secretSaved ? t("routesConsoleMail.enterToChange") : ""}
+                            type="password"
+                            autoComplete="new-password"
+                            value={values.secrets[field.key] ?? ""}
+                            onChange={(event) =>
+                              update(direction, {
+                                secrets: { ...values.secrets, [field.key]: event.target.value },
+                              })
+                            }
+                          />
+                          {secretSaved && (
+                            <div className="mail-secret-change">
+                              <Check
+                                checked={!!values.editingSecrets[field.key]}
+                                onChange={(checked) =>
+                                  update(direction, {
+                                    editingSecrets: {
+                                      ...values.editingSecrets,
+                                      [field.key]: checked,
+                                    },
+                                    ...(!checked
+                                      ? { secrets: { ...values.secrets, [field.key]: "" } }
+                                      : {}),
+                                  })
+                                }
+                              >
+                                {t("routesConsoleMail.change")}
+                              </Check>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </ConsoleFieldset>
+                )}
               </div>
             );
           })}
@@ -572,7 +563,7 @@ function DomainEditor({
               {t("routesConsoleMail.yourRoleNeedsTheManageSendingProvidersPermissionTo")}
             </p>
           )}
-          <MailInput
+          <ConsoleInput
             label={t("routesConsoleMail.maximumMessageSizeMib")}
             hint={
               providerMaximum
@@ -603,11 +594,11 @@ function DomainEditor({
             {t("routesConsoleMail.enablePlusAddressingNameTagExampleCom")}
           </Check>
           {existing && (
-            <MailField
+            <ConsoleField
               label={t("routesConsoleMail.catchAllMailbox")}
               hint={t("routesConsoleMail.unmatchedRecipientsInThisDomainAreDeliveredToThe")}
             >
-              <MailSelect
+              <ConsoleSelect
                 value={catchAll}
                 onValueChange={setCatchAll}
                 options={[
@@ -620,12 +611,12 @@ function DomainEditor({
                     .map((box) => ({ value: box.id, label: box.name })),
                 ]}
               />
-            </MailField>
+            </ConsoleField>
           )}
-        </MailFieldset>
-        <MailNotice error={action.error} />
+        </ConsoleFieldset>
+        <Notice error={action.error} />
         {canManage && (
-          <div className="mail-actions">
+          <ConsoleFormActions>
             <Button
               nativeButton={false}
               disabled={action.busy}
@@ -637,12 +628,12 @@ function DomainEditor({
               {action.busy
                 ? t("common.saving")
                 : existing
-                  ? t("routesConsoleMail.saveDomain")
-                  : t("routesConsoleMail.registerDomain")}
+                  ? t("common.saveChanges")
+                  : t("consoleSettings.addDomain")}
             </Button>
-          </div>
+          </ConsoleFormActions>
         )}
-      </MailForm>
-    </MailSection>
+      </ConsoleForm>
+    </ConsoleSection>
   );
 }

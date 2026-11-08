@@ -1,3 +1,16 @@
+import {
+  ConsoleField,
+  ConsoleInput,
+  ConsoleSection,
+  ConsoleState,
+  ConsoleSelect,
+  ConsoleSettingsHeader,
+  ConsoleDetail,
+  ConsoleFormActions,
+  ConsoleForm,
+  ConsoleFieldset,
+} from "../components/console-settings";
+import { Notice } from "../components/console-shared";
 import { enumLabel } from "../../shared/i18n/labels.ts";
 import { LocalizedMessage } from "../components/i18n";
 import { t, plural } from "../../shared/i18n/index.ts";
@@ -5,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useAccess } from "../components/console-access";
 import { useAccount } from "../components/account-context";
-import { Check, ConsolePageHeader } from "../components/console-shared";
+import { Check } from "../components/console-shared";
 import { Button, useNotifications } from "../components/ui";
 import {
   MailAddressField,
@@ -13,18 +26,7 @@ import {
   DomainSetupLink,
   preferredDomain,
 } from "../components/user-mail";
-import {
-  MailField,
-  MailFieldset,
-  MailForm,
-  MailInput,
-  MailNotice,
-  MailSection,
-  MailSelect,
-  MailState,
-  useMailAction,
-  useMailResource,
-} from "../components/mail-common";
+import { useMailAction, useMailResource } from "../components/mail-common";
 import { api, ApiError } from "../lib/api";
 import { MailOperation, type Address, type Domain, type Mailbox } from "../lib/mail";
 import "./console.css";
@@ -74,15 +76,11 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
     ),
     directory = useMailResource<{ users: Person[] }>("/api/mail/mailbox-users");
   return (
-    <div className="console-detail-page">
-      <Link to="/console/mail/mailboxes" className="console-back">
-        {t("mailAdmin.backToMailboxes")}
-      </Link>
-      <ConsolePageHeader
-        level={2}
+    <ConsoleDetail backTo="/console/mail/mailboxes" backLabel={t("mailAdmin.mailboxes")}>
+      <ConsoleSettingsHeader
         title={
           creating
-            ? t("routesConsoleSharedMailboxes.newSharedMailbox")
+            ? t("consoleSettings.addSharedMailbox")
             : (config.data?.mailbox.name ?? t("routesConsoleSharedMailboxes.sharedMailbox"))
         }
         description={
@@ -91,7 +89,7 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
             : t("routesConsoleSharedMailboxes.setATeamAddressAndSharedAccessInOne")
         }
       />
-      <MailState
+      <ConsoleState
         loading={
           (!creating && config.loading && !config.data) ||
           (directory.loading && !directory.data) ||
@@ -115,7 +113,7 @@ export function SharedMailboxEditorPage({ creating = false }: { creating?: boole
             onSaved={config.reload}
           />
         )}
-    </div>
+    </ConsoleDetail>
   );
 }
 function SharedMailboxForm({
@@ -230,13 +228,13 @@ function SharedMailboxForm({
   };
   if (box?.kind === "personal")
     return (
-      <MailSection
+      <ConsoleSection
         title={t("routesConsoleSharedMailboxes.personalMailbox")}
         description={t("routesConsoleSharedMailboxes.personalMailBelongsWithTheUserAccount")}
       >
         <div className="console-mail-totals">
           <div>
-            <span>{t("mailAdmin.owner")}</span>
+            <span>{t("consoleSettings.owner")}</span>
             <strong>{owner?.display_name || owner?.email_address}</strong>
             <span>{owner?.email_address}</span>
           </div>
@@ -253,26 +251,25 @@ function SharedMailboxForm({
             {t("routesConsoleSharedMailboxes.manageUser")}
           </Button>
         )}
-      </MailSection>
+      </ConsoleSection>
     );
   return (
     <>
-      <MailForm
-        className="mail-form"
+      <ConsoleForm
         onSubmit={(event) => {
           event.preventDefault();
           void action.run(submit);
         }}
       >
-        <MailFieldset disabled={action.busy || uncertain || !manage}>
-          <MailSection
+        <ConsoleFieldset sections disabled={action.busy || uncertain || !manage}>
+          <ConsoleSection
             title={t("routesConsoleSharedMailboxes.teamAddress")}
             description={t(
               "routesConsoleSharedMailboxes.theAddressAndMailboxAreCreatedAndSavedTogether",
             )}
           >
-            <div className="mail-form">
-              <MailInput
+            <div className="console-form-fields">
+              <ConsoleInput
                 label={t("routesConsoleSharedMailboxes.mailboxName")}
                 required
                 maxLength={100}
@@ -305,8 +302,8 @@ function SharedMailboxForm({
                 </p>
               )}
               {existing && (
-                <MailField label={t("routesConsoleSharedMailboxes.mailboxStatus")}>
-                  <MailSelect
+                <ConsoleField label={t("routesConsoleSharedMailboxes.mailboxStatus")}>
+                  <ConsoleSelect
                     value={status}
                     onValueChange={setStatus}
                     options={[
@@ -322,11 +319,11 @@ function SharedMailboxForm({
                         : []),
                     ]}
                   />
-                </MailField>
+                </ConsoleField>
               )}
             </div>
-          </MailSection>
-          <MailSection
+          </ConsoleSection>
+          <ConsoleSection
             title={t("routesConsoleSharedMailboxes.peopleWithAccess")}
             description={t(
               "routesConsoleSharedMailboxes.membersFindThisSharedMailboxAlongsideTheirPersonalMail",
@@ -348,7 +345,7 @@ function SharedMailboxForm({
               </div>
               <span className="mail-badge">{t("routesConsoleSharedMailboxes.owner")}</span>
             </div>
-            <MailInput
+            <ConsoleInput
               label={t("routesConsoleSharedMailboxes.findPeople")}
               placeholder={t("routesConsoleSharedMailboxes.nameOrEmailAddress")}
               value={search}
@@ -385,7 +382,7 @@ function SharedMailboxForm({
                         </small>
                       </Check>
                       {entry && (
-                        <MailSelect
+                        <ConsoleSelect
                           aria-label={t("routesConsoleSharedMailboxes.accessFor", {
                             email_address: person.email_address,
                           })}
@@ -456,16 +453,16 @@ function SharedMailboxForm({
               </p>
             )}
             <p className="mail-hint">{plural("mail.sharedMembers", selected.length)}</p>
-          </MailSection>
-        </MailFieldset>
-        <MailNotice error={action.error} />
+          </ConsoleSection>
+        </ConsoleFieldset>
+        <Notice error={action.error} />
         {uncertain && (
           <p className="mail-hint">
             {t("routesConsoleSharedMailboxes.retryToRecoverTheResultOfThisSameCreation")}
           </p>
         )}
         {manage && (
-          <div className="mail-actions">
+          <ConsoleFormActions>
             <Button
               nativeButton={false}
               disabled={action.busy}
@@ -483,14 +480,14 @@ function SharedMailboxForm({
                 : uncertain
                   ? t("routesConsoleSharedMailboxes.checkCreationResult")
                   : existing
-                    ? t("routesConsoleSharedMailboxes.saveSharedMailbox")
-                    : t("routesConsoleSharedMailboxes.createSharedMailbox")}
+                    ? t("common.saveChanges")
+                    : t("consoleSettings.addSharedMailbox")}
             </Button>
-          </div>
+          </ConsoleFormActions>
         )}
-      </MailForm>
+      </ConsoleForm>
       {box && (
-        <MailSection
+        <ConsoleSection
           title={t("routesConsoleSharedMailboxes.addressesAndDelivery")}
           description={t(
             "routesConsoleSharedMailboxes.manageAddressDeliveryAndAliasesForThisSameShared",
@@ -503,7 +500,7 @@ function SharedMailboxForm({
             canManage={permissions.includes("admin.mail.domains.manage")}
             onSaved={onSaved}
           />
-        </MailSection>
+        </ConsoleSection>
       )}
     </>
   );

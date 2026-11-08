@@ -1,4 +1,20 @@
-import { useState, type ReactNode } from "react";
+import {
+  ConsoleSelectField,
+  ConsoleInput,
+  ConsoleSection,
+  ConsoleState,
+  ConsoleSettingsHeader,
+  ConsoleFilters,
+  ConsoleTable,
+  ConsoleMetrics,
+  ConsoleRefresh,
+  ConsoleFormActions,
+  ConsoleForm,
+  ConsoleFieldset,
+  ConsoleDateFilters,
+} from "../components/console-settings";
+import { Notice } from "../components/console-shared";
+import { useState } from "react";
 import { Link } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import { enumLabel } from "../../shared/i18n/labels.ts";
@@ -6,20 +22,9 @@ import { api } from "../lib/api";
 import { formatBytes } from "../lib/drive";
 import type { AdminMailbox, MailAdminActivity, MailFlow, MailPolicy } from "../lib/mail-admin";
 import { useAccess } from "../components/console-access";
-import { Check, ConsolePageHeader, adminDate } from "../components/console-shared";
+import { Check, adminDate } from "../components/console-shared";
 import { Button, useNotifications } from "../components/ui";
-import {
-  MailField,
-  MailFieldset,
-  MailForm,
-  MailInput,
-  MailNotice,
-  MailSection,
-  MailSelect,
-  MailState,
-  useMailAction,
-  useMailResource,
-} from "../components/mail-common";
+import { useMailAction, useMailResource } from "../components/mail-common";
 
 interface Page<T> {
   items: T[];
@@ -54,120 +59,7 @@ function useAdminPage<T>(path: string, filters: Record<string, string>) {
     },
   };
 }
-function AdminTable<T>({
-  resource,
-  headings,
-  children,
-}: {
-  resource: ReturnType<typeof useAdminPage<T>>;
-  headings: string[];
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <MailState
-        loading={resource.loading && !resource.data}
-        error={resource.error}
-        retry={resource.reload}
-        kind="list"
-      />
-      {resource.data && (
-        <section className="account-panel console-list-panel">
-          <div className="console-table-scroll">
-            <table className="console-table">
-              <thead>
-                <tr>
-                  {headings.map((heading, index) => (
-                    <th key={index} scope="col">
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>{children}</tbody>
-            </table>
-            {!resource.data.items.length && (
-              <p className="console-empty">{t("mailAdmin.noRecords")}</p>
-            )}
-          </div>
-          <div className="console-pagination">
-            <span>{t("mailAdmin.page", { page: resource.page })}</span>
-            <div>
-              <Button
-                size="sm"
-                disabled={resource.page === 1 || resource.loading}
-                onClick={resource.previous}
-              >
-                {t("common.previous")}
-              </Button>
-              <Button
-                size="sm"
-                disabled={!resource.data.next_cursor || resource.loading}
-                onClick={resource.next}
-              >
-                {t("common.next")}
-              </Button>
-            </div>
-          </div>
-        </section>
-      )}
-    </>
-  );
-}
-function SelectFilter({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <MailField label={label}>
-      <MailSelect value={value} onValueChange={onChange} options={options} />
-    </MailField>
-  );
-}
-function Reload({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
-  return (
-    <Button size="sm" onClick={onClick} disabled={disabled}>
-      {t("mailAdmin.refresh")}
-    </Button>
-  );
-}
-function DateFilters({
-  after,
-  before,
-  onAfter,
-  onBefore,
-}: {
-  after: string;
-  before: string;
-  onAfter: (value: string) => void;
-  onBefore: (value: string) => void;
-}) {
-  return (
-    <>
-      <MailInput
-        label={t("mailAdmin.fromDate")}
-        type="date"
-        value={after}
-        max={before || undefined}
-        onChange={(event) => onAfter(event.target.value)}
-      />
-      <MailInput
-        label={t("mailAdmin.toDate")}
-        type="date"
-        value={before}
-        min={after || undefined}
-        onChange={(event) => onBefore(event.target.value)}
-      />
-    </>
-  );
-}
+
 const timestamp = (value: string, end = false) =>
   value
     ? String(Math.floor(new Date(`${value}T00:00:00`).getTime() / 1000) + (end ? 86400 : 0))
@@ -196,37 +88,29 @@ export function MailOverview() {
   const data = resource.data;
   return (
     <>
-      <ConsolePageHeader
-        level={2}
-        title={t("mailAdmin.overview")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.overview")}
         description={t("mailAdmin.overviewDescription")}
       >
-        <Reload onClick={resource.reload} disabled={resource.loading} />
-      </ConsolePageHeader>
-      <MailState
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleState
         loading={resource.loading && !data}
         error={resource.error}
         retry={resource.reload}
       />
       {data && (
         <>
-          <div className="console-drive-summary-grid">
-            {[
+          <ConsoleMetrics
+            items={[
               [t("mailAdmin.domains"), data.summary.domains],
               [t("mailAdmin.mailboxes"), data.summary.mailboxes],
               [t("mailAdmin.shared"), data.summary.shared_mailboxes],
               [t("mailAdmin.disabled"), data.summary.disabled_mailboxes],
               [t("domainProviders.activeDomains"), data.summary.active_domains],
-            ].map(([label, value]) => (
-              <section className="account-panel" key={label}>
-                <div className="account-panel-header">
-                  <h3>{label}</h3>
-                </div>
-                <p className="console-mail-metric">{value}</p>
-              </section>
-            ))}
-          </div>
-          <MailSection
+            ].map(([label, value]) => ({ label: String(label), value }))}
+          />
+          <ConsoleSection
             title={t("mailAdmin.last24Hours")}
             description={t("mailAdmin.trackingSince", { date: adminDate(data.tracking_since) })}
           >
@@ -243,8 +127,8 @@ export function MailOverview() {
                 </div>
               ))}
             </div>
-          </MailSection>
-          <MailSection
+          </ConsoleSection>
+          <ConsoleSection
             title={t("mailAdmin.storage")}
             description={t("mailAdmin.storageCoverage", {
               measured: data.summary.measured_mailboxes,
@@ -261,7 +145,7 @@ export function MailOverview() {
                 <strong>{formatBytes(data.summary.attachment_bytes)}</strong>
               </div>
             </div>
-          </MailSection>
+          </ConsoleSection>
         </>
       )}
     </>
@@ -278,29 +162,30 @@ export function MailboxDirectory() {
     action = useMailAction();
   return (
     <>
-      <ConsolePageHeader
-        level={2}
+      <ConsoleSettingsHeader
         title={t("mailAdmin.mailboxes")}
         description={t("mailAdmin.mailboxesDescription")}
       >
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
         {permissions.includes("admin.mail.mailboxes.manage") && (
           <Button
             nativeButton={false}
             render={<Link to="/console/mail/mailboxes/new" />}
             variant="primary"
           >
-            {t("routesConsoleSharedMailboxes.newSharedMailbox")}
+            {t("consoleSettings.addSharedMailbox")}
           </Button>
         )}
-      </ConsolePageHeader>
-      <div className="console-mail-filters">
-        <MailInput
-          label={t("mailAdmin.searchMailboxes")}
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
+          label={t("consoleSettings.search")}
+          placeholder={t("mailAdmin.searchMailboxes")}
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <SelectFilter
+        <ConsoleSelectField
           label={t("mailAdmin.kind")}
           value={kind}
           onChange={setKind}
@@ -310,7 +195,7 @@ export function MailboxDirectory() {
             { value: "shared", label: t("mailAdmin.shared") },
           ]}
         />
-        <SelectFilter
+        <ConsoleSelectField
           label={t("common.status")}
           value={status}
           onChange={setStatus}
@@ -322,14 +207,13 @@ export function MailboxDirectory() {
             })),
           ]}
         />
-        <Reload onClick={resource.reload} disabled={resource.loading} />
-      </div>
-      <MailNotice error={action.error} />
-      <AdminTable
+      </ConsoleFilters>
+      <Notice error={action.error} />
+      <ConsoleTable
         resource={resource}
         headings={[
           t("mailAdmin.mailbox"),
-          t("mailAdmin.owner"),
+          t("consoleSettings.owner"),
           t("common.status"),
           t("mailAdmin.storage"),
           t("common.actions"),
@@ -374,13 +258,13 @@ export function MailboxDirectory() {
               )}
             </td>
             <td>
-              <div className="console-mail-row-actions">
+              <div className="console-row-actions">
                 <Button
                   nativeButton={false}
                   render={<Link to={`/console/mail/mailboxes/${box.id}`} />}
                   size="sm"
                 >
-                  {t("routesConsoleSharedMailboxes.view")}
+                  {t("consoleSettings.manage")}
                 </Button>
                 <Button
                   size="sm"
@@ -404,7 +288,7 @@ export function MailboxDirectory() {
             </td>
           </tr>
         ))}
-      </AdminTable>
+      </ConsoleTable>
     </>
   );
 }
@@ -423,21 +307,21 @@ export function MailFlowPage() {
   });
   return (
     <>
-      <ConsolePageHeader
-        level={2}
+      <ConsoleSettingsHeader
         title={t("mailAdmin.flow")}
         description={t("mailAdmin.flowDescription")}
       >
-        <Reload onClick={resource.reload} disabled={resource.loading} />
-      </ConsolePageHeader>
-      <div className="console-mail-filters">
-        <MailInput
-          label={t("mailAdmin.searchFlow")}
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
+          label={t("consoleSettings.search")}
+          placeholder={t("mailAdmin.searchFlow")}
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <SelectFilter
+        <ConsoleSelectField
           label={t("mailAdmin.direction")}
           value={direction}
           onChange={setDirection}
@@ -447,7 +331,7 @@ export function MailFlowPage() {
             { value: "outbound", label: t("mailAdmin.outbound") },
           ]}
         />
-        <SelectFilter
+        <ConsoleSelectField
           label={t("common.status")}
           value={status}
           onChange={setStatus}
@@ -470,17 +354,17 @@ export function MailFlowPage() {
             ].map((value) => ({ value, label: enumLabel(value) })),
           ]}
         />
-        <DateFilters after={after} before={before} onAfter={setAfter} onBefore={setBefore} />
-      </div>
+        <ConsoleDateFilters after={after} before={before} onAfter={setAfter} onBefore={setBefore} />
+      </ConsoleFilters>
       {resource.data?.tracking_since && (
         <p className="mail-hint console-mail-record-note">
           {t("mailAdmin.flowRetention", { date: adminDate(resource.data.tracking_since) })}
         </p>
       )}
-      <AdminTable
+      <ConsoleTable
         resource={resource}
         headings={[
-          t("mailAdmin.time"),
+          t("consoleSettings.time"),
           t("mailAdmin.mailbox"),
           t("mailAdmin.direction"),
           t("mailAdmin.provider"),
@@ -510,7 +394,7 @@ export function MailFlowPage() {
             <td>{entry.attempt_count}</td>
           </tr>
         ))}
-      </AdminTable>
+      </ConsoleTable>
     </>
   );
 }
@@ -521,12 +405,11 @@ export function MailPolicies() {
   );
   return (
     <>
-      <ConsolePageHeader
-        level={2}
-        title={t("mailAdmin.policies")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.policies")}
         description={t("mailAdmin.policiesDescription")}
       />
-      <MailState
+      <ConsoleState
         loading={resource.loading && !resource.data}
         error={resource.error}
         retry={resource.reload}
@@ -561,8 +444,7 @@ function PolicyForm({
     ),
     [forwarding, setForwarding] = useState(!!initial.external_forwarding_enabled);
   return (
-    <MailForm
-      className="mail-form"
+    <ConsoleForm
       onSubmit={(event) => {
         event.preventDefault();
         void action.run(async () => {
@@ -580,12 +462,12 @@ function PolicyForm({
         });
       }}
     >
-      <MailFieldset disabled={action.busy || !manage}>
-        <MailSection
+      <ConsoleFieldset sections disabled={action.busy || !manage}>
+        <ConsoleSection
           title={t("mailAdmin.retention")}
           description={t("mailAdmin.retentionDescription")}
         >
-          <MailInput
+          <ConsoleInput
             label={t("mailAdmin.retentionDays")}
             type="number"
             min={1}
@@ -594,12 +476,12 @@ function PolicyForm({
             onChange={(event) => setRetention(event.target.value)}
             hint={t("mailAdmin.retentionHint")}
           />
-        </MailSection>
-        <MailSection
+        </ConsoleSection>
+        <ConsoleSection
           title={t("mailAdmin.sendingLimits")}
           description={t("mailAdmin.sendingLimitsDescription")}
         >
-          <MailInput
+          <ConsoleInput
             label={t("routesConsoleMail.maximumMessageSizeMib")}
             type="number"
             min={0.001}
@@ -609,28 +491,27 @@ function PolicyForm({
             onChange={(event) => setLimit(event.target.value)}
             hint={t("mailAdmin.sendingLimitsHint")}
           />
-        </MailSection>
-        <MailSection
+        </ConsoleSection>
+        <ConsoleSection
           title={t("mailAdmin.forwarding")}
           description={t("mailAdmin.forwardingDescription")}
         >
           <Check checked={forwarding} onChange={setForwarding}>
             {t("mailAdmin.allowExternalForwarding")}
           </Check>
-        </MailSection>
-      </MailFieldset>
-      <MailNotice error={action.error} />
-      <div className="mail-actions">
-        <span className="mail-hint">
-          {t("mailAdmin.lastUpdated", { date: adminDate(initial.updated_at) })}
-        </span>
+        </ConsoleSection>
+      </ConsoleFieldset>
+      <Notice error={action.error} />
+      <ConsoleFormActions
+        meta={t("consoleSettings.lastUpdated", { date: adminDate(initial.updated_at) })}
+      >
         {manage && (
           <Button type="submit" variant="primary" disabled={action.busy}>
-            {action.busy ? t("common.saving") : t("common.save")}
+            {action.busy ? t("common.saving") : t("common.saveChanges")}
           </Button>
         )}
-      </div>
-    </MailForm>
+      </ConsoleFormActions>
+    </ConsoleForm>
   );
 }
 
@@ -648,11 +529,11 @@ export function MailAuditLog() {
     value === "POST"
       ? t("mailAdmin.created")
       : value === "DELETE"
-        ? t("common.delete")
+        ? t("consoleSettings.deletion")
         : t("mailAdmin.updated");
   const resourceLabel = (path: string) =>
     path.includes("/admin/settings")
-      ? t("mailAdmin.policies")
+      ? t("consoleSettings.policies")
       : path.includes("/provider-connections")
         ? t("mailAdmin.providers")
         : path.includes("/domains")
@@ -664,22 +545,22 @@ export function MailAuditLog() {
               : t("mailAdmin.mailbox");
   return (
     <>
-      <ConsolePageHeader
-        level={2}
-        title={t("mailAdmin.audit")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.audit")}
         description={t("mailAdmin.activityDescription")}
       >
-        <Reload onClick={resource.reload} disabled={resource.loading} />
-      </ConsolePageHeader>
-      <div className="console-mail-filters">
-        <MailInput
-          label={t("mailAdmin.searchActivity")}
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
+          label={t("consoleSettings.search")}
+          placeholder={t("mailAdmin.searchActivity")}
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <SelectFilter
-          label={t("mailAdmin.operation")}
+        <ConsoleSelectField
+          label={t("consoleSettings.action")}
           value={operation}
           onChange={setOperation}
           options={[
@@ -690,15 +571,15 @@ export function MailAuditLog() {
             })),
           ]}
         />
-        <DateFilters after={after} before={before} onAfter={setAfter} onBefore={setBefore} />
-      </div>
+        <ConsoleDateFilters after={after} before={before} onAfter={setAfter} onBefore={setBefore} />
+      </ConsoleFilters>
       <p className="mail-hint console-mail-record-note">{t("mailAdmin.auditRetention")}</p>
-      <AdminTable
+      <ConsoleTable
         resource={resource}
         headings={[
-          t("mailAdmin.time"),
-          t("mailAdmin.actor"),
-          t("mailAdmin.operation"),
+          t("consoleSettings.time"),
+          t("consoleSettings.actor"),
+          t("consoleSettings.action"),
           t("mailAdmin.resource"),
         ]}
       >
@@ -719,7 +600,7 @@ export function MailAuditLog() {
             </td>
           </tr>
         ))}
-      </AdminTable>
+      </ConsoleTable>
     </>
   );
 }

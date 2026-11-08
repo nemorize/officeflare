@@ -28,26 +28,27 @@ import {
 import { formatBytes } from "../lib/drive";
 import { driveUserPermissions } from "../lib/console";
 import { AccessDenied, useAccess } from "../components/console-access";
-import {
-  adminDate,
-  Check,
-  Confirm,
-  Notice,
-  ResourceState,
-  useResource,
-} from "../components/console-shared";
+import { adminDate, Check, Confirm, Notice, useResource } from "../components/console-shared";
 import { PermissionPicker } from "../components/permission-picker";
+import { Button, useNotifications } from "../components/ui";
 import {
-  Button,
-  Dialog,
-  DialogPopup,
-  Field,
-  Form,
-  SelectControl,
-  Tabs,
-  TextField,
-  useNotifications,
-} from "../components/ui";
+  ConsoleDialog,
+  ConsoleDetail,
+  ConsoleSettingsLayout,
+  ConsoleSettingsHeader,
+  ConsoleSection,
+  ConsoleInput,
+  ConsoleSelectField,
+  ConsoleFilters,
+  ConsoleTable,
+  ConsoleMetrics,
+  ConsoleState,
+  ConsolePagination,
+  ConsoleFormActions,
+  ConsoleForm,
+  ConsoleDateFilters,
+  ConsoleRefresh,
+} from "../components/console-settings";
 import "./console.css";
 
 const endpoint = "/api/drive/admin";
@@ -59,33 +60,7 @@ const localDate = (value: number | null) =>
     : "";
 const expiration = (value: string) => (value ? Math.floor(new Date(value).getTime() / 1000) : null);
 const allowed = (permissions: string[], key: string) => permissions.includes(`admin.drive.${key}`);
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string; disabled?: boolean }[];
-  disabled?: boolean;
-}) {
-  return (
-    <Field.Root>
-      <Field.Label>{label}</Field.Label>
-      <SelectControl
-        aria-label={label}
-        value={value}
-        onValueChange={(value) => onChange(value ?? "")}
-        options={options}
-        disabled={disabled}
-        theme="neutral"
-      />
-    </Field.Root>
-  );
-}
+
 function useDirectory(value: string, exclude: string, writable: boolean) {
   const resource = useResource<AdminPage<DriveAccount>>(
     allowed(useAccess().permissions, "accounts.read")
@@ -120,10 +95,10 @@ function AccountPicker({
   const [query, setQuery] = useState("");
   const resource = useDirectory(query, exclude, writable);
   return (
-    <div className="console-drive-form-grid">
-      <TextField
+    <div className="console-form-fields">
+      <ConsoleInput
         type="search"
-        label={t("routesConsoleDrive.findAccount")}
+        label={t("consoleSettings.search")}
         name="account_search"
         value={query}
         onValueChange={(value) => {
@@ -132,7 +107,7 @@ function AccountPicker({
         }}
         placeholder={t("routesConsoleDrive.searchNameOrEmail")}
       />
-      <SelectField
+      <ConsoleSelectField
         label={t("routesConsoleDrive.destinationAccount")}
         value={value}
         onChange={onChange}
@@ -168,7 +143,7 @@ function AdminConfirm({
   }, [open, title]);
   return (
     <Confirm
-      className="console-drive-confirm"
+      className="console-confirm"
       theme="neutral"
       open={open}
       title={title}
@@ -182,9 +157,9 @@ function AdminConfirm({
         await onConfirm(reason.trim());
       }}
     >
-      <div className="console-drive-confirm-fields">
+      <div className="console-confirm-fields">
         {children}
-        <TextField
+        <ConsoleInput
           label={t("routesConsoleDrive.reason")}
           name="admin_reason"
           required
@@ -223,105 +198,27 @@ function usePaged<T>(path: string, filters: Record<string, string>) {
     reload: () => setRevision((value) => value + 1),
   };
 }
-function ListPanel<T>({
-  resource,
-  headings,
-  children,
-  empty,
-}: {
-  resource: ReturnType<typeof usePaged<T>>;
-  headings: string[];
-  children: ReactNode;
-  empty: string;
-}) {
-  return (
-    <section className="account-panel console-list-panel">
-      <ResourceState
-        loading={resource.loading}
-        error={resource.error}
-        kind="list"
-        label={t("routesConsoleDrive.loadingRecords")}
-        rows={5}
-      />
-      {resource.data && (
-        <>
-          <div className="console-table-scroll">
-            <table className="console-table">
-              <thead>
-                <tr>
-                  {headings.map((heading) => (
-                    <th scope="col" key={heading}>
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>{children}</tbody>
-            </table>
-            {!resource.data.items.length && <p className="console-empty">{empty}</p>}
-          </div>
-          <div className="console-pagination">
-            <span>
-              <LocalizedMessage
-                id="routesConsoleDrive.pageResults"
-                values={{ page: resource.page, length: resource.data.items.length }}
-              />
-            </span>
-            <div>
-              <Button size="sm" disabled={resource.page === 1} onClick={resource.previous}>
-                {t("common.previous")}
-              </Button>
-              <Button size="sm" disabled={!resource.data.next_cursor} onClick={resource.next}>
-                {t("common.next")}
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-function PageHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <header className="account-panel-header console-page-header">
-      <div>
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-    </header>
-  );
-}
 
 export function DriveConsoleLayout() {
-  const access = useAccess(),
+  const { permissions } = useAccess(),
     navigate = useNavigate(),
     location = useLocation();
-  const pages = driveConsolePages.filter((page) => access.permissions.includes(page.permission));
-  const requested = location.pathname.split("/")[3],
-    selected = pages.find((page) => page.page === requested)?.page ?? pages[0]?.page;
+  const pages = driveConsolePages.filter((page) => permissions.includes(page.permission));
+  const requested = location.pathname.split("/")[3];
+  const selected = pages.find((page) => page.page === requested)?.page ?? pages[0]?.page ?? "";
   return (
-    <section className="account-page console-page" data-ui-theme="neutral">
-      <header className="account-page-header">
-        <h1>{t("routesConsoleDrive.drive")}</h1>
-        <p>{t("routesConsoleDrive.manageStorageSharingAndWorkspacePoliciesFileContentsRemain")}</p>
-      </header>
-      {selected && (
-        <Tabs.Root value={selected} onValueChange={(value) => navigate(`/console/drive/${value}`)}>
-          <div className="console-tabs">
-            <Tabs.List aria-label={t("routesConsoleDrive.driveNavigation")}>
-              {pages.map((page) => (
-                <Tabs.Tab key={page.page} value={page.page}>
-                  {page.label}
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-          </div>
-          <Tabs.Panel value={selected}>
-            <Outlet />
-          </Tabs.Panel>
-        </Tabs.Root>
+    <ConsoleSettingsLayout
+      title={t("routesConsoleDrive.drive")}
+      description={t(
+        "routesConsoleDrive.manageStorageSharingAndWorkspacePoliciesFileContentsRemain",
       )}
-    </section>
+      pages={pages.map((page) => ({ path: page.page, name: page.label }))}
+      selected={selected}
+      onNavigate={(page) => navigate(`/console/drive/${page}`)}
+      navigationLabel={t("routesConsoleDrive.driveNavigation")}
+    >
+      <Outlet />
+    </ConsoleSettingsLayout>
   );
 }
 export function DriveConsolePage({ page }: { page: string }) {
@@ -350,22 +247,24 @@ export function DriveConsolePage({ page }: { page: string }) {
   );
 }
 function Overview() {
-  const resource = useResource<{ summary: Record<string, number> }>(`${endpoint}/overview`);
+  const [revision, setRevision] = useState(0);
+  const resource = useResource<{ summary: Record<string, number> }>(
+    `${endpoint}/overview?revision=${revision}`,
+  );
+  const reload = () => setRevision((value) => value + 1);
   const summary = resource.data?.summary;
   return (
     <>
-      <PageHeader
-        title={t("routesConsoleDrive.driveOverview")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.overview")}
         description={t("routesConsoleDrive.storageTotalsIncludeEveryStoredFileVersionAndItems")}
-      />
-      <ResourceState
-        loading={resource.loading}
-        error={resource.error}
-        label={t("routesConsoleDrive.loadingDriveOverview")}
-      />
+      >
+        <ConsoleRefresh onClick={reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleState loading={resource.loading} error={resource.error} />
       {summary && (
-        <div className="console-drive-summary-grid">
-          {[
+        <ConsoleMetrics
+          items={[
             [t("routesConsoleDrive.storageUsed"), formatBytes(summary.used_bytes ?? 0)],
             [t("routesConsoleDrive.reservedStorage"), formatBytes(summary.reserved_bytes ?? 0)],
             [t("routesConsoleDrive.allocatedLimits"), formatBytes(summary.quota_bytes ?? 0)],
@@ -379,15 +278,8 @@ function Overview() {
             [t("routesConsoleDrive.activeUploads"), summary.uploads],
             [t("routesConsoleDrive.pendingCleanup"), summary.pending_cleanup],
             [t("routesConsoleDrive.ownershipTransfers"), summary.transfers ?? 0],
-          ].map(([label, value]) => (
-            <section className="account-panel" key={label}>
-              <div className="account-panel-header">
-                <h2>{label}</h2>
-              </div>
-              <p>{value}</p>
-            </section>
-          ))}
-        </div>
+          ].map(([label, value]) => ({ label: String(label), value }))}
+        />
       )}
     </>
   );
@@ -398,21 +290,23 @@ function Accounts() {
     resource = usePaged<DriveAccount>("accounts", { q: query, state });
   return (
     <>
-      <PageHeader
+      <ConsoleSettingsHeader
         title={t("routesConsoleDrive.accountsStorage")}
         description={t("routesConsoleDrive.inspectAllUsersIncludingAccountsWithoutADriveRole")}
-      />
-      <div className="console-drive-filters">
-        <TextField
-          label={t("routesConsoleDrive.findUser")}
+      >
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
+          label={t("consoleSettings.search")}
           name="drive_accounts_search"
           type="search"
           value={query}
           onValueChange={setQuery}
           placeholder={t("routesConsoleDrive.nameOrEmail")}
         />
-        <SelectField
-          label={t("routesConsoleDrive.accountFilter")}
+        <ConsoleSelectField
+          label={t("common.status")}
           value={state}
           onChange={setState}
           options={[
@@ -423,8 +317,8 @@ function Accounts() {
             { value: "over_quota", label: t("routesConsoleDrive.overQuota") },
           ]}
         />
-      </div>
-      <ListPanel
+      </ConsoleFilters>
+      <ConsoleTable
         resource={resource}
         headings={[
           t("routesConsoleDrive.user"),
@@ -432,7 +326,7 @@ function Accounts() {
           t("routesConsoleDrive.storageUsed"),
           t("routesConsoleDrive.reserved"),
           t("routesConsoleDrive.limit"),
-          "",
+          t("common.actions"),
         ]}
         empty={t("routesConsoleDrive.noMatchingAccounts")}
       >
@@ -464,12 +358,12 @@ function Accounts() {
                   email_address: account.email_address,
                 })}
               >
-                {t("routesConsoleDrive.manage")}
+                {t("consoleSettings.manage")}
               </Button>
             </td>
           </tr>
         ))}
-      </ListPanel>
+      </ConsoleTable>
     </>
   );
 }
@@ -481,16 +375,11 @@ export function DriveAccountEditorPage() {
     ),
     account = resource.data?.account;
   return (
-    <>
-      <Link className="console-back" to="/console/drive/accounts">
-        {t("routesConsoleDrive.accountsStorage2")}
-      </Link>
-      <ResourceState
-        loading={resource.loading}
-        error={resource.error}
-        kind="form"
-        label={t("routesConsoleDrive.loadingDriveAccount")}
-      />
+    <ConsoleDetail
+      backTo="/console/drive/accounts"
+      backLabel={t("routesConsoleDrive.accountsStorage")}
+    >
+      <ConsoleState loading={resource.loading} error={resource.error} kind="form" />
       {account && (
         <AccountDetails
           key={`${account.user_id}:${account.version}`}
@@ -498,7 +387,7 @@ export function DriveAccountEditorPage() {
           reload={() => setRevision((value) => value + 1)}
         />
       )}
-    </>
+    </ConsoleDetail>
   );
 }
 function AccountDetails({ account, reload }: { account: DriveAccount; reload: () => void }) {
@@ -514,11 +403,11 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
     [error, setError] = useState("");
   return (
     <>
-      <PageHeader
+      <ConsoleSettingsHeader
         title={account.display_name || account.email_address}
         description={account.email_address}
       />
-      <section className="account-panel">
+      <ConsoleSection>
         <dl className="console-facts">
           <div>
             <dt>{t("routesConsoleDrive.availability")}</dt>
@@ -559,8 +448,8 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
             </Link>
           </p>
         )}
-      </section>
-      <Form
+      </ConsoleSection>
+      <ConsoleForm
         onSubmit={(event) => {
           event.preventDefault();
           try {
@@ -571,16 +460,17 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
           }
         }}
       >
-        <section className="account-panel">
-          <div className="account-panel-header">
-            <h2>{t("routesConsoleDrive.storageAvailability")}</h2>
-            <p>{t("routesConsoleDrive.loweringALimitPreservesFilesAndBlocksAdditionalUploads")}</p>
-          </div>
-          <div className="console-drive-form-grid">
+        <ConsoleSection
+          title={t("routesConsoleDrive.storageAvailability")}
+          description={t(
+            "routesConsoleDrive.loweringALimitPreservesFilesAndBlocksAdditionalUploads",
+          )}
+        >
+          <div className="console-form-fields">
             <Check checked={inherit} onChange={setInherit} disabled={!manage}>
               {t("routesConsoleDrive.useTheWorkspaceDefaultStorageLimit")}
             </Check>
-            <TextField
+            <ConsoleInput
               label={t("routesConsoleDrive.individualStorageLimitGib")}
               name="quota"
               type="number"
@@ -591,7 +481,7 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
               disabled={inherit}
               readOnly={!manage}
             />
-            <SelectField
+            <ConsoleSelectField
               label={t("routesConsoleDrive.driveAvailability")}
               value={status}
               onChange={(value) => setStatus(value as DriveAccount["status"])}
@@ -605,19 +495,20 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
           </div>
           <Notice error={error} />
           {manage && (
-            <div className="account-actions">
+            <ConsoleFormActions>
               <Button variant="primary" type="submit">
-                {t("routesConsoleDrive.reviewChanges")}
+                {t("consoleSettings.reviewChanges")}
               </Button>
-            </div>
+            </ConsoleFormActions>
           )}
-        </section>
-      </Form>
-      <section className="account-panel">
-        <div className="account-panel-header">
-          <h2>{t("routesConsoleDrive.roleAccess")}</h2>
-          <p>{t("routesConsoleDrive.theseDriveCapabilitiesComeFromAssignedWorkspaceRolesItem")}</p>
-        </div>
+        </ConsoleSection>
+      </ConsoleForm>
+      <ConsoleSection
+        title={t("routesConsoleDrive.roleAccess")}
+        description={t(
+          "routesConsoleDrive.theseDriveCapabilitiesComeFromAssignedWorkspaceRolesItem",
+        )}
+      >
         <PermissionPicker selected={account.permissions ?? []} keys={driveUserPermissions} />
         {permissions.includes("admin.users.read") && !account.deleted_at && (
           <p>
@@ -626,35 +517,35 @@ function AccountDetails({ account, reload }: { account: DriveAccount; reload: ()
             </Link>
           </p>
         )}
-      </section>
+      </ConsoleSection>
       {(account.active_uploads ?? 0) > 0 && (
-        <section className="account-panel">
-          <div className="account-panel-header">
-            <h2>{t("routesConsoleDrive.unfinishedUploads")}</h2>
-            <p>
+        <ConsoleSection
+          title={t("routesConsoleDrive.unfinishedUploads")}
+          description={
+            <>
               <LocalizedMessage
                 id="routesConsoleDrive.unfinishedUploadsAreReservingStorageTheyMustFinishOr"
                 values={{ active_uploads: account.active_uploads }}
               />
-            </p>
-          </div>
+            </>
+          }
+        >
           {manage && (
             <Button onClick={() => setCancelUploads(true)}>
               {t("routesConsoleDrive.cancelUnfinishedUploads")}
             </Button>
           )}
-        </section>
+        </ConsoleSection>
       )}
       {allowed(permissions, "ownership.transfer") && (
-        <section className="account-panel">
-          <div className="account-panel-header">
-            <h2>{t("routesConsoleDrive.ownershipHandover")}</h2>
-            <p>{t("routesConsoleDrive.transferThisUserSFilesAndFoldersIncludingTrash")}</p>
-          </div>
+        <ConsoleSection
+          title={t("routesConsoleDrive.ownershipHandover")}
+          description={t("routesConsoleDrive.transferThisUserSFilesAndFoldersIncludingTrash")}
+        >
           <Button onClick={() => setTransfer(true)} disabled={!account.total_items}>
             {t("routesConsoleDrive.transferAllOwnedItems")}
           </Button>
-        </section>
+        </ConsoleSection>
       )}
       <AdminConfirm
         open={confirm}
@@ -778,18 +669,13 @@ function Transfers({ accountId = "" }: { accountId?: string }) {
     return () => window.clearInterval(timer);
   }, [active]);
   return (
-    <section className="account-panel">
-      <PageHeader
-        title={t("routesConsoleDrive.ownershipTransfers")}
-        description={t(
-          "routesConsoleDrive.transferProgressIsRetainedAcrossSessionsFailedTransfersKeep",
-        )}
-      />
-      <ResourceState
-        loading={resource.loading}
-        error={resource.error}
-        label={t("routesConsoleDrive.loadingOwnershipTransfers")}
-      />
+    <ConsoleSection
+      title={t("routesConsoleDrive.transferJobs")}
+      description={t(
+        "routesConsoleDrive.transferProgressIsRetainedAcrossSessionsFailedTransfersKeep",
+      )}
+    >
+      <ConsoleState loading={resource.loading} error={resource.error} />
       {resource.data?.items.map((job) => (
         <article className="console-drive-job" key={job.id}>
           <div>
@@ -833,19 +719,14 @@ function Transfers({ accountId = "" }: { accountId?: string }) {
         <p className="console-subtext">{t("routesConsoleDrive.noOwnershipTransfers")}</p>
       )}
       {resource.data && resource.data.items.length > 0 && (
-        <div className="console-pagination">
-          <span>
-            <LocalizedMessage id="routesConsoleDrive.page" values={{ page: resource.page }} />
-          </span>
-          <div>
-            <Button size="sm" disabled={resource.page === 1} onClick={resource.previous}>
-              {t("routesConsoleDrive.previousTransfers")}
-            </Button>
-            <Button size="sm" disabled={!resource.data.next_cursor} onClick={resource.next}>
-              {t("routesConsoleDrive.nextTransfers")}
-            </Button>
-          </div>
-        </div>
+        <ConsolePagination
+          page={resource.page}
+          count={resource.data.items.length}
+          hasNext={!!resource.data.next_cursor}
+          loading={resource.loading}
+          previous={resource.previous}
+          next={resource.next}
+        />
       )}
       <AdminConfirm
         open={!!selected}
@@ -879,7 +760,7 @@ function Transfers({ accountId = "" }: { accountId?: string }) {
           reload();
         }}
       />
-    </section>
+    </ConsoleSection>
   );
 }
 
@@ -898,20 +779,22 @@ function Inventory() {
     [grant, setGrant] = useState<DriveSharing | null>(null);
   return (
     <>
-      <PageHeader
+      <ConsoleSettingsHeader
         title={t("routesConsoleDrive.filesTrash")}
         description={t("routesConsoleDrive.inspectFileMetadataWithoutOpeningFileContentsRestoreA")}
-      />
-      <div className="console-drive-filters">
-        <TextField
-          label={t("routesConsoleDrive.findFileOrFolder")}
+      >
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
+          label={t("consoleSettings.search")}
           name="inventory_search"
           type="search"
           value={query}
           onValueChange={setQuery}
         />
-        <SelectField
-          label={t("routesConsoleDrive.inventoryFilter")}
+        <ConsoleSelectField
+          label={t("common.status")}
           value={state}
           onChange={setState}
           options={[
@@ -925,12 +808,12 @@ function Inventory() {
             {t("routesConsoleDrive.clearOwnerFilter")}
           </Button>
         )}
-      </div>
-      <ListPanel
+      </ConsoleFilters>
+      <ConsoleTable
         resource={resource}
         headings={[
           t("routesConsoleDrive.item"),
-          t("routesConsoleDrive.owner"),
+          t("consoleSettings.owner"),
           t("routesConsoleDrive.currentVersions"),
           t("routesConsoleDrive.modified"),
           t("common.actions"),
@@ -957,7 +840,7 @@ function Inventory() {
             </td>
             <td>{adminDate(item.updated_at)}</td>
             <td>
-              <div className="console-drive-row-actions">
+              <div className="console-row-actions">
                 {item.trashed_at ? (
                   <>
                     {allowed(permissions, "trash.restore") && (
@@ -1006,7 +889,7 @@ function Inventory() {
             </td>
           </tr>
         ))}
-      </ListPanel>
+      </ConsoleTable>
       <AdminConfirm
         open={!!action}
         title={
@@ -1098,7 +981,7 @@ function GrantDialog({
       ) : (
         <AccountPicker value={user} onChange={setUser} exclude="" />
       )}
-      <SelectField
+      <ConsoleSelectField
         label={t("routesConsoleDrive.sharingRole")}
         value={role}
         onChange={setRole}
@@ -1108,7 +991,7 @@ function GrantDialog({
           { value: "editor", label: t("routesConsoleDrive.editor") },
         ]}
       />
-      <TextField
+      <ConsoleInput
         label={t("routesConsoleDrive.sharingExpiresAtOptional")}
         name="grant_expiry"
         type="datetime-local"
@@ -1135,20 +1018,22 @@ function Sharing() {
     [edit, setEdit] = useState<DriveSharing | null>(null);
   return (
     <>
-      <PageHeader
+      <ConsoleSettingsHeader
         title={t("routesConsoleDrive.sharing")}
         description={t("routesConsoleDrive.inspectDirectFolderGrantsAndPublicLinkMetadataFolder")}
-      />
-      <div className="console-drive-filters">
-        <TextField
+      >
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
           type="search"
-          label={t("routesConsoleDrive.findSharedItem")}
+          label={t("consoleSettings.search")}
           name="sharing_search"
           value={query}
           onValueChange={setQuery}
           placeholder={t("routesConsoleDrive.itemNameOrOwnerSEmail")}
         />
-        <SelectField
+        <ConsoleSelectField
           label={t("routesConsoleDrive.sharingType")}
           value={kind}
           onChange={setKind}
@@ -1157,8 +1042,8 @@ function Sharing() {
             { value: "grants", label: t("routesConsoleDrive.internalGrants") },
           ]}
         />
-        <SelectField
-          label={t("routesConsoleDrive.sharingFilter")}
+        <ConsoleSelectField
+          label={t("common.status")}
           value={state}
           onChange={setState}
           options={[
@@ -1166,12 +1051,12 @@ function Sharing() {
             { value: "all", label: t("routesConsoleDrive.allRecords") },
           ]}
         />
-      </div>
-      <ListPanel
+      </ConsoleFilters>
+      <ConsoleTable
         resource={resource}
         headings={[
           t("routesConsoleDrive.item"),
-          t("routesConsoleDrive.owner"),
+          t("consoleSettings.owner"),
           kind === "links" ? t("routesConsoleDrive.linkAccess") : t("routesConsoleDrive.recipient"),
           t("routesConsoleDrive.expiry"),
           t("common.actions"),
@@ -1222,7 +1107,7 @@ function Sharing() {
             </td>
             <td>
               {allowed(permissions, "sharing.manage") && (
-                <div className="console-drive-row-actions">
+                <div className="console-row-actions">
                   {kind === "grants" && (
                     <Button size="sm" onClick={() => setEdit(entry)}>
                       {t("routesConsoleDrive.editRole")}
@@ -1238,7 +1123,7 @@ function Sharing() {
             </td>
           </tr>
         ))}
-      </ListPanel>
+      </ConsoleTable>
       <AdminConfirm
         open={!!selected}
         title={
@@ -1275,18 +1160,13 @@ function Policies() {
     );
   return (
     <>
-      <PageHeader
-        title={t("routesConsoleDrive.workspacePolicies")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.policies")}
         description={t(
           "routesConsoleDrive.settingsAreStoredInTheDatabaseIndividualStorageOverrides",
         )}
       />
-      <ResourceState
-        loading={resource.loading}
-        error={resource.error}
-        kind="form"
-        label={t("routesConsoleDrive.loadingWorkspacePolicies")}
-      />
+      <ConsoleState loading={resource.loading} error={resource.error} kind="form" />
       {resource.data && (
         <PolicyForm
           key={resource.data.settings.version}
@@ -1320,7 +1200,7 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
     [error, setError] = useState("");
   return (
     <>
-      <Form
+      <ConsoleForm
         onSubmit={(event) => {
           event.preventDefault();
           try {
@@ -1339,13 +1219,12 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
           }
         }}
       >
-        <section className="account-panel">
-          <div className="account-panel-header">
-            <h2>{t("routesConsoleDrive.storageRetention")}</h2>
-            <p>{t("routesConsoleDrive.filesRemainIntactWhenAStorageLimitIsReduced")}</p>
-          </div>
-          <div className="console-drive-form-grid">
-            <TextField
+        <ConsoleSection
+          title={t("routesConsoleDrive.storageRetention")}
+          description={t("routesConsoleDrive.filesRemainIntactWhenAStorageLimitIsReduced")}
+        >
+          <div className="console-form-fields">
+            <ConsoleInput
               label={t("routesConsoleDrive.defaultStoragePerUserGib")}
               name="default_quota"
               type="number"
@@ -1356,7 +1235,7 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
               onValueChange={setQuota}
               readOnly={!manage}
             />
-            <TextField
+            <ConsoleInput
               label={t("routesConsoleDrive.maximumFileSizeGib")}
               name="max_file"
               type="number"
@@ -1368,7 +1247,7 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
               onValueChange={setMaxFile}
               readOnly={!manage}
             />
-            <TextField
+            <ConsoleInput
               label={t("routesConsoleDrive.trashRetentionDays")}
               name="retention_days"
               type="number"
@@ -1380,17 +1259,14 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
               readOnly={!manage}
             />
           </div>
-        </section>
-        <section className="account-panel">
-          <div className="account-panel-header">
-            <h2>{t("routesConsoleDrive.sharingPolicies")}</h2>
-            <p>
-              {t(
-                "routesConsoleDrive.disablingInternalSharingBlocksExistingRecipientGrantsDisablingPublic",
-              )}
-            </p>
-          </div>
-          <div className="console-drive-form-grid">
+        </ConsoleSection>
+        <ConsoleSection
+          title={t("routesConsoleDrive.sharingPolicies")}
+          description={t(
+            "routesConsoleDrive.disablingInternalSharingBlocksExistingRecipientGrantsDisablingPublic",
+          )}
+        >
+          <div className="console-form-fields">
             <Check checked={internal} onChange={setInternal} disabled={!manage}>
               {t("routesConsoleDrive.allowInternalSharing")}
             </Check>
@@ -1400,7 +1276,7 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
             <Check checked={password} onChange={setPassword} disabled={!manage}>
               {t("routesConsoleDrive.requireAPasswordOnPublicShareLinks")}
             </Check>
-            <TextField
+            <ConsoleInput
               label={t("routesConsoleDrive.maximumPublicLinkLifetimeDays")}
               name="public_link_days"
               type="number"
@@ -1410,25 +1286,21 @@ function PolicyForm({ settings, reload }: { settings: DriveSettings; reload: () 
               value={maxDays}
               onValueChange={setMaxDays}
               readOnly={!manage}
-              description={t("routesConsoleDrive.0AllowsNoExpiryAPositiveValueLimitsExpiry")}
+              hint={t("routesConsoleDrive.0AllowsNoExpiryAPositiveValueLimitsExpiry")}
             />
           </div>
-          <Notice error={error} />
+        </ConsoleSection>
+        <Notice error={error} />
+        <ConsoleFormActions
+          meta={t("consoleSettings.lastUpdated", { date: adminDate(settings.updated_at) })}
+        >
           {manage && (
-            <div className="account-actions">
-              <Button variant="primary" type="submit">
-                {t("routesConsoleDrive.reviewPolicyChanges")}
-              </Button>
-            </div>
+            <Button variant="primary" type="submit">
+              {t("consoleSettings.reviewChanges")}
+            </Button>
           )}
-          <p className="console-subtext">
-            <LocalizedMessage
-              id="routesConsoleDrive.updated"
-              values={{ adminDate: adminDate(settings.updated_at) }}
-            />
-          </p>
-        </section>
-      </Form>
+        </ConsoleFormActions>
+      </ConsoleForm>
       <AdminConfirm
         open={!!review}
         title={t("routesConsoleDrive.applyDrivePolicies")}
@@ -1537,22 +1409,24 @@ function AuditLog() {
   });
   return (
     <>
-      <PageHeader
-        title={t("routesConsoleDrive.auditLog")}
+      <ConsoleSettingsHeader
+        title={t("consoleSettings.audit")}
         description={t(
           "routesConsoleDrive.immutableFileActivityAndAdministratorActionsAdministrativeChangesInclude",
         )}
-      />
-      <div className="console-drive-filters">
-        <TextField
+      >
+        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
+      </ConsoleSettingsHeader>
+      <ConsoleFilters>
+        <ConsoleInput
           type="search"
-          label={t("routesConsoleDrive.findActivity")}
+          label={t("consoleSettings.search")}
           name="audit_search"
           value={query}
           onValueChange={setQuery}
           placeholder={t("routesConsoleDrive.fileNameOrActorEmail")}
         />
-        <SelectField
+        <ConsoleSelectField
           label={t("routesConsoleDrive.activitySource")}
           value={kind}
           onChange={setKind}
@@ -1562,8 +1436,8 @@ function AuditLog() {
             { value: "items", label: t("routesConsoleDrive.fileActivity") },
           ]}
         />
-        <SelectField
-          label={t("routesConsoleDrive.actionFilter")}
+        <ConsoleSelectField
+          label={t("consoleSettings.action")}
           value={action}
           onChange={setAction}
           options={[
@@ -1581,27 +1455,14 @@ function AuditLog() {
             },
           ]}
         />
-        <TextField
-          label={t("routesConsoleDrive.fromDate")}
-          name="audit_from"
-          type="date"
-          value={from}
-          onValueChange={setFrom}
-        />
-        <TextField
-          label={t("routesConsoleDrive.toDate")}
-          name="audit_to"
-          type="date"
-          value={to}
-          onValueChange={setTo}
-        />
-      </div>
-      <ListPanel
+        <ConsoleDateFilters after={from} before={to} onAfter={setFrom} onBefore={setTo} />
+      </ConsoleFilters>
+      <ConsoleTable
         resource={resource}
         headings={[
-          t("routesConsoleDrive.time"),
-          t("routesConsoleDrive.actor"),
-          t("routesConsoleDrive.action"),
+          t("consoleSettings.time"),
+          t("consoleSettings.actor"),
+          t("consoleSettings.action"),
           t("routesConsoleDrive.itemTarget"),
           t("routesConsoleDrive.details"),
         ]}
@@ -1630,51 +1491,49 @@ function AuditLog() {
             </td>
           </tr>
         ))}
-      </ListPanel>
-      <Dialog.Root
+      </ConsoleTable>
+      <ConsoleDialog
         open={!!detail}
-        onOpenChange={(open) => {
-          if (!open) setDetail(null);
-        }}
-      >
-        <DialogPopup data-ui-theme="neutral">
-          <Dialog.Title>{t("routesConsoleDrive.driveActivityDetails")}</Dialog.Title>
-          <Dialog.Description>
+        title={t("routesConsoleDrive.driveActivityDetails")}
+        onClose={() => setDetail(null)}
+        description={
+          <>
             {detail && enumLabel(detail.action)}
             {t("routesConsoleDrive.text5")}
             {detail ? adminDate(detail.created_at) : ""}
-          </Dialog.Description>
-          {detail && (
-            <>
-              <dl className="console-facts">
-                <div>
-                  <dt>{t("routesConsoleDrive.actor")}</dt>
-                  <dd>
-                    {detail.actor_name ||
-                      detail.actor_email ||
-                      t("routesConsoleDrive.publicLinkSystem")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t("routesConsoleDrive.itemTarget")}</dt>
-                  <dd>{detail.item_name || detail.target_type}</dd>
-                </div>
-              </dl>
-              <pre
-                className="console-drive-audit-json"
-                tabIndex={0}
-                role="region"
-                aria-label={t("routesConsoleDrive.auditRecordValues")}
-              >
-                {JSON.stringify(detail.details, null, 2)}
-              </pre>
-            </>
-          )}
-          <div className="account-actions">
-            <Button onClick={() => setDetail(null)}>{t("common.close")}</Button>
-          </div>
-        </DialogPopup>
-      </Dialog.Root>
+          </>
+        }
+      >
+        {detail && (
+          <>
+            <dl className="console-facts">
+              <div>
+                <dt>{t("consoleSettings.actor")}</dt>
+                <dd>
+                  {detail.actor_name ||
+                    detail.actor_email ||
+                    t("routesConsoleDrive.publicLinkSystem")}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("routesConsoleDrive.itemTarget")}</dt>
+                <dd>{detail.item_name || detail.target_type}</dd>
+              </div>
+            </dl>
+            <pre
+              className="console-drive-audit-json"
+              tabIndex={0}
+              role="region"
+              aria-label={t("routesConsoleDrive.auditRecordValues")}
+            >
+              {JSON.stringify(detail.details, null, 2)}
+            </pre>
+          </>
+        )}
+        <div className="account-actions">
+          <Button onClick={() => setDetail(null)}>{t("common.close")}</Button>
+        </div>
+      </ConsoleDialog>
     </>
   );
 }
