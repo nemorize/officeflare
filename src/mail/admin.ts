@@ -81,7 +81,7 @@ adminMail.get("/overview", async (c) => {
     (SELECT count(*) FROM mail_mailboxes WHERE status<>'deleted') mailboxes,
     (SELECT count(*) FROM mail_mailboxes WHERE kind='shared' AND status<>'deleted') shared_mailboxes,
     (SELECT count(*) FROM mail_mailboxes WHERE status='disabled') disabled_mailboxes,
-    (SELECT count(*) FROM mail_provider_connections WHERE enabled=1) enabled_providers,
+    (SELECT count(*) FROM mail_domains WHERE (inbound_enabled=1 AND json_type(provider_settings_json,'$.inbound')='object') OR (outbound_enabled=1 AND json_type(provider_settings_json,'$.outbound')='object')) active_domains,
     (SELECT count(*) FROM mail_admin_storage s JOIN mail_mailboxes b ON b.id=s.mailbox_id WHERE b.status<>'deleted') measured_mailboxes,
     (SELECT coalesce(sum(s.database_bytes),0) FROM mail_admin_storage s JOIN mail_mailboxes b ON b.id=s.mailbox_id WHERE b.status<>'deleted') database_bytes,
     (SELECT coalesce(sum(s.attachment_bytes),0) FROM mail_admin_storage s JOIN mail_mailboxes b ON b.id=s.mailbox_id WHERE b.status<>'deleted') attachment_bytes`,
@@ -214,17 +214,16 @@ adminMail.get("/activity", async (c) => {
     like(q),
     like(q),
     like(q),
-    like(q),
   ];
   const dates = timeFilters(c, "a.created_at", args);
   return c.json(
     await page(
       c,
       "activity",
-      `SELECT cast(a.sequence AS TEXT) page_id,a.sequence page_time,a.*,u.email_address actor_email,u.display_name actor_name,coalesce(d.name,b.name,p.name) resource_name
+      `SELECT cast(a.sequence AS TEXT) page_id,a.sequence page_time,a.*,u.email_address actor_email,u.display_name actor_name,coalesce(d.name,b.name) resource_name
     FROM mail_admin_audit a LEFT JOIN users u ON u.id=a.actor_user_id
-    LEFT JOIN mail_domains d ON d.id=a.resource_id LEFT JOIN mail_mailboxes b ON b.id=a.resource_id LEFT JOIN mail_provider_connections p ON p.id=a.resource_id
-    WHERE (?='' OR a.operation=? OR (?='PATCH' AND a.operation='PUT')) AND (?='' OR u.email_address LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\' OR a.resource_path LIKE ? ESCAPE '\\' OR a.resource_id LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\' OR b.name LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\')${dates}`,
+    LEFT JOIN mail_domains d ON d.id=a.resource_id LEFT JOIN mail_mailboxes b ON b.id=a.resource_id
+    WHERE (?='' OR a.operation=? OR (?='PATCH' AND a.operation='PUT')) AND (?='' OR u.email_address LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\' OR a.resource_path LIKE ? ESCAPE '\\' OR a.resource_id LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\' OR b.name LIKE ? ESCAPE '\\')${dates}`,
       args,
       ["a.sequence", "a.sequence"],
     ),
@@ -235,7 +234,7 @@ export async function recordMailAdministration(c: AdminContext) {
   if (c.res.status >= 400 || !["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method)) return;
   const path = c.req.path.replace(/^\/api\/mail/, "");
   if (
-    !/^\/(?:admin\/settings|provider-connections|domains|addresses)(?:\/|$)/.test(path) &&
+    !/^\/(?:admin\/settings|domains|addresses)(?:\/|$)/.test(path) &&
     !/^\/mailboxes(?:\/[^/]+(?:\/configuration|\/members(?:\/[^/]+)?)?)?$/.test(path)
   )
     return;

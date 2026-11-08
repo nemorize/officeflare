@@ -5025,4 +5025,10 @@ export const ja = defineTranslations(en, {
   "mailAdmin.backToMailboxes": "← メールボックス",
   "mailAdmin.chooseConnection": "接続を選択",
   "mailAdmin.domainConnectionDescription": "配信接続を選択し、このドメインの設定を管理します。",
+  "domainProviders.activeDomains": "メールが有効なドメイン",
+  "domainProviders.description": "このドメインの受信・送信プロバイダーと認証情報を直接設定します。",
+  "domainProviders.unsupportedDirection":
+    "このプロバイダーは選択した送受信方向に対応していません。",
+  "domainProviders.invalidSettings": "ドメインのプロバイダー設定が無効です。",
+  "domainProviders.versionChanged": "ドメイン設定が変更されました。更新してから保存してください。",
 });

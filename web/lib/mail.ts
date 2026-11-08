@@ -148,12 +148,20 @@ export interface Connection {
   enabled: number;
   version: number;
 }
+export interface DomainProviderSettings {
+  provider: string;
+  config?: Record<string, string>;
+  secret_configured: boolean;
+}
 export interface Domain {
   id: string;
   name: string;
   is_default: number;
-  inbound_connection_id: string | null;
-  outbound_connection_id: string | null;
+  version: number;
+  provider_settings: {
+    inbound: DomainProviderSettings | null;
+    outbound: DomainProviderSettings | null;
+  };
   inbound_provider?: string | null;
   outbound_provider?: string | null;
   inbound_enabled: number;
@@ -181,7 +189,6 @@ export interface DomainProvider {
   };
   config_fields: ProviderField[];
   secret_fields: ProviderField[];
-  default_connection_id: string | null;
 }
 export interface Condition {
   field: string;

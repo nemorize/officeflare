@@ -1,3 +1,11 @@
+import { can } from "../authorization/access";
+import type { AuthContext } from "../auth/types";
+import {
+  defaultDomainProviders,
+  domainProviders,
+  publicMailDomain,
+  updateDomainProviders,
+} from "../mail/domain-providers";
 import { t } from "../../shared/i18n/index.ts";
 import { adminMail, recordMailAdministration } from "../mail/admin";
 import { mailSendLimit, requireForwardingAllowed, workspaceMailPolicy } from "../mail/policy";
@@ -39,7 +47,6 @@ import {
   authenticateMail,
   administrator,
   authorize,
-  connection,
   control,
   first,
   activeAccountSql,
@@ -62,17 +69,10 @@ import {
   text,
 } from "../mail/input";
 import { mailbox, partition } from "../mail/mailbox";
-import {
-  providers,
-  provider,
-  publicProvider,
-  parseProviderConfig,
-  parseProviderSecrets,
-  parseProviderSecretUpdates,
-} from "../mail/providers";
+import { providers, provider, publicProvider } from "../mail/providers";
 import { exportStream, startImport, startExport, startRestore } from "../mail/data";
 import { jmap, mcp } from "../mail/protocols";
-import { seal, unseal } from "../mail/secrets";
+import { seal } from "../mail/secrets";
 import type { Permission } from "../authorization/permissions";
 import {
   belongs,
@@ -96,7 +96,6 @@ import {
   type MailBody,
   type Address,
   type Attachment,
-  type Connection,
   type Domain,
   type MailAppEnv,
   type Mailbox,
@@ -123,30 +122,7 @@ function backgroundOutbox(c: Parameters<typeof authenticateMail>[0], partitionId
     }),
   );
 }
-const safeProviderConfig = (value?: string) => {
-  try {
-    const parsed = JSON.parse(value || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-const publicConnection = (connection: Connection | null) =>
-  connection && {
-    id: connection.id,
-    provider: connection.provider,
-    name: connection.name,
-    enabled: connection.enabled,
-    version: connection.version,
-    config: safeProviderConfig(connection.config_json),
-    secret_configured: !!connection.secret_ciphertext,
-  };
-const providerCatalog = () => {
-  return providers.map((entry) => ({
-    ...publicProvider(entry),
-    default_connection_id: entry.id === "cloudflare" ? "cloudflare-bindings" : null,
-  }));
-};
+const providerCatalog = () => providers.map(publicProvider);
 const key = (c: Parameters<typeof authenticateMail>[0]) => {
   const supplied = c.req.header("Idempotency-Key");
   if (supplied !== undefined && !/^[A-Za-z0-9._:-]{1,128}$/.test(supplied))
@@ -299,190 +275,59 @@ const mailCapabilities = (env: Env) => ({
   domain_setup: "cloudflare_dashboard",
 });
 mail.get("/capabilities", (c) => c.json(mailCapabilities(c.env)));
-mail.get("/provider-connections", async (c) => {
-  await administrator(c, "admin.mail.providers.read");
-  const connections = await all<Connection & { domain_ids_json: string }>(
-    c.env,
-    "SELECT p.*,(SELECT json_group_array(d.id) FROM mail_domains d WHERE d.outbound_connection_id=p.id) domain_ids_json FROM mail_provider_connections p ORDER BY p.created_at,p.id",
-  );
-  return c.json({
-    connections: connections.map((entry) => ({
-      id: entry.id,
-      provider: entry.provider,
-      name: entry.name,
-      enabled: entry.enabled,
-      version: entry.version,
-      config: safeProviderConfig(entry.config_json),
-      secret_configured: !!entry.secret_ciphertext,
-      domain_ids: JSON.parse(entry.domain_ids_json) as string[],
-    })),
-  });
-});
-mail.get("/provider-catalog", async (c) => {
-  await administrator(c, "admin.mail.providers.read");
-  return c.json({ providers: providerCatalog() });
-});
-mail.post("/provider-connections", async (c) => {
-  await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["provider", "name", "enabled", "config", "secrets"]),
-    name = text(data.name, "name", 100),
-    selected = provider(text(data.provider, "provider", 64)),
-    connectionId = id(),
-    config = parseProviderConfig(data.config, selected),
-    secrets = parseProviderSecrets(data.secrets, selected),
-    sealed = Object.keys(secrets).length ? await seal(c.env, JSON.stringify(secrets)) : null;
-  await administrativeControl(c, "admin.mail.providers.manage")
-    .prepare(
-      "INSERT INTO mail_provider_connections(id,provider,name,enabled,config_json,secret_ciphertext,secret_nonce) VALUES(?,?,?,?,?,?,?)",
-    )
-    .bind(
-      connectionId,
-      selected.id,
-      name,
-      data.enabled === undefined ? 1 : flag(data.enabled, "enabled"),
-      JSON.stringify(config),
-      sealed?.ciphertext ?? null,
-      sealed?.nonce ?? null,
-    )
-    .run();
-  return c.json(
-    {
-      connection: publicConnection(
-        await first<Connection>(
-          c.env,
-          "SELECT * FROM mail_provider_connections WHERE id=?",
-          connectionId,
-        ),
-      ),
-    },
-    201,
-  );
-});
-mail.patch("/provider-connections/:id", async (c) => {
-  await administrator(c, "admin.mail.providers.manage");
-  const data = await input(c, ["name", "enabled", "version", "config", "secrets"]),
-    version = integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
-  const existing = await first<Connection>(
-    c.env,
-    "SELECT * FROM mail_provider_connections WHERE id=?",
-    c.req.param("id"),
-  );
-  if (!existing) fail(404, t("routesMail.connectionNotFound"));
-  const selected = provider(existing.provider),
-    config =
-      data.config === undefined
-        ? safeProviderConfig(existing.config_json)
-        : parseProviderConfig(data.config, selected),
-    secretUpdates =
-      data.secrets === undefined ? {} : parseProviderSecretUpdates(data.secrets, selected),
-    hasSecretUpdates = Object.keys(secretUpdates).length > 0;
-  let sealed: Awaited<ReturnType<typeof seal>> | null = null;
-  if (hasSecretUpdates) {
-    const existingSecrets =
-      existing.secret_ciphertext && existing.secret_nonce
-        ? (JSON.parse(
-            await unseal(c.env, existing.secret_ciphertext, existing.secret_nonce),
-          ) as Record<string, unknown>)
-        : {};
-    const mergedSecrets = parseProviderSecrets({ ...existingSecrets, ...secretUpdates }, selected);
-    sealed = await seal(c.env, JSON.stringify(mergedSecrets));
-  }
-  const result = await administrativeControl(c, "admin.mail.providers.manage")
-    .prepare(
-      "UPDATE mail_provider_connections SET name=?,enabled=?,config_json=?,secret_ciphertext=CASE WHEN ? THEN ? ELSE secret_ciphertext END,secret_nonce=CASE WHEN ? THEN ? ELSE secret_nonce END,version=version+1,updated_at=? WHERE id=? AND version=?",
-    )
-    .bind(
-      data.name === undefined ? existing.name : text(data.name, "name", 100),
-      data.enabled === undefined ? existing.enabled : flag(data.enabled, "enabled"),
-      JSON.stringify(config),
-      hasSecretUpdates ? 1 : 0,
-      sealed?.ciphertext ?? null,
-      hasSecretUpdates ? 1 : 0,
-      sealed?.nonce ?? null,
-      epoch(),
-      existing.id,
-      version,
-    )
-    .run();
-  if (!result.meta.changes) fail(409, t("routesMail.connectionVersionChanged"));
-  return c.json({
-    connection: publicConnection(
-      await first<Connection>(
-        c.env,
-        "SELECT * FROM mail_provider_connections WHERE id=?",
-        existing.id,
-      ),
-    ),
-  });
-});
 mail.get("/domains", async (c) => {
   await administrator(c, "admin.mail.domains.read");
+  const readConfiguration = await can(c as unknown as AuthContext, "admin.mail.providers.read");
+  const domains = await all<Domain>(c.env, "SELECT * FROM mail_domains ORDER BY name");
   return c.json({
-    domains: await all(
-      c.env,
-      "SELECT d.*,i.provider inbound_provider,o.provider outbound_provider FROM mail_domains d LEFT JOIN mail_provider_connections i ON i.id=d.inbound_connection_id LEFT JOIN mail_provider_connections o ON o.id=d.outbound_connection_id ORDER BY d.name",
-    ),
+    domains: domains.map((domain) => publicMailDomain(domain, readConfiguration)),
     providers: providerCatalog(),
   });
 });
 mail.post("/domains", async (c) => {
   await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
-      "name",
-      "inbound_connection_id",
-      "outbound_connection_id",
-      "inbound_enabled",
-      "outbound_enabled",
-      "max_send_bytes",
-      "plus_addressing",
-      "is_default",
-    ]),
-    domainId = id();
-  const inbound =
-    data.inbound_connection_id === null
-      ? null
-      : text(data.inbound_connection_id ?? "cloudflare-bindings", "inbound_connection_id", 100);
-  const outbound =
-    data.outbound_connection_id === null
-      ? null
-      : text(data.outbound_connection_id ?? "cloudflare-bindings", "outbound_connection_id", 100);
-  if (inbound) await connection(c.env, inbound);
-  const sendingConnection = outbound ? await connection(c.env, outbound) : null;
-  if (
-    sendingConnection &&
-    sendingConnection.provider !== "cloudflare" &&
-    (await first(
-      c.env,
-      "SELECT id FROM mail_domains WHERE outbound_connection_id=? LIMIT 1",
-      outbound,
-    ))
-  )
-    fail(409, t("routesMail.sendingProviderConnectionsAreConfiguredPerDomain"));
+    "name",
+    "provider_settings",
+    "inbound_enabled",
+    "outbound_enabled",
+    "max_send_bytes",
+    "plus_addressing",
+    "is_default",
+  ]);
+  const permissions: Permission[] = ["admin.mail.domains.manage"];
+  let settings = defaultDomainProviders();
+  if ("provider_settings" in data) {
+    await administrator(c, "admin.mail.providers.manage");
+    permissions.push("admin.mail.providers.manage");
+    settings = await updateDomainProviders(c.env, settings, data.provider_settings);
+  }
+  const domainId = id(),
+    domainName = domain(data.name);
   const maxSendBytes = configuredSendLimit(
     data.max_send_bytes ?? null,
-    sendingConnection?.provider ?? null,
+    settings.outbound?.provider ?? null,
   );
   const receive =
       data.inbound_enabled === undefined ? 0 : flag(data.inbound_enabled, "inbound_enabled"),
     send =
       data.outbound_enabled === undefined ? 0 : flag(data.outbound_enabled, "outbound_enabled");
-  if ((receive && !inbound) || (send && !outbound))
+  if ((receive && !settings.inbound) || (send && !settings.outbound))
     fail(400, t("routesMail.enabledDirectionRequiresAProviderConnection"));
-  const domainDb = administrativeControl(c, "admin.mail.domains.manage");
+  const db = administrativeControl(c, permissions);
   const defaultFlag = data.is_default === undefined ? null : flag(data.is_default, "is_default");
-  await domainDb.batch([
+  await db.batch([
     ...(defaultFlag === 1
-      ? [domainDb.prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1").bind()]
+      ? [db.prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1").bind()]
       : []),
-    domainDb
+    db
       .prepare(
-        "INSERT INTO mail_domains(id,name,inbound_connection_id,outbound_connection_id,inbound_enabled,outbound_enabled,plus_addressing,max_send_bytes) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO mail_domains(id,name,provider_settings_json,inbound_enabled,outbound_enabled,plus_addressing,max_send_bytes) VALUES(?,?,?,?,?,?,?)",
       )
       .bind(
         domainId,
-        domain(data.name),
-        inbound,
-        outbound,
+        domainName,
+        JSON.stringify(settings),
         receive,
         send,
         data.plus_addressing === undefined ? 1 : flag(data.plus_addressing, "plus_addressing"),
@@ -490,7 +335,7 @@ mail.post("/domains", async (c) => {
       ),
     ...(defaultFlag !== 0
       ? [
-          domainDb
+          db
             .prepare(
               "UPDATE mail_domains SET is_default=1 WHERE id=? AND NOT EXISTS(SELECT 1 FROM mail_domains WHERE is_default=1)",
             )
@@ -500,7 +345,10 @@ mail.post("/domains", async (c) => {
   ]);
   return c.json(
     {
-      domain: await first(c.env, "SELECT * FROM mail_domains WHERE id=?", domainId),
+      domain: publicMailDomain(
+        (await first<Domain>(c.env, "SELECT * FROM mail_domains WHERE id=?", domainId))!,
+        await can(c as unknown as AuthContext, "admin.mail.providers.read"),
+      ),
     },
     201,
   );
@@ -508,8 +356,8 @@ mail.post("/domains", async (c) => {
 mail.patch("/domains/:id", async (c) => {
   await administrator(c, "admin.mail.domains.manage");
   const data = await input(c, [
-    "inbound_connection_id",
-    "outbound_connection_id",
+    "version",
+    "provider_settings",
     "inbound_enabled",
     "outbound_enabled",
     "max_send_bytes",
@@ -523,12 +371,19 @@ mail.patch("/domains/:id", async (c) => {
     c.req.param("id"),
   );
   if (!existing) fail(404, t("routesMail.domainNotFound"));
+  const permissions: Permission[] = ["admin.mail.domains.manage"];
+  const version =
+    data.version === undefined && !("provider_settings" in data)
+      ? existing.version
+      : integer(data.version, "version", 1, Number.MAX_SAFE_INTEGER);
+  let settings = domainProviders(existing);
   const values: Record<string, string | number | null> = {};
-  for (const field of ["inbound_connection_id", "outbound_connection_id"] as const)
-    if (field in data) {
-      values[field] = data[field] === null ? null : text(data[field], field, 100);
-      if (values[field]) await connection(c.env, String(values[field]));
-    }
+  if ("provider_settings" in data) {
+    await administrator(c, "admin.mail.providers.manage");
+    permissions.push("admin.mail.providers.manage");
+    settings = await updateDomainProviders(c.env, settings, data.provider_settings);
+    values.provider_settings_json = JSON.stringify(settings);
+  }
   for (const field of ["inbound_enabled", "outbound_enabled", "plus_addressing", "is_default"])
     if (field in data) values[field] = flag(data[field], field);
   if ("catch_all_mailbox_id" in data) {
@@ -544,64 +399,44 @@ mail.patch("/domains/:id", async (c) => {
     )
       fail(400, t("routesMail.catchAllMailboxIsNotActive"));
   }
-  const inbound =
-      values.inbound_connection_id === undefined
-        ? existing.inbound_connection_id
-        : values.inbound_connection_id,
-    outbound =
-      values.outbound_connection_id === undefined
-        ? existing.outbound_connection_id
-        : values.outbound_connection_id;
-  const sendingConnection = outbound
-    ? await first<Connection>(
-        c.env,
-        "SELECT * FROM mail_provider_connections WHERE id=?",
-        String(outbound),
-      )
-    : null;
-  if (
-    "outbound_connection_id" in data &&
-    sendingConnection &&
-    sendingConnection.provider !== "cloudflare" &&
-    (await first(
-      c.env,
-      "SELECT id FROM mail_domains WHERE outbound_connection_id=? AND id<>? LIMIT 1",
-      String(outbound),
-      existing.id,
-    ))
-  )
-    fail(409, t("routesMail.sendingProviderConnectionsAreConfiguredPerDomain"));
-  const maxSendBytes = configuredSendLimit(
+  const maximum = configuredSendLimit(
     data.max_send_bytes === undefined ? existing.max_send_bytes : data.max_send_bytes,
-    sendingConnection?.provider ?? null,
+    settings.outbound?.provider ?? null,
   );
-  if ("max_send_bytes" in data) values.max_send_bytes = maxSendBytes;
+  if ("max_send_bytes" in data) values.max_send_bytes = maximum;
   if (
-    ((values.inbound_enabled ?? existing.inbound_enabled) && !inbound) ||
-    ((values.outbound_enabled ?? existing.outbound_enabled) && !outbound)
+    ((values.inbound_enabled ?? existing.inbound_enabled) && !settings.inbound) ||
+    ((values.outbound_enabled ?? existing.outbound_enabled) && !settings.outbound)
   )
     fail(400, t("routesMail.enabledDirectionRequiresAProviderConnection"));
   const fields = Object.keys(values);
   if (!fields.length) fail(400, t("routesMail.noChangesSupplied"));
-  const domainDb = administrativeControl(c, "admin.mail.domains.manage");
-  await domainDb.batch([
+  const db = administrativeControl(c, permissions, {
+    sql: "EXISTS(SELECT 1 FROM mail_domains WHERE id=? AND version=?)",
+    bindings: [existing.id, version],
+  });
+  const results = await db.batch([
     ...(values.is_default === 1
       ? [
-          domainDb
+          db
             .prepare("UPDATE mail_domains SET is_default=0 WHERE is_default=1 AND id<>?")
             .bind(existing.id),
         ]
       : []),
-    domainDb
+    db
       .prepare(
         "UPDATE mail_domains SET " +
-          fields.map((f) => f + "=?").join(",") +
-          ",updated_at=? WHERE id=?",
+          fields.map((field) => field + "=?").join(",") +
+          ",version=version+1,updated_at=? WHERE id=?",
       )
-      .bind(...fields.map((f) => values[f]), epoch(), existing.id),
+      .bind(...fields.map((field) => values[field]), epoch(), existing.id),
   ]);
+  if (!results.at(-1)!.meta.changes) fail(409, t("domainProviders.versionChanged"));
   return c.json({
-    domain: await first(c.env, "SELECT * FROM mail_domains WHERE id=?", existing.id),
+    domain: publicMailDomain(
+      (await first<Domain>(c.env, "SELECT * FROM mail_domains WHERE id=?", existing.id))!,
+      await can(c as unknown as AuthContext, "admin.mail.providers.read"),
+    ),
   });
 });
 mail.get("/domains/:id/rules", async (c) => {
@@ -1174,7 +1009,7 @@ async function mailboxAddresses(c: Parameters<typeof authenticateMail>[0]) {
     }
   >(
     c.env,
-    "SELECT a.*,a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,(a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1) send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id LEFT JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=?",
+    "SELECT a.*,a.local_part||'@'||d.name email_address,json_extract(d.provider_settings_json,'$.outbound.provider') provider,d.max_send_bytes,(a.send_enabled=1 AND d.outbound_enabled=1 AND json_type(d.provider_settings_json,'$.outbound')='object') send_available FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.mailbox_id=?",
     resource(c),
   );
   return {

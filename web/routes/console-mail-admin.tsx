@@ -4,14 +4,7 @@ import { t } from "../../shared/i18n/index.ts";
 import { enumLabel } from "../../shared/i18n/labels.ts";
 import { api } from "../lib/api";
 import { formatBytes } from "../lib/drive";
-import type { DomainProvider } from "../lib/mail";
-import type {
-  AdminMailbox,
-  MailAdminActivity,
-  MailFlow,
-  MailPolicy,
-  ProviderConnection,
-} from "../lib/mail-admin";
+import type { AdminMailbox, MailAdminActivity, MailFlow, MailPolicy } from "../lib/mail-admin";
 import { useAccess } from "../components/console-access";
 import { Check, ConsolePageHeader, adminDate } from "../components/console-shared";
 import { Button, useNotifications } from "../components/ui";
@@ -20,7 +13,6 @@ import {
   MailFieldset,
   MailForm,
   MailInput,
-  MailModal,
   MailNotice,
   MailSection,
   MailSelect,
@@ -192,7 +184,7 @@ export function MailOverview() {
       | "mailboxes"
       | "shared_mailboxes"
       | "disabled_mailboxes"
-      | "enabled_providers"
+      | "active_domains"
       | "measured_mailboxes"
       | "database_bytes"
       | "attachment_bytes",
@@ -224,7 +216,7 @@ export function MailOverview() {
               [t("mailAdmin.mailboxes"), data.summary.mailboxes],
               [t("mailAdmin.shared"), data.summary.shared_mailboxes],
               [t("mailAdmin.disabled"), data.summary.disabled_mailboxes],
-              [t("mailAdmin.enabledProviders"), data.summary.enabled_providers],
+              [t("domainProviders.activeDomains"), data.summary.active_domains],
             ].map(([label, value]) => (
               <section className="account-panel" key={label}>
                 <div className="account-panel-header">
@@ -414,214 +406,6 @@ export function MailboxDirectory() {
         ))}
       </AdminTable>
     </>
-  );
-}
-
-export function MailProviders() {
-  const { permissions } = useAccess(),
-    manage = permissions.includes("admin.mail.providers.manage");
-  const resource = useMailResource<{ connections: ProviderConnection[] }>(
-    "/api/mail/provider-connections",
-  );
-  const catalog = useMailResource<{ providers: DomainProvider[] }>("/api/mail/provider-catalog");
-  const [editing, setEditing] = useState<ProviderConnection | "new" | null>(null);
-  return (
-    <>
-      <ConsolePageHeader
-        level={2}
-        title={t("mailAdmin.providers")}
-        description={t("mailAdmin.providersDescription")}
-      >
-        {manage && (
-          <Button variant="primary" disabled={!catalog.data} onClick={() => setEditing("new")}>
-            {t("mailAdmin.addProvider")}
-          </Button>
-        )}
-      </ConsolePageHeader>
-      <MailState
-        loading={(resource.loading && !resource.data) || (catalog.loading && !catalog.data)}
-        error={resource.error || catalog.error}
-        retry={() => {
-          resource.reload();
-          catalog.reload();
-        }}
-      />
-      <div className="mail-domain-grid">
-        {resource.data?.connections.map((connection) => (
-          <article className="mail-domain-card" key={connection.id}>
-            <h3>{connection.name}</h3>
-            <p className="mail-hint">
-              {catalog.data?.providers.find((entry) => entry.provider === connection.provider)
-                ?.label ?? connection.provider}
-            </p>
-            <div className="mail-actions">
-              <span className="mail-badge">
-                {connection.enabled ? t("common.enabled") : t("common.disabled")}
-              </span>
-              <span className="mail-badge">
-                {connection.provider === "cloudflare"
-                  ? t("mailAdmin.platformConnection")
-                  : connection.secret_configured
-                    ? t("mailAdmin.credentialsConfigured")
-                    : t("mailAdmin.credentialsMissing")}
-              </span>
-            </div>
-            {manage && (
-              <Button size="sm" disabled={!catalog.data} onClick={() => setEditing(connection)}>
-                {t("common.edit")}
-              </Button>
-            )}
-          </article>
-        ))}
-      </div>
-      {resource.data && !resource.data.connections.length && (
-        <p className="console-empty">{t("mailAdmin.noRecords")}</p>
-      )}
-      {editing && catalog.data && (
-        <ProviderEditor
-          key={editing === "new" ? "new" : editing.id}
-          existing={editing === "new" ? undefined : editing}
-          providers={catalog.data.providers}
-          onClose={() => setEditing(null)}
-          onSaved={resource.reload}
-        />
-      )}
-    </>
-  );
-}
-function ProviderEditor({
-  existing,
-  providers,
-  onClose,
-  onSaved,
-}: {
-  existing?: ProviderConnection;
-  providers: DomainProvider[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [providerId, setProviderId] = useState(existing?.provider ?? providers[0]?.provider ?? ""),
-    [name, setName] = useState(existing?.name ?? ""),
-    [enabled, setEnabled] = useState(existing ? !!existing.enabled : true);
-  const [config, setConfig] = useState<Record<string, string>>(existing?.config ?? {}),
-    [secrets, setSecrets] = useState<Record<string, string>>({});
-  const selected = providers.find((entry) => entry.provider === providerId),
-    action = useMailAction(),
-    notify = useNotifications();
-  return (
-    <MailModal
-      open
-      title={existing ? t("mailAdmin.editProvider") : t("mailAdmin.addProvider")}
-      description={t("mailAdmin.providerEditorDescription")}
-      onClose={onClose}
-    >
-      <MailForm
-        className="mail-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void action.run(async () => {
-            const updates = Object.fromEntries(
-              Object.entries(secrets).filter(([, value]) => value.trim()),
-            );
-            const values = Object.fromEntries(
-              (selected?.config_fields ?? []).map((field) => [
-                field.key,
-                config[field.key] ?? field.options?.[0] ?? "",
-              ]),
-            );
-            await api(`/api/mail/provider-connections${existing ? `/${existing.id}` : ""}`, {
-              method: existing ? "PATCH" : "POST",
-              body: {
-                name: name.trim(),
-                enabled,
-                config: values,
-                ...(existing ? { version: existing.version } : { provider: providerId }),
-                ...(!existing || Object.keys(updates).length ? { secrets: updates } : {}),
-              },
-            });
-            setSecrets({});
-            onSaved();
-            onClose();
-            notify.success(t("mailAdmin.providerSaved"));
-          });
-        }}
-      >
-        <MailFieldset disabled={action.busy}>
-          <MailInput
-            label={t("mailAdmin.connectionName")}
-            required
-            maxLength={100}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <MailField label={t("mailAdmin.provider")}>
-            <MailSelect
-              value={providerId}
-              disabled={!!existing}
-              onValueChange={(value) => {
-                setProviderId(value);
-                setConfig({});
-                setSecrets({});
-              }}
-              options={providers.map((entry) => ({
-                value: entry.provider,
-                label: entry.label ?? entry.provider,
-              }))}
-            />
-          </MailField>
-          {selected?.config_fields.map((field) =>
-            field.options ? (
-              <MailField key={field.key} label={field.label} hint={field.help}>
-                <MailSelect
-                  value={config[field.key] ?? field.options[0] ?? ""}
-                  onValueChange={(value) =>
-                    setConfig((current) => ({ ...current, [field.key]: value }))
-                  }
-                  options={field.options.map((value) => ({ value, label: value }))}
-                />
-              </MailField>
-            ) : (
-              <MailInput
-                key={field.key}
-                label={field.label}
-                hint={field.help}
-                required={!!field.required}
-                value={config[field.key] ?? ""}
-                onChange={(event) =>
-                  setConfig((current) => ({ ...current, [field.key]: event.target.value }))
-                }
-              />
-            ),
-          )}
-          {selected?.secret_fields.map((field) => (
-            <MailInput
-              key={field.key}
-              label={field.label}
-              hint={existing?.secret_configured ? t("mailAdmin.keepCredential") : field.help}
-              required={!!field.required && !existing?.secret_configured}
-              type="password"
-              autoComplete="new-password"
-              value={secrets[field.key] ?? ""}
-              onChange={(event) =>
-                setSecrets((current) => ({ ...current, [field.key]: event.target.value }))
-              }
-            />
-          ))}
-          <Check checked={enabled} onChange={setEnabled}>
-            {t("mailAdmin.enableConnection")}
-          </Check>
-        </MailFieldset>
-        <MailNotice error={action.error} />
-        <div className="mail-actions">
-          <Button disabled={action.busy} onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={action.busy || !selected}>
-            {action.busy ? t("common.saving") : t("common.save")}
-          </Button>
-        </div>
-      </MailForm>
-    </MailModal>
   );
 }
 

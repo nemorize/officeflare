@@ -39,7 +39,6 @@ export const mailConsolePages = [
     label: t("mailAdmin.mailboxes"),
     permission: "admin.mail.mailboxes.read",
   },
-  { page: "providers", label: t("mailAdmin.providers"), permission: "admin.mail.providers.read" },
   { page: "flow", label: t("mailAdmin.flow"), permission: "admin.mail.flow.read" },
   { page: "settings", label: t("mailAdmin.policies"), permission: "admin.mail.settings.read" },
   { page: "activity", label: t("mailAdmin.audit"), permission: "admin.mail.activity.read" },

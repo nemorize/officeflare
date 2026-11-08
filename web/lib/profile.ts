@@ -68,7 +68,6 @@ export const returnToWorkspace = (path: unknown) =>
     "/mail/activity",
     "/console/mail",
     "/console/mail/overview",
-    "/console/mail/providers",
     "/console/mail/flow",
     "/console/mail/settings",
     "/console/mail/activity",

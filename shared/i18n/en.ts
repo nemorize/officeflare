@@ -4951,4 +4951,10 @@ export const en = defineMessages({
   "mailAdmin.chooseConnection": "Choose a connection",
   "mailAdmin.domainConnectionDescription":
     "Choose delivery connections and configure the settings for this domain.",
+  "domainProviders.activeDomains": "Domains with mail enabled",
+  "domainProviders.description":
+    "Configure receiving and sending providers directly for this domain.",
+  "domainProviders.unsupportedDirection": "This provider does not support the selected direction.",
+  "domainProviders.invalidSettings": "Invalid domain provider settings.",
+  "domainProviders.versionChanged": "This domain changed. Reload its settings before saving again.",
 });

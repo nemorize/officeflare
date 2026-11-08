@@ -1,13 +1,3 @@
-export interface ProviderConnection {
-  id: string;
-  provider: string;
-  name: string;
-  enabled: number;
-  version: number;
-  config: Record<string, string>;
-  secret_configured: boolean;
-  domain_ids?: string[];
-}
 export interface MailPolicy {
   default_retention_days: number | null;
   max_send_bytes: number | null;

@@ -4954,4 +4954,10 @@ export const ko = defineTranslations(en, {
   "mailAdmin.chooseConnection": "연결 선택",
   "mailAdmin.domainConnectionDescription":
     "송수신 연결을 선택하고 이 도메인의 전송 설정을 관리합니다.",
+  "domainProviders.activeDomains": "송수신 활성 도메인",
+  "domainProviders.description":
+    "이 도메인에서 사용할 송수신 제공업체와 인증정보를 바로 설정합니다.",
+  "domainProviders.unsupportedDirection": "선택한 송수신 방향을 지원하지 않는 제공업체입니다.",
+  "domainProviders.invalidSettings": "도메인의 제공업체 설정이 올바르지 않습니다.",
+  "domainProviders.versionChanged": "도메인 설정이 변경되었습니다. 새로고침 후 다시 저장하세요.",
 });

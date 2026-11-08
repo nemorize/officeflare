@@ -111,7 +111,7 @@ adminSettings.patch("/admin/settings", async (c) => {
       values.system_address_id &&
       !(await first(
         c.env,
-        "SELECT 1 FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
+        "SELECT 1 FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND json_type(d.provider_settings_json,'$.outbound')='object'",
         values.system_address_id,
       ))
     )

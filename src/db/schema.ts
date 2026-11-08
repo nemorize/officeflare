@@ -273,26 +273,14 @@ export const installationState = sqliteTable("installation_state", {
 
 // migrations/0009_create_mail_control.sql is the DDL source. Mail contents live in DO SQL.
 
-export const mailProviderConnections = sqliteTable("mail_provider_connections", {
-  id: text().primaryKey().notNull(),
-  provider: text().notNull(),
-  name: text().notNull(),
-  enabled: integer().notNull().default(1),
-  version: integer().notNull().default(1),
-  config_json: text().notNull().default("{}"),
-  secret_ciphertext: text(),
-  secret_nonce: text(),
-  created_at: timestamp("created_at"),
-  updated_at: timestamp("updated_at"),
-});
 export const mailDomains = sqliteTable(
   "mail_domains",
   {
     is_default: integer().notNull().default(0),
     id: text().primaryKey().notNull(),
     name: text().notNull().unique(),
-    inbound_connection_id: text().references(() => mailProviderConnections.id),
-    outbound_connection_id: text().references(() => mailProviderConnections.id),
+    provider_settings_json: text().notNull().default('{"inbound":null,"outbound":null}'),
+    version: integer().notNull().default(1),
     inbound_enabled: integer().notNull().default(0),
     outbound_enabled: integer().notNull().default(0),
     max_send_bytes: integer(),

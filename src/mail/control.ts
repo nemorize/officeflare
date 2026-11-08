@@ -1,5 +1,6 @@
 import { t } from "../../shared/i18n/index.ts";
 import { mailSendLimit, workspaceMailPolicy } from "./policy";
+import { domainConnection } from "./domain-providers";
 import type { Context } from "hono";
 import type { AuthContext } from "../auth/types";
 import { createMiddleware } from "hono/factory";
@@ -14,10 +15,8 @@ import {
   type MailAction,
   type Mailbox,
   type Domain,
-  type Connection,
 } from "./types";
 import { hash } from "./input";
-import { provider } from "./providers";
 
 export const control = (env: Env) => env.DB.withSession("first-primary");
 export async function first<T>(env: Env, sql: string, ...args: (string | number | null)[]) {
@@ -42,9 +41,7 @@ function administrativeRequest(c: Context<MailAppEnv>) {
   const path = c.req.path.replace(/^\/api\/mail/, ""),
     method = c.req.method;
   return (
-    /^\/(admin|provider-connections|provider-catalog|domains|addresses|mailbox-users)(\/|$)/.test(
-      path,
-    ) ||
+    /^\/(admin|domains|addresses|mailbox-users)(\/|$)/.test(path) ||
     /^\/mailboxes\/[^/]+\/configuration$/.test(path) ||
     (method === "GET" && /^\/mailboxes\/[^/]+\/addresses$/.test(path)) ||
     (path === "/mailboxes" && (method === "POST" || c.req.query("all") === "true")) ||
@@ -118,16 +115,6 @@ export async function authorize(
   if (!mailbox) fail(403, t("mailControl.mailboxAccessDenied"));
   return mailbox;
 }
-export async function connection(env: Env, connectionId: string) {
-  const result = await first<Connection>(
-    env,
-    "SELECT * FROM mail_provider_connections WHERE id=? AND enabled=1",
-    connectionId,
-  );
-  if (!result) fail(409, t("mailControl.providerConnectionIsDisabledOrMissing"));
-  provider(result.provider);
-  return result;
-}
 export async function resolveRecipient(env: Env, destination: string) {
   const at = destination.lastIndexOf("@"),
     local = destination.slice(0, at).toLowerCase(),
@@ -137,8 +124,9 @@ export async function resolveRecipient(env: Env, destination: string) {
     "SELECT * FROM mail_domains WHERE name=? AND inbound_enabled=1",
     name,
   );
-  if (!domain?.inbound_connection_id) return null;
-  const provider = await connection(env, domain.inbound_connection_id);
+  if (!domain) return null;
+  const provider = domainConnection(domain, "inbound");
+  if (!provider) return null;
   const exact = await first<{ mailbox_id: string }>(
     env,
     "SELECT a.mailbox_id FROM mail_addresses a JOIN mail_mailboxes b ON b.id=a.mailbox_id WHERE a.domain_id=? AND a.receive_enabled=1 AND b.status='active' AND a.local_part=?",
@@ -168,21 +156,20 @@ export async function resolveRecipient(env: Env, destination: string) {
 }
 export async function sender(env: Env, actor: MailActor, mailboxId: string, addressId: string) {
   await authorize(env, actor, mailboxId, "send");
-  const result = await first<{
-    email_address: string;
-    connection_id: string;
-    max_send_bytes: number | null;
-  }>(
+  const result = await first<Domain & { email_address: string }>(
     env,
-    "SELECT a.local_part||'@'||d.name email_address,d.outbound_connection_id connection_id,d.max_send_bytes FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1",
+    "SELECT d.*,a.local_part||'@'||d.name email_address FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.id=? AND a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1",
     addressId,
     mailboxId,
   );
-  if (!result?.connection_id) fail(409, t("mailControl.sendingAddressOrDomainIsDisabled"));
+  if (!result) fail(409, t("mailControl.sendingAddressOrDomainIsDisabled"));
+  const selected = domainConnection(result, "outbound");
+  if (!selected) fail(409, t("mailControl.sendingAddressOrDomainIsDisabled"));
   const policy = await workspaceMailPolicy(env);
   return {
-    ...result,
-    ...(await connection(env, result.connection_id)),
+    ...selected,
+    email_address: result.email_address,
+    connection_id: selected.id,
     max_send_bytes: mailSendLimit(result.max_send_bytes, policy.max_send_bytes),
   };
 }

@@ -113,7 +113,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     async () => {
       await db.batch([
         db.prepare(
-          "INSERT INTO mail_domains(id,name,outbound_connection_id,outbound_enabled) VALUES('calendar-domain','calendar.test','cloudflare-bindings',1)",
+          "INSERT INTO mail_domains(id,name,provider_settings_json,outbound_enabled) VALUES('calendar-domain','calendar.test',json_object('outbound',json_object('id','cloudflare-bindings','provider','cloudflare','config',json('{}'))),1)",
         ),
         db.prepare(
           "INSERT INTO mail_mailboxes(id,owner_user_id,name,status) VALUES('system-calendar-box','admin','Calendar sender','active')",
@@ -1501,8 +1501,8 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         ],
         [
           "disabled provider",
-          "UPDATE mail_provider_connections SET enabled=0 WHERE id='cloudflare-bindings'",
-          "UPDATE mail_provider_connections SET enabled=1 WHERE id='cloudflare-bindings'",
+          "UPDATE mail_domains SET provider_settings_json=json_remove(provider_settings_json,'$.outbound') WHERE id='calendar-domain'",
+          "UPDATE mail_domains SET provider_settings_json=json_set(provider_settings_json,'$.outbound',json_object('id','cloudflare-bindings','provider','cloudflare','config',json('{}'))) WHERE id='calendar-domain'",
         ],
         [
           "revoked Mail access",
@@ -1583,11 +1583,6 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     });
     const pending = (await deliveries(value.event.id))[0],
       before = (await sent()).length;
-    await db
-      .prepare(
-        "INSERT INTO mail_provider_connections(id,provider,name) VALUES('calendar-replacement-provider','cloudflare','Replacement')",
-      )
-      .run();
     try {
       await flushAfterSnapshot(
         pending.id,
@@ -1598,7 +1593,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
         .run();
       await db
         .prepare(
-          "UPDATE mail_domains SET outbound_connection_id='calendar-replacement-provider' WHERE id='calendar-domain'",
+          "UPDATE mail_domains SET provider_settings_json=json_set(provider_settings_json,'$.outbound.id','calendar-replacement-provider') WHERE id='calendar-domain'",
         )
         .run();
       await db.prepare("UPDATE calendar_outbox SET run_at=0 WHERE id=?").bind(pending.id).run();
@@ -1610,7 +1605,7 @@ test("Calendar collaboration: grants, invitation delivery and verified registrat
     } finally {
       await db
         .prepare(
-          "UPDATE mail_domains SET outbound_connection_id='cloudflare-bindings' WHERE id='calendar-domain'",
+          "UPDATE mail_domains SET provider_settings_json=json_set(provider_settings_json,'$.outbound.id','cloudflare-bindings') WHERE id='calendar-domain'",
         )
         .run();
       await db

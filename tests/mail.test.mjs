@@ -276,7 +276,11 @@ test("sending size limits follow the From provider and administrator configurati
       }
       await admin("/domains", {
         method: "POST",
-        data: { name: "no-provider.test", outbound_connection_id: null, max_send_bytes: oneMiB },
+        data: {
+          name: "no-provider.test",
+          provider_settings: { outbound: null },
+          max_send_bytes: oneMiB,
+        },
         expected: 400,
       });
       await admin("/domains/" + domain.id, {
@@ -290,18 +294,9 @@ test("sending size limits follow the From provider and administrator configurati
         (await admin("/domains")).domains.find((entry) => entry.id === domain.id).max_send_bytes,
         oneMiB,
       );
-      const connection = (await admin("/provider-connections")).connections[0];
-      const disabled = (
-        await admin("/provider-connections/" + connection.id, {
-          method: "PATCH",
-          data: { version: connection.version, enabled: false },
-        })
-      ).connection;
+      await admin("/domains/" + domain.id, { method: "PATCH", data: { outbound_enabled: false } });
       await admin("/domains/" + domain.id, { method: "PATCH", data: { max_send_bytes: oneMiB } });
-      await admin("/provider-connections/" + connection.id, {
-        method: "PATCH",
-        data: { version: disabled.version, enabled: true },
-      });
+      await admin("/domains/" + domain.id, { method: "PATCH", data: { outbound_enabled: true } });
     },
   );
   await t.test(
@@ -659,155 +654,136 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
   const { mf, db, tokens, raw, call, admin, base, address, mailbox, domain, draft } =
     await fixture(t);
   await t.test(
-    "Provider catalog exposes direct sending adapters while preserving Cloudflare bindings",
+    "Provider configuration is owned, encrypted, and updated atomically by each domain",
     async () => {
-      assert.equal((await call("/providers")).providers[0].provider, "cloudflare");
-      const domainSettings = await admin("/domains");
-      assert.equal(domainSettings.domains[0].inbound_provider, "cloudflare");
-      assert.equal(domainSettings.domains[0].outbound_provider, "cloudflare");
-      assert.deepEqual(
-        domainSettings.providers.map(({ provider, default_connection_id }) => ({
-          provider,
-          default_connection_id,
-        })),
-        [
-          { provider: "cloudflare", default_connection_id: "cloudflare-bindings" },
-          ...domainSettings.providers
-            .slice(1)
-            .map(({ provider }) => ({ provider, default_connection_id: null })),
-        ],
-      );
+      const initial = await admin("/domains");
+      assert.equal(initial.domains[0].inbound_provider, "cloudflare");
+      assert.equal(initial.domains[0].outbound_provider, "cloudflare");
+      assert.ok(initial.providers.some((entry) => entry.provider === "cloudflare-rest"));
       await call("/domains", { expected: 403 });
-      await admin("/provider-connections", {
+      await admin("/domains", {
         method: "POST",
-        data: { provider: "ses", name: "missing config" },
+        data: { name: "missing-config.test", provider_settings: { outbound: { provider: "ses" } } },
         expected: 400,
       });
-      const created = await admin("/provider-connections", {
-        method: "POST",
-        expected: 201,
-        data: {
-          provider: "cloudflare-rest",
-          name: "Cloudflare REST",
-          config: { accountId: "account-123" },
-          secrets: { apiToken: "provider-secret-value" },
-        },
-      });
-      assert.deepEqual(created.connection.config, { accountId: "account-123" });
-      assert.equal(created.connection.secret_configured, true);
-      assert.equal(JSON.stringify(created).includes("provider-secret-value"), false);
-      const stored = await db
-        .prepare(
-          "SELECT config_json,secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?",
-        )
-        .bind(created.connection.id)
-        .first();
-      assert.equal(JSON.parse(stored.config_json).accountId, "account-123");
-      assert.notEqual(stored.secret_ciphertext, "provider-secret-value");
-      assert.ok(stored.secret_ciphertext && stored.secret_nonce);
-      const ses = await admin("/provider-connections", {
-        method: "POST",
-        expected: 201,
-        data: {
-          provider: "ses",
-          name: "SES",
-          config: { region: "us-east-1" },
-          secrets: {
-            accessKeyId: "old-access-key",
-            secretAccessKey: "preserved-secret",
-            sessionToken: "preserved-session",
+      const create = (name, token) =>
+        admin("/domains", {
+          method: "POST",
+          expected: 201,
+          data: {
+            name,
+            provider_settings: {
+              inbound: null,
+              outbound: {
+                provider: "cloudflare-rest",
+                config: { accountId: "account-123" },
+                secrets: { apiToken: token },
+              },
+            },
           },
-        },
-      });
-      const updatedSes = await admin(`/provider-connections/${ses.connection.id}`, {
-        method: "PATCH",
-        data: { version: ses.connection.version, secrets: { accessKeyId: "new-access-key" } },
-      });
-      assert.equal(updatedSes.connection.secret_configured, true);
-      const sesStored = await db
-        .prepare("SELECT secret_ciphertext,secret_nonce FROM mail_provider_connections WHERE id=?")
-        .bind(ses.connection.id)
-        .first();
+        });
+      const first = (await create("provider-one.test", "provider-secret-value")).domain;
+      const second = (await create("provider-two.test", "second-provider-secret")).domain;
+      assert.deepEqual(first.provider_settings.outbound.config, { accountId: "account-123" });
+      assert.equal(first.provider_settings.outbound.secret_configured, true);
+      assert.ok(!JSON.stringify(first).includes("provider-secret-value"));
+      assert.ok(!("provider_settings_json" in first));
+      const read = async (id) =>
+        JSON.parse(
+          (
+            await db
+              .prepare("SELECT provider_settings_json FROM mail_domains WHERE id=?")
+              .bind(id)
+              .first()
+          ).provider_settings_json,
+        );
+      const stored = await read(first.id),
+        secondStored = await read(second.id);
+      assert.notEqual(stored.outbound.id, secondStored.outbound.id);
+      assert.notEqual(stored.outbound.secret_ciphertext, "provider-secret-value");
       const bindings = await mf.getBindings("officeflare");
-      assert.deepEqual(await decryptProviderSecrets(bindings, sesStored), {
+      assert.deepEqual(await decryptProviderSecrets(bindings, stored.outbound), {
+        apiToken: "provider-secret-value",
+      });
+      const ses = (
+        await admin("/domains", {
+          method: "POST",
+          expected: 201,
+          data: {
+            name: "ses.test",
+            provider_settings: {
+              outbound: {
+                provider: "ses",
+                config: { region: "us-east-1" },
+                secrets: {
+                  accessKeyId: "old-access-key",
+                  secretAccessKey: "preserved-secret",
+                  sessionToken: "preserved-session",
+                },
+              },
+            },
+          },
+        })
+      ).domain;
+      const updated = (
+        await admin(`/domains/${ses.id}`, {
+          method: "PATCH",
+          data: {
+            version: ses.version,
+            provider_settings: { outbound: { secrets: { accessKeyId: "new-access-key" } } },
+          },
+        })
+      ).domain;
+      assert.equal(updated.version, ses.version + 1);
+      const updatedStored = await read(ses.id);
+      assert.deepEqual(await decryptProviderSecrets(bindings, updatedStored.outbound), {
         accessKeyId: "new-access-key",
         secretAccessKey: "preserved-secret",
         sessionToken: "preserved-session",
       });
-      const secondConnection = await admin("/provider-connections", {
-        method: "POST",
-        expected: 201,
-        data: {
-          provider: "cloudflare-rest",
-          name: "Domain-specific Cloudflare REST",
-          config: { accountId: "domain-account-456" },
-          secrets: { apiToken: "second-provider-secret" },
-        },
-      });
-      assert.deepEqual(secondConnection.connection.config, { accountId: "domain-account-456" });
-      await admin("/domains", {
-        method: "POST",
-        expected: 201,
-        data: {
-          name: "provider-one.test",
-          inbound_connection_id: null,
-          outbound_connection_id: created.connection.id,
-        },
-      });
-      await admin("/domains", {
-        method: "POST",
-        expected: 409,
-        data: {
-          name: "provider-two.test",
-          inbound_connection_id: null,
-          outbound_connection_id: created.connection.id,
-        },
-      });
-      await admin("/domains", {
-        method: "POST",
-        expected: 201,
-        data: {
-          name: "provider-two.test",
-          inbound_connection_id: null,
-          outbound_connection_id: secondConnection.connection.id,
-        },
-      });
-      const configuredDomains = (await admin("/domains")).domains;
-      const secondProviderDomain = configuredDomains.find(
-        (entry) => entry.name === "provider-two.test",
-      );
-      await admin(`/domains/${secondProviderDomain.id}`, {
+      await admin(`/domains/${ses.id}`, {
         method: "PATCH",
+        data: {
+          version: ses.version,
+          is_default: true,
+          provider_settings: { outbound: { secrets: { secretAccessKey: "stale-update" } } },
+        },
         expected: 409,
-        data: { outbound_connection_id: created.connection.id },
       });
-      const catalog = await admin("/provider-catalog");
+      assert.deepEqual(await read(ses.id), updatedStored);
       assert.equal(
-        catalog.providers.find((entry) => entry.provider === "cloudflare-rest")
-          .default_connection_id,
-        null,
+        (await admin("/domains")).domains.find((value) => value.is_default).id,
+        domain.id,
       );
-      const connections = await admin("/provider-connections");
-      assert.equal(
-        connections.connections.find((entry) => entry.id === created.connection.id)
-          .secret_configured,
-        true,
-      );
-      assert.equal(JSON.stringify(connections).includes("provider-secret-value"), false);
-      await call("/provider-connections", { expected: 403 });
-      await call(base + "/messages", {
-        token: tokens.administrator,
-        expected: 403,
+      const isolated = (
+        await admin(`/domains/${first.id}`, {
+          method: "PATCH",
+          data: {
+            version: first.version,
+            provider_settings: {
+              outbound: {
+                config: { accountId: "changed-account" },
+                secrets: { apiToken: "updated-first-secret" },
+              },
+            },
+          },
+        })
+      ).domain;
+      assert.equal(isolated.provider_settings.outbound.config.accountId, "changed-account");
+      assert.deepEqual(await read(second.id), secondStored);
+      await admin(`/domains/${second.id}`, {
+        method: "PATCH",
+        data: {
+          version: second.version,
+          provider_settings: { outbound: { id: stored.outbound.id } },
+        },
+        expected: 400,
       });
+      await admin("/provider-connections", { expected: 404 });
+      await admin("/provider-catalog", { expected: 404 });
+      await call(base + "/messages", { token: tokens.administrator, expected: 403 });
       await call(base + "/messages", { token: tokens.outsider, expected: 403 });
-      const unauthorized = await raw("/api/mail/providers");
-      assert.equal(unauthorized.status, 401);
-      const selected = await db
-        .prepare("SELECT inbound_connection_id,outbound_connection_id FROM mail_domains WHERE id=?")
-        .bind(domain.id)
-        .first();
-      assert.equal(selected.inbound_connection_id, "cloudflare-bindings");
-      assert.equal(selected.outbound_connection_id, "cloudflare-bindings");
+      assert.equal((await raw("/api/mail/providers")).status, 401);
     },
   );
   let firstDraft;
@@ -889,13 +865,21 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
   await t.test(
     "scheduled submissions preserve provider identity, freeze drafts and cancel safely",
     async () => {
+      const transport = JSON.parse(
+        (
+          await db
+            .prepare("SELECT provider_settings_json FROM mail_domains WHERE id=?")
+            .bind(domain.id)
+            .first()
+        ).provider_settings_json,
+      ).outbound.id;
       const message = await draft({ subject: "Scheduled" });
       const data = {
         address_id: address.id,
         version: 1,
         scheduled_at: Math.floor(Date.now() / 1000) + 3600,
         provider: "cloudflare",
-        connection_id: "cloudflare-bindings",
+        connection_id: transport,
       };
       const headers = { "Idempotency-Key": "send-one" };
       const job = (
@@ -907,7 +891,7 @@ test("mail backend permissions, providers, drafts, search and scheduling", async
         })
       ).submission;
       assert.equal(job.provider, "cloudflare");
-      assert.equal(job.connection_id, "cloudflare-bindings");
+      assert.equal(job.connection_id, transport);
       assert.equal(job.status, "scheduled");
       const replay = (
         await call(base + "/drafts/" + message.id + "/submissions", {
@@ -1114,7 +1098,16 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
   const inbound = page.messages[0],
     message = (await call(base + "/messages/" + inbound.id)).message;
   assert.equal(message.provider, "cloudflare");
-  assert.equal(message.connection_id, "cloudflare-bindings");
+  assert.equal(
+    message.connection_id,
+    JSON.parse(
+      (
+        await db
+          .prepare("SELECT provider_settings_json FROM mail_domains WHERE name='mail.test'")
+          .first()
+      ).provider_settings_json,
+    ).inbound.id,
+  );
   assert.equal(message.rfc_message_id, "original@example.test");
   assert.equal(message.attachments.length, 1);
   const bytes = await mf.dispatchFetch(
@@ -2208,7 +2201,7 @@ test("Mail service entry is independent of Console administration and is checked
       "DELETE FROM role_permissions WHERE role_id='system-administrator' AND permission_key='mail.access'",
     )
     .run();
-  await admin("/provider-connections");
+  await admin("/domains");
   await admin("/mailboxes?all=true");
   await admin(base + "/messages", { expected: 403 });
   await admin("/mailboxes", { expected: 403 });
@@ -2226,11 +2219,11 @@ test("Mail service entry is independent of Console administration and is checked
   await db
     .prepare("INSERT INTO user_roles(user_id,role_id) VALUES('reader','provider-reader')")
     .run();
-  await call("/provider-connections", { token: tokens.reader });
-  await call("/provider-connections", {
+  await call("/domains", { token: tokens.reader, expected: 403 });
+  await call("/domains", {
     token: tokens.reader,
     method: "POST",
-    data: { provider: "cloudflare", name: "Denied" },
+    data: { name: "denied.test" },
     expected: 403,
   });
   await db
@@ -2238,7 +2231,7 @@ test("Mail service entry is independent of Console administration and is checked
       "DELETE FROM role_permissions WHERE role_id='provider-reader' AND permission_key='console.access'",
     )
     .run();
-  await call("/provider-connections", { token: tokens.reader, expected: 403 });
+  await call("/domains", { token: tokens.reader, expected: 403 });
   const { key } = await call("/api-keys", {
     method: "POST",
     data: {
@@ -4237,14 +4230,16 @@ test("workspace mail administration separates metadata permissions from mailbox 
     "/admin/flow",
     "/admin/settings",
     "/admin/activity",
-    "/provider-catalog",
   ]) {
     await admin(path);
     await call(path, { expected: 403 });
   }
   await admin(base + "/messages", { expected: 403 });
   const overview = await admin("/admin/overview");
-  assert.deepEqual((await admin("/provider-connections")).connections[0].domain_ids, [domain.id]);
+  assert.equal(
+    (await admin("/domains")).domains.find((entry) => entry.id === domain.id).outbound_provider,
+    "cloudflare",
+  );
   assert.equal(overview.summary.domains, 1);
   assert.equal(overview.summary.mailboxes, 1);
   const storage = (await admin(`/admin/mailboxes/${mailbox.id}/storage`)).storage;

@@ -25,11 +25,10 @@ export async function personalInvitationSender(
      FROM users u JOIN mail_mailboxes b ON b.owner_user_id=u.id
      JOIN mail_addresses a ON a.mailbox_id=b.id
      JOIN mail_domains d ON d.id=a.domain_id
-     JOIN mail_provider_connections p ON p.id=d.outbound_connection_id
      WHERE u.id=? AND ${activeAccountSql} AND ${mailAccessSql}
        AND b.kind='personal' AND b.status='active' AND a.send_enabled=1
-       AND d.outbound_enabled=1 AND p.enabled=1
-       AND p.provider IN(SELECT value FROM json_each(?))
+       AND d.outbound_enabled=1
+       AND json_extract(d.provider_settings_json,'$.outbound.provider') IN(SELECT value FROM json_each(?))
      ORDER BY a.is_primary DESC,b.created_at,b.id,a.created_at,a.id LIMIT 1`,
     userId,
     JSON.stringify(
@@ -65,12 +64,10 @@ export function personalSenderCondition(sender: PersonalInvitationSender) {
   return condition(
     `EXISTS(SELECT 1 FROM users u JOIN mail_mailboxes b ON b.owner_user_id=u.id
      JOIN mail_addresses a ON a.mailbox_id=b.id JOIN mail_domains d ON d.id=a.domain_id
-     JOIN mail_provider_connections p ON p.id=d.outbound_connection_id
      WHERE u.id=? AND u.auth_version=? AND ${activeAccountSql} AND ${mailAccessSql}
        AND b.id=? AND b.kind='personal' AND b.status='active'
        AND a.id=? AND a.send_enabled=1 AND a.local_part||'@'||d.name=?
-       AND d.outbound_enabled=1 AND p.id=? AND p.provider=? AND p.version=? AND p.enabled=1
-       AND d.max_send_bytes IS ?)`,
+       AND d.outbound_enabled=1 AND json_extract(d.provider_settings_json,'$.outbound.id')=? AND json_extract(d.provider_settings_json,'$.outbound.provider')=? AND d.version=?)`,
     sender.user_id,
     sender.auth_version,
     sender.mailbox_id,
@@ -79,6 +76,5 @@ export function personalSenderCondition(sender: PersonalInvitationSender) {
     sender.connection_id,
     sender.provider,
     sender.version,
-    sender.max_send_bytes,
   );
 }

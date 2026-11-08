@@ -1,3 +1,6 @@
+import { domainConnection } from "../mail/domain-providers";
+import { mailSendLimit, workspaceMailPolicy } from "../mail/policy";
+import type { Domain } from "../mail/types";
 import { t } from "../../shared/i18n/index.ts";
 import { createDatabase } from "../db";
 import { now, uuid, type AuthEnv } from "../auth/types";
@@ -60,28 +63,24 @@ export async function recoverCalendar(env: AuthEnv) {
     );
 }
 async function systemSender(env: AuthEnv) {
-  const value = await first<{
-    email_address: string;
-    provider: string;
-    max_send_bytes: number | null;
-    id: string;
-    name: string;
-    enabled: number;
-    version: number;
-    config_json: string;
-    secret_ciphertext: string | null;
-    secret_nonce: string | null;
-  }>(
+  const value = await first<Domain & { email_address: string }>(
     env,
-    "SELECT a.local_part||'@'||d.name email_address,p.provider,d.max_send_bytes,p.id,p.name,p.enabled,p.version,p.config_json,p.secret_ciphertext,p.secret_nonce FROM calendar_workspace_settings s JOIN mail_addresses a ON a.id=s.system_address_id JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE s.id='workspace' AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
+    "SELECT d.*,a.local_part||'@'||d.name email_address FROM calendar_workspace_settings s JOIN mail_addresses a ON a.id=s.system_address_id JOIN mail_domains d ON d.id=a.domain_id WHERE s.id='workspace' AND a.send_enabled=1 AND d.outbound_enabled=1 AND json_type(d.provider_settings_json,'$.outbound')='object'",
   );
-  if (!value)
+  const selected = value ? domainConnection(value, "outbound") : null;
+  if (!value || !selected)
     throw Object.assign(new Error(t("calendarJobs.systemInvitationSenderIsNotConfigured")), {
       code: "CALENDAR_SENDER_UNAVAILABLE",
       retryable: true,
     });
-  return value;
+  const policy = await workspaceMailPolicy(env);
+  return {
+    ...selected,
+    email_address: value.email_address,
+    max_send_bytes: mailSendLimit(value.max_send_bytes, policy.max_send_bytes),
+  };
 }
+
 export async function deliverCalendar(env: AuthEnv, id: string) {
   const lease = uuid(),
     db = env.DB.withSession("first-primary"),

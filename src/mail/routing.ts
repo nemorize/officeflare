@@ -1,4 +1,5 @@
-import { all, connection, first } from "./control";
+import { all, first } from "./control";
+import { domainConnection } from "./domain-providers";
 import type { Domain, RuleCondition } from "./types";
 
 export interface RoutingRule {
@@ -20,8 +21,9 @@ export async function incomingRoute(env: Env, message: ForwardableEmailMessage) 
     "SELECT * FROM mail_domains WHERE name=? AND inbound_enabled=1",
     message.to.split("@").at(-1)!.toLowerCase(),
   );
-  if (!domain?.inbound_connection_id) return null;
-  const selected = await connection(env, domain.inbound_connection_id);
+  if (!domain) return null;
+  const selected = domainConnection(domain, "inbound");
+  if (!selected) return null;
   const fields = {
     from: message.from,
     to: message.to,

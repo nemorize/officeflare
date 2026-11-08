@@ -29,11 +29,11 @@ export interface Mailbox {
   status: string;
 }
 export interface Domain {
+  version: number;
+  provider_settings_json: string;
   is_default: number;
   id: string;
   name: string;
-  inbound_connection_id: string | null;
-  outbound_connection_id: string | null;
   inbound_enabled: number;
   outbound_enabled: number;
   max_send_bytes: number | null;

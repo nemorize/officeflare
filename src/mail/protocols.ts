@@ -508,7 +508,7 @@ async function jmapMethod(
     const addresses = canSend
       ? await all<{ id: string; email: string; provider: string }>(
           env,
-          "SELECT a.id,a.local_part||'@'||d.name email,p.provider FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id JOIN mail_provider_connections p ON p.id=d.outbound_connection_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND p.enabled=1",
+          "SELECT a.id,a.local_part||'@'||d.name email,json_extract(d.provider_settings_json,'$.outbound.provider') provider FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.mailbox_id=? AND a.send_enabled=1 AND d.outbound_enabled=1 AND json_type(d.provider_settings_json,'$.outbound')='object'",
           account,
         )
       : [];
