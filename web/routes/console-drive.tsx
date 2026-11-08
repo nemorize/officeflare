@@ -47,7 +47,6 @@ import {
   ConsoleFormActions,
   ConsoleForm,
   ConsoleDateFilters,
-  ConsoleRefresh,
 } from "../components/console-settings";
 import "./console.css";
 
@@ -247,20 +246,14 @@ export function DriveConsolePage({ page }: { page: string }) {
   );
 }
 function Overview() {
-  const [revision, setRevision] = useState(0);
-  const resource = useResource<{ summary: Record<string, number> }>(
-    `${endpoint}/overview?revision=${revision}`,
-  );
-  const reload = () => setRevision((value) => value + 1);
+  const resource = useResource<{ summary: Record<string, number> }>(`${endpoint}/overview`);
   const summary = resource.data?.summary;
   return (
     <>
       <ConsoleSettingsHeader
         title={t("consoleSettings.overview")}
         description={t("routesConsoleDrive.storageTotalsIncludeEveryStoredFileVersionAndItems")}
-      >
-        <ConsoleRefresh onClick={reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleState loading={resource.loading} error={resource.error} />
       {summary && (
         <ConsoleMetrics
@@ -293,9 +286,7 @@ function Accounts() {
       <ConsoleSettingsHeader
         title={t("routesConsoleDrive.accountsStorage")}
         description={t("routesConsoleDrive.inspectAllUsersIncludingAccountsWithoutADriveRole")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           label={t("consoleSettings.search")}
@@ -782,9 +773,7 @@ function Inventory() {
       <ConsoleSettingsHeader
         title={t("routesConsoleDrive.filesTrash")}
         description={t("routesConsoleDrive.inspectFileMetadataWithoutOpeningFileContentsRestoreA")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           label={t("consoleSettings.search")}
@@ -1021,9 +1010,7 @@ function Sharing() {
       <ConsoleSettingsHeader
         title={t("routesConsoleDrive.sharing")}
         description={t("routesConsoleDrive.inspectDirectFolderGrantsAndPublicLinkMetadataFolder")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           type="search"
@@ -1414,9 +1401,7 @@ function AuditLog() {
         description={t(
           "routesConsoleDrive.immutableFileActivityAndAdministratorActionsAdministrativeChangesInclude",
         )}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           type="search"

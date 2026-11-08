@@ -7,7 +7,6 @@ import {
   ConsoleFilters,
   ConsoleTable,
   ConsoleMetrics,
-  ConsoleRefresh,
   ConsoleFormActions,
   ConsoleForm,
   ConsoleFieldset,
@@ -91,9 +90,7 @@ export function MailOverview() {
       <ConsoleSettingsHeader
         title={t("consoleSettings.overview")}
         description={t("mailAdmin.overviewDescription")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleState
         loading={resource.loading && !data}
         error={resource.error}
@@ -166,7 +163,6 @@ export function MailboxDirectory() {
         title={t("mailAdmin.mailboxes")}
         description={t("mailAdmin.mailboxesDescription")}
       >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
         {permissions.includes("admin.mail.mailboxes.manage") && (
           <Button
             nativeButton={false}
@@ -310,9 +306,7 @@ export function MailFlowPage() {
       <ConsoleSettingsHeader
         title={t("mailAdmin.flow")}
         description={t("mailAdmin.flowDescription")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           label={t("consoleSettings.search")}
@@ -548,9 +542,7 @@ export function MailAuditLog() {
       <ConsoleSettingsHeader
         title={t("consoleSettings.audit")}
         description={t("mailAdmin.activityDescription")}
-      >
-        <ConsoleRefresh onClick={resource.reload} disabled={resource.loading} />
-      </ConsoleSettingsHeader>
+      />
       <ConsoleFilters>
         <ConsoleInput
           label={t("consoleSettings.search")}

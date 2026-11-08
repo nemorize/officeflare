@@ -4916,7 +4916,6 @@ export const ko = defineTranslations(en, {
   "mailAdmin.providersDescription":
     "도메인별 전송 연결과 인증정보를 통합 관리합니다. 사용할 연결은 도메인 설정에서 지정합니다.",
   "mailAdmin.received": "수신 완료",
-  "mailAdmin.refresh": "새로고침",
   "mailAdmin.resource": "대상",
   "mailAdmin.retention": "휴지통·스팸 보관",
   "mailAdmin.retentionDays": "기본 보관 기간(일)",
@@ -4972,7 +4971,6 @@ export const ko = defineTranslations(en, {
   "consoleSettings.time": "시간",
   "consoleSettings.fromDate": "시작일",
   "consoleSettings.toDate": "종료일",
-  "consoleSettings.refresh": "새로고침",
   "consoleSettings.retry": "다시 시도",
   "consoleSettings.pageResults": "{page}페이지 · 결과 {count}개",
   "consoleSettings.noRecords": "조건에 맞는 기록이 없습니다.",

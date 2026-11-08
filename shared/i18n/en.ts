@@ -4914,7 +4914,6 @@ export const en = defineMessages({
   "mailAdmin.providersDescription":
     "Manage per-domain delivery connections, configuration, and credentials. Assign a connection from domain settings.",
   "mailAdmin.received": "Received",
-  "mailAdmin.refresh": "Refresh",
   "mailAdmin.resource": "Resource",
   "mailAdmin.retention": "Trash and spam retention",
   "mailAdmin.retentionDays": "Default retention period (days)",
@@ -4970,7 +4969,6 @@ export const en = defineMessages({
   "consoleSettings.time": "Time",
   "consoleSettings.fromDate": "Start date",
   "consoleSettings.toDate": "End date",
-  "consoleSettings.refresh": "Refresh",
   "consoleSettings.retry": "Try again",
   "consoleSettings.pageResults": "Page {page} · {count} results",
   "consoleSettings.noRecords": "No records match your filters.",

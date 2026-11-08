@@ -4989,7 +4989,6 @@ export const ja = defineTranslations(en, {
   "mailAdmin.providersDescription":
     "ドメインごとの配信接続と認証情報を一元管理します。接続はドメイン設定で指定します。",
   "mailAdmin.received": "受信済み",
-  "mailAdmin.refresh": "更新",
   "mailAdmin.resource": "対象",
   "mailAdmin.retention": "ゴミ箱・迷惑メールの保存",
   "mailAdmin.retentionDays": "既定の保存期間（日）",
@@ -5044,7 +5043,6 @@ export const ja = defineTranslations(en, {
   "consoleSettings.time": "日時",
   "consoleSettings.fromDate": "開始日",
   "consoleSettings.toDate": "終了日",
-  "consoleSettings.refresh": "更新",
   "consoleSettings.retry": "再試行",
   "consoleSettings.pageResults": "{page}ページ · {count}件",
   "consoleSettings.noRecords": "条件に一致する記録はありません。",

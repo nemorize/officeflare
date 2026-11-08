@@ -217,14 +217,6 @@ export function ConsoleFieldset({
   );
 }
 
-export function ConsoleRefresh({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
-  return (
-    <Button size="sm" onClick={onClick} disabled={disabled}>
-      {t("consoleSettings.refresh")}
-    </Button>
-  );
-}
-
 export function ConsoleState({
   loading,
   error,
