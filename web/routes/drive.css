@@ -500,6 +500,9 @@
   background: var(--ui-raised);
   border-color: var(--ui-control-border);
 }
+.drive-layout-grid .drive-file-row:focus-visible {
+  box-shadow: inset var(--ui-focus-ring);
+}
 .drive-layout-grid .drive-file-row.is-selected {
   background: var(--ui-selected);
   border-color: var(--ui-muted);
