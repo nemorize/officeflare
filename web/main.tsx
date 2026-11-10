@@ -4,6 +4,7 @@ import { WorkspaceLoading } from "./components/workspace-loading";
 import { root } from "./lib/app-root";
 import "./lib/browser-theme";
 import { browserLanguage } from "./lib/browser-language";
+import { setRegionalPreferences } from "./lib/regional";
 import { sessions } from "./lib/session";
 import "./styles.css";
 
@@ -19,7 +20,10 @@ root.render(
 sessions.start();
 await sessions.restore();
 sessions.subscribe(() => {
-  if (sessions.getSnapshot().status === "signed_out") browserLanguage.setPreference("system");
+  if (sessions.getSnapshot().status === "signed_out") {
+    setRegionalPreferences(null);
+    browserLanguage.setPreference("system");
+  }
 });
 await import("./app");
 browserLanguage.start();

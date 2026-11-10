@@ -4833,6 +4833,10 @@ export const en = defineMessages({
   "language.korean": "한국어",
   "language.japanese": "日本語",
   "language.invalid": "Unsupported language preference",
+  "preferences.timeZone": "Time zone",
+  "preferences.regionalFormat": "Regional format",
+  "preferences.invalidTimeZone": "Enter a valid IANA time zone.",
+  "preferences.invalidRegionalFormat": "Enter a valid regional format.",
   "mailAdmin.activityDescription":
     "Review changes to domain settings, addresses, and mailbox access.",
   "mailAdmin.actor": "Changed by",

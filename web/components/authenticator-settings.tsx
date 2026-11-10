@@ -1,5 +1,6 @@
 import { LocalizedMessage } from "./i18n";
-import { getLocale, t } from "../../shared/i18n/index.ts";
+import { t } from "../../shared/i18n/index.ts";
+import { formatDateTime } from "../lib/regional";
 import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -299,9 +300,7 @@ export function AuthenticatorSettings() {
                 <>
                   <p>
                     {t("componentsAuthenticatorSettings.scanThisQrCodeInYourAuthenticatorAppOr", {
-                      toLocaleTimeString: new Date(
-                        setup.setup_expires_at * 1000,
-                      ).toLocaleTimeString(getLocale(), {
+                      toLocaleTimeString: formatDateTime(setup.setup_expires_at, {
                         hour: "numeric",
                         minute: "2-digit",
                       }),

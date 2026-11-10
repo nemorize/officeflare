@@ -1,6 +1,6 @@
 import { enumLabel } from "../../shared/i18n/labels.ts";
 import { t } from "../../shared/i18n/index.ts";
-import { useMemo, useRef } from "react";
+import { useRef } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import {
   Button,
@@ -31,7 +31,6 @@ import {
   type CalendarPreferences,
   type CalendarRecord,
 } from "../lib/calendar";
-import { calendarRegionalFormatOptions } from "../lib/calendar-settings";
 import "./calendar-settings.css";
 
 export function CalendarSettingsPage() {
@@ -88,8 +87,6 @@ export function CalendarSettingsPage() {
 
 const generalValues = (prefs: CalendarPreferences) => ({
   version: prefs.version,
-  time_zone: prefs.time_zone,
-  locale: prefs.locale,
   week_start: prefs.week_start,
   default_view: prefs.default_view,
   remember_view: prefs.remember_view,
@@ -99,7 +96,6 @@ function GeneralPreferences() {
   const calendar = useCalendar(),
     notify = useNotifications(),
     prefs = calendar.data!.preferences;
-  const formats = useMemo(() => calendarRegionalFormatOptions(prefs.locale), [prefs.locale]);
   const draft = useCalendarSettingsDraft(generalValues(prefs)),
     { value, setValue } = draft;
   const update = <K extends keyof typeof value>(key: K, next: (typeof value)[K]) =>
@@ -118,27 +114,6 @@ function GeneralPreferences() {
         notify.success(t("routesCalendarSettings.calendarPreferencesSaved"));
       }}
     >
-      <SettingsSection
-        title={t("routesCalendarSettings.languageRegion")}
-        description={t("routesCalendarSettings.thesePreferencesApplyToYourAccountOnEveryDevice")}
-      >
-        <div className="settings-form-grid">
-          <CalendarTimeZoneField
-            value={value.time_zone}
-            onChange={(next) => update("time_zone", next)}
-          />
-          <CalendarField label={t("routesCalendarSettings.regionalFormat")}>
-            <SelectControl
-              aria-label={t("routesCalendarSettings.regionalFormat")}
-              value={value.locale}
-              onValueChange={(next) => {
-                if (formats.some((format) => format.value === next)) update("locale", next);
-              }}
-              options={formats}
-            />
-          </CalendarField>
-        </div>
-      </SettingsSection>
       <SettingsSection
         title={t("routesCalendarSettings.calendarDisplay")}
         description={t("routesCalendarSettings.keepUsingYourLastViewOrChooseAView")}

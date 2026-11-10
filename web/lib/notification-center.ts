@@ -1,4 +1,4 @@
-import { getLocale } from "../../shared/i18n/index.ts";
+import { formatDateTime } from "./regional.ts";
 export interface NotificationItem {
   id: string;
   type: string;
@@ -51,8 +51,4 @@ export const notificationTarget = (path: string | null) =>
   /^\/calendar\/invitations\/[A-Za-z0-9_-]+$/.test(path ?? "")
     ? path
     : null;
-export const notificationDate = (timestamp: number) =>
-  new Date(timestamp * 1000).toLocaleString(getLocale(), {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+export const notificationDate = (timestamp: number) => formatDateTime(timestamp);

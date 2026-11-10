@@ -1,8 +1,9 @@
 import { t } from "../../shared/i18n/index.ts";
 import { isLanguagePreference } from "../../shared/i18n/locale.ts";
+import { canonicalRegionalFormat, canonicalTimeZone } from "../../shared/regional";
 import { and, desc, eq, exists, gt, isNull } from "drizzle-orm";
 import { Hono } from "hono";
-import { body, conflict, invalid, password, unauthorized } from "../auth/input";
+import { body, conflict, invalid, password, string, unauthorized } from "../auth/input";
 import { hashPassword } from "../auth/crypto";
 import {
   accessClaim,
@@ -17,7 +18,7 @@ import {
 import { accessWon, challengeWon } from "../db/auth-conditions";
 import { coalesce, increment } from "../db/expressions";
 import { users, userAuthChallenges, userSessions } from "../db/schema";
-import { now, uuid, type AppEnv } from "../auth/types";
+import { now, uuid, type AppEnv, type AuthContext, type User } from "../auth/types";
 import profile from "./profile";
 import profileImages from "./profile-images";
 import mfaManagement from "./mfa-management";
@@ -32,6 +33,32 @@ me.get("/permissions", requireAccess, async (c) =>
 me.put("/language", requireAccess, async (c) => {
   const data = await body(c, ["language"]);
   if (!isLanguagePreference(data.language)) invalid(t("language.invalid"));
+  return updatePreferences(c, { language: data.language });
+});
+
+me.put("/preferences", requireAccess, async (c) => {
+  const data = await body(c, ["language", "time_zone", "regional_format"]);
+  if (!isLanguagePreference(data.language)) invalid(t("language.invalid"));
+  const timeZone = string(data.time_zone, "time_zone", 100);
+  const format = string(data.regional_format, "regional_format", 64);
+  let time_zone: string, regional_format: string;
+  try {
+    time_zone = canonicalTimeZone(timeZone);
+  } catch {
+    invalid(t("preferences.invalidTimeZone"));
+  }
+  try {
+    regional_format = canonicalRegionalFormat(format);
+  } catch {
+    invalid(t("preferences.invalidRegionalFormat"));
+  }
+  return updatePreferences(c, { language: data.language, time_zone, regional_format });
+});
+
+async function updatePreferences(
+  c: AuthContext,
+  values: Partial<Pick<User, "language" | "time_zone" | "regional_format">>,
+) {
   const { user, session } = c.get("identity");
   const db = c.get("db"),
     operation = uuid();
@@ -39,14 +66,14 @@ me.put("/language", requireAccess, async (c) => {
     accessClaim(c, operation),
     db
       .update(users)
-      .set({ language: data.language, updated_at: now() })
+      .set({ ...values, updated_at: now() })
       .where(and(eq(users.id, user.id), accessWon(db, session.id, operation)))
       .returning(),
   ]);
   const updated = result[1][0];
   if (!updated) conflict(t("routesProfile.accountOrProfilePolicyChangedReloadAndRetry"));
   return c.json({ user: publicUser(updated) });
-});
+}
 
 // A password-reset or one-use reauthentication grant is the Bearer token here.
 me.put("/password", async (c) => {

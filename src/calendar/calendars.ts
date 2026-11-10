@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { canonicalRegionalFormat } from "../../shared/regional";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../auth/types";
@@ -119,7 +120,7 @@ export async function ensurePrimary(c: CalendarContext) {
     stamp = now(),
     pref = await first<{ time_zone: string }>(
       c.env,
-      "SELECT time_zone FROM calendar_preferences WHERE user_id=?",
+      "SELECT time_zone FROM users WHERE id=?",
       user.id,
     );
   try {
@@ -175,12 +176,20 @@ export async function preferences(c: CalendarContext) {
       created_at: number;
       updated_at: number;
     }
-  >(c.env, "SELECT * FROM calendar_preferences WHERE user_id=?", c.get("identity").user.id);
+  >(
+    c.env,
+    "SELECT p.*, u.time_zone, u.regional_format AS locale FROM calendar_preferences p JOIN users u ON u.id=p.user_id WHERE p.user_id=?",
+    c.get("identity").user.id,
+  );
   if (!value) {
     await ensurePrimary(c);
     value = await first<
       typeof prefDefaults & { user_id: string; created_at: number; updated_at: number }
-    >(c.env, "SELECT * FROM calendar_preferences WHERE user_id=?", c.get("identity").user.id);
+    >(
+      c.env,
+      "SELECT p.*, u.time_zone, u.regional_format AS locale FROM calendar_preferences p JOIN users u ON u.id=p.user_id WHERE p.user_id=?",
+      c.get("identity").user.id,
+    );
   }
   if (!value)
     fail(404, "PREFERENCES_NOT_FOUND", t("calendarCalendars.calendarPreferencesNotFound"));
@@ -240,18 +249,19 @@ routes.patch("/preferences", async (c) => {
     version: version + 1,
     updated_at: now(),
   };
-  if ("time_zone" in data) values.time_zone = zone(data.time_zone);
+  // Older clients can still update these fields through the calendar API.
+  const accountValues: Record<string, string | number> = {};
+  if ("time_zone" in data) accountValues.time_zone = zone(data.time_zone);
   if ("secondary_time_zone" in data)
     values.secondary_time_zone =
       data.secondary_time_zone === null ? null : zone(data.secondary_time_zone);
   if ("locale" in data) {
     const locale = text(data.locale, "locale", 64);
     try {
-      Intl.getCanonicalLocales(locale);
+      accountValues.regional_format = canonicalRegionalFormat(locale);
     } catch {
       fail(400, "INVALID_INPUT", t("calendarCalendars.invalidLocale"));
     }
-    values.locale = locale;
   }
   if ("week_start" in data) values.week_start = integer(data.week_start, "week_start", 0, 6);
   if ("remember_view" in data) values.remember_view = flag(data.remember_view, "remember_view");
@@ -300,6 +310,9 @@ routes.patch("/preferences", async (c) => {
     ],
     build: (proof) => [
       update(c, "calendar_preferences", values, "user_id=?", [user], proof),
+      ...(Object.keys(accountValues).length
+        ? [update(c, "users", { ...accountValues, updated_at: now() }, "id=?", [user], proof)]
+        : []),
       change(c, proof, null, "preferences", user, version + 1, "upsert", user),
     ],
   });

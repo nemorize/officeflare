@@ -23,7 +23,7 @@ test("preferences render localized language settings without save guidance", asy
         name: "isolated-account",
         setup(builder) {
           builder.onLoad({ filter: /web\/components\/account-context\.tsx$/ }, () => ({
-            contents: `export const useAccount = () => ({ user: { id: 'test-user', language: 'system' }, update() {} });`,
+            contents: `export const useAccount = () => ({ user: { id: 'test-user', language: 'system', time_zone: 'Asia/Seoul', regional_format: 'ko-KR' }, update() {} });`,
             loader: "ts",
           }));
           builder.onLoad({ filter: /web\/lib\/api\.ts$/ }, () => ({
@@ -55,6 +55,10 @@ test("preferences render localized language settings without save guidance", asy
     assert.match(html, /role="combobox"/);
     assert.ok(html.includes(`aria-label="${title}"`));
     assert.match(html, /name="language"/);
+    assert.match(html, /name="time_zone"/);
+    assert.match(html, /name="regional_format"/);
+    assert.ok(html.includes('value="Asia/Seoul"'));
+    assert.match(html, /type="submit"[^>]*disabled=""/);
     assert.match(html, /type="submit"/);
   }
 });

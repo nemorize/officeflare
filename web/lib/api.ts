@@ -10,8 +10,9 @@ export const api = createApiClient({
 });
 
 import type { LanguagePreference } from "../../shared/i18n/locale.ts";
+import type { RegionalPreferences } from "../../shared/regional.ts";
 
-export interface AccountUser {
+export interface AccountUser extends RegionalPreferences {
   language: LanguagePreference;
   id: string;
   email_address: string;

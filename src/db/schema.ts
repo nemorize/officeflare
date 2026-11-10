@@ -25,6 +25,8 @@ export const users = sqliteTable(
     language: text({ enum: ["system", "en", "ko", "ja"] })
       .notNull()
       .default("system"),
+    time_zone: text().notNull().default("UTC"),
+    regional_format: text().notNull().default("en"),
     profile_image_key: text(),
     created_at: timestamp("created_at"),
     updated_at: timestamp("updated_at"),
@@ -962,9 +964,7 @@ export const calendarPreferences = sqliteTable("calendar_preferences", {
     .primaryKey()
     .notNull()
     .references(() => users.id),
-  time_zone: text().notNull().default("UTC"),
   secondary_time_zone: text(),
-  locale: text().notNull().default("en"),
   week_start: integer().notNull().default(1),
   default_view: text().notNull().default("week"),
   default_duration_minutes: integer().notNull().default(30),

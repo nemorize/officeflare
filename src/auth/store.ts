@@ -551,6 +551,8 @@ export function publicUser(user: User) {
     display_name: user.display_name,
     profile_image_key: user.profile_image_key,
     language: user.language,
+    time_zone: user.time_zone,
+    regional_format: user.regional_format,
     created_at: user.created_at,
     updated_at: user.updated_at,
     password_changed_at: user.password_changed_at,

@@ -1,13 +1,13 @@
 import { t } from "../../shared/i18n/index.ts";
 import { Temporal } from "@js-temporal/polyfill";
+import { canonicalTimeZone } from "../../shared/regional";
 import { fail, fields, object, text } from "./input";
 import type { EventTimes } from "./types";
 export const MAX_DAYS = 366;
 export function zone(value: unknown): string {
   const name = text(value, "time_zone", 100);
   try {
-    if (/^[+-]/.test(name)) throw new Error();
-    return new Intl.DateTimeFormat("en", { timeZone: name }).resolvedOptions().timeZone;
+    return canonicalTimeZone(name);
   } catch {
     fail(400, "INVALID_TIME_ZONE", t("calendarTime.invalidIanaTimeZone"));
   }

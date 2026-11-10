@@ -1,4 +1,4 @@
-import { browserLanguage } from "./browser-language";
+import { applyAccountPreferences } from "./browser-preferences";
 import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useSyncExternalStore } from "react";
 import { currentUser, logout, refresh } from "./auth";
@@ -55,7 +55,7 @@ export const sessions = new SessionManager({
   },
   lock,
   currentUser,
-  onUser: (user) => browserLanguage.setPreference(user.language),
+  onUser: applyAccountPreferences,
   logout,
   refresh,
   now: Date.now,

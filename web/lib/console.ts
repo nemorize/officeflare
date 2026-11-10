@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import type { RegionalPreferences } from "../../shared/regional.ts";
 import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
 import {
@@ -149,7 +150,7 @@ export const roleTemplates = [
     ]),
   },
 ];
-export interface AdminUser {
+export interface AdminUser extends RegionalPreferences {
   language: import("../../shared/i18n/locale.ts").LanguagePreference;
   id: string;
   email_address: string;

@@ -4908,6 +4908,10 @@ export const ja = defineTranslations(en, {
   "language.korean": "한국어",
   "language.japanese": "日本語",
   "language.invalid": "対応していない言語設定です",
+  "preferences.timeZone": "タイムゾーン",
+  "preferences.regionalFormat": "地域の形式",
+  "preferences.invalidTimeZone": "有効なIANAタイムゾーンを入力してください。",
+  "preferences.invalidRegionalFormat": "有効な地域の形式を入力してください。",
   "mailAdmin.activityDescription":
     "ドメイン設定、アドレス、メールボックスへのアクセス権の変更履歴を確認します。",
   "mailAdmin.actor": "実行者",

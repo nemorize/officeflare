@@ -1,5 +1,6 @@
 import { enumLabel } from "../../shared/i18n/labels.ts";
-import { getLocale, t } from "../../shared/i18n/index.ts";
+import { t } from "../../shared/i18n/index.ts";
+import { formatDateTime } from "./regional.ts";
 export const bytes = (value: number) =>
   value < 1024
     ? t("libMailHelpers.b", { value: value })
@@ -8,13 +9,7 @@ export const bytes = (value: number) =>
       : value < 1024 ** 3
         ? t("libMailHelpers.mb", { toFixed: (value / 1024 ** 2).toFixed(1) })
         : t("libMailHelpers.gb", { toFixed: (value / 1024 ** 3).toFixed(2) });
-export const mailDate = (value: number | null) =>
-  value
-    ? new Date(value * 1000).toLocaleString(getLocale(), {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : "—";
+export const mailDate = (value: number | null) => (value ? formatDateTime(value) : "—");
 export function parseRecipients(value: string): string[] {
   const addresses = value
     .split(/[,;\n]+/)

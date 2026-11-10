@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { timeZones } from "../lib/regional-settings";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   Button,
@@ -120,13 +121,7 @@ export function CalendarScopeDialog({
     </CalendarModal>
   );
 }
-export const timeZones = [
-  ...new Set([
-    "UTC",
-    Intl.DateTimeFormat().resolvedOptions().timeZone,
-    ...Intl.supportedValuesOf("timeZone"),
-  ]),
-];
+export { timeZones } from "../lib/regional-settings";
 export function CalendarTimeZoneField({
   value,
   onChange,

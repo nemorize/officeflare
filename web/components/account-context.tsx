@@ -1,4 +1,4 @@
-import { browserLanguage } from "../lib/browser-language";
+import { applyAccountPreferences } from "../lib/browser-preferences";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type AccountUser } from "../lib/api";
 import { sessions, useSession } from "../lib/session";
@@ -19,7 +19,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const update = useCallback(
     (next: AccountUser) => {
       if (sessions.getSnapshot().session?.tokens.session_id !== sessionId) return;
-      browserLanguage.setPreference(next.language);
+      applyAccountPreferences(next);
       setUser(next);
     },
     [sessionId],
