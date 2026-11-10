@@ -43,7 +43,7 @@ export function LanguageSettings() {
     <Form onSubmit={save} aria-busy={busy}>
       <section className="account-panel">
         <div className="account-panel-header">
-          <h2>{t("language.title")}</h2>
+          <h2>{t("language.sectionTitle")}</h2>
         </div>
         <Field.Root name="language">
           <Select.Root
@@ -68,9 +68,7 @@ export function LanguageSettings() {
               </Select.List>
             </SelectPopup>
           </Select.Root>
-          <Field.Description>{t("language.description")}</Field.Description>
         </Field.Root>
-        <p className="account-notice">{t("language.applyHint")}</p>
         {error && (
           <p className="account-notice" data-error role="alert">
             {error}
