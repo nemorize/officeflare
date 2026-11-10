@@ -9,7 +9,11 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../src/db/schema.ts";
 import { hashPassword, verifyPassword } from "../src/auth/password.ts";
-import { permissionCatalog, permissionClosure } from "../src/authorization/permissions.ts";
+import {
+  calendarUserPermissions,
+  permissionCatalog,
+  permissionClosure,
+} from "../src/authorization/permissions.ts";
 
 const {
   users,
@@ -305,7 +309,7 @@ test("user management in the Workers runtime", async (t) => {
         (await db.select().from(userRoles).where(eq(userRoles.user_id, user.id))).map(
           (row) => row.role_id,
         ),
-        ["system-mail-user"],
+        ["system-calendar-user", "system-mail-user"],
       );
       const pending = await login(user.email_address);
       assert.equal(pending.next, "password_reset");
@@ -317,7 +321,7 @@ test("user management in the Workers runtime", async (t) => {
       });
       assert.deepEqual(
         (await request("/api/me/permissions", { token: changed.access_token })).permissions,
-        ["mail.access"],
+        [...calendarUserPermissions, "mail.access"].sort(),
       );
       const listed = (await request(`/api/users/${user.id}`, { token })).user;
       assert.equal(listed.password_reset_required, false);
@@ -578,7 +582,7 @@ test("user management in the Workers runtime", async (t) => {
       const fresh = await login(replacement.email_address);
       assert.deepEqual(
         (await request("/api/me/permissions", { token: fresh.access_token })).permissions,
-        ["mail.access"],
+        [...calendarUserPermissions, "mail.access"].sort(),
       );
       assert.deepEqual(
         (await request("/api/me/mfa/methods", { token: fresh.access_token })).methods,
@@ -601,6 +605,7 @@ test("user management in the Workers runtime", async (t) => {
         "admin.users.credentials.reset",
         "admin.users.delete",
         "mail.access",
+        ...calendarUserPermissions,
       ]).map((permission_key) =>
         db.insert(rolePermissions).values({ role_id: "account-manager", permission_key }),
       ),
@@ -663,7 +668,11 @@ test("user management in the Workers runtime", async (t) => {
           data: {
             key: "email-operator",
             label: "Email operator",
-            permissions: permissionClosure(["admin.users.profile.update", "mail.access"]),
+            permissions: permissionClosure([
+              "admin.users.profile.update",
+              "mail.access",
+              ...calendarUserPermissions,
+            ]),
           },
           expected: 201,
         })
@@ -710,6 +719,7 @@ test("user management in the Workers runtime", async (t) => {
               "admin.users.profile.update",
               "admin.users.email.update",
               "mail.access",
+              ...calendarUserPermissions,
             ]),
             version: role.version,
           },
@@ -726,7 +736,11 @@ test("user management in the Workers runtime", async (t) => {
         token,
         data: {
           label: granted.label,
-          permissions: permissionClosure(["admin.users.profile.update", "mail.access"]),
+          permissions: permissionClosure([
+            "admin.users.profile.update",
+            "mail.access",
+            ...calendarUserPermissions,
+          ]),
           version: granted.version,
         },
       });
@@ -980,7 +994,11 @@ test("service entry, administrative actions, role defaults and assignment concur
   await t.test(
     "profile-only editing cannot change account security and mixed edits are atomic",
     async () => {
-      const actor = await grant("profile-only", ["admin.users.profile.update", "mail.access"]),
+      const actor = await grant("profile-only", [
+          "admin.users.profile.update",
+          "mail.access",
+          ...calendarUserPermissions,
+        ]),
         target = await create("granular-target@office.test");
       const active = await login(target.email_address);
       await edit(target.id, { display_name: "Allowed profile change" }, 200, actor);
@@ -998,6 +1016,7 @@ test("service entry, administrative actions, role defaults and assignment concur
       const support = await grant("credential-only", [
         "admin.users.credentials.reset",
         "mail.access",
+        ...calendarUserPermissions,
       ]);
       await edit(target.id, { display_name: "Denied profile change" }, 403, support);
       await edit(target.id, { password_reset_required: true }, 200, support);
@@ -1072,7 +1091,7 @@ test("service entry, administrative actions, role defaults and assignment concur
       const defaults = (await request("/api/users/default-roles", { token: actor })).roles;
       assert.deepEqual(
         defaults.map((role) => role.id),
-        ["system-mail-user"],
+        ["system-calendar-user", "system-mail-user"],
       );
       const created = (
         await request("/api/users", {
@@ -1088,7 +1107,7 @@ test("service entry, administrative actions, role defaults and assignment concur
       ).user;
       assert.deepEqual(
         (await request(`/api/users/${created.id}/roles`, { token })).roles.map((role) => role.id),
-        ["system-mail-user"],
+        ["system-calendar-user", "system-mail-user"],
       );
       assert.deepEqual(
         (
@@ -1096,7 +1115,7 @@ test("service entry, administrative actions, role defaults and assignment concur
             token: (await login(created.email_address)).access_token,
           })
         ).permissions,
-        ["mail.access"],
+        [...calendarUserPermissions, "mail.access"].sort(),
       );
       await request("/api/users", {
         method: "POST",
@@ -1141,17 +1160,25 @@ test("service entry, administrative actions, role defaults and assignment concur
         data: { is_default: true, version: mail.version },
         expected: 409,
       });
-      assert.ok((await request("/api/users/default-roles", { token })).roles.length === 0);
-      const created = await create("no-default@office.test");
-      assert.equal((await request(`/api/users/${created.id}/roles`, { token })).roles.length, 0);
+      assert.deepEqual(
+        (await request("/api/users/default-roles", { token })).roles.map((role) => role.id),
+        ["system-calendar-user"],
+      );
+      const created = await create("calendar-default@office.test");
+      assert.deepEqual(
+        (await request(`/api/users/${created.id}/roles`, { token })).roles.map((role) => role.id),
+        ["system-calendar-user"],
+      );
       const previous = await db
         .select()
         .from(users)
         .where(eq(users.email_address, "defaulted@office.test"))
         .get();
-      assert.equal(
-        (await request(`/api/users/${previous.id}/roles`, { token })).roles[0].id,
-        mail.id,
+      assert.deepEqual(
+        (await request(`/api/users/${previous.id}/roles`, { token })).roles
+          .map((role) => role.id)
+          .sort(),
+        ["system-calendar-user", mail.id].sort(),
       );
       const administrative = await role("not-a-default", ["admin.users.read"]);
       await request(`/api/roles/${administrative.id}/default`, {

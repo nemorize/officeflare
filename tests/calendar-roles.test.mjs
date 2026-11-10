@@ -38,7 +38,7 @@ test("Calendar role migration preserves custom roles and supplies assignable per
     const { role } = await response.json();
     assert.match(role.key, new RegExp(`^officeflare-${template.key}-[a-f0-9]{8}$`));
     assert.equal(role.is_system, false);
-    assert.equal(role.is_default, false);
+    assert.equal(role.is_default, template.key === "calendar-user");
     assert.equal(role.assigned_user_count, 0);
     assert.deepEqual([...role.permissions].sort(), [...template.permissions].sort());
     const legacy = await f.db
