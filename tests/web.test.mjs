@@ -40,6 +40,7 @@ test("React Router assets and API routes coexist in the Workers runtime", async 
     "/calendar/settings/working-hours",
     "/calendar/settings/data",
     "/drive",
+    `/share/drive/ofd_${"a".repeat(43)}`,
     "/profile",
     "/profile/security",
     "/profile/sessions",

@@ -26,6 +26,7 @@ interface Link {
   allow_download: number;
   expires_at: number | null;
 }
+const publicToken = /^ofd_[A-Za-z0-9_-]{43}$/;
 const scope = (hash: string, item: string, password: string | null, reference = false) =>
   condition(
     `EXISTS(SELECT 1 FROM drive_links l JOIN drive_items root ON root.id=l.item_id JOIN users owner ON owner.id=root.owner_user_id
@@ -40,8 +41,7 @@ async function validate(c: DriveContext) {
   c.header("Referrer-Policy", "no-referrer");
   c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
   const token = c.req.param("token");
-  if (!token || !/^ofd_[A-Za-z0-9_-]{43}$/.test(token))
-    fail(404, t("drivePublic.shareLinkNotFound"));
+  if (!token || !publicToken.test(token)) fail(404, t("drivePublic.shareLinkNotFound"));
   const hash = await digest(token),
     limitKey = await digest(
       `drive-public:${c.req.header("cf-connecting-ip") ?? "local"}:${hash}:${Math.floor(now() / 900)}`,
@@ -102,6 +102,13 @@ async function dto(c: DriveContext, item: DriveItem) {
 }
 export const publicDrive = new Hono<AppEnv>();
 publicDrive.get("/:token", async (c) => {
+  // Previously issued API URLs must open the password form when visited in a browser.
+  const token = c.req.param("token");
+  if (publicToken.test(token) && c.req.header("accept")?.includes("text/html")) {
+    c.header("Referrer-Policy", "no-referrer");
+    c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
+    return c.redirect(`/share/drive/${token}`);
+  }
   const link = await validate(c),
     result = await publicItem(c, link, link.item_id);
   return c.json({

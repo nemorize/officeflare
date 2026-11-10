@@ -529,6 +529,15 @@ test("Drive backend: file lifecycle, inherited sharing, public links and recover
       const shared = await link(root.id, { password: "share-password" }),
         publicRoot = `/public/${shared.token}`,
         headers = { "X-Drive-Link-Password": "share-password" };
+      assert.equal(shared.url, `https://office.test/share/drive/${shared.token}`);
+      const navigation = await f.mf.dispatchFetch(`https://office.test/api/drive${publicRoot}`, {
+        redirect: "manual",
+        headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" },
+      });
+      assert.equal(navigation.status, 302);
+      assert.equal(navigation.headers.get("location"), `/share/drive/${shared.token}`);
+      assert.equal(navigation.headers.get("cache-control"), "no-store");
+      assert.equal(navigation.headers.get("referrer-policy"), "no-referrer");
       await call(publicRoot, { actor: null, expected: 403 });
       await call(publicRoot, {
         actor: null,

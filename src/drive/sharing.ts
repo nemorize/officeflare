@@ -227,7 +227,7 @@ sharing.post("/:itemId/links", async (c) => {
       link: {
         id: link,
         token,
-        url: new URL(`/api/drive/public/${token}`, c.req.url).href,
+        url: new URL(`/share/drive/${token}`, c.req.url).href,
         expires_at: expires,
         allow_download: allow,
         password_protected: !!hash,
