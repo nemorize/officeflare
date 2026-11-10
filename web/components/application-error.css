@@ -1,0 +1,85 @@
+.application-error-page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--ui-background);
+  color: var(--ui-text);
+}
+.application-error-header {
+  padding: 24px 32px;
+}
+.application-error-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ui-text);
+  text-decoration: none;
+}
+.application-error-content {
+  display: grid;
+  place-items: center;
+  padding: 32px 24px 112px;
+}
+.application-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(480px, 100%);
+  text-align: center;
+}
+.application-error-symbol {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-block-end: 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  color: var(--ui-muted);
+}
+.application-error-card h1 {
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.application-error-card h1:focus {
+  outline: none;
+  box-shadow: none;
+}
+.application-error-card p {
+  margin-block-start: 14px;
+  color: var(--ui-muted);
+  font-size: 14px;
+  line-height: 1.8;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.application-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-block-start: 28px;
+}
+@media (max-width: 480px) {
+  .application-error-header {
+    padding: 20px;
+  }
+  .application-error-content {
+    padding: 24px 20px 80px;
+  }
+  .application-error-actions {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 280px;
+  }
+}

@@ -12,6 +12,8 @@ import {
 } from "react-router";
 import { LoginPage } from "./routes/login";
 import { UIProvider } from "@/components/ui";
+import { ApplicationErrorBoundary } from "./components/application-error";
+import { RouteErrorBoundary } from "./components/route-error";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
 import { workspaceApps } from "./lib/workspace-navigation";
 import { ConsoleGate, ConsoleHome, ServiceGate, WorkspaceHome } from "./components/console-access";
@@ -116,7 +118,7 @@ const CalendarInvitationPage = lazy(() =>
 
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <>
+    <Route errorElement={<RouteErrorBoundary />}>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/share/drive/:token"
@@ -419,14 +421,16 @@ const router = createBrowserRouter(
           }
         />
       )}
-    </>,
+    </Route>,
   ),
 );
 if (import.meta.hot) import.meta.hot.dispose(() => router.dispose());
 root.render(
   <StrictMode>
-    <UIProvider>
-      <RouterProvider router={router} />
-    </UIProvider>
+    <ApplicationErrorBoundary>
+      <UIProvider>
+        <RouterProvider router={router} />
+      </UIProvider>
+    </ApplicationErrorBoundary>
   </StrictMode>,
 );

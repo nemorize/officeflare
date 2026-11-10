@@ -4843,6 +4843,12 @@ export const ko = defineTranslations(en, {
   "preferences.regionalFormat": "지역 형식",
   "preferences.invalidTimeZone": "올바른 IANA 시간대를 입력하세요.",
   "preferences.invalidRegionalFormat": "올바른 지역 형식을 입력하세요.",
+  "applicationError.loadTitle": "화면을 불러오지 못했습니다",
+  "applicationError.loadDescription":
+    "앱이 업데이트되었거나 연결이 일시적으로 끊겼을 수 있습니다. 페이지를 새로고침해 다시 시도해 주세요.",
+  "applicationError.unexpectedTitle": "문제가 발생했습니다",
+  "applicationError.unexpectedDescription":
+    "요청한 화면을 표시하지 못했습니다. 페이지를 새로고침하거나 워크스페이스로 돌아가 다시 시도해 주세요.",
   "mailAdmin.activityDescription": "도메인 설정, 주소와 사서함 접근 권한의 변경 이력을 확인합니다.",
   "mailAdmin.actor": "작업자",
   "mailAdmin.addProvider": "연결 추가",

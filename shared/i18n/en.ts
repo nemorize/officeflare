@@ -4837,6 +4837,12 @@ export const en = defineMessages({
   "preferences.regionalFormat": "Regional format",
   "preferences.invalidTimeZone": "Enter a valid IANA time zone.",
   "preferences.invalidRegionalFormat": "Enter a valid regional format.",
+  "applicationError.loadTitle": "This page could not be loaded",
+  "applicationError.loadDescription":
+    "The app may have been updated or your connection was interrupted. Refresh the page to try again.",
+  "applicationError.unexpectedTitle": "Something went wrong",
+  "applicationError.unexpectedDescription":
+    "We couldn’t display this page. Refresh the page or return to your workspace to try again.",
   "mailAdmin.activityDescription":
     "Review changes to domain settings, addresses, and mailbox access.",
   "mailAdmin.actor": "Changed by",

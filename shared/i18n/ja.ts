@@ -4912,6 +4912,12 @@ export const ja = defineTranslations(en, {
   "preferences.regionalFormat": "地域の形式",
   "preferences.invalidTimeZone": "有効なIANAタイムゾーンを入力してください。",
   "preferences.invalidRegionalFormat": "有効な地域の形式を入力してください。",
+  "applicationError.loadTitle": "画面を読み込めませんでした",
+  "applicationError.loadDescription":
+    "アプリが更新されたか、接続が一時的に切れた可能性があります。ページを再読み込みして、もう一度お試しください。",
+  "applicationError.unexpectedTitle": "問題が発生しました",
+  "applicationError.unexpectedDescription":
+    "この画面を表示できませんでした。ページを再読み込みするか、ワークスペースに戻ってもう一度お試しください。",
   "mailAdmin.activityDescription":
     "ドメイン設定、アドレス、メールボックスへのアクセス権の変更履歴を確認します。",
   "mailAdmin.actor": "実行者",

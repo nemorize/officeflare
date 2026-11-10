@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { UIProvider } from "./components/ui";
 import { WorkspaceLoading } from "./components/workspace-loading";
+import { ApplicationErrorBoundary, ApplicationErrorPage } from "./components/application-error";
 import { root } from "./lib/app-root";
 import "./lib/browser-theme";
 import { browserLanguage } from "./lib/browser-language";
@@ -10,9 +11,11 @@ import "./styles.css";
 
 root.render(
   <StrictMode>
-    <UIProvider>
-      <WorkspaceLoading />
-    </UIProvider>
+    <ApplicationErrorBoundary>
+      <UIProvider>
+        <WorkspaceLoading />
+      </UIProvider>
+    </ApplicationErrorBoundary>
   </StrictMode>,
 );
 
@@ -25,5 +28,10 @@ sessions.subscribe(() => {
     browserLanguage.setPreference("system");
   }
 });
-await import("./app");
+try {
+  await import("./app");
+} catch (error) {
+  console.error("Application startup failed", error);
+  root.render(<ApplicationErrorPage error={error} />);
+}
 browserLanguage.start();
