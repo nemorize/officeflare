@@ -1151,6 +1151,12 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
   assert.ok(delivered.submission.provider_message_id);
   const sentCopy = (await call(base + "/messages/" + reply.id)).message;
   assert.equal(sentCopy.folder_id, "sent");
+  assert.equal(sentCopy.is_read, 1);
+  assert.equal((await call(base + "/summary")).summary.folders.sent.unread, 0);
+  const sentView = await call(base + "/ui/view?folder_id=sent&grouped=true");
+  assert.equal(sentView.messages[0].is_read, 1);
+  assert.equal(sentView.messages[0].unread_count, 0);
+  assert.equal((await call(base + "/messages/" + message.id)).message.is_read, 0);
   assert.equal(sentCopy.draft, null);
   assert.ok(
     (await call(base + "/search?q=from:owner@mail.test")).messages.some((m) => m.id === reply.id),
@@ -1606,12 +1612,19 @@ test("outbox keeps processing and unknown sends visible, private, cancelable and
   );
   assert.equal((await call(base + "/messages?view=outbox")).messages.length, 0);
   assert.equal((await call(base + "/summary")).summary.outbox, 0);
-  assert.equal((await call(base + "/messages?folder_id=sent")).messages[0].id, reconcileDraft.id);
+  const sentPage = await call(base + "/messages?folder_id=sent");
+  assert.equal(sentPage.messages[0].id, reconcileDraft.id);
+  assert.ok(sentPage.messages.every((message) => message.is_read === 1));
+  assert.equal((await call(base + "/summary")).summary.folders.sent.unread, 0);
   assert.equal((await bucket.list({ prefix: "test-sent/" })).objects.length, 2);
 });
 
 test("imports, backups, restore, JMAP and MCP use the same permission boundary", async (t) => {
-  const { mf, tokens, call, admin, base, mailbox, draft } = await fixture(t, "6000000000", true);
+  const { mf, tokens, call, admin, base, mailbox, draft, address } = await fixture(
+    t,
+    "6000000000",
+    true,
+  );
   const mime =
     "From: source@example.test\r\nTo: owner@mail.test\r\nSubject: Imported content\r\nMessage-ID: <import@example.test>\r\n\r\nImported body";
   const response = await mf.dispatchFetch(
@@ -1630,6 +1643,19 @@ test("imports, backups, restore, JMAP and MCP use the same permission boundary",
     "Import did not complete",
   );
   assert.equal((await call(base + "/search?q=Imported")).messages.length, 1);
+  const sentDraft = await draft({ subject: "Sent backup message" });
+  const sentJob = (
+    await call(base + "/drafts/" + sentDraft.id + "/submissions", {
+      method: "POST",
+      data: { address_id: address.id, version: sentDraft.draft.version },
+      expected: 202,
+    })
+  ).submission;
+  await eventually(
+    () => call(base + "/submissions/" + sentJob.id),
+    (result) => result.submission.status === "accepted",
+    "Sent backup message was not accepted",
+  );
   const backup = (await call(base + "/backups", { method: "POST", expected: 202 })).job;
   await eventually(
     () => call(base + "/jobs/" + backup.id),
@@ -1641,6 +1667,18 @@ test("imports, backups, restore, JMAP and MCP use the same permission boundary",
   assert.ok(backupDetails.files.some((file) => file.name.endsWith(".message.json")));
   assert.equal("output_prefix" in backupDetails.job, false);
   for (const file of backupDetails.files) assert.match(file.name, /^[a-z0-9.-]{1,100}$/);
+  const bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const backupFiles = await bucket.list({ prefix: `data-jobs/${mailbox.id}/${backup.id}/` });
+  let patchedSent = false;
+  for (const file of backupFiles.objects.filter((file) => file.key.endsWith(".message.json"))) {
+    const stored = await (await bucket.get(file.key)).json();
+    if (stored.folder_id === "sent") {
+      stored.is_read = 0;
+      await bucket.put(file.key, JSON.stringify(stored));
+      patchedSent = true;
+    }
+  }
+  assert.equal(patchedSent, true);
   const target = (
     await admin("/mailboxes", {
       method: "POST",
@@ -1663,6 +1701,11 @@ test("imports, backups, restore, JMAP and MCP use the same permission boundary",
   const restored = await call("/mailboxes/" + target.id + "/search?q=Imported");
   assert.equal(restored.messages.length, 1);
   assert.equal(restored.messages[0].provider, null);
+  assert.equal(restored.messages[0].is_read, 0);
+  const restoredSent = await call("/mailboxes/" + target.id + "/messages?folder_id=sent");
+  assert.equal(restoredSent.messages.length, 1);
+  assert.equal(restoredSent.messages[0].is_read, 1);
+  assert.equal((await call("/mailboxes/" + target.id + "/summary")).summary.folders.sent.unread, 0);
   const exported = (await call(base + "/exports", { method: "POST", expected: 202 })).job;
   await eventually(
     () => call(base + "/jobs/" + exported.id),

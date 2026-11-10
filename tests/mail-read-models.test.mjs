@@ -18,9 +18,13 @@ const { migrate, rebuildReadModels, rebuildDirtyThreads } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`
 );
 const migrations = await Promise.all(
-  ["partition.sql", "partition-v2.sql", "partition-v3.sql", "partition-v4.sql"].map((file) =>
-    readFile(new URL(`../src/mail/${file}`, import.meta.url), "utf8"),
-  ),
+  [
+    "partition.sql",
+    "partition-v2.sql",
+    "partition-v3.sql",
+    "partition-v4.sql",
+    "partition-v5.sql",
+  ].map((file) => readFile(new URL(`../src/mail/${file}`, import.meta.url), "utf8")),
 );
 const plain = (value) => JSON.parse(JSON.stringify(value));
 function fixture(t) {
@@ -146,6 +150,61 @@ test("read-model migration backfills deployed messages and remains atomic throug
   f.db.exec("DELETE FROM mailbox_counts; DELETE FROM thread_summaries");
   f.storage.transactionSync(() => rebuildReadModels(f.sql));
   f.verify();
+});
+
+test("sent-read migration updates legacy messages, unread counts and sync events once", (t) => {
+  const f = fixture(t);
+  migrate(f.storage, migrations.slice(0, 4));
+  f.db.exec("INSERT INTO partition_identity VALUES(1,'mailbox','partition')");
+  for (const id of ["sent-unread", "sent-read", "inbox-unread", "archive-unread", "draft-unread"])
+    f.insert(id, "mixed-thread", id === "draft-unread" ? "owner" : null);
+  f.db.exec("UPDATE messages SET direction='outbound',folder_id='sent' WHERE id LIKE 'sent-%'");
+  f.db.exec("UPDATE messages SET is_read=1,version=7 WHERE id='sent-read'");
+  f.db.exec(
+    "UPDATE messages SET direction='outbound',folder_id='archive' WHERE id='archive-unread'",
+  );
+  f.db.exec("UPDATE messages SET direction='outbound',folder_id='drafts' WHERE id='draft-unread'");
+  migrate(f.storage, migrations);
+  f.verify();
+  const sent = f.db
+    .prepare("SELECT is_read,version,received_at FROM messages WHERE id='sent-unread'")
+    .get();
+  assert.deepEqual(plain(sent), { is_read: 1, version: 2, received_at: 100 });
+  assert.equal(f.db.prepare("SELECT version FROM messages WHERE id='sent-read'").get().version, 7);
+  for (const id of ["inbox-unread", "archive-unread", "draft-unread"])
+    assert.equal(f.db.prepare("SELECT is_read FROM messages WHERE id=?").get(id).is_read, 0);
+  assert.equal(
+    f.db.prepare("SELECT sum(unread) n FROM mailbox_counts WHERE folder_id='sent'").get().n,
+    0,
+  );
+  assert.equal(
+    f.db.prepare("SELECT unread_count FROM thread_summaries WHERE folder_id='sent'").get()
+      .unread_count,
+    0,
+  );
+  assert.equal(
+    f.db.prepare("SELECT unread_count FROM thread_summaries WHERE folder_id='inbox'").get()
+      .unread_count,
+    1,
+  );
+  assert.deepEqual(plain(f.db.prepare("SELECT message_id,operation FROM change_log").all()), [
+    { message_id: "sent-unread", operation: "updated" },
+  ]);
+  const outbox = f.db.prepare("SELECT payload_json FROM outbox").all();
+  assert.equal(outbox.length, 1);
+  assert.deepEqual(JSON.parse(outbox[0].payload_json), {
+    mailbox_id: "mailbox",
+    partition_id: "partition",
+    message_id: "sent-unread",
+    thread_id: "mixed-thread",
+    version: 2,
+    operation: "updated",
+    private_user_id: null,
+  });
+  migrate(f.storage, migrations);
+  f.verify();
+  assert.equal(f.db.prepare("SELECT count(*) n FROM change_log").get().n, 1);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM outbox").get().n, 1);
 });
 
 test("bulk edits rebuild each dirty conversation once and rollback leaves no deferred state", (t) => {

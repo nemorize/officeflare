@@ -5,6 +5,7 @@ import schema from "./partition.sql";
 import unifiedSend from "./partition-v2.sql";
 import uiCommands from "./partition-v3.sql";
 import readModels from "./partition-v4.sql";
+import sentRead from "./partition-v5.sql";
 import { rebuildReadModels, rebuildDirtyThreads } from "./read-models";
 import { migrate } from "./migrations";
 import { mailRenderKey, legacyMailRenderKey, mailRenderImagePrefix } from "./rendering";
@@ -31,7 +32,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
-      migrate(ctx.storage, [schema, unifiedSend, uiCommands, readModels]);
+      migrate(ctx.storage, [schema, unifiedSend, uiCommands, readModels, sentRead]);
     });
   }
   initialize(mailboxId: string, partitionId: string) {
@@ -198,7 +199,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (existing) return existing.id;
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
-        "INSERT INTO messages(id,thread_id,direction,folder_id,subject,from_address,received_at,provider,connection_id,provider_message_id,rfc_message_id,raw_r2_key,body_r2_key,snippet,has_attachments,draft_owner_id,ingest_id,is_spam,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO messages(id,thread_id,direction,folder_id,subject,from_address,received_at,provider,connection_id,provider_message_id,rfc_message_id,raw_r2_key,body_r2_key,snippet,has_attachments,draft_owner_id,ingest_id,is_spam,is_read,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         input.id,
         input.thread_id,
         input.direction,
@@ -217,6 +218,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         input.draft_owner_id,
         input.ingest_id ?? null,
         Number(input.is_spam ?? false),
+        Number(input.folder_id === "sent"),
         epoch(),
         epoch(),
       );
@@ -306,7 +308,7 @@ export class MailPartitionDO extends DurableObject<Env> {
   }
   applyInboundFlags(messageId: string, read: boolean, star: boolean) {
     this.sql.exec(
-      "UPDATE messages SET is_read=?,is_starred=? WHERE id=?",
+      "UPDATE messages SET is_read=CASE WHEN folder_id='sent' THEN 1 ELSE ? END,is_starred=? WHERE id=?",
       Number(read),
       Number(star),
       messageId,
@@ -581,6 +583,7 @@ export class MailPartitionDO extends DurableObject<Env> {
     if (changes.folder_id === "spam" && changes.is_spam === undefined) changes.is_spam = 1;
     if (["inbox", "archive"].includes(changes.folder_id ?? "") && changes.is_spam === undefined)
       changes.is_spam = 0;
+    if (changes.folder_id === "sent" && changes.is_read === undefined) changes.is_read = 1;
     const message = this.get(messageId, actorId);
     if (message.version !== version) fail(409, t("mailPartition.messageVersionChanged"));
     if (message.draft && changes.folder_id && changes.folder_id !== "drafts")
@@ -917,7 +920,7 @@ export class MailPartitionDO extends DurableObject<Env> {
         submissionId,
       );
       this.sql.exec(
-        "UPDATE messages SET folder_id='sent',draft_owner_id=NULL,provider=?,connection_id=?,provider_message_id=?,version=version+1,updated_at=? WHERE id=?",
+        "UPDATE messages SET folder_id='sent',is_read=1,draft_owner_id=NULL,provider=?,connection_id=?,provider_message_id=?,version=version+1,updated_at=? WHERE id=?",
         job.provider,
         job.connection_id,
         providerMessageId,
