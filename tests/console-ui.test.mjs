@@ -7,6 +7,7 @@ import {
   consoleMenu,
   managedPermissions,
   rolePayload,
+  roleTemplates,
   userChanges,
 } from "../web/lib/console.ts";
 import {
@@ -16,6 +17,7 @@ import {
   effectivePermissions,
   defaultEligible,
   permissionCatalog,
+  calendarUserPermissions,
 } from "../src/authorization/permissions.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 const user = {
@@ -26,6 +28,30 @@ const user = {
   password_reset_required: false,
 };
 const values = { name: "Alex", email: "alex@example.test", disabled: false, passwordReset: false };
+
+test("Calendar role templates separate user, read-only and administrative access", () => {
+  const templates = Object.fromEntries(roleTemplates.map((template) => [template.key, template]));
+  assert.deepEqual(templates["calendar-user"].permissions, [...calendarUserPermissions]);
+  assert.deepEqual(templates["calendar-reader"].permissions, ["calendar.access"]);
+  assert.deepEqual(
+    [...templates["calendar-manager"].permissions].sort(),
+    ["console.access", "admin.calendar.settings.read", "admin.calendar.settings.manage"].sort(),
+  );
+  for (const key of ["calendar-user", "calendar-reader", "calendar-manager"]) {
+    const template = templates[key];
+    assert.deepEqual(missingPrerequisites(template.permissions), []);
+    assert.equal(defaultEligible(template.permissions), key !== "calendar-manager");
+    assert.equal(canGrant(["calendar.access"], template.permissions), key === "calendar-reader");
+    assert.doesNotThrow(() =>
+      rolePayload({
+        key: `${key}-custom`,
+        label: template.label,
+        description: "",
+        permissions: template.permissions,
+      }),
+    );
+  }
+});
 
 test("console entry and administrative records are separate from service access", () => {
   for (const permissions of [

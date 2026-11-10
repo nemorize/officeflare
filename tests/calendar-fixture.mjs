@@ -20,7 +20,7 @@ const harness = await build({
   external: ["cloudflare:workers", "cloudflare:sockets", "../dist/index.js", "node:*"],
   target: "es2022",
 });
-export async function fixture(t, { assets = false } = {}) {
+export async function fixture(t, { assets = false, beforeRolesMigration } = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const common = {
     compatibilityDate: "2026-09-29",
@@ -84,6 +84,7 @@ export async function fixture(t, { assets = false } = {}) {
   const db = await mf.getD1Database("DB"),
     faults = await mf.getWorker("calendar-harness");
   for (const file of (await readdir("migrations")).sort()) {
+    if (file === "0027_calendar_roles.sql" && beforeRolesMigration) await beforeRolesMigration(db);
     let statement = "",
       trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {

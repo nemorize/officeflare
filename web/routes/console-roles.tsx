@@ -396,7 +396,9 @@ export function RoleEditorPage({ creating = false }: { creating?: boolean }) {
                         setSelected(template.permissions);
                         if (creating && !key)
                           setKey(
-                            template.key === "mail-user" || template.key.startsWith("drive-")
+                            template.key === "mail-user" ||
+                              template.key.startsWith("drive-") ||
+                              template.key.startsWith("calendar-")
                               ? `${template.key}-custom`
                               : template.key,
                           );

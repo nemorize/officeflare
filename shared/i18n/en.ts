@@ -2158,6 +2158,9 @@ export const en = defineMessages({
   "libConsole.accessManager": "Access manager",
   "libConsole.accountSupport": "Account support",
   "libConsole.accountViewer": "Account viewer",
+  "libConsole.calendarManager": "Calendar manager",
+  "libConsole.calendarReadOnlyUser": "Calendar read-only user",
+  "libConsole.calendarUser": "Calendar user",
   "libConsole.descriptionMustContainAtMost1000Characters":
     "Description must contain at most 1000 characters.",
   "libConsole.displayNameMustContainAtMost200Characters":

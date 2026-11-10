@@ -2,6 +2,7 @@ import { t } from "../../shared/i18n/index.ts";
 import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
 import {
+  calendarUserPermissions,
   driveUserPermissions,
   isPermission,
   missingPrerequisites,
@@ -91,6 +92,21 @@ export const managedPermissions = (permissions: readonly string[]) =>
   permissions.filter(isPermission);
 export const roleTemplates = [
   { key: "mail-user", label: t("libConsole.mailUser"), permissions: ["mail.access"] },
+  {
+    key: "calendar-user",
+    label: t("libConsole.calendarUser"),
+    permissions: [...calendarUserPermissions],
+  },
+  {
+    key: "calendar-reader",
+    label: t("libConsole.calendarReadOnlyUser"),
+    permissions: ["calendar.access"],
+  },
+  {
+    key: "calendar-manager",
+    label: t("libConsole.calendarManager"),
+    permissions: permissionClosure(["admin.calendar.settings.manage"]),
+  },
   { key: "drive-user", label: t("libConsole.driveUser"), permissions: [...driveUserPermissions] },
   {
     key: "drive-reader",
