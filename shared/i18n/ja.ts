@@ -2102,6 +2102,7 @@ export const ja = defineTranslations(en, {
   "labels.link_revoked": "リンクを取り消しました",
   "labels.link_updated": "リンクを更新しました",
   "labels.mail": "メール",
+  "labels.messages": "メッセージ",
   "labels.manage": "管理",
   "labels.manager": "管理者",
   "labels.metadata_updated": "メタデータ更新済み",
@@ -5065,4 +5066,35 @@ export const ja = defineTranslations(en, {
   "consoleSettings.lastUpdated": "最終更新: {date}",
   "consoleSettings.addDomain": "ドメインを追加",
   "consoleSettings.addSharedMailbox": "共有メールボックスを追加",
+  "push.adminRead": "通知設定の表示",
+  "push.adminManage": "通知設定の管理",
+  "push.adminTitle": "通知管理",
+  "push.adminDescription": "ワークスペースの Web プッシュ通知を管理します。",
+  "push.notConfigured":
+    "FCM が未設定です。Cloudflare の環境変数を設定すると Web プッシュを許可できます。",
+  "push.configured": "FCM が設定されています。",
+  "push.settingsChanged": "設定が変更されました。再読み込みしてお試しください。",
+  "push.newMail": "新着メール",
+  "push.unavailable": "現在 Web プッシュは利用できません。",
+  "push.unsupported":
+    "このブラウザーは Web プッシュに対応していません。対応ブラウザーで HTTPS に接続してください。",
+  "push.failed": "Web プッシュに接続できませんでした。もう一度お試しください。",
+  "push.denied": "通知がブロックされています。ブラウザーの設定で通知を許可してからお試しください。",
+  "push.promptTitle": "プッシュ通知を受け取りますか？",
+  "push.promptDescription":
+    "Officeflare を閉じていても、このブラウザーで新着メールや通知センターの更新を受け取れます。環境設定からいつでも変更できます。",
+  "push.later": "後で",
+  "push.enable": "Web プッシュを有効にする",
+  "push.disable": "このブラウザーで無効にする",
+  "push.enabled": "このブラウザーで Web プッシュが有効です。",
+  "push.disabled": "このブラウザーで Web プッシュは無効です。",
+  "push.description":
+    "このブラウザーで新着メールや通知センターの更新を受け取ります。通知設定の受信項目はプッシュ通知にも適用されます。",
+  "push.adminEnable": "Web プッシュ通知を許可",
+  "push.adminHint":
+    "利用者がブラウザーごとに接続を選択します。無効にすると全利用者への Web プッシュ送信が停止します。",
+  "push.saved": "通知設定を保存しました。",
+  "push.connecting": "Web プッシュに接続中…",
+  "push.loadingFailed": "Web プッシュ設定を読み込めませんでした。再読み込みしてください。",
+  "push.title": "Web プッシュ",
 });

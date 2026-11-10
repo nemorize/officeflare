@@ -45,6 +45,11 @@ const NotificationsPage = lazy(() =>
 const NotificationSettingsPage = lazy(() =>
   import("./routes/notifications").then((module) => ({ default: module.NotificationSettingsPage })),
 );
+const NotificationConsolePage = lazy(() =>
+  import("./routes/console-notifications").then((module) => ({
+    default: module.NotificationConsolePage,
+  })),
+);
 const UsersPage = lazy(() =>
   import("./routes/console-users").then((module) => ({ default: module.UsersPage })),
 );
@@ -275,6 +280,14 @@ const router = createBrowserRouter(
         <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
         <Route path="/console" element={<ConsoleGate />}>
           <Route index element={<ConsoleHome />} />
+          <Route
+            path="notifications"
+            element={
+              <ConsoleGate permissions={["admin.notifications.settings.read"]}>
+                <NotificationConsolePage />
+              </ConsoleGate>
+            }
+          />
           <Route
             path="users"
             element={

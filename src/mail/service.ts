@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { notifyIncomingMail } from "../notifications/mail";
 import { publishMailFlow, recordInboundFlow } from "./admin-store";
 import { forwardingAllowed } from "./policy";
 import { incomingRoute } from "./routing";
@@ -555,6 +556,13 @@ export async function ingest(env: Env, task: InboundTask) {
     decision.is_read,
     decision.is_starred,
   );
+  if (
+    task.source !== "import" &&
+    !decision.is_spam &&
+    !decision.is_read &&
+    !["spam", "trash"].includes(decision.folder_id)
+  )
+    await notifyIncomingMail(env, task.mailbox_id, task.id, subject, from);
   await env.MAIL_BUCKET.put(
     receiptKey,
     JSON.stringify({

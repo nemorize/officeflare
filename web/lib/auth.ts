@@ -1,4 +1,5 @@
 import type { AccountUser } from "./api";
+import { bindPushWorker } from "./push-browser";
 import { getLocale, t } from "../../shared/i18n/index.ts";
 export interface Session {
   token_type: "Bearer";
@@ -72,7 +73,10 @@ export const recoverMfa = (challenge: string, code: string) =>
 export const changePassword = (challenge: string, password: string) =>
   request<Session>("/api/me/password", { new_password: password }, challenge, "PUT");
 
-export const logout = (access: string) => request<void>("/api/auth/logout", undefined, access);
+export const logout = async (access: string) => {
+  await bindPushWorker(null).catch(() => {});
+  await request<void>("/api/auth/logout", undefined, access);
+};
 
 export const refresh = (token: string, requestId: string) =>
   request<Session>("/api/auth/refresh", { request_id: requestId }, token);

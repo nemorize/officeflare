@@ -1,4 +1,5 @@
 import { now, uuid, type AuthEnv } from "../auth/types";
+import { deliverPush } from "./push";
 
 interface InvalidationJob {
   kind: "notifications.invalidate";
@@ -19,6 +20,17 @@ export async function recoverNotifications(env: AuthEnv) {
     db
       .prepare("DELETE FROM notification_outbox WHERE delivered_at < ?")
       .bind(timestamp - 7 * 86400),
+    db
+      .prepare("DELETE FROM notification_push_deliveries WHERE delivered_at < ?")
+      .bind(timestamp - 7 * 86400),
+    db
+      .prepare(
+        `DELETE FROM push_tokens WHERE session_id IN
+      (SELECT id FROM user_sessions WHERE revoked_at IS NOT NULL OR expires_at <= ?)
+      OR user_id IN (SELECT id FROM users WHERE disabled_at IS NOT NULL OR deleted_at IS NOT NULL)
+      OR auth_version != (SELECT auth_version FROM users WHERE users.id = push_tokens.user_id)`,
+      )
+      .bind(timestamp),
   ]);
   if (!env.NOTIFICATION_QUEUE) return;
   const lease = uuid();
@@ -82,7 +94,15 @@ export async function consumeNotifications(batch: MessageBatch<unknown>, env: Au
     for (const [userId, seqs] of users) {
       try {
         await env.NOTIFICATION_HUB.get(env.NOTIFICATION_HUB.idFromName(userId)).invalidate();
-        delivered.push(...seqs);
+        for (const seq of seqs) {
+          try {
+            await deliverPush(env, seq);
+            delivered.push(seq);
+          } catch {
+            console.error("Push delivery failed", { seq });
+            failed.add(seq);
+          }
+        }
       } catch (error) {
         console.error("Notification delivery failed", error);
         for (const seq of seqs) failed.add(seq);

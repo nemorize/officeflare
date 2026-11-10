@@ -11,6 +11,7 @@ import me from "./me";
 import users from "./users";
 import mail from "./mail";
 import notifications from "./notifications";
+import push from "./push";
 import drive from "./drive";
 import calendar from "./calendar";
 import { PART_BYTES } from "../drive/types";
@@ -65,6 +66,7 @@ api.use("*", async (c, next) => {
 });
 api.route("/mail", mail);
 api.route("/notifications", notifications);
+api.route("/push", push);
 api.route("/drive", drive);
 api.route("/calendar", calendar);
 api.route("/auth", auth);

@@ -2071,6 +2071,7 @@ export const ko = defineTranslations(en, {
   "labels.link_revoked": "링크가 철회되었습니다",
   "labels.link_updated": "링크가 업데이트되었습니다",
   "labels.mail": "메일",
+  "labels.messages": "메시지",
   "labels.manage": "관리",
   "labels.manager": "관리자",
   "labels.metadata_updated": "메타데이터 업데이트됨",
@@ -4993,4 +4994,35 @@ export const ko = defineTranslations(en, {
   "consoleSettings.lastUpdated": "최근 변경: {date}",
   "consoleSettings.addDomain": "도메인 추가",
   "consoleSettings.addSharedMailbox": "공유 사서함 추가",
+  "push.adminRead": "알림 설정 조회",
+  "push.adminManage": "알림 설정 관리",
+  "push.adminTitle": "알림 관리",
+  "push.adminDescription": "워크스페이스의 웹 푸시 알림을 관리합니다.",
+  "push.notConfigured":
+    "FCM이 설정되지 않았습니다. Cloudflare 환경변수를 설정한 뒤 웹 푸시를 허용할 수 있습니다.",
+  "push.configured": "FCM 설정이 등록되어 있습니다.",
+  "push.settingsChanged": "설정이 변경되었습니다. 새로고침 후 다시 시도하세요.",
+  "push.newMail": "새 메일",
+  "push.unavailable": "현재 웹 푸시를 사용할 수 없습니다.",
+  "push.unsupported":
+    "이 브라우저에서는 웹 푸시를 지원하지 않습니다. HTTPS에서 지원되는 브라우저를 사용하세요.",
+  "push.failed": "웹 푸시를 연결하지 못했습니다. 다시 시도하세요.",
+  "push.denied": "알림이 차단되어 있습니다. 브라우저 설정에서 알림을 허용한 뒤 다시 시도하세요.",
+  "push.promptTitle": "푸시 알림을 받으시겠어요?",
+  "push.promptDescription":
+    "오피스플레어를 닫아도 이 브라우저에서 새 메일과 알림센터 알림을 받을 수 있습니다. 환경설정에서 언제든 변경할 수 있습니다.",
+  "push.later": "나중에",
+  "push.enable": "웹 푸시 연결",
+  "push.disable": "이 브라우저에서 해제",
+  "push.enabled": "이 브라우저에 웹 푸시가 연결되어 있습니다.",
+  "push.disabled": "이 브라우저에 웹 푸시가 연결되어 있지 않습니다.",
+  "push.description":
+    "이 브라우저에서 새 메일과 알림센터 알림을 받습니다. 알림 설정에서 선택한 수신 항목이 웹 푸시에도 적용됩니다.",
+  "push.adminEnable": "웹 푸시 알림 허용",
+  "push.adminHint":
+    "사용자가 브라우저별로 연결 여부를 선택합니다. 해제하면 모든 사용자의 웹 푸시 발송이 중단됩니다.",
+  "push.saved": "알림 설정을 저장했습니다.",
+  "push.connecting": "웹 푸시 연결 중…",
+  "push.loadingFailed": "웹 푸시 설정을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.",
+  "push.title": "웹 푸시",
 });

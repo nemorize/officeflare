@@ -37,7 +37,9 @@
     "screenshots": "node scripts/generate-screenshots.mjs"
   },
   "overrides": {
-    "undici": "7.29.1"
+    "undici": "7.29.1",
+    "@firebase/app": "0.16.2",
+    "@firebase/app-compat": "0.5.18"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
@@ -76,6 +78,7 @@
     "@tiptap/starter-kit": "3.31.4",
     "css-tree": "3.1.0",
     "drizzle-orm": "0.45.3",
+    "firebase": "12.19.0",
     "hono": "4.13.12",
     "htmlparser2": "12.0.0",
     "ical.js": "2.2.1",

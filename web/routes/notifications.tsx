@@ -17,6 +17,7 @@ import {
   useNotificationList,
 } from "../components/notification-center-context";
 import { api, errorMessage } from "../lib/api";
+import { PushNotificationSettings } from "../components/push-settings";
 import type {
   NotificationPreferences,
   NotificationState,
@@ -193,6 +194,7 @@ export function NotificationSettingsPage() {
         <h1>{t("routesNotifications.notificationSettings")}</h1>
         <p>{t("routesNotifications.chooseTheUpdatesYouReceiveInYourNotificationCenter")}</p>
       </header>
+      <PushNotificationSettings />
       {error && (
         <p className="notification-error" role="alert">
           {error}
@@ -235,14 +237,14 @@ export function NotificationSettingsPage() {
                   <small>
                     {item.required
                       ? t("routesNotifications.alwaysOn")
-                      : `${item.service === "account" ? t("routesNotifications.account") : t("routesNotifications.system")} · ${enumLabel(item.category)}`}
+                      : `${enumLabel(item.service)} · ${enumLabel(item.category)}`}
                   </small>
                 </span>
                 <CheckboxControl
                   checked={
                     item.required ||
                     (settings.rules[`type:${item.type}`] ??
-                      settings.rules[`category:${item.service}:${enumLabel(item.category)}`] ??
+                      settings.rules[`category:${item.service}:${item.category}`] ??
                       settings.rules[`service:${item.service}`] ??
                       settings.enabled)
                   }

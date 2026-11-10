@@ -3,6 +3,7 @@ import { t } from "../../shared/i18n/index.ts";
 import { useEffect, useSyncExternalStore } from "react";
 import { currentUser, logout, refresh } from "./auth";
 import { SESSION_KEY, SessionManager } from "./session-manager";
+import { bindPushWorker } from "./push-browser";
 
 let database: Promise<IDBDatabase> | undefined;
 function lock<T>(action: () => T): Promise<T> {
@@ -65,6 +66,10 @@ export const sessions = new SessionManager({
       .join(""),
   schedule: (action, delay) => window.setTimeout(action, delay),
   cancel: (handle) => window.clearTimeout(handle as number),
+});
+
+sessions.subscribe(() => {
+  if (sessions.getSnapshot().status === "signed_out") void bindPushWorker(null).catch(() => {});
 });
 
 window.addEventListener("storage", (event) => {

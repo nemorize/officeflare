@@ -23,6 +23,7 @@ import {
 import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "../components/workspace-navigation";
 import { NotificationBell } from "../components/notification-center";
 import { NotificationCenterProvider } from "../components/notification-center-context";
+import { PushNotificationProvider } from "../components/push-notifications";
 import { consoleMenu } from "../lib/console";
 import { errorMessage } from "../lib/api";
 import { sessions, useSession } from "../lib/session";
@@ -404,17 +405,19 @@ function WorkspaceStartup() {
   return (
     <AccountProvider>
       <NotificationCenterProvider key={sessionId}>
-        <MailResourceProvider>
-          <MailProvider key={sessionId}>
-            <DriveResourceProvider>
-              <DriveProvider key={sessionId}>
-                <CalendarProvider key={sessionId}>
-                  <WorkspaceChrome />
-                </CalendarProvider>
-              </DriveProvider>
-            </DriveResourceProvider>
-          </MailProvider>
-        </MailResourceProvider>
+        <PushNotificationProvider>
+          <MailResourceProvider>
+            <MailProvider key={sessionId}>
+              <DriveResourceProvider>
+                <DriveProvider key={sessionId}>
+                  <CalendarProvider key={sessionId}>
+                    <WorkspaceChrome />
+                  </CalendarProvider>
+                </DriveProvider>
+              </DriveResourceProvider>
+            </MailProvider>
+          </MailResourceProvider>
+        </PushNotificationProvider>
       </NotificationCenterProvider>
     </AccountProvider>
   );

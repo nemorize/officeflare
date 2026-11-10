@@ -1098,6 +1098,18 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
   const inbound = page.messages[0],
     message = (await call(base + "/messages/" + inbound.id)).message;
   assert.equal(message.provider, "cloudflare");
+  const incomingAlert = await eventually(
+    () =>
+      db
+        .prepare(
+          "SELECT e.title, i.user_id FROM notification_events e JOIN notification_inbox i ON i.event_id = e.id WHERE e.type = 'mail.received'",
+        )
+        .all(),
+    (result) => result.results.length === 1,
+    "Incoming mail notification was not created",
+  );
+  assert.equal(incomingAlert.results[0].title, "Native inbound");
+  assert.equal(incomingAlert.results[0].user_id, "owner");
   assert.equal(
     message.connection_id,
     JSON.parse(

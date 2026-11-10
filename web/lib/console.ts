@@ -79,6 +79,12 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     icon: "drive",
     permissions: driveAdminPermissions,
   },
+  {
+    path: "/console/notifications",
+    name: t("push.adminTitle"),
+    icon: "bell",
+    permissions: ["admin.notifications.settings.read"],
+  },
 ];
 export const consoleMenu = (permissions: readonly string[]) =>
   permissions.includes("console.access")

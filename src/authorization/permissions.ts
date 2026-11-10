@@ -41,6 +41,26 @@ const assignmentRead = ["admin.users.roles.read"] as const;
 // One catalog drives API policies, role validation and the management UI.
 // Service access never grants access to another user's mailbox or files.
 export const permissionCatalog = {
+  "admin.notifications.settings.read": {
+    get label() {
+      return t("push.adminRead");
+    },
+    get description() {
+      return t("push.adminDescription");
+    },
+    group: "security",
+    requires: ["console.access"],
+  },
+  "admin.notifications.settings.manage": {
+    get label() {
+      return t("push.adminManage");
+    },
+    get description() {
+      return t("push.adminDescription");
+    },
+    group: "security",
+    requires: ["admin.notifications.settings.read"],
+  },
   "console.access": {
     get label() {
       return t("permissions.accessConsole");

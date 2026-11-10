@@ -2053,6 +2053,7 @@ export const en = defineMessages({
   "labels.link_revoked": "Link revoked",
   "labels.link_updated": "Link updated",
   "labels.mail": "Mail",
+  "labels.messages": "Messages",
   "labels.manage": "Manage",
   "labels.manager": "Manager",
   "labels.metadata_updated": "Metadata updated",
@@ -4991,4 +4992,35 @@ export const en = defineMessages({
   "consoleSettings.lastUpdated": "Last updated: {date}",
   "consoleSettings.addDomain": "Add domain",
   "consoleSettings.addSharedMailbox": "Add shared mailbox",
+  "push.adminRead": "View notification settings",
+  "push.adminManage": "Manage notification settings",
+  "push.adminTitle": "Notifications",
+  "push.adminDescription": "Manage workspace web push notifications.",
+  "push.notConfigured":
+    "FCM is not configured. Configure the optional Cloudflare variables before enabling web push.",
+  "push.configured": "FCM configuration is available.",
+  "push.settingsChanged": "Settings changed. Reload and try again.",
+  "push.newMail": "New mail",
+  "push.unavailable": "Web push is currently unavailable.",
+  "push.unsupported": "This browser does not support web push. Use a supported browser over HTTPS.",
+  "push.failed": "Could not connect web push. Please try again.",
+  "push.denied":
+    "Notifications are blocked. Allow notifications in your browser settings, then try again.",
+  "push.promptTitle": "Receive push notifications?",
+  "push.promptDescription":
+    "Receive new mail and notification center updates on this browser, even when Officeflare is closed. You can change this in Preferences.",
+  "push.later": "Later",
+  "push.enable": "Enable web push",
+  "push.disable": "Disable on this browser",
+  "push.enabled": "Web push is connected on this browser.",
+  "push.disabled": "Web push is not connected on this browser.",
+  "push.description":
+    "Receive new mail and notification center updates on this browser. Notification choices below also apply to push delivery.",
+  "push.adminEnable": "Allow web push notifications",
+  "push.adminHint":
+    "Members choose whether to connect each browser. Turning this off stops push delivery for everyone.",
+  "push.saved": "Notification settings saved.",
+  "push.connecting": "Connecting web push…",
+  "push.loadingFailed": "Could not load web push settings. Reload to try again.",
+  "push.title": "Web push",
 });

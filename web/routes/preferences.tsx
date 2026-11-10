@@ -1,5 +1,6 @@
 import { t } from "../../shared/i18n/index.ts";
 import { LanguageSettings } from "../components/language-settings";
+import { PushNotificationSettings } from "../components/push-settings";
 
 export function PreferencesPage() {
   return (
@@ -9,6 +10,7 @@ export function PreferencesPage() {
         <p>{t("routesPreferences.description")}</p>
       </header>
       <LanguageSettings />
+      <PushNotificationSettings />
     </section>
   );
 }

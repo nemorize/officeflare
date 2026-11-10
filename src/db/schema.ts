@@ -537,6 +537,49 @@ export const notificationWsTickets = sqliteTable("notification_ws_tickets", {
   expires_at: integer().notNull(),
 });
 
+export const pushSettings = sqliteTable("push_settings", {
+  id: integer().primaryKey(),
+  web_push_enabled: integer().notNull().default(0),
+  version: integer().notNull().default(1),
+  updated_at: timestamp("updated_at"),
+  updated_by: text().references(() => users.id),
+});
+export const pushTokens = sqliteTable(
+  "push_tokens",
+  {
+    id: text().primaryKey().notNull(),
+    user_id: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    session_id: text()
+      .notNull()
+      .references(() => userSessions.id, { onDelete: "cascade" }),
+    auth_version: integer().notNull(),
+    device_id: text().notNull(),
+    token_type: text({ enum: ["fcm_web", "fcm_android", "fcm_ios"] }).notNull(),
+    token: text().notNull().unique(),
+    created_at: timestamp("created_at"),
+    updated_at: timestamp("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("push_tokens_device").on(table.user_id, table.device_id, table.token_type),
+  ],
+);
+export const notificationPushDeliveries = sqliteTable(
+  "notification_push_deliveries",
+  {
+    seq: integer()
+      .notNull()
+      .references(() => notificationChanges.seq, { onDelete: "cascade" }),
+    token_id: text()
+      .notNull()
+      .references(() => pushTokens.id, { onDelete: "cascade" }),
+    lease_until: integer().notNull().default(0),
+    delivered_at: integer(),
+  },
+  (table) => [primaryKey({ columns: [table.seq, table.token_id] })],
+);
+
 export const driveAccounts = sqliteTable("drive_accounts", {
   user_id: text()
     .primaryKey()

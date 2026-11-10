@@ -1,5 +1,13 @@
 import { t } from "../../shared/i18n/index.ts";
 export const notificationTypes = {
+  "mail.received": {
+    service: "mail",
+    category: "messages",
+    get label() {
+      return t("push.newMail");
+    },
+    required: false,
+  },
   "security.sign_in": {
     service: "account",
     category: "security",
@@ -89,6 +97,7 @@ export const knownType = (value: string): value is NotificationType =>
 // authorization here when a service such as Drive starts producing notifications.
 export function targetPath(type: NotificationType, path?: string | null) {
   if (!path) return null;
+  if (type === "mail.received" && path === "/mail") return path;
   if (type === "security.sign_in" && path === "/profile/sessions") return path;
   if (type === "system.announcement" && path === "/notifications") return path;
   if (type.startsWith("calendar.") && /^\/calendar\/invitations\/[A-Za-z0-9_-]+$/.test(path))
