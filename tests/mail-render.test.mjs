@@ -477,3 +477,41 @@ test("DNS verification refuses redirects instead of following a potentially priv
   );
   assert.ok(calls.every((url) => url.startsWith("https://cloudflare-dns.com/")));
 });
+
+test("all automatically discovered application aliases are blocked, including redirect destinations", async () => {
+  const hosts = ["office.example.org", "app.account.workers.dev"];
+  for (const host of hosts) {
+    const remote = remoteFixture(imageResponse);
+    await assert.rejects(
+      fetchRemoteAsset(`https://${host}/private`, "image", hosts, remote.fetcher),
+      /Application/,
+    );
+    assert.equal(remote.calls.length, 0);
+  }
+  const redirected = remoteFixture(
+    () =>
+      new Response(null, {
+        status: 302,
+        headers: { Location: "https://app.account.workers.dev/api/private" },
+      }),
+  );
+  await assert.rejects(
+    fetchRemoteAsset("https://cdn.example.org/image", "image", hosts, redirected.fetcher),
+    /Application/,
+  );
+  assert.equal(
+    redirected.calls.filter((call) => call.url.hostname === "app.account.workers.dev").length,
+    0,
+  );
+  const remote = remoteFixture(imageResponse);
+  const result = await renderMailHtml(
+    '<img src="https://office.example.org/a.png"><img src="https://app.account.workers.dev/b.png"><img src="https://cdn.example.org/c.png">',
+    {},
+    path,
+    hosts,
+    memoryCache(),
+    remote.fetcher,
+  );
+  assert.equal(result.assets.length, 1);
+  assert.equal(result.assets[0].url, "https://cdn.example.org/c.png");
+});

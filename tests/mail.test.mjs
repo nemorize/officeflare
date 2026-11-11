@@ -1063,6 +1063,19 @@ test("Cloudflare handler, MIME ingestion, delivery and unknown acceptance in Wor
   );
   const harness = await mf.getWorker("mail-harness"),
     bucket = await mf.getR2Bucket("MAIL_BUCKET");
+  const aliasResponse = await mf.dispatchFetch("https://new.office.test/api/mail/mailboxes", {
+    headers: { Authorization: "Bearer " + tokens.owner },
+  });
+  assert.equal(aliasResponse.status, 200);
+  const unknownResponse = await mf.dispatchFetch("https://untrusted.test/api/mail/mailboxes");
+  assert.equal(unknownResponse.status, 401);
+  const applicationHosts = await db
+    .prepare("SELECT hostname FROM mail_application_hosts ORDER BY hostname")
+    .all();
+  assert.deepEqual(
+    applicationHosts.results.map((row) => row.hostname),
+    ["new.office.test", "office.test"],
+  );
   const mime = [
     "From: Sender <sender@example.test>",
     "To: owner@mail.test",

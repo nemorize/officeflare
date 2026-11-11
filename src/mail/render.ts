@@ -11,6 +11,8 @@ import {
   validatedImage,
   isHeifType,
   runtimeRemoteFetcher,
+  applicationHostMatches,
+  type ApplicationHosts,
   type RemoteFetcher,
 } from "./remote";
 import { hash } from "./input";
@@ -128,7 +130,7 @@ export function safeMailCss(
 async function cachedRemote(
   url: string,
   kind: "image" | "stylesheet",
-  ownHost: string,
+  ownHost: ApplicationHosts,
   cache: RenderCache | undefined,
   fetcher: RemoteFetcher,
   images?: ImagesBinding,
@@ -156,7 +158,7 @@ export async function renderMailHtml(
   source: string,
   cid: Record<string, string>,
   resourcePath: string,
-  ownHost: string,
+  ownHost: ApplicationHosts,
   cache: RenderCache | undefined = frameCache(),
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
 ): Promise<MailRendering> {
@@ -255,7 +257,7 @@ export async function renderMailHtml(
     } catch {
       return null;
     }
-    if (new URL(url).hostname === ownHost.toLowerCase()) return null;
+    if (applicationHostMatches(new URL(url).hostname, ownHost)) return null;
     const prior = registered.get(url);
     if (prior) return prior;
     if (assets.length >= assetLimit) return null;
@@ -472,7 +474,7 @@ export async function renderMailHtml(
 }
 export async function loadMailRenderImage(
   asset: MailRenderAsset,
-  ownHost: string,
+  ownHost: ApplicationHosts,
   cache: RenderCache | undefined = frameCache(),
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
   images?: ImagesBinding,

@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const cli = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 
-export async function runNode(entry, args = [], { capture = false } = {}) {
-  const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
+export async function runNode(entry, args = [], { capture = false, env: environment = {} } = {}) {
+  const env = { ...process.env, ...environment, WRANGLER_SEND_METRICS: "false" };
   if (capture) {
     const { stdout } = await promisify(execFile)(process.execPath, [entry, ...args], {
       env,

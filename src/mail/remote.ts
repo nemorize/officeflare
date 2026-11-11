@@ -4,6 +4,13 @@ import { imageSize } from "image-size";
 import sanitizeHtml from "sanitize-html";
 
 export type RemoteKind = "image" | "stylesheet";
+export type ApplicationHosts = string | readonly string[];
+export function applicationHostMatches(hostname: string, hosts: ApplicationHosts) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  return (typeof hosts === "string" ? [hosts] : hosts).some(
+    (host) => host.toLowerCase().replace(/\.$/, "") === normalized,
+  );
+}
 export interface RemoteAsset {
   body: Uint8Array;
   contentType: string;
@@ -253,14 +260,14 @@ export async function renderableImage(
 export async function fetchRemoteAsset(
   value: string,
   kind: RemoteKind,
-  ownHost: string,
+  ownHost: ApplicationHosts,
   fetcher: RemoteFetcher = runtimeRemoteFetcher,
   images?: ImagesBinding,
 ): Promise<RemoteAsset> {
   let url = remoteUrl(value);
   const signal = AbortSignal.timeout(8000);
   for (let hop = 0; hop <= 3; hop++) {
-    if (url.hostname === ownHost.toLowerCase().replace(/\.$/, ""))
+    if (applicationHostMatches(url.hostname, ownHost))
       throw new Error(t("mailRemote.applicationResourcesCannotBeProxied"));
     await publicDns(url.hostname, fetcher, signal);
     const response = await fetcher(url.href, {

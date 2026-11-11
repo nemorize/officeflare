@@ -4,3 +4,12 @@
 AUTH_SIGNING_KEYS='{"active_kid":"replace","keys":[{"kid":"replace","kty":"EC","crv":"P-256","x":"replace","y":"replace","d":"replace"}]}'
 MFA_ENCRYPTION_KEYS='{"active_version":1,"keys":{"1":"replace-with-32-random-bytes-in-base64url"}}'
 MAIL_ENCRYPTION_KEY='replace-with-32-random-bytes-in-base64url'
+
+# Optional FCM web push. Leave these unset when web push is not used.
+# Commented examples are not requested by Deploy to Cloudflare; configure them after deployment.
+# In production, store FCM_SERVICE_ACCOUNT as a Worker Secret.
+# FCM_WEB_CONFIG and FCM_VAPID_KEY are public client configuration.
+# Use the same Firebase project for the service account and web app.
+# FCM_SERVICE_ACCOUNT='{"project_id":"your-firebase-project","client_email":"push@your-firebase-project.iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\nreplace-with-service-account-private-key\n-----END PRIVATE KEY-----\n"}'
+# FCM_WEB_CONFIG='{"apiKey":"replace-with-web-api-key","projectId":"your-firebase-project","messagingSenderId":"replace-with-sender-id","appId":"replace-with-web-app-id"}'
+# FCM_VAPID_KEY='replace-with-web-push-public-vapid-key'

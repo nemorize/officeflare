@@ -4,7 +4,12 @@ import {
   type MailRendering,
   type RenderCache,
 } from "./render";
-import { runtimeRemoteFetcher, renderableImage, type RemoteFetcher } from "./remote";
+import {
+  runtimeRemoteFetcher,
+  renderableImage,
+  type RemoteFetcher,
+  type ApplicationHosts,
+} from "./remote";
 import { fail, type Attachment } from "./types";
 import { t } from "../../shared/i18n/index.ts";
 
@@ -128,7 +133,7 @@ export async function prepareMailRendering(
   bucket: R2Bucket,
   message: { id: string; body_r2_key: string; attachments: Attachment[] },
   mailboxId: string,
-  ownHost: string,
+  ownHost: ApplicationHosts,
   options: {
     part?: MailRenderPart;
     retryFailures?: boolean;
@@ -311,7 +316,7 @@ export async function readMailRendering(
   bucket: R2Bucket,
   message: { id: string; body_r2_key: string; attachments: Attachment[] },
   mailboxId: string,
-  ownHost: string,
+  ownHost: ApplicationHosts,
   options: NonNullable<Parameters<typeof prepareMailRendering>[4]> & {
     defer: (task: Promise<void>) => void;
   },

@@ -3,6 +3,7 @@ node_modules/
 .husky/_/
 .wrangler/
 .officeflare-deploy-*.jsonc
+.officeflare-dev-*.jsonc
 dist/
 coverage/
 worker-configuration.d.ts

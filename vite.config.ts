@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { readFile, readdir } from "node:fs/promises";
 import type { Plugin } from "vite";
 import { defaultLocale, messageTemplate, isStaticMessageKey } from "./shared/i18n/index.ts";
+import { localSecretSettings } from "./scripts/local-secrets.ts";
 
 function localizedHtml(): Plugin {
   return {
@@ -88,7 +89,15 @@ export default defineConfig(({ command }) => ({
     react(),
     localizedHtml(),
     pdfPreviewAssets(),
-    ...(command === "serve" ? [cloudflare()] : []),
+    ...(command === "serve"
+      ? [
+          cloudflare({
+            config(config) {
+              config.secrets = localSecretSettings(config, process.env.CLOUDFLARE_ENV);
+            },
+          }),
+        ]
+      : []),
   ],
   resolve: { alias: { "@": fileURLToPath(new URL("./web", import.meta.url)) } },
   server: { host: "127.0.0.1", port: 8787, strictPort: true },

@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { mailApplicationHosts } from "./application-hosts";
 import { putStream } from "./objects";
 import { authorize } from "./control";
 import { mailbox, partition } from "./mailbox";
@@ -423,6 +424,7 @@ async function restorePage(
   actor: MailActor,
 ) {
   const coordinator = mailbox(env, mailboxId),
+    applicationHosts = await mailApplicationHosts(env),
     cursor = JSON.parse(job.cursor_json) as {
       cursor?: string;
       restore_settings: boolean;
@@ -593,13 +595,10 @@ async function restorePage(
       snoozed_until: source.snoozed_until,
     };
     if (input.direction === "inbound")
-      await prepareMailRendering(
-        env.MAIL_BUCKET,
-        input,
-        mailboxId,
-        env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
-        { source: body.html, images: env.MAIL_IMAGES },
-      );
+      await prepareMailRendering(env.MAIL_BUCKET, input, mailboxId, applicationHosts, {
+        source: body.html,
+        images: env.MAIL_IMAGES,
+      });
     await coordinator.storeMessage(partitionId, input);
     await partition(env, partitionId).applyInboundFlags(
       targetId,

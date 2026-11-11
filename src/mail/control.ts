@@ -17,6 +17,7 @@ import {
   type Domain,
 } from "./types";
 import { hash } from "./input";
+import { rememberMailApplicationHost } from "./application-hosts";
 
 export const control = (env: Env) => env.DB.withSession("first-primary");
 export async function first<T>(env: Env, sql: string, ...args: (string | number | null)[]) {
@@ -62,6 +63,7 @@ export const authenticateMail = createMiddleware<MailAppEnv>(async (c, next) => 
     );
     if (!actor) fail(401, t("mailControl.invalidMailApiKey"));
     c.set("mail_actor", actor);
+    await rememberMailApplicationHost(c.env, c.req.url);
     await next();
   } else {
     await requireAccess(c as unknown as AuthContext, async () => {
@@ -74,6 +76,7 @@ export const authenticateMail = createMiddleware<MailAppEnv>(async (c, next) => 
       // Console administration is separate from using mailbox contents.
       if (!administrativeRequest(c) && !(await can(c as unknown as AuthContext, "mail.access")))
         fail(403, t("mailControl.mailAccessIsNotEnabledForThisAccount"));
+      await rememberMailApplicationHost(c.env, c.req.url);
       await next();
     });
   }

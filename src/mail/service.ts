@@ -6,6 +6,7 @@ import { incomingRoute } from "./routing";
 import { sendingLimits, validateMessageSize } from "./limits";
 import { putStream } from "./objects";
 import { prepareMailRendering } from "./rendering";
+import { mailApplicationHosts } from "./application-hosts";
 import { queueWebhooks } from "./jobs";
 import { attachEditorImages, composedBody, editorBody, inlineContentIds, textHtml } from "./editor";
 import PostalMime, { type Address as MimeAddress } from "postal-mime";
@@ -518,7 +519,7 @@ export async function ingest(env: Env, task: InboundTask) {
     env.MAIL_BUCKET,
     { id: resourceId, body_r2_key: keyBody, attachments: files },
     task.mailbox_id,
-    env.MAIL_RENDER_ORIGIN ? new URL(env.MAIL_RENDER_ORIGIN).hostname : "",
+    await mailApplicationHosts(env),
     { source: body.html, images: env.MAIL_IMAGES },
   );
   await mailbox(env, task.mailbox_id).storeMessage(partitionId, {

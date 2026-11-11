@@ -7,6 +7,7 @@ import {
   updateDomainProviders,
 } from "../mail/domain-providers";
 import { t } from "../../shared/i18n/index.ts";
+import { mailApplicationHosts } from "../mail/application-hosts";
 import { adminMail, recordMailAdministration } from "../mail/admin";
 import { mailSendLimit, requireForwardingAllowed, workspaceMailPolicy } from "../mail/policy";
 import { measured } from "../observability/performance";
@@ -1299,7 +1300,7 @@ async function readerRendering(
     c.env.MAIL_BUCKET,
     message,
     resource(c),
-    new URL(c.req.url).hostname,
+    await mailApplicationHosts(c.env),
     {
       part: c.req.query("part") === "quoted" ? "quoted" : "body",
       retryFailures: c.req.query("retry") === "1",
@@ -1326,7 +1327,7 @@ async function mailRendering(c: Parameters<typeof authenticateMail>[0]) {
     c.env.MAIL_BUCKET,
     message,
     resource(c),
-    new URL(c.req.url).hostname,
+    await mailApplicationHosts(c.env),
     { part, retryFailures: c.req.query("retry") === "1", images: c.env.MAIL_IMAGES },
   );
   return { message, rendering };
@@ -1373,7 +1374,7 @@ async function mailImageResponse(c: Parameters<typeof authenticateMail>[0], body
       c.env.MAIL_BUCKET,
       message,
       resource(c),
-      new URL(c.req.url).hostname,
+      await mailApplicationHosts(c.env),
       { images: c.env.MAIL_IMAGES },
     );
     imageId = preparedMailImageId(rendering, mailImagePath(c), asset) ?? "";

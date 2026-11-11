@@ -272,6 +272,10 @@ export const installationState = sqliteTable("installation_state", {
   initialized_at: timestamp("initialized_at"),
   bootstrap_user_id: text(),
 });
+export const mailApplicationHosts = sqliteTable("mail_application_hosts", {
+  hostname: text().primaryKey().notNull(),
+  created_at: timestamp("created_at"),
+});
 
 // migrations/0009_create_mail_control.sql is the DDL source. Mail contents live in DO SQL.
 

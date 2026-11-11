@@ -8,6 +8,7 @@ import {
 } from "wrangler";
 import { bootstrapAdministrator } from "./bootstrap-administrator.mjs";
 import { runWrangler, runTypeScript, runViteBuild } from "./wrangler.mjs";
+import { deployAndRememberHosts } from "./deployment-hosts.mjs";
 
 export function deploymentOptions(args) {
   const options = {};
@@ -215,7 +216,12 @@ export async function deploy(
     log("Initializing the first administrator...");
     await bootstrap({ flags: boundFlags, wrangler, log });
     log("Deploying the Worker...");
-    await wrangler(["deploy", ...secrets, ...boundFlags]);
+    await deployAndRememberHosts(
+      config,
+      ["deploy", ...secrets, ...boundFlags],
+      boundFlags,
+      wrangler,
+    );
   });
 }
 

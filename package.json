@@ -24,7 +24,7 @@
     "typecheck:i18n": "tsc --project tsconfig.i18n-tests.json",
     "build:web": "npm run typecheck:i18n && vite build",
     "build": "npm run build:web && wrangler deploy --dry-run --outdir dist",
-    "preview": "wrangler dev",
+    "preview": "node --experimental-strip-types scripts/preview.mjs",
     "check": "npm run format:check && npm run typecheck && npm run build",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",

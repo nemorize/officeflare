@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-29",
   "workers_dev": true,
+  "keep_vars": true,
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
@@ -14,7 +15,6 @@
     "AUTH_AUDIENCE": "officeflare-api",
     "NOTIFICATION_QUEUE_NAME": "officeflare-notifications",
     "MAIL_PARTITION_TARGET_BYTES": "6000000000",
-    "MAIL_RENDER_ORIGIN": "https://office.headercat.com",
   },
   "secrets": {
     "required": ["AUTH_SIGNING_KEYS", "MFA_ENCRYPTION_KEYS"],
