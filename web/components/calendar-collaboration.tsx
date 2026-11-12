@@ -14,6 +14,7 @@ import {
 } from "./calendar-controls";
 import { useCalendar } from "./calendar-context";
 import { RecipientField } from "./mail-recipients";
+import { ContactSaveButton } from "./contact-save";
 import { CalendarRegistrations } from "./calendar-registration";
 import { LoadingSkeleton } from "./loading-skeleton";
 import { DriveFileIcon } from "./drive-controls";
@@ -460,6 +461,7 @@ function CalendarGuests({
     notify = useNotifications();
   const [guests, setGuests] = useState(""),
     operation = useRef(new MailOperation());
+  const guestNames = useRef<Record<string, string>>({});
   const query = occurrenceKey ? `?occurrence_key=${encodeURIComponent(occurrenceKey)}` : "";
   const resource = useCalendarResource<{ attendees: CalendarAttendee[] }>(
     `${eventPath(event)}/attendees${query}`,
@@ -492,6 +494,10 @@ function CalendarGuests({
               <strong>{attendee.display_name || attendee.email_address}</strong>
               <small>{attendee.email_address}</small>
             </div>
+            <ContactSaveButton
+              emailAddress={attendee.email_address}
+              displayName={attendee.display_name ?? ""}
+            />
             <span className="calendar-small-tag">{enumLabel(attendee.response_status)}</span>
             {canInvite && (
               <CalendarIconButton
@@ -525,7 +531,12 @@ function CalendarGuests({
             void action.run(async () => {
               const body = {
                 version: event.version,
-                attendees: parseRecipients(guests).map((email_address) => ({ email_address })),
+                attendees: parseRecipients(guests).map((email_address) => ({
+                  email_address,
+                  ...(guestNames.current[email_address]
+                    ? { display_name: guestNames.current[email_address] }
+                    : {}),
+                })),
                 ...(occurrenceKey ? { occurrence_key: occurrenceKey } : {}),
               };
               try {
@@ -550,6 +561,9 @@ function CalendarGuests({
             label={t("componentsCalendarCollaboration.addGuests")}
             value={guests}
             onChange={setGuests}
+            onContactSelect={(contact) => {
+              guestNames.current[contact.email_address.toLowerCase()] = contact.display_name;
+            }}
           />
           <Button type="submit" disabled={action.busy || !guests.trim()}>
             <Icon name="plus" />

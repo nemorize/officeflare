@@ -27,6 +27,9 @@ export const permissionGroups = {
   get calendar() {
     return t("permissions.calendarUsage");
   },
+  get contacts() {
+    return t("contacts.usage");
+  },
 } as const;
 export interface PermissionDefinition {
   label: string;
@@ -90,6 +93,66 @@ export const permissionCatalog = {
     },
     group: "services",
     requires: [],
+  },
+  "contacts.access": {
+    get label() {
+      return t("contacts.access");
+    },
+    get description() {
+      return t("contacts.accessDescription");
+    },
+    group: "services",
+    requires: [],
+  },
+  "contacts.entries.create": {
+    get label() {
+      return t("contacts.create");
+    },
+    get description() {
+      return t("contacts.personalDescription");
+    },
+    group: "contacts",
+    requires: ["contacts.access"],
+  },
+  "contacts.entries.update": {
+    get label() {
+      return t("contacts.update");
+    },
+    get description() {
+      return t("contacts.personalDescription");
+    },
+    group: "contacts",
+    requires: ["contacts.access"],
+  },
+  "contacts.entries.delete": {
+    get label() {
+      return t("contacts.delete");
+    },
+    get description() {
+      return t("contacts.personalDescription");
+    },
+    group: "contacts",
+    requires: ["contacts.access"],
+  },
+  "contacts.folders.manage": {
+    get label() {
+      return t("contacts.manageFolders");
+    },
+    get description() {
+      return t("contacts.personalDescription");
+    },
+    group: "contacts",
+    requires: ["contacts.access"],
+  },
+  "contacts.fields.manage": {
+    get label() {
+      return t("contacts.manageFields");
+    },
+    get description() {
+      return t("contacts.personalDescription");
+    },
+    group: "contacts",
+    requires: ["contacts.access"],
   },
   "calendar.calendars.create": {
     get label() {
@@ -694,6 +757,15 @@ export const permissionCatalog = {
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";
 export const MAIL_USER_ROLE_ID = "system-mail-user";
+export const CONTACTS_USER_ROLE_ID = "system-contacts-user";
+export const contactsUserPermissions = [
+  "contacts.access",
+  "contacts.entries.create",
+  "contacts.entries.update",
+  "contacts.entries.delete",
+  "contacts.folders.manage",
+  "contacts.fields.manage",
+] as const;
 export const calendarUserPermissions = [
   "calendar.access",
   "calendar.calendars.create",
@@ -748,9 +820,14 @@ export function togglePermission(
 }
 export function defaultEligible(values: readonly string[]): boolean {
   return values.every((key) =>
-    ["mail.access", ...calendarUserPermissions, ...driveUserPermissions].includes(
-      key as (typeof driveUserPermissions)[number],
-    ),
+    (
+      [
+        "mail.access",
+        ...calendarUserPermissions,
+        ...driveUserPermissions,
+        ...contactsUserPermissions,
+      ] as readonly string[]
+    ).includes(key),
   );
 }
 export interface ResourceRef {

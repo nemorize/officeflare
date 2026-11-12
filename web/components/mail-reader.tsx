@@ -20,6 +20,7 @@ import { MailHtml, SendStatus } from "./mail-body";
 import { MailNotice, MailState, useMailAction, useMailResource } from "./mail-common";
 import { Button, Icon, Menu, Popover, PopoverPopup } from "./ui";
 import { Confirm } from "./console-shared";
+import { ContactSaveButton } from "./contact-save";
 export function ConversationReader({
   id,
   onClose,
@@ -432,6 +433,7 @@ function MessageCard({
           </span>
         </Button>
         <time>{mailDate(entry.received_at)}</time>
+        {open && message?.from_address && <ContactSaveButton emailAddress={message.from_address} />}
         {open && message && (
           <>
             <Popover.Root>

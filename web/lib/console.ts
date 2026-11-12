@@ -4,6 +4,7 @@ import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
 import {
   calendarUserPermissions,
+  contactsUserPermissions,
   driveUserPermissions,
   isPermission,
   missingPrerequisites,
@@ -99,6 +100,12 @@ export const managedPermissions = (permissions: readonly string[]) =>
   permissions.filter(isPermission);
 export const roleTemplates = [
   { key: "mail-user", label: t("libConsole.mailUser"), permissions: ["mail.access"] },
+  {
+    key: "contacts-user",
+    label: t("contacts.userRole"),
+    permissions: [...contactsUserPermissions],
+  },
+  { key: "contacts-reader", label: t("contacts.readerRole"), permissions: ["contacts.access"] },
   {
     key: "calendar-user",
     label: t("libConsole.calendarUser"),

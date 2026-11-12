@@ -286,6 +286,7 @@ export function CalendarEventEditor({
   const [draft, setDraft] = useState<EventDraft | null>(null),
     [initial, setInitial] = useState<EventDraft | null>(null),
     [guests, setGuests] = useState("");
+  const guestNames = useRef<Record<string, string>>({});
   const [tab, setTab] = useState("details"),
     [customRepeat, setCustomRepeat] = useState(false),
     [scope, setScope] = useState(false),
@@ -369,7 +370,14 @@ export function CalendarEventEditor({
         : {
             ...changes,
             ...(guests.trim()
-              ? { attendees: parseRecipients(guests).map((email_address) => ({ email_address })) }
+              ? {
+                  attendees: parseRecipients(guests).map((email_address) => ({
+                    email_address,
+                    ...(guestNames.current[email_address]
+                      ? { display_name: guestNames.current[email_address] }
+                      : {}),
+                  })),
+                }
               : {}),
           };
       try {
@@ -706,6 +714,10 @@ export function CalendarEventEditor({
                               label={t("componentsCalendarEditor.guests")}
                               value={guests}
                               onChange={setGuests}
+                              onContactSelect={(contact) => {
+                                guestNames.current[contact.email_address.toLowerCase()] =
+                                  contact.display_name;
+                              }}
                             />
                             <p className="calendar-field-hint">
                               {t("componentsCalendarEditor.addInternalOrExternalGuestsByEmail")}

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   blob,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -15,6 +16,237 @@ const timestamp = (name: string) =>
   integer(name)
     .notNull()
     .default(sql`(unixepoch())`);
+
+// migrations/0034_contacts.sql owns STRICT constraints and folder-cycle triggers.
+export const contactBooks = sqliteTable("contact_books", {
+  id: text().primaryKey().notNull(),
+  owner_user_id: text()
+    .notNull()
+    .unique()
+    .references(() => users.id),
+  name: text()
+    .notNull()
+    .default(sql`'Contacts'`),
+  version: integer().notNull().default(1),
+  created_at: timestamp("created_at"),
+  updated_at: timestamp("updated_at"),
+});
+export const contactFolders = sqliteTable(
+  "contact_folders",
+  {
+    id: text().primaryKey().notNull(),
+    book_id: text()
+      .notNull()
+      .references(() => contactBooks.id),
+    parent_id: text(),
+    name: text().notNull(),
+    name_key: text().notNull(),
+    sort_order: integer().notNull().default(0),
+    version: integer().notNull().default(1),
+    created_at: timestamp("created_at"),
+    updated_at: timestamp("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("contact_folders_book_id").on(table.book_id, table.id),
+    uniqueIndex("contact_folders_siblings")
+      .on(table.book_id, table.parent_id, table.name_key)
+      .where(sql`${table.parent_id} IS NOT NULL`),
+    uniqueIndex("contact_folders_roots")
+      .on(table.book_id, table.name_key)
+      .where(sql`${table.parent_id} IS NULL`),
+    foreignKey({
+      columns: [table.book_id, table.parent_id],
+      foreignColumns: [table.book_id, table.id],
+    }),
+  ],
+);
+export const contacts = sqliteTable(
+  "contacts",
+  {
+    id: text().primaryKey().notNull(),
+    book_id: text()
+      .notNull()
+      .references(() => contactBooks.id),
+    folder_id: text(),
+    display_name: text().notNull(),
+    display_name_key: text().notNull(),
+    given_name: text().notNull().default(""),
+    family_name: text().notNull().default(""),
+    nickname: text().notNull().default(""),
+    organization: text().notNull().default(""),
+    organization_key: text().notNull().default(""),
+    department: text().notNull().default(""),
+    job_title: text().notNull().default(""),
+    birthday: text(),
+    notes: text().notNull().default(""),
+    version: integer().notNull().default(1),
+    created_at: timestamp("created_at"),
+    updated_at: timestamp("updated_at"),
+    trashed_at: integer(),
+  },
+  (table) => [
+    uniqueIndex("contacts_book_id").on(table.book_id, table.id),
+    foreignKey({
+      columns: [table.book_id, table.folder_id],
+      foreignColumns: [contactFolders.book_id, contactFolders.id],
+    }),
+    index("contacts_list")
+      .on(table.book_id, table.display_name_key, table.id)
+      .where(sql`${table.trashed_at} IS NULL`),
+    index("contacts_folder")
+      .on(table.book_id, table.folder_id, table.display_name_key, table.id)
+      .where(sql`${table.trashed_at} IS NULL`),
+    index("contacts_organization")
+      .on(table.book_id, table.organization_key, table.id)
+      .where(sql`${table.trashed_at} IS NULL`),
+    index("contacts_trash").on(table.book_id, table.trashed_at, table.id),
+  ],
+);
+const contactDetailColumns = () => ({
+  id: text().primaryKey().notNull(),
+  contact_id: text()
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  label: text().notNull().default(""),
+  is_primary: integer().notNull().default(0),
+  sort_order: integer().notNull().default(0),
+});
+export const contactEmails = sqliteTable(
+  "contact_emails",
+  {
+    ...contactDetailColumns(),
+    contact_id: text().notNull(),
+    book_id: text().notNull(),
+    email_address: text().notNull(),
+    email_key: text().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.book_id, table.contact_id],
+      foreignColumns: [contacts.book_id, contacts.id],
+    }).onDelete("cascade"),
+    uniqueIndex("contact_emails_contact_key").on(table.contact_id, table.email_key),
+    index("contact_emails_lookup").on(table.book_id, table.email_key, table.contact_id),
+    uniqueIndex("contact_emails_primary")
+      .on(table.contact_id)
+      .where(sql`${table.is_primary}=1`),
+  ],
+);
+export const contactPhones = sqliteTable(
+  "contact_phones",
+  {
+    ...contactDetailColumns(),
+    phone_number: text().notNull(),
+    phone_key: text().notNull(),
+    extension: text().notNull().default(""),
+  },
+  (table) => [
+    index("contact_phones_contact").on(table.contact_id, table.phone_key),
+    uniqueIndex("contact_phones_primary")
+      .on(table.contact_id)
+      .where(sql`${table.is_primary}=1`),
+  ],
+);
+export const contactAddresses = sqliteTable(
+  "contact_addresses",
+  {
+    ...contactDetailColumns(),
+    country_code: text().notNull().default(""),
+    region: text().notNull().default(""),
+    city: text().notNull().default(""),
+    postal_code: text().notNull().default(""),
+    street_address: text().notNull().default(""),
+    extended_address: text().notNull().default(""),
+    formatted_address: text().notNull().default(""),
+  },
+  (table) => [
+    index("contact_addresses_contact").on(table.contact_id),
+    uniqueIndex("contact_addresses_primary")
+      .on(table.contact_id)
+      .where(sql`${table.is_primary}=1`),
+  ],
+);
+export const contactLinks = sqliteTable(
+  "contact_links",
+  {
+    ...contactDetailColumns(),
+    url: text().notNull(),
+  },
+  (table) => [
+    index("contact_links_contact").on(table.contact_id),
+    uniqueIndex("contact_links_primary")
+      .on(table.contact_id)
+      .where(sql`${table.is_primary}=1`),
+  ],
+);
+export const contactFieldDefinitions = sqliteTable(
+  "contact_field_definitions",
+  {
+    id: text().primaryKey().notNull(),
+    book_id: text()
+      .notNull()
+      .references(() => contactBooks.id),
+    key: text().notNull(),
+    label: text().notNull(),
+    value_type: text({
+      enum: ["text", "number", "boolean", "date", "url", "select", "multiselect"],
+    }).notNull(),
+    options_json: text().notNull().default("[]"),
+    sort_order: integer().notNull().default(0),
+    version: integer().notNull().default(1),
+    created_at: timestamp("created_at"),
+    updated_at: timestamp("updated_at"),
+    archived_at: integer(),
+  },
+  (table) => [
+    uniqueIndex("contact_field_definitions_book_id").on(table.book_id, table.id),
+    uniqueIndex("contact_field_definitions_key").on(table.book_id, table.key),
+  ],
+);
+export const contactFieldValues = sqliteTable(
+  "contact_field_values",
+  {
+    book_id: text().notNull(),
+    contact_id: text().notNull(),
+    field_id: text().notNull(),
+    value_json: text().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contact_id, table.field_id] }),
+    foreignKey({
+      columns: [table.book_id, table.contact_id],
+      foreignColumns: [contacts.book_id, contacts.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.book_id, table.field_id],
+      foreignColumns: [contactFieldDefinitions.book_id, contactFieldDefinitions.id],
+    }),
+    index("contact_field_values_definition").on(table.field_id, table.contact_id),
+  ],
+);
+export const contactOperations = sqliteTable(
+  "contact_operations",
+  {
+    id: text().primaryKey().notNull(),
+    actor_user_id: text()
+      .notNull()
+      .references(() => users.id),
+    operation: text().notNull(),
+    idempotency_key: text(),
+    request_hash: text().notNull(),
+    result_json: text().notNull(),
+    created_at: timestamp("created_at"),
+    expires_at: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("contact_operations_key").on(
+      table.actor_user_id,
+      table.operation,
+      table.idempotency_key,
+    ),
+    index("contact_operations_expiration").on(table.expires_at),
+  ],
+);
 
 export const users = sqliteTable(
   "users",

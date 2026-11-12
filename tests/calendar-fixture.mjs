@@ -22,7 +22,12 @@ const harness = await build({
 });
 export async function fixture(
   t,
-  { assets = false, beforeRolesMigration, beforeRegionalPreferencesMigration } = {},
+  {
+    assets = false,
+    beforeRolesMigration,
+    beforeRegionalPreferencesMigration,
+    beforeContactsRolesMigration,
+  } = {},
 ) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const common = {
@@ -88,6 +93,8 @@ export async function fixture(
     faults = await mf.getWorker("calendar-harness");
   for (const file of (await readdir("migrations")).sort()) {
     if (file === "0027_calendar_roles.sql" && beforeRolesMigration) await beforeRolesMigration(db);
+    if (file === "0035_contacts_roles.sql" && beforeContactsRolesMigration)
+      await beforeContactsRolesMigration(db);
     if (file === "0029_account_regional_preferences.sql" && beforeRegionalPreferencesMigration)
       await beforeRegionalPreferencesMigration(db);
     let statement = "",

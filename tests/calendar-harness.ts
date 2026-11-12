@@ -151,7 +151,7 @@ export default {
                     if (
                       !injected &&
                       statements.some((value) =>
-                        (queries.get(value) ?? "").includes("INSERT INTO calendar_operations"),
+                        /INSERT INTO (calendar|contact)_operations/.test(queries.get(value) ?? ""),
                       )
                     ) {
                       injected = true;

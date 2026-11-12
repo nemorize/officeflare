@@ -351,6 +351,27 @@ button:disabled {
     transform: translateX(225%);
   }
 }
+.contact-save-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+.contact-save-dialog form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.contact-save-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.mail-recipient-controls > .mail-recipient-input {
+  flex: 1;
+  min-width: min(110px, 100%);
+  max-width: 100%;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
 @media (max-width: 760px) {
   .workspace-loading-symbol {
     width: 88px;

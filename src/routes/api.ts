@@ -14,6 +14,7 @@ import notifications from "./notifications";
 import push from "./push";
 import drive from "./drive";
 import calendar from "./calendar";
+import contacts from "./contacts";
 import { PART_BYTES } from "../drive/types";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
@@ -69,6 +70,7 @@ api.route("/notifications", notifications);
 api.route("/push", push);
 api.route("/drive", drive);
 api.route("/calendar", calendar);
+api.route("/contacts", contacts);
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("admin.roles.read"), (c) =>

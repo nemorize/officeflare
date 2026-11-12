@@ -9,6 +9,7 @@ import { receive } from "./mail/service";
 import { consume, recover } from "./mail/jobs";
 import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
 import { recoverDrive } from "./drive/jobs";
+import { recoverContacts } from "./contacts/jobs";
 import { consumeCalendar, recoverCalendar } from "./calendar/jobs";
 import { recoverCalendarFeeds, syncCalendarFeed } from "./calendar/feed-sync";
 export { MailboxDO } from "./mail/mailbox";
@@ -105,6 +106,7 @@ export default {
         recover(env),
         recoverNotifications(env),
         recoverDrive(env),
+        recoverContacts(env),
         recoverCalendar(env),
         recoverCalendarFeeds(env),
       ]),
