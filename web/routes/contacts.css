@@ -1,3 +1,8 @@
+.workspace-contacts,
+.contacts-dialog,
+.contact-save-dialog {
+  --contact-label-gap: 4px;
+}
 .workspace-contacts .workspace-content {
   overflow: hidden;
 }
@@ -245,7 +250,7 @@
 }
 .contact-list-name > span:last-child {
   display: grid;
-  gap: 5px;
+  gap: var(--contact-label-gap);
   min-width: 0;
 }
 .contact-list-name strong {
@@ -344,7 +349,7 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--ui-muted);
-  margin: 0 0 14px;
+  margin: 0 0 var(--contact-label-gap);
 }
 .contact-detail-section dl,
 .contact-detail-section p {
@@ -353,10 +358,15 @@
 .contact-detail-section dl > div + div {
   margin-top: 14px;
 }
+.contact-detail-section dl > div {
+  display: grid;
+  align-content: start;
+  gap: var(--contact-label-gap);
+}
 .contact-detail-section dt {
   font-size: 10px;
   color: var(--ui-muted);
-  margin-bottom: 5px;
+  margin: 0;
 }
 .contact-detail-section dd {
   margin: 0;
@@ -377,7 +387,7 @@
 }
 .contact-detail-email {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
 }
 .contact-detail-email a {
@@ -514,9 +524,15 @@
   gap: 18px;
 }
 .contact-field {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--contact-label-gap);
   min-width: 0;
+}
+.contact-save-dialog [data-ui="field-root"] {
+  align-items: stretch;
+  gap: var(--contact-label-gap);
 }
 .contact-field > [data-ui="field-label"],
 .contact-choice-field legend {
@@ -560,6 +576,7 @@
 .contact-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: start;
   gap: 14px;
 }
 .contact-value-editor {
@@ -596,6 +613,7 @@
 .contact-phone-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 100px;
+  align-items: start;
   gap: 12px;
 }
 .contact-choice-field {
@@ -607,7 +625,7 @@
   padding: 0;
 }
 .contact-choice-field legend {
-  margin-bottom: 10px;
+  margin-bottom: var(--contact-label-gap);
 }
 .contact-choice-field label {
   display: flex;
@@ -616,8 +634,13 @@
   font-size: 12px;
 }
 .contact-archived-value {
+  display: grid;
+  gap: var(--contact-label-gap);
   font-size: 12px;
   color: var(--ui-muted);
+}
+.contact-archived-value p {
+  margin: 0;
 }
 .contact-archived-value small {
   margin-inline-start: 8px;
@@ -666,10 +689,11 @@
 }
 .contacts-definition-row > div:first-child {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  gap: var(--contact-label-gap);
   min-width: 0;
 }
-.contacts-definition-row > div:last-child {
+.contacts-definition-row > div:nth-child(2) {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
@@ -787,7 +811,7 @@
     align-items: flex-start;
     gap: 12px;
   }
-  .contacts-definition-row > div:last-child {
+  .contacts-definition-row > div:nth-child(2) {
     flex-direction: column;
   }
   .contacts-dialog-viewport[data-ui="dialog-viewport"] {
