@@ -112,6 +112,12 @@ const MailDomainEditorPage = lazy(() =>
 const CalendarPage = lazy(() =>
   import("./routes/calendar").then((module) => ({ default: module.CalendarPage })),
 );
+const ContactsPage = lazy(() =>
+  import("./routes/contacts").then((module) => ({ default: module.ContactsPage })),
+);
+const ContactFieldsPage = lazy(() =>
+  import("./routes/contact-fields").then((module) => ({ default: module.ContactFieldsPage })),
+);
 const CalendarSettingsPage = lazy(() =>
   import("./routes/calendar-settings").then((module) => ({ default: module.CalendarSettingsPage })),
 );
@@ -137,7 +143,11 @@ const router = createBrowserRouter(
         <Route path="/" element={<WorkspaceHome />} />
         {workspaceApps
           .filter(
-            (app) => app.path !== "/mail" && app.path !== "/drive" && app.path !== "/calendar",
+            (app) =>
+              app.path !== "/mail" &&
+              app.path !== "/drive" &&
+              app.path !== "/calendar" &&
+              app.path !== "/contacts",
           )
           .flatMap((app) =>
             app.menu.map((item) => (
@@ -152,6 +162,27 @@ const router = createBrowserRouter(
               />
             )),
           )}
+        {["/contacts", "/contacts/unfiled", "/contacts/trash", "/contacts/folders/:folderId"].map(
+          (path) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ServiceGate permission="contacts.access">
+                  <ContactsPage />
+                </ServiceGate>
+              }
+            />
+          ),
+        )}
+        <Route
+          path="/contacts/fields"
+          element={
+            <ServiceGate permission="contacts.access">
+              <ContactFieldsPage />
+            </ServiceGate>
+          }
+        />
         <Route
           path="/drive/items/:itemId"
           element={

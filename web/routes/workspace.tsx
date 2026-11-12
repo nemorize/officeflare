@@ -15,6 +15,12 @@ import { DriveResourceProvider } from "../components/drive-resource-context";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSettingsButton, DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
+import { ContactsProvider } from "../components/contacts-context";
+import {
+  ContactsSidebar,
+  ContactsTopbar,
+  ContactsSettingsButton,
+} from "../components/contacts-chrome";
 import {
   CalendarSettingsButton,
   CalendarSidebar,
@@ -103,6 +109,7 @@ function WorkspaceChrome() {
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
   const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
   const isDrive = pathname === "/drive" || pathname.startsWith("/drive/");
+  const isContacts = pathname === "/contacts" || pathname.startsWith("/contacts/");
   const isCalendar =
     (pathname === "/calendar" || pathname.startsWith("/calendar/")) &&
     !pathname.startsWith("/calendar/invitations/");
@@ -133,18 +140,22 @@ function WorkspaceChrome() {
     ) ?? (isDrive ? driveSettingsPages.find((page) => page.path === pathname) : undefined);
   const title = pathname.startsWith("/calendar/invitations/")
     ? t("routesWorkspace.calendarInvitation")
-    : isCalendar
-      ? pathname.startsWith("/calendar/settings")
-        ? t("routesWorkspace.calendarSettings")
-        : t("routesWorkspace.calendar")
-      : (current?.name ??
-        (isDrive
-          ? t("routesWorkspace.folder")
-          : isMail
-            ? pathname.includes("/folders/")
-              ? t("routesWorkspace.folder")
-              : t("routesWorkspace.mail")
-            : t("routesWorkspace.pageNotFound")));
+    : isContacts
+      ? pathname === "/contacts/fields"
+        ? t("contacts.customFields")
+        : t("contacts.title")
+      : isCalendar
+        ? pathname.startsWith("/calendar/settings")
+          ? t("routesWorkspace.calendarSettings")
+          : t("routesWorkspace.calendar")
+        : (current?.name ??
+          (isDrive
+            ? t("routesWorkspace.folder")
+            : isMail
+              ? pathname.includes("/folders/")
+                ? t("routesWorkspace.folder")
+                : t("routesWorkspace.mail")
+              : t("routesWorkspace.pageNotFound")));
   useEffect(() => {
     document.title = t("routesWorkspace.officeflare", { title: title });
   }, [title]);
@@ -169,7 +180,7 @@ function WorkspaceChrome() {
   return (
     <div
       data-ui-theme="neutral"
-      className={`workspace-shell${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
+      className={`workspace-shell${isContacts ? " workspace-contacts" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
     >
       <a href="#workspace-main" className="workspace-skip-link">
         {t("routesWorkspace.skipToContent")}
@@ -216,9 +227,12 @@ function WorkspaceChrome() {
             {isMail && activeApp && <MailSettingsButton />}
             {isDrive && activeApp && <DriveSettingsButton />}
             {isCalendar && activeApp && <CalendarSettingsButton />}
+            {isContacts && activeApp && <ContactsSettingsButton />}
           </div>
           {access.status === "loading" ? (
             <LoadingSkeleton label={t("routesWorkspace.loadingNavigation")} />
+          ) : isContacts && activeApp ? (
+            <ContactsSidebar />
           ) : isCalendar && activeApp ? (
             <CalendarSidebar />
           ) : isDrive && activeApp ? (
@@ -247,7 +261,21 @@ function WorkspaceChrome() {
           )}
         </aside>
         <div ref={content} className="workspace-content">
-          {isCalendar ? (
+          {isContacts ? (
+            <ContactsTopbar
+              mobileAccount={
+                <div className="notification-mobile-actions">
+                  <NotificationBell />
+                  <ProfileMenu
+                    busy={busy}
+                    signOut={() => {
+                      void signOut();
+                    }}
+                  />
+                </div>
+              }
+            />
+          ) : isCalendar ? (
             <CalendarTopbar
               mobileAccount={
                 <div className="notification-mobile-actions">
@@ -304,7 +332,7 @@ function WorkspaceChrome() {
               </div>
             </header>
           )}
-          {!isCalendar && !isDrive && !isMail && (
+          {!isCalendar && !isDrive && !isMail && !isContacts && (
             <WorkspaceNavigationDrawer
               open={mobileMenu}
               onOpenChange={setMobileMenu}
@@ -411,7 +439,9 @@ function WorkspaceStartup() {
               <DriveResourceProvider>
                 <DriveProvider key={sessionId}>
                   <CalendarProvider key={sessionId}>
-                    <WorkspaceChrome />
+                    <ContactsProvider key={sessionId}>
+                      <WorkspaceChrome />
+                    </ContactsProvider>
                   </CalendarProvider>
                 </DriveProvider>
               </DriveResourceProvider>

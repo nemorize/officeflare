@@ -1,4 +1,5 @@
 import { api } from "./api";
+export type * from "./contact-model";
 
 export interface ContactSuggestion {
   contact_id: string;
@@ -6,11 +7,6 @@ export interface ContactSuggestion {
   display_name: string;
   email_address: string;
   label: string;
-}
-export interface ContactFolder {
-  id: string;
-  parent_id: string | null;
-  name: string;
 }
 export const contactSuggestions = (query: string, signal: AbortSignal) =>
   api<{ suggestions: ContactSuggestion[] }>(

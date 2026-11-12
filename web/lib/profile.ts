@@ -75,6 +75,10 @@ export const returnToWorkspace = (path: unknown) =>
     "/console/mail/mailboxes",
     "/calendar",
     "/calendar/shared",
+    "/contacts",
+    "/contacts/unfiled",
+    "/contacts/trash",
+    "/contacts/fields",
     "/drive",
     "/drive/shared",
     "/drive/recent",
@@ -93,7 +97,8 @@ export const returnToWorkspace = (path: unknown) =>
   ].includes(path) ||
     /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) ||
     /^\/console\/mail\/(?:domains|mailboxes)\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
-    /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path))
+    /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
+    /^\/contacts\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path))
     ? path
     : typeof path === "string" && /^\/drive\/(?:folders|items)\/[A-Za-z0-9_-]{1,100}$/.test(path)
       ? path

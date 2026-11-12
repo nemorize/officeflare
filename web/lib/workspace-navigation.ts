@@ -8,7 +8,7 @@ export interface WorkspaceNavigationItem {
 }
 
 export interface WorkspaceApp extends WorkspaceNavigationItem {
-  permission: "mail.access" | "calendar.access" | "drive.access";
+  permission: "mail.access" | "calendar.access" | "drive.access" | "contacts.access";
   menuTitle: string;
   menu: WorkspaceNavigationItem[];
 }
@@ -73,6 +73,19 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
       { path: "/drive/recent", name: t("libWorkspaceNavigation.recent"), icon: "clock" },
       { path: "/drive/starred", name: t("libWorkspaceNavigation.starred"), icon: "star" },
       { path: "/drive/trash", name: t("libWorkspaceNavigation.trash"), icon: "trash" },
+    ],
+  },
+  {
+    path: "/contacts",
+    name: t("contacts.title"),
+    icon: "users",
+    menuTitle: t("contacts.title"),
+    permission: "contacts.access",
+    menu: [
+      { path: "/contacts", name: t("contacts.all"), icon: "users" },
+      { path: "/contacts/unfiled", name: t("contacts.unfiled"), icon: "inbox" },
+      { path: "/contacts/trash", name: t("contacts.trash"), icon: "trash" },
+      { path: "/contacts/fields", name: t("contacts.customFields"), icon: "controls" },
     ],
   },
 ];
