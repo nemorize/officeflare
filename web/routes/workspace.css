@@ -116,10 +116,18 @@
   padding: 4px 16px 20px;
 }
 :is(.workspace-sidebar, .workspace-drawer-body) .workspace-create-button[data-ui-button] {
+  display: flex;
+  align-items: center;
   width: 100%;
+  height: var(--ui-control-height);
   min-height: var(--ui-control-height);
+  padding: 7px var(--ui-button-padding-inline-lg);
   justify-content: flex-start;
   gap: 13px;
+}
+.workspace-create-button > span {
+  min-width: 0;
+  text-align: start;
 }
 .workspace-create-button > svg:first-child {
   width: 19px;

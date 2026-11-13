@@ -14,7 +14,8 @@ import {
   ContactNotice,
   useContactAction,
 } from "../components/contacts-controls";
-import { Confirm } from "../components/console-shared";
+import { Confirm, ConsolePageHeader } from "../components/console-shared";
+import { SettingsSection } from "../components/settings-layout";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { Button, Icon, SelectControl, Textarea, useNotifications } from "../components/ui";
 
@@ -37,61 +38,61 @@ export function ContactFieldsPage() {
     const fields = contacts.fields.filter((field) => !!field.archived_at === archived);
     if (!fields.length) return null;
     return (
-      <section className="contacts-fields-section">
-        <h2>{t(archived ? "contacts.archivedFields" : "contacts.activeFields")}</h2>
-        {fields.map((field) => (
-          <div key={field.id} className="contacts-definition-row">
-            <div>
-              <strong>{field.label}</strong>
-              <span>
-                {t(typeLabels[field.value_type])}
-                {field.options.length ? ` · ${field.options.join(", ")}` : ""}
-              </span>
-            </div>
-            {contacts.can("fields.manage") && (
+      <SettingsSection title={t(archived ? "contacts.archivedFields" : "contacts.activeFields")}>
+        <div className="settings-record-list">
+          {fields.map((field) => (
+            <div key={field.id} className="settings-record contacts-definition-row">
               <div>
-                {archived ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={action.busy}
-                    onClick={() =>
-                      void action.run(async () => {
-                        await api(`/api/contacts/field-definitions/${field.id}`, {
-                          method: "PATCH",
-                          body: { version: field.version, archived: false },
-                        });
-                        contacts.refresh();
-                        notify.success(t("contacts.fieldSaved"));
-                      })
-                    }
-                  >
-                    {t("contacts.restoreField")}
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="ghost" size="sm" onClick={() => setEditor({ field })}>
-                      {t("common.edit")}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setArchiving(field)}>
-                      {t("contacts.archiveField")}
-                    </Button>
-                  </>
-                )}
+                <strong>{field.label}</strong>
+                <span>
+                  {t(typeLabels[field.value_type])}
+                  {field.options.length ? ` · ${field.options.join(", ")}` : ""}
+                </span>
               </div>
-            )}
-          </div>
-        ))}
-      </section>
+              {contacts.can("fields.manage") && (
+                <div className="settings-actions">
+                  {archived ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={action.busy}
+                      onClick={() =>
+                        void action.run(async () => {
+                          await api(`/api/contacts/field-definitions/${field.id}`, {
+                            method: "PATCH",
+                            body: { version: field.version, archived: false },
+                          });
+                          contacts.refresh();
+                          notify.success(t("contacts.fieldSaved"));
+                        })
+                      }
+                    >
+                      {t("contacts.restoreField")}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setEditor({ field })}>
+                        {t("common.edit")}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setArchiving(field)}>
+                        {t("contacts.archiveField")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </SettingsSection>
     );
   };
   return (
-    <div className="contacts-fields-page">
-      <header>
-        <div>
-          <h1>{t("contacts.customFields")}</h1>
-          <p>{t("contacts.customDescription")}</p>
-        </div>
+    <div className="account-page settings-page contacts-fields-page">
+      <ConsolePageHeader
+        title={t("contacts.customFields")}
+        description={t("contacts.customDescription")}
+      >
         {contacts.can("fields.manage") && (
           <Button
             variant="primary"
@@ -102,7 +103,7 @@ export function ContactFieldsPage() {
             {t("contacts.newField")}
           </Button>
         )}
-      </header>
+      </ConsolePageHeader>
       <ContactNotice error={contacts.error} retry={contacts.refresh} />
       <ContactNotice error={action.error} />
       {contacts.loading && !contacts.fields.length ? (

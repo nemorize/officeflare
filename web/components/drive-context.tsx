@@ -13,6 +13,7 @@ import { Button, Icon, Menu, MenuPopup, Progress, useNotifications } from "./ui"
 import { api, ApiError } from "../lib/api";
 import { useSharedDriveCache } from "./drive-resource-context";
 import { useAccess } from "./console-access";
+import { WorkspaceCreateButton } from "./workspace-controls";
 import {
   useDriveAction,
   useDriveResource,
@@ -59,18 +60,14 @@ export function DriveNewMenu() {
     <Menu.Root>
       <Menu.Trigger
         render={
-          <Button
-            variant="primary"
-            size="lg"
-            className="workspace-create-button drive-new-button"
+          <WorkspaceCreateButton
+            label={t("componentsDriveContext.new")}
+            dropdown
+            className="drive-new-button"
           />
         }
         disabled={!drive.target.writable}
-      >
-        <Icon name="plus" width="18" height="18" />
-        {t("componentsDriveContext.new")}
-        <Icon name="down" width="12" height="12" />
-      </Menu.Trigger>
+      />
       <MenuPopup data-ui-theme="neutral">
         <Menu.Item onClick={drive.newFolder}>
           <Icon name="folder" />

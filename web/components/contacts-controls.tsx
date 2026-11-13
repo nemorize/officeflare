@@ -2,19 +2,10 @@ import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode
 import { t } from "../../shared/i18n/index.ts";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { useAccess } from "./console-access";
-import { Button, Dialog, DialogPopup, Field, Icon, Input, type IconProps } from "./ui";
+import { Button, Dialog, DialogPopup, Field, Icon, Input } from "./ui";
+import { WorkspaceIconButton as ContactIconButton } from "./workspace-controls";
 
-export function ContactIconButton({
-  label,
-  icon,
-  ...props
-}: ComponentProps<typeof Button> & { label: string; icon: IconProps["name"] }) {
-  return (
-    <Button variant="ghost" size="icon" aria-label={label} title={label} {...props}>
-      <Icon name={icon} />
-    </Button>
-  );
-}
+export { ContactIconButton };
 export function ContactField({
   label,
   children,

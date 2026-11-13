@@ -103,7 +103,8 @@ function WorkspaceChrome() {
   const auth = useSession();
   const [busy, setBusy] = useState(false),
     [mobileMenu, setMobileMenu] = useState(false),
-    [driveSidebarCollapsed, setDriveSidebarCollapsed] = useState(false);
+    [driveSidebarCollapsed, setDriveSidebarCollapsed] = useState(false),
+    [contactsSidebarCollapsed, setContactsSidebarCollapsed] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   const isAccount = pathname === "/profile" || pathname.startsWith("/profile/");
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
@@ -180,7 +181,7 @@ function WorkspaceChrome() {
   return (
     <div
       data-ui-theme="neutral"
-      className={`workspace-shell${isContacts ? " workspace-contacts" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
+      className={`workspace-shell${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
     >
       <a href="#workspace-main" className="workspace-skip-link">
         {t("routesWorkspace.skipToContent")}
@@ -263,6 +264,8 @@ function WorkspaceChrome() {
         <div ref={content} className="workspace-content">
           {isContacts ? (
             <ContactsTopbar
+              sidebarCollapsed={contactsSidebarCollapsed}
+              onToggleSidebar={() => setContactsSidebarCollapsed((value) => !value)}
               mobileAccount={
                 <div className="notification-mobile-actions">
                   <NotificationBell />

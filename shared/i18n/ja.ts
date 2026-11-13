@@ -14,6 +14,8 @@ export const ja = defineTranslations(en, {
   "contacts.newFolder": "新しいフォルダー",
   "contacts.editContact": "連絡先を編集",
   "contacts.search": "連絡先を検索",
+  "contacts.clearSearch": "検索をクリア",
+  "contacts.toggleNavigation": "連絡先のナビゲーションを切り替え",
   "contacts.retry": "再試行",
   "contacts.refresh": "連絡先を更新",
   "contacts.identityRequired": "名前、会社、メールアドレス、電話番号のいずれかを入力してください。",

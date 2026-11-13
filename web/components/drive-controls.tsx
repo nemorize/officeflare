@@ -21,14 +21,12 @@ import {
   Icon,
   Input,
   SelectControl,
-  Tooltip,
-  TooltipPopup,
-  type IconProps,
 } from "./ui";
 import { api, ApiError, errorMessage } from "../lib/api";
 import type { DriveItem } from "../lib/drive";
 import { fileKind } from "../lib/drive";
 import { LoadingSkeleton } from "./loading-skeleton";
+import { WorkspaceIconButton as DriveIconButton } from "./workspace-controls";
 import "../routes/drive.css";
 
 export const driveFailure = (failure: unknown) =>
@@ -95,23 +93,7 @@ export function useDriveAction() {
 export function DriveCheckbox(props: CheckboxControlProps) {
   return <CheckboxControl {...props} />;
 }
-export function DriveIconButton({
-  icon,
-  label,
-  ...props
-}: ComponentProps<typeof Button> & { icon: IconProps["name"]; label: string }) {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger
-        render={<Button size="icon" variant="ghost" {...props} />}
-        aria-label={label}
-      >
-        <Icon name={icon} />
-      </Tooltip.Trigger>
-      <TooltipPopup>{label}</TooltipPopup>
-    </Tooltip.Root>
-  );
-}
+export { DriveIconButton };
 export function DriveFileIcon({ item, large = false }: { item: DriveItem; large?: boolean }) {
   const kind = fileKind(item);
   return (

@@ -4,6 +4,7 @@ import { api, ApiError, errorMessage } from "../lib/api";
 import { MailOperation } from "../lib/mail-helpers";
 import type { ContactFolder } from "../lib/contacts";
 import { useAccess } from "./console-access";
+import { WorkspaceIconButton } from "./workspace-controls";
 import { Button, Dialog, DialogPopup, Field, Input, SelectControl, useNotifications } from "./ui";
 
 export function ContactSaveButton({
@@ -101,8 +102,20 @@ function ContactSave({ emailAddress, displayName }: { emailAddress: string; disp
       >
         {t("contacts.save")}
       </Dialog.Trigger>
-      <DialogPopup className="contact-save-dialog" data-ui-theme="neutral">
-        <Dialog.Title>{t("contacts.save")}</Dialog.Title>
+      <DialogPopup
+        className="contact-save-dialog"
+        data-ui-theme="neutral"
+        viewportProps={{ className: "contacts-dialog-viewport" }}
+      >
+        <header className="contact-save-heading">
+          <Dialog.Title>{t("contacts.save")}</Dialog.Title>
+          <WorkspaceIconButton
+            icon="close"
+            label={t("common.close")}
+            disabled={busy}
+            onClick={() => setOpen(false)}
+          />
+        </header>
         <Dialog.Description className="visually-hidden">
           {t("contacts.personalDescription")}
         </Dialog.Description>
@@ -157,7 +170,7 @@ function ContactSave({ emailAddress, displayName }: { emailAddress: string; disp
             <Dialog.Close render={<Button variant="ghost" disabled={busy} />}>
               {t("common.cancel")}
             </Dialog.Close>
-            <Button type="submit" disabled={busy}>
+            <Button variant="primary" type="submit" disabled={busy}>
               {duplicate ? t("contacts.createAnyway") : t("contacts.save")}
             </Button>
           </div>

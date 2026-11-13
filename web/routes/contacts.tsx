@@ -92,18 +92,26 @@ export function ContactsPage() {
             <h1>{title}</h1>
             {resource.data && <span>{plural("contacts.showing", list.length)}</span>}
           </div>
-          {view.folder && contacts.can("folders.manage") && (
+          <div className="contacts-list-actions">
+            {view.folder && contacts.can("folders.manage") && (
+              <ContactIconButton
+                icon="edit"
+                label={t("contacts.editFolder")}
+                disabled={
+                  contacts.loading || !contacts.folders.some((item) => item.id === view.folder)
+                }
+                onClick={() =>
+                  contacts.editFolder(contacts.folders.find((item) => item.id === view.folder))
+                }
+              />
+            )}
             <ContactIconButton
-              icon="edit"
-              label={t("contacts.editFolder")}
-              disabled={
-                contacts.loading || !contacts.folders.some((item) => item.id === view.folder)
-              }
-              onClick={() =>
-                contacts.editFolder(contacts.folders.find((item) => item.id === view.folder))
-              }
+              icon="refresh"
+              label={t("contacts.refresh")}
+              disabled={resource.loading || contacts.loading}
+              onClick={contacts.refresh}
             />
-          )}
+          </div>
         </div>
         <ContactNotice error={resource.error} retry={contacts.refresh} />
         <ContactNotice error={contacts.error} retry={contacts.refresh} />
@@ -154,12 +162,15 @@ export function ContactsPage() {
                 </thead>
                 <tbody>
                   {list.map((record) => (
-                    <tr key={record.id} data-selected={selected === record.id || undefined}>
+                    <tr
+                      key={record.id}
+                      data-selected={selected === record.id || undefined}
+                      onClick={() => choose(record.id)}
+                    >
                       <td>
                         <Button
                           variant="plain"
                           className="contact-list-name"
-                          onClick={() => choose(record.id)}
                           aria-pressed={selected === record.id}
                         >
                           <span className="contact-avatar" aria-hidden="true">
@@ -213,15 +224,18 @@ export function ContactsPage() {
           </div>
         )}
       </section>
-      <aside className="contacts-detail-pane" aria-label={t("contacts.details")}>
-        {selected ? (
+      {selected && (
+        <aside className="contacts-detail-pane" aria-label={t("contacts.details")}>
           <>
             <div className="contacts-detail-toolbar">
+              <h2>{t("contacts.details")}</h2>
               <ContactIconButton
-                icon="back"
+                icon="close"
                 label={t("contacts.backToList")}
                 onClick={() => choose(null)}
               />
+            </div>
+            <div className="contacts-detail-actions">
               <div>
                 {detail.data && !view.trash && contacts.can("entries.update") && (
                   <Button
@@ -301,14 +315,8 @@ export function ContactsPage() {
               </div>
             )}
           </>
-        ) : (
-          <div className="contacts-empty contacts-detail-empty">
-            <Icon name="user" width={36} height={36} />
-            <h2>{t("contacts.selectTitle")}</h2>
-            <p>{t("contacts.selectDescription")}</p>
-          </div>
-        )}
-      </aside>
+        </aside>
+      )}
       {confirm && (
         <Confirm
           open

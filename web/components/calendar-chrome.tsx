@@ -22,6 +22,7 @@ import {
   todayIn,
 } from "../lib/calendar-date";
 import "../routes/calendar.css";
+import { WorkspaceCreateButton } from "./workspace-controls";
 
 export function CalendarMiniMonth({ onSelect }: { onSelect?: () => void }) {
   const calendar = useCalendar(),
@@ -203,20 +204,15 @@ export function CalendarSidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="calendar-sidebar-body">
       <div className="workspace-create-action calendar-create">
-        <Button
-          className="workspace-create-button"
-          variant="primary"
-          size="lg"
+        <WorkspaceCreateButton
+          label={t("componentsCalendarChrome.new")}
+          dropdown
           disabled={!calendar.can("events.create") || !calendar.data}
           onClick={() => {
             calendar.setCreate({ date: calendar.date });
             onNavigate?.();
           }}
-        >
-          <Icon name="plus" width="19" height="19" />
-          {t("componentsCalendarChrome.new")}
-          <Icon name="down" width="12" height="12" />
-        </Button>
+        />
       </div>
       <CalendarMiniMonth onSelect={onNavigate} />
       <div className="calendar-sidebar-calendars">

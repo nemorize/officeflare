@@ -23,6 +23,7 @@ import {
   type Message,
 } from "../lib/mail";
 import { useAccess } from "./console-access";
+import { WorkspaceCreateButton } from "./workspace-controls";
 import { Snackbar, Button, Icon } from "./ui";
 import {
   MailField,
@@ -718,19 +719,15 @@ export function MailSidebar() {
             />
           </MailField>
         )}
-        <Button
-          className="workspace-create-button mail-compose-button"
-          variant="primary"
-          size="lg"
+        <WorkspaceCreateButton
+          className="mail-compose-button"
+          label={t("componentsMailContext.compose")}
           disabled={!mail.box?.access?.read || !mail.box?.access?.write}
           onClick={() => {
             mail.compose();
             menu.setMobileMenu(false);
           }}
-        >
-          <Icon name="plus" />
-          {t("componentsMailContext.compose")}
-        </Button>
+        />
       </div>
       <nav className="workspace-nav" aria-label={t("componentsMailContext.mailNavigation")}>
         <div className="mail-nav-group">

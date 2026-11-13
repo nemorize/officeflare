@@ -12,7 +12,7 @@ import {
   type ContactFieldDefinition,
   type ContactValue,
 } from "../lib/contact-model";
-import { Button, CheckboxControl, Radio, RadioGroup, SelectControl, Textarea } from "./ui";
+import { Button, CheckboxControl, Icon, Radio, RadioGroup, SelectControl, Textarea } from "./ui";
 import { Confirm } from "./console-shared";
 import {
   ContactField,
@@ -93,8 +93,8 @@ function ValueList<T extends ContactValue>({
           </div>
         ))}
       </RadioGroup>
-      <Button variant="text" size="sm" disabled={values.length >= 50} onClick={onAdd}>
-        <span aria-hidden="true">+</span>
+      <Button variant="ghost" size="sm" disabled={values.length >= 50} onClick={onAdd}>
+        <Icon name="plus" />
         {addLabel}
       </Button>
     </section>

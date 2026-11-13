@@ -13,6 +13,8 @@ export const en = defineMessages({
   "contacts.newFolder": "New folder",
   "contacts.editContact": "Edit contact",
   "contacts.search": "Search contacts",
+  "contacts.clearSearch": "Clear search",
+  "contacts.toggleNavigation": "Toggle contacts navigation",
   "contacts.retry": "Try again",
   "contacts.refresh": "Refresh contacts",
   "contacts.identityRequired": "Enter a name, company, email address or phone number.",

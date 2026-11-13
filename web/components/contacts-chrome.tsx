@@ -1,11 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import { api } from "../lib/api";
 import { contactLocation, type ContactFolder } from "../lib/contact-model";
 import { useContacts } from "./contacts-context";
 import { ContactIconButton, ContactNotice } from "./contacts-controls";
-import { WorkspaceMenuButton, WorkspaceNavigationDrawer } from "./workspace-navigation";
+import { WorkspaceCreateButton } from "./workspace-controls";
+import { WorkspaceNavigationDrawer } from "./workspace-navigation";
+import { useWorkspaceMobile } from "../lib/workspace-responsive";
 import { Confirm } from "./console-shared";
 import { LoadingSkeleton } from "./loading-skeleton";
 import { Button, Icon, Input, Menu, MenuPopup, SearchField, useNotifications } from "./ui";
@@ -95,19 +97,14 @@ export function ContactsSidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="contacts-sidebar-body">
       <div className="workspace-create-action">
-        <Button
-          className="workspace-create-button"
-          variant="primary"
-          size="lg"
+        <WorkspaceCreateButton
+          label={t("contacts.newContact")}
           disabled={!contacts.can("entries.create") || contacts.loading || !!contacts.error}
           onClick={() => {
             contacts.edit();
             onNavigate?.();
           }}
-        >
-          <Icon name="plus" />
-          {t("contacts.newContact")}
-        </Button>
+        />
       </div>
       <nav className="workspace-nav contacts-nav" aria-label={t("contacts.title")}>
         <NavLink end to="/contacts" onClick={onNavigate}>
@@ -174,11 +171,21 @@ export function ContactsSidebar({ onNavigate }: { onNavigate?: () => void }) {
     </div>
   );
 }
-export function ContactsTopbar({ mobileAccount }: { mobileAccount: ReactNode }) {
+export function ContactsTopbar({
+  mobileAccount,
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  mobileAccount: ReactNode;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const contacts = useContacts(),
     location = useLocation(),
     navigate = useNavigate(),
-    [params] = useSearchParams();
+    [params] = useSearchParams(),
+    mobile = useWorkspaceMobile(),
+    input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(params.get("q") ?? ""),
     [menu, setMenu] = useState(false);
   useEffect(() => setQuery(params.get("q") ?? ""), [params]);
@@ -186,9 +193,16 @@ export function ContactsTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
   return (
     <>
       <header className="workspace-topbar contacts-topbar">
-        <WorkspaceMenuButton label={t("contacts.openNavigation")} onClick={() => setMenu(true)} />
+        <ContactIconButton
+          icon="menu"
+          label={t("contacts.toggleNavigation")}
+          aria-expanded={mobile ? menu : !sidebarCollapsed}
+          aria-haspopup={mobile ? "dialog" : undefined}
+          onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
+        />
         <SearchField
           className="contacts-search"
+          role="search"
           onSubmit={(event) => {
             event.preventDefault();
             const next = new URLSearchParams();
@@ -201,31 +215,35 @@ export function ContactsTopbar({ mobileAccount }: { mobileAccount: ReactNode }) 
           <Icon name="search" />
           <Input
             variant="integrated"
-            type="search"
+            ref={input}
             aria-label={t("contacts.search")}
             placeholder={t("contacts.search")}
             value={query}
             maxLength={255}
             onChange={(event) => setQuery(event.target.value)}
           />
+          {(query || params.has("q")) && (
+            <ContactIconButton
+              icon="close"
+              label={t("contacts.clearSearch")}
+              onClick={() => {
+                setQuery("");
+                navigate(
+                  location.pathname === "/contacts/fields" ? "/contacts" : location.pathname,
+                );
+                input.current?.focus();
+              }}
+            />
+          )}
         </SearchField>
         <div className="contacts-topbar-actions">
           <ContactIconButton
-            icon="refresh"
-            label={t("contacts.refresh")}
-            disabled={contacts.loading}
-            onClick={contacts.refresh}
-          />
-          <Button
             className="contacts-mobile-new"
-            variant="primary"
-            size="icon"
-            aria-label={t("contacts.newContact")}
+            icon="plus"
+            label={t("contacts.newContact")}
             disabled={!contacts.can("entries.create") || contacts.loading || !!contacts.error}
             onClick={() => contacts.edit()}
-          >
-            <Icon name="plus" />
-          </Button>
+          />
         </div>
       </header>
       <WorkspaceNavigationDrawer

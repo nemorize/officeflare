@@ -14,6 +14,8 @@ export const ko = defineTranslations(en, {
   "contacts.newFolder": "새 폴더",
   "contacts.editContact": "연락처 편집",
   "contacts.search": "연락처 검색",
+  "contacts.clearSearch": "검색 지우기",
+  "contacts.toggleNavigation": "연락처 탐색 전환",
   "contacts.retry": "다시 시도",
   "contacts.refresh": "연락처 새로고침",
   "contacts.identityRequired": "이름, 회사, 이메일 주소 또는 전화번호를 입력하세요.",
