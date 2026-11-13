@@ -253,6 +253,7 @@ export function ContactEditor({
         busy={action.busy}
         onClose={close}
         className="contact-editor-dialog"
+        viewportClassName="contact-editor-viewport"
       >
         <form
           aria-busy={action.busy}

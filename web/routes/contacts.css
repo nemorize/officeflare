@@ -860,6 +860,34 @@
   .contacts-dialog form > footer {
     padding-inline: 20px;
   }
+  .contact-editor-viewport[data-ui="dialog-viewport"] {
+    padding: 0;
+  }
+  .contact-editor-dialog[data-ui="dialog-popup"] {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .contact-editor-dialog > header {
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px 18px;
+  }
+  .contact-editor-dialog > form,
+  .contact-editor-scroll {
+    flex: 1;
+  }
+  .contact-editor-body {
+    padding: 16px 18px 24px;
+  }
+  .contact-editor-dialog form > footer {
+    gap: 10px;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  }
+  .contact-editor-dialog form > footer > button {
+    min-width: 88px;
+  }
   .contact-value-meta {
     gap: 8px;
   }

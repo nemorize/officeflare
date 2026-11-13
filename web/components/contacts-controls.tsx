@@ -25,12 +25,14 @@ export function ContactModal({
   onClose,
   busy = false,
   className = "",
+  viewportClassName = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   busy?: boolean;
   className?: string;
+  viewportClassName?: string;
 }) {
   return (
     <Dialog.Root
@@ -43,7 +45,9 @@ export function ContactModal({
         className={`contacts-dialog ${className}`}
         padding="none"
         data-ui-theme="neutral"
-        viewportProps={{ className: "contacts-dialog-viewport" }}
+        viewportProps={{
+          className: `contacts-dialog-viewport ${viewportClassName}`.trim(),
+        }}
       >
         <header>
           <Dialog.Title>{title}</Dialog.Title>
