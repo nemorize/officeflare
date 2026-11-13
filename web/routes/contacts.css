@@ -159,6 +159,8 @@
   display: inline-flex;
 }
 .contacts-page {
+  --contact-row-height: 54px;
+  --contact-name-height: 52px;
   flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -245,7 +247,7 @@
 }
 .contacts-table td {
   border-bottom: 1px solid var(--ui-border);
-  height: 54px;
+  height: var(--contact-row-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -258,11 +260,12 @@
   background: var(--ui-selected);
   color: var(--ui-text);
 }
-.contact-list-name[data-ui-button] {
+.contact-list-name[data-ui-button],
+.contact-list-skeleton {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
+  min-height: var(--contact-name-height);
   width: 100%;
   padding: 0;
   text-align: start;
@@ -271,6 +274,22 @@
 }
 .contact-list-name[data-ui-button]:focus-visible {
   box-shadow: inset var(--ui-focus-ring);
+}
+.contact-list-skeleton > div {
+  display: grid;
+  gap: var(--contact-label-gap);
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.contact-list-skeleton .skeleton-line {
+  height: 1.35em;
+}
+.contact-list-skeleton .skeleton-short {
+  font-size: 10px;
+}
+.contact-avatar.contact-skeleton-avatar {
+  background: var(--ui-hover);
 }
 .contact-list-name > span:last-child {
   display: grid;
@@ -770,6 +789,10 @@
   }
 }
 @media (max-width: 760px) {
+  .contacts-page {
+    --contact-row-height: 62px;
+    --contact-name-height: 60px;
+  }
   .contact-folder-row,
   .contact-folder-row a {
     min-height: 44px;
@@ -822,9 +845,6 @@
   .contacts-table td:first-child {
     width: 100%;
     padding-inline: 0;
-  }
-  .contact-list-name[data-ui-button] {
-    min-height: 60px;
   }
   .contact-details {
     padding-inline: 18px;

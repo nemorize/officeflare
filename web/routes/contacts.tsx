@@ -83,14 +83,15 @@ export function ContactsPage() {
       : view.folder
         ? (contacts.folders.find((item) => item.id === view.folder)?.name ?? t("contacts.folder"))
         : t("contacts.all");
-  const list = resource.data?.contacts ?? [];
+  const list = resource.data?.contacts ?? [],
+    loading = resource.loading && !resource.data;
   return (
     <div className={`contacts-page${selected ? " has-selection" : ""}`}>
       <section className="contacts-list-pane" aria-label={t("contacts.title")}>
         <div className="contacts-list-heading">
           <div>
             <h1>{title}</h1>
-            {resource.data && <span>{plural("contacts.showing", list.length)}</span>}
+            <span>{resource.data ? plural("contacts.showing", list.length) : "\u00a0"}</span>
           </div>
           <div className="contacts-list-actions">
             {view.folder && contacts.can("folders.manage") && (
@@ -115,9 +116,12 @@ export function ContactsPage() {
         </div>
         <ContactNotice error={resource.error} retry={contacts.refresh} />
         <ContactNotice error={contacts.error} retry={contacts.refresh} />
-        {resource.loading && !resource.data ? (
-          <LoadingSkeleton kind="list" rows={7} />
-        ) : !resource.error && !list.length ? (
+        {loading && (
+          <span className="visually-hidden" role="status">
+            {t("common.loading")}
+          </span>
+        )}
+        {!loading && !resource.error && !list.length ? (
           <div className="contacts-empty">
             <Icon name={view.trash ? "trash" : "users"} width={36} height={36} />
             <h2>
@@ -150,8 +154,8 @@ export function ContactsPage() {
             )}
           </div>
         ) : (
-          !!list.length && (
-            <div className="contacts-table-scroll">
+          (loading || !!list.length) && (
+            <div className="contacts-table-scroll" aria-busy={loading}>
               <table className="contacts-table">
                 <thead>
                   <tr>
@@ -161,38 +165,58 @@ export function ContactsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {list.map((record) => (
-                    <tr
-                      key={record.id}
-                      data-selected={selected === record.id || undefined}
-                      onClick={() => choose(record.id)}
-                    >
-                      <td>
-                        <Button
-                          variant="plain"
-                          className="contact-list-name"
-                          aria-pressed={selected === record.id}
+                  {loading
+                    ? Array.from({ length: 7 }, (_, index) => (
+                        <tr key={index} aria-hidden="true">
+                          <td>
+                            <div className="contact-list-skeleton">
+                              <span className="contact-avatar contact-skeleton-avatar" />
+                              <div>
+                                <span className="skeleton-line" />
+                                <span className="skeleton-line skeleton-short" />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="contact-email-column">
+                            <span className="skeleton-line" />
+                          </td>
+                          <td className="contact-phone-column">
+                            <span className="skeleton-line" />
+                          </td>
+                        </tr>
+                      ))
+                    : list.map((record) => (
+                        <tr
+                          key={record.id}
+                          data-selected={selected === record.id || undefined}
+                          onClick={() => choose(record.id)}
                         >
-                          <span className="contact-avatar" aria-hidden="true">
-                            {contactInitials(record.display_name)}
-                          </span>
-                          <span>
-                            <strong>{record.display_name}</strong>
-                            <small>
-                              {[record.job_title, record.organization]
-                                .filter(Boolean)
-                                .join(" · ") ||
-                                record.primary_email ||
-                                record.primary_phone ||
-                                ""}
-                            </small>
-                          </span>
-                        </Button>
-                      </td>
-                      <td className="contact-email-column">{record.primary_email || "—"}</td>
-                      <td className="contact-phone-column">{record.primary_phone || "—"}</td>
-                    </tr>
-                  ))}
+                          <td>
+                            <Button
+                              variant="plain"
+                              className="contact-list-name"
+                              aria-pressed={selected === record.id}
+                            >
+                              <span className="contact-avatar" aria-hidden="true">
+                                {contactInitials(record.display_name)}
+                              </span>
+                              <span>
+                                <strong>{record.display_name}</strong>
+                                <small>
+                                  {[record.job_title, record.organization]
+                                    .filter(Boolean)
+                                    .join(" · ") ||
+                                    record.primary_email ||
+                                    record.primary_phone ||
+                                    ""}
+                                </small>
+                              </span>
+                            </Button>
+                          </td>
+                          <td className="contact-email-column">{record.primary_email || "—"}</td>
+                          <td className="contact-phone-column">{record.primary_phone || "—"}</td>
+                        </tr>
+                      ))}
                 </tbody>
               </table>
             </div>
