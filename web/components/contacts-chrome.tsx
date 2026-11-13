@@ -190,6 +190,15 @@ export function ContactsTopbar({
     [menu, setMenu] = useState(false);
   useEffect(() => setQuery(params.get("q") ?? ""), [params]);
   useEffect(() => setMenu(false), [location.pathname]);
+  const createButton = (
+    <ContactIconButton
+      className="contacts-topbar-new"
+      icon="plus"
+      label={t("contacts.newContact")}
+      disabled={!contacts.can("entries.create") || contacts.loading || !!contacts.error}
+      onClick={() => contacts.edit()}
+    />
+  );
   return (
     <>
       <header className="workspace-topbar contacts-topbar">
@@ -200,6 +209,7 @@ export function ContactsTopbar({
           aria-haspopup={mobile ? "dialog" : undefined}
           onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
         />
+        {!mobile && sidebarCollapsed && createButton}
         <SearchField
           className="contacts-search"
           role="search"
@@ -236,15 +246,7 @@ export function ContactsTopbar({
             />
           )}
         </SearchField>
-        <div className="contacts-topbar-actions">
-          <ContactIconButton
-            className="contacts-mobile-new"
-            icon="plus"
-            label={t("contacts.newContact")}
-            disabled={!contacts.can("entries.create") || contacts.loading || !!contacts.error}
-            onClick={() => contacts.edit()}
-          />
-        </div>
+        {mobile && <div className="contacts-topbar-actions">{createButton}</div>}
       </header>
       <WorkspaceNavigationDrawer
         open={menu}
