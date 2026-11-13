@@ -39,8 +39,6 @@ routes.put("/settings", requirePermission("admin.notifications.settings.manage")
     Number(data.version) < 1
   )
     invalid();
-  if (data.web_push_enabled && !fcmWebConfig(c.env))
-    throw new HTTPException(409, { message: t("push.notConfigured") });
   const db = c.get("db"),
     { user, session } = c.get("identity"),
     operation = uuid();

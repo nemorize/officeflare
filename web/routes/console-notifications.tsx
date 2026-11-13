@@ -79,7 +79,7 @@ export function NotificationConsolePage() {
               </span>
               <CheckboxControl
                 checked={settings.web_push_enabled}
-                disabled={busy || !editable || (!settings.configured && !settings.web_push_enabled)}
+                disabled={busy || !editable}
                 onCheckedChange={(checked) =>
                   setSettings({ ...settings, web_push_enabled: checked })
                 }

@@ -17,7 +17,7 @@ const harness = await build({
   external: ["cloudflare:workers"],
   target: "es2022",
 });
-async function fixture(t, configured = true) {
+async function fixture(t, configured = true, options = {}) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const rsa = await generateKeyPair("RS256", { extractable: true });
   const privatePem = await exportPKCS8(rsa.privateKey);
@@ -38,6 +38,7 @@ async function fixture(t, configured = true) {
         FCM_VAPID_KEY: "B" + "A".repeat(86),
       }
     : {};
+  if (options.missingFcmKey) delete fcm[options.missingFcmKey];
   const sent = [],
     oauth = [],
     failures = new Map();
@@ -122,6 +123,7 @@ async function fixture(t, configured = true) {
   t.after(() => mf.dispose());
   const db = await mf.getD1Database("DB");
   for (const file of (await readdir("migrations")).sort()) {
+    if (file.endsWith("_default_web_push.sql")) await options.beforeDefaultMigration?.(db);
     let statement = "",
       trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {
@@ -239,19 +241,46 @@ test("web push remains optional and requires administrator permission and config
   assert.deepEqual(await f.call("/push/config", { tokens: f.bob }), { available: false });
   const settings = await f.call("/push/settings", { tokens: f.alice });
   assert.equal(settings.configured, false);
-  assert.equal(settings.web_push_enabled, false);
+  assert.equal(settings.web_push_enabled, true);
   await f.call("/push/settings", { tokens: f.bob, expected: 403 });
-  await f.call("/push/settings", {
-    method: "PUT",
-    tokens: f.alice,
-    data: { web_push_enabled: true, version: settings.version },
-    expected: 409,
-  });
-  await f.register("a-token", undefined, f.alice, 409);
+  await f.db
+    .prepare(
+      `INSERT INTO push_tokens (id, user_id, session_id, auth_version, device_id, token_type, token)
+    SELECT 'existing-token', user_id, id, auth_version, 'device_1234567890', 'fcm_web', 'existing-token'
+    FROM user_sessions WHERE id = ?`,
+    )
+    .bind(f.alice.session_id)
+    .run();
+  let version = settings.version;
+  for (const enabled of [true, false, true]) {
+    const saved = await f.call("/push/settings", {
+      method: "PUT",
+      tokens: f.alice,
+      data: { web_push_enabled: enabled, version },
+    });
+    version = saved.version;
+    assert.equal(saved.web_push_enabled, enabled);
+    assert.equal(saved.configured, false);
+    assert.deepEqual(await f.call("/push/config", { tokens: f.bob }), { available: false });
+    await f.register("a-token", undefined, f.alice, 409);
+    await f.deliver(await f.publish(`unconfigured-${version}`));
+  }
+  assert.equal(f.sent.length, 0);
+  assert.equal(f.oauth.length, 0);
 });
 
 test("web push registration rotates tokens, enforces types and ownership, and removes logged-out devices", async (t) => {
   const f = await fixture(t);
+  const initial = await f.call("/push/settings", { tokens: f.alice });
+  assert.equal(initial.web_push_enabled, true);
+  assert.equal((await f.call("/push/config", { tokens: f.bob })).available, true);
+  await f.register("a-token");
+  await f.call("/push/settings", {
+    method: "PUT",
+    tokens: f.alice,
+    data: { web_push_enabled: false, version: initial.version },
+  });
+  assert.deepEqual(await f.call("/push/config", { tokens: f.bob }), { available: false });
   await f.register("a-token", undefined, f.alice, 409);
   const enabled = await f.enable();
   const config = await f.call("/push/config", { tokens: f.bob });
@@ -310,7 +339,6 @@ test("web push registration rotates tokens, enforces types and ownership, and re
 
 test("FCM delivery retries only failed devices, drops unregistered tokens, and ignores updates and opt-outs", async (t) => {
   const f = await fixture(t);
-  await f.enable();
   await f.register("good-token");
   await f.register("retry-token", "retry_device_12345");
   await f.register("gone-token", "gone_device_123456");
@@ -367,6 +395,62 @@ test("FCM delivery retries only failed devices, drops unregistered tokens, and i
   const expired = await f.publish("expired-session");
   await f.deliver(expired);
   assert.equal(f.sent.length, 4);
+});
+
+test("a missing FCM value blocks registration and delivery even when administrator permission is enabled", async (t) => {
+  for (const name of ["FCM_SERVICE_ACCOUNT", "FCM_WEB_CONFIG", "FCM_VAPID_KEY"]) {
+    await t.test(name, async (t) => {
+      const f = await fixture(t, true, { missingFcmKey: name });
+      const settings = await f.call("/push/settings", { tokens: f.alice });
+      assert.equal(settings.web_push_enabled, true);
+      assert.equal(settings.configured, false);
+      assert.deepEqual(await f.call("/push/config", { tokens: f.alice }), { available: false });
+      await f.register("a-token", undefined, f.alice, 409);
+      await f.db
+        .prepare(
+          `INSERT INTO push_tokens (id, user_id, session_id, auth_version, device_id, token_type, token)
+        SELECT 'existing-token', user_id, id, auth_version, 'device_1234567890', 'fcm_web', 'existing-token'
+        FROM user_sessions WHERE id = ?`,
+        )
+        .bind(f.alice.session_id)
+        .run();
+      await f.deliver(await f.publish("missing-fcm"));
+      assert.equal(f.sent.length, 0);
+      assert.equal(f.oauth.length, 0);
+    });
+  }
+});
+
+test("upgrading preserves existing installation policies and explicit administrator choices", async (t) => {
+  for (const policy of [
+    { name: "administrator disabled", enabled: false, version: 4, administrator: true },
+    { name: "administrator enabled", enabled: true, version: 4, administrator: true },
+    { name: "existing untouched installation", enabled: false, version: 1, administrator: false },
+  ]) {
+    await t.test(policy.name, async (t) => {
+      const f = await fixture(t, true, {
+        beforeDefaultMigration: async (db) => {
+          if (policy.administrator)
+            await db
+              .prepare(
+                "INSERT INTO users (id, email_address) VALUES ('existing-admin', 'existing@office.test')",
+              )
+              .run();
+          await db.prepare("INSERT INTO installation_state (id) VALUES (1)").run();
+          await db
+            .prepare(
+              "UPDATE push_settings SET web_push_enabled = ?, version = ?, updated_by = ? WHERE id = 1",
+            )
+            .bind(+policy.enabled, policy.version, policy.administrator ? "existing-admin" : null)
+            .run();
+        },
+      });
+      const settings = await f.call("/push/settings", { tokens: f.alice });
+      assert.equal(settings.web_push_enabled, policy.enabled);
+      assert.equal(settings.version, policy.version);
+      assert.equal((await f.call("/push/config", { tokens: f.bob })).available, policy.enabled);
+    });
+  }
 });
 
 test("suppressed notifications and revoked mailbox access never produce a push", async (t) => {
