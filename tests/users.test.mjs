@@ -12,6 +12,7 @@ import { hashPassword, verifyPassword } from "../src/auth/password.ts";
 import {
   calendarUserPermissions,
   contactsUserPermissions,
+  wikiUserPermissions,
   permissionCatalog,
   permissionClosure,
 } from "../src/authorization/permissions.ts";
@@ -310,7 +311,7 @@ test("user management in the Workers runtime", async (t) => {
         (await db.select().from(userRoles).where(eq(userRoles.user_id, user.id))).map(
           (row) => row.role_id,
         ),
-        ["system-calendar-user", "system-contacts-user", "system-mail-user"],
+        ["system-calendar-user", "system-contacts-user", "system-mail-user", "system-wiki-user"],
       );
       const pending = await login(user.email_address);
       assert.equal(pending.next, "password_reset");
@@ -322,7 +323,12 @@ test("user management in the Workers runtime", async (t) => {
       });
       assert.deepEqual(
         (await request("/api/me/permissions", { token: changed.access_token })).permissions,
-        [...calendarUserPermissions, ...contactsUserPermissions, "mail.access"].sort(),
+        [
+          ...calendarUserPermissions,
+          ...contactsUserPermissions,
+          ...wikiUserPermissions,
+          "mail.access",
+        ].sort(),
       );
       const listed = (await request(`/api/users/${user.id}`, { token })).user;
       assert.equal(listed.password_reset_required, false);
@@ -583,7 +589,12 @@ test("user management in the Workers runtime", async (t) => {
       const fresh = await login(replacement.email_address);
       assert.deepEqual(
         (await request("/api/me/permissions", { token: fresh.access_token })).permissions,
-        [...calendarUserPermissions, ...contactsUserPermissions, "mail.access"].sort(),
+        [
+          ...calendarUserPermissions,
+          ...contactsUserPermissions,
+          ...wikiUserPermissions,
+          "mail.access",
+        ].sort(),
       );
       assert.deepEqual(
         (await request("/api/me/mfa/methods", { token: fresh.access_token })).methods,
@@ -608,6 +619,7 @@ test("user management in the Workers runtime", async (t) => {
         "mail.access",
         ...calendarUserPermissions,
         ...contactsUserPermissions,
+        ...wikiUserPermissions,
       ]).map((permission_key) =>
         db.insert(rolePermissions).values({ role_id: "account-manager", permission_key }),
       ),
@@ -675,6 +687,7 @@ test("user management in the Workers runtime", async (t) => {
               "mail.access",
               ...calendarUserPermissions,
               ...contactsUserPermissions,
+              ...wikiUserPermissions,
             ]),
           },
           expected: 201,
@@ -724,6 +737,7 @@ test("user management in the Workers runtime", async (t) => {
               "mail.access",
               ...calendarUserPermissions,
               ...contactsUserPermissions,
+              ...wikiUserPermissions,
             ]),
             version: role.version,
           },
@@ -745,6 +759,7 @@ test("user management in the Workers runtime", async (t) => {
             "mail.access",
             ...calendarUserPermissions,
             ...contactsUserPermissions,
+            ...wikiUserPermissions,
           ]),
           version: granted.version,
         },
@@ -1004,6 +1019,7 @@ test("service entry, administrative actions, role defaults and assignment concur
           "mail.access",
           ...calendarUserPermissions,
           ...contactsUserPermissions,
+          ...wikiUserPermissions,
         ]),
         target = await create("granular-target@office.test");
       const active = await login(target.email_address);
@@ -1024,6 +1040,7 @@ test("service entry, administrative actions, role defaults and assignment concur
         "mail.access",
         ...calendarUserPermissions,
         ...contactsUserPermissions,
+        ...wikiUserPermissions,
       ]);
       await edit(target.id, { display_name: "Denied profile change" }, 403, support);
       await edit(target.id, { password_reset_required: true }, 200, support);
@@ -1098,7 +1115,7 @@ test("service entry, administrative actions, role defaults and assignment concur
       const defaults = (await request("/api/users/default-roles", { token: actor })).roles;
       assert.deepEqual(
         defaults.map((role) => role.id),
-        ["system-calendar-user", "system-contacts-user", "system-mail-user"],
+        ["system-calendar-user", "system-contacts-user", "system-mail-user", "system-wiki-user"],
       );
       const created = (
         await request("/api/users", {
@@ -1114,7 +1131,7 @@ test("service entry, administrative actions, role defaults and assignment concur
       ).user;
       assert.deepEqual(
         (await request(`/api/users/${created.id}/roles`, { token })).roles.map((role) => role.id),
-        ["system-calendar-user", "system-contacts-user", "system-mail-user"],
+        ["system-calendar-user", "system-contacts-user", "system-mail-user", "system-wiki-user"],
       );
       assert.deepEqual(
         (
@@ -1122,7 +1139,12 @@ test("service entry, administrative actions, role defaults and assignment concur
             token: (await login(created.email_address)).access_token,
           })
         ).permissions,
-        [...calendarUserPermissions, ...contactsUserPermissions, "mail.access"].sort(),
+        [
+          ...calendarUserPermissions,
+          ...contactsUserPermissions,
+          ...wikiUserPermissions,
+          "mail.access",
+        ].sort(),
       );
       await request("/api/users", {
         method: "POST",
@@ -1169,12 +1191,12 @@ test("service entry, administrative actions, role defaults and assignment concur
       });
       assert.deepEqual(
         (await request("/api/users/default-roles", { token })).roles.map((role) => role.id),
-        ["system-calendar-user", "system-contacts-user"],
+        ["system-calendar-user", "system-contacts-user", "system-wiki-user"],
       );
       const created = await create("calendar-default@office.test");
       assert.deepEqual(
         (await request(`/api/users/${created.id}/roles`, { token })).roles.map((role) => role.id),
-        ["system-calendar-user", "system-contacts-user"],
+        ["system-calendar-user", "system-contacts-user", "system-wiki-user"],
       );
       const previous = await db
         .select()
@@ -1185,7 +1207,7 @@ test("service entry, administrative actions, role defaults and assignment concur
         (await request(`/api/users/${previous.id}/roles`, { token })).roles
           .map((role) => role.id)
           .sort(),
-        ["system-calendar-user", "system-contacts-user", mail.id].sort(),
+        ["system-calendar-user", "system-contacts-user", mail.id, "system-wiki-user"].sort(),
       );
       const administrative = await role("not-a-default", ["admin.users.read"]);
       await request(`/api/roles/${administrative.id}/default`, {

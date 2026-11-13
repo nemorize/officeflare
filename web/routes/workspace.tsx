@@ -15,6 +15,8 @@ import { DriveResourceProvider } from "../components/drive-resource-context";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSettingsButton, DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
+import { WikiProvider } from "../components/wiki-context";
+import { WikiSidebar } from "../components/wiki-chrome";
 import { ContactsProvider } from "../components/contacts-context";
 import {
   ContactsSidebar,
@@ -110,6 +112,7 @@ function WorkspaceChrome() {
   const isConsole = pathname === "/console" || pathname.startsWith("/console/");
   const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
   const isDrive = pathname === "/drive" || pathname.startsWith("/drive/");
+  const isWiki = pathname === "/wiki" || pathname.startsWith("/wiki/");
   const isContacts = pathname === "/contacts" || pathname.startsWith("/contacts/");
   const isCalendar =
     (pathname === "/calendar" || pathname.startsWith("/calendar/")) &&
@@ -139,24 +142,26 @@ function WorkspaceChrome() {
     sidebarMenu.find(
       (item) => item.path === pathname || (isConsole && pathname.startsWith(`${item.path}/`)),
     ) ?? (isDrive ? driveSettingsPages.find((page) => page.path === pathname) : undefined);
-  const title = pathname.startsWith("/calendar/invitations/")
-    ? t("routesWorkspace.calendarInvitation")
-    : isContacts
-      ? pathname === "/contacts/fields"
-        ? t("contacts.customFields")
-        : t("contacts.title")
-      : isCalendar
-        ? pathname.startsWith("/calendar/settings")
-          ? t("routesWorkspace.calendarSettings")
-          : t("routesWorkspace.calendar")
-        : (current?.name ??
-          (isDrive
-            ? t("routesWorkspace.folder")
-            : isMail
-              ? pathname.includes("/folders/")
-                ? t("routesWorkspace.folder")
-                : t("routesWorkspace.mail")
-              : t("routesWorkspace.pageNotFound")));
+  const title = isWiki
+    ? t("wiki.title")
+    : pathname.startsWith("/calendar/invitations/")
+      ? t("routesWorkspace.calendarInvitation")
+      : isContacts
+        ? pathname === "/contacts/fields"
+          ? t("contacts.customFields")
+          : t("contacts.title")
+        : isCalendar
+          ? pathname.startsWith("/calendar/settings")
+            ? t("routesWorkspace.calendarSettings")
+            : t("routesWorkspace.calendar")
+          : (current?.name ??
+            (isDrive
+              ? t("routesWorkspace.folder")
+              : isMail
+                ? pathname.includes("/folders/")
+                  ? t("routesWorkspace.folder")
+                  : t("routesWorkspace.mail")
+                : t("routesWorkspace.pageNotFound")));
   useEffect(() => {
     document.title = t("routesWorkspace.officeflare", { title: title });
   }, [title]);
@@ -232,6 +237,8 @@ function WorkspaceChrome() {
           </div>
           {access.status === "loading" ? (
             <LoadingSkeleton label={t("routesWorkspace.loadingNavigation")} />
+          ) : isWiki && activeApp ? (
+            <WikiSidebar />
           ) : isContacts && activeApp ? (
             <ContactsSidebar />
           ) : isCalendar && activeApp ? (
@@ -352,22 +359,26 @@ function WorkspaceChrome() {
                 </div>
               }
             >
-              <nav
-                aria-label={t("workspace.navigation", { name: sidebarName })}
-                className="workspace-nav"
-              >
-                {sidebarMenu.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={!isConsole}
-                    onClick={() => setMobileMenu(false)}
-                  >
-                    <Icon name={item.icon} />
-                    <span>{item.name}</span>
-                  </NavLink>
-                ))}
-              </nav>
+              {isWiki ? (
+                <WikiSidebar onNavigate={() => setMobileMenu(false)} />
+              ) : (
+                <nav
+                  aria-label={t("workspace.navigation", { name: sidebarName })}
+                  className="workspace-nav"
+                >
+                  {sidebarMenu.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={!isConsole}
+                      onClick={() => setMobileMenu(false)}
+                    >
+                      <Icon name={item.icon} />
+                      <span>{item.name}</span>
+                    </NavLink>
+                  ))}
+                </nav>
+              )}
             </WorkspaceNavigationDrawer>
           )}
           {auth.error && (
@@ -443,7 +454,9 @@ function WorkspaceStartup() {
                 <DriveProvider key={sessionId}>
                   <CalendarProvider key={sessionId}>
                     <ContactsProvider key={sessionId}>
-                      <WorkspaceChrome />
+                      <WikiProvider>
+                        <WorkspaceChrome />
+                      </WikiProvider>
                     </ContactsProvider>
                   </CalendarProvider>
                 </DriveProvider>

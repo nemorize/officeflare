@@ -292,7 +292,7 @@ export function findUiStrings(source, file = "example.tsx") {
           ancestors.some(
             (item) =>
               item.type === "ObjectProperty" &&
-              ["style", "headers", "httpMetadata"].includes(property(item)),
+              ["style", "headers", "httpMetadata", "className"].includes(property(item)),
           ) ||
           (parent?.type === "ObjectProperty" && internalProperties.has(property(parent))) ||
           (parent?.type === "ObjectProperty" && property(parent) === value) ||
@@ -321,7 +321,7 @@ export function findUiStrings(source, file = "example.tsx") {
           protocolValues.has(value) ||
           /^(?:[a-z]+:\/\/|data:|blob:|urn:|mailto:|\/|#|\.[\w/]|--|\*\/|\{)/i.test(value) ||
           /<\/?[a-z!]/i.test(value) ||
-          /\b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|JOIN|LIMIT|OFFSET|ASC|DESC|AND|ORDER BY|GROUP BY|VALUES|LIKE|COLLATE|COALESCE|CASE WHEN|NOT IN)\b|\bIS (?:NOT )?NULL\b/.test(
+          /\b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|JOIN|LIMIT|OFFSET|ASC|DESC|AND|ORDER BY|GROUP BY|VALUES|LIKE|COLLATE|COALESCE|NOT IN)\b|\bCASE(?:\s+[\w.]+)?\s+WHEN\b|\bIS\s+(?:\?|(?:NOT\s+)?NULL\b)|\bOR\s+instr\(/.test(
             value,
           ) ||
           /^\s*(?:default-src|script-src|attachment;|inline;|Bearer |Basic |bytes[ =]|boundary=|text\/|application\/|image\/|font\/|video\/|audio\/|message\/|@media|EHLO |AUTH PLAIN|MAIL FROM:|RCPT TO:|Zoho-enczapikey)/.test(

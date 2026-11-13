@@ -5,6 +5,7 @@ import type { WorkspaceNavigationItem } from "./workspace-navigation";
 import {
   calendarUserPermissions,
   contactsUserPermissions,
+  wikiUserPermissions,
   driveUserPermissions,
   isPermission,
   missingPrerequisites,
@@ -100,6 +101,12 @@ export const managedPermissions = (permissions: readonly string[]) =>
   permissions.filter(isPermission);
 export const roleTemplates = [
   { key: "mail-user", label: t("libConsole.mailUser"), permissions: ["mail.access"] },
+  {
+    key: "wiki-user",
+    label: t("wiki.userRole"),
+    permissions: [...wikiUserPermissions],
+  },
+  { key: "wiki-reader", label: t("wiki.readerRole"), permissions: ["wiki.access"] },
   {
     key: "contacts-user",
     label: t("contacts.userRole"),

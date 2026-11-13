@@ -1740,3 +1740,168 @@ export const calendarTimeProposals = sqliteTable("calendar_time_proposals", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// Wiki and service-independent collaboration metadata (0036).
+export const collaborationResources = sqliteTable("collaboration_resources", {
+  id: text().primaryKey().notNull(),
+  service: text().notNull(),
+  resource_id: text().notNull(),
+  schema_key: text().notNull(),
+  retired_at: integer(),
+  purged_at: integer(),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+});
+export const collaborationTickets = sqliteTable("collaboration_tickets", {
+  token_hash: text().primaryKey().notNull(),
+  resource_id: text().notNull(),
+  user_id: text().notNull(),
+  session_id: text().notNull(),
+  auth_version: integer().notNull(),
+  origin: text().notNull(),
+  expires_at: integer().notNull(),
+  consumed_at: integer(),
+});
+export const wikiSpaces = sqliteTable("wiki_spaces", {
+  id: text().primaryKey().notNull(),
+  name: text().notNull(),
+  description: text()
+    .notNull()
+    .default(sql`''`),
+  kind: text()
+    .notNull()
+    .default(sql`'team'`),
+  owner_user_id: text().notNull(),
+  version: integer()
+    .notNull()
+    .default(sql`1`),
+  acl_version: integer()
+    .notNull()
+    .default(sql`1`),
+  tree_version: integer()
+    .notNull()
+    .default(sql`1`),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+  archived_at: integer(),
+});
+export const wikiSpaceMembers = sqliteTable(
+  "wiki_space_members",
+  {
+    space_id: text().notNull(),
+    user_id: text().notNull(),
+    role: text().notNull(),
+    created_at: integer()
+      .notNull()
+      .default(sql`unixepoch()`),
+  },
+  (table) => [primaryKey({ columns: [table.space_id, table.user_id] })],
+);
+export const wikiPages = sqliteTable("wiki_pages", {
+  id: text().primaryKey().notNull(),
+  space_id: text().notNull(),
+  parent_id: text(),
+  resource_id: text().notNull(),
+  title: text()
+    .notNull()
+    .default(sql`''`),
+  plain_text: text()
+    .notNull()
+    .default(sql`''`),
+  icon: text()
+    .notNull()
+    .default(sql`''`),
+  sort_order: integer()
+    .notNull()
+    .default(sql`0`),
+  permission_mode: text()
+    .notNull()
+    .default(sql`'inherit'`),
+  version: integer()
+    .notNull()
+    .default(sql`1`),
+  projected_epoch: integer()
+    .notNull()
+    .default(sql`0`),
+  projected_seq: integer()
+    .notNull()
+    .default(sql`0`),
+  created_by: text().notNull(),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+  updated_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+  trashed_at: integer(),
+  purged_at: integer(),
+});
+export const wikiPageGrants = sqliteTable(
+  "wiki_page_grants",
+  {
+    page_id: text().notNull(),
+    user_id: text().notNull(),
+    role: text().notNull(),
+    created_at: integer()
+      .notNull()
+      .default(sql`unixepoch()`),
+  },
+  (table) => [primaryKey({ columns: [table.page_id, table.user_id] })],
+);
+export const wikiComments = sqliteTable("wiki_comments", {
+  id: text().primaryKey().notNull(),
+  page_id: text().notNull(),
+  author_user_id: text().notNull(),
+  body: text().notNull(),
+  resolved_at: integer(),
+  version: integer()
+    .notNull()
+    .default(sql`1`),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+  updated_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+  deleted_at: integer(),
+});
+export const wikiFavorites = sqliteTable(
+  "wiki_favorites",
+  {
+    user_id: text().notNull(),
+    page_id: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.user_id, table.page_id] })],
+);
+export const wikiAssets = sqliteTable("wiki_assets", {
+  id: text().primaryKey().notNull(),
+  page_id: text().notNull(),
+  object_key: text().notNull(),
+  filename: text().notNull(),
+  content_type: text().notNull(),
+  byte_size: integer().notNull(),
+  created_by: text().notNull(),
+  ready_at: integer(),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+});
+export const wikiOperations = sqliteTable("wiki_operations", {
+  id: text().primaryKey().notNull(),
+  actor_user_id: text().notNull(),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+});
+export const wikiActivity = sqliteTable("wiki_activity", {
+  id: text().primaryKey().notNull(),
+  space_id: text().notNull(),
+  page_id: text(),
+  actor_user_id: text().notNull(),
+  action: text().notNull(),
+  created_at: integer()
+    .notNull()
+    .default(sql`unixepoch()`),
+});

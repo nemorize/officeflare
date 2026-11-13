@@ -15,6 +15,9 @@ import push from "./push";
 import drive from "./drive";
 import calendar from "./calendar";
 import contacts from "./contacts";
+import wiki from "./wiki";
+import { collaborationRoutes } from "../collaboration/routes";
+import { collaborationAdapters } from "../collaboration-bindings";
 import { PART_BYTES } from "../drive/types";
 import { roleRoutes, userRoleRoutes } from "./authorization";
 import { requireAccess } from "../auth/store";
@@ -47,17 +50,20 @@ api.use("*", async (c, next) => {
   const driveUpload = /^\/api\/drive\/uploads\/[^/]+\/(?:content|parts\/[^/]+)$/.test(path);
   // JSON escaping can expand the 1 MiB calendar payload up to sixfold.
   const calendarImport = /^\/api\/calendar\/calendars\/[^/]+\/imports$/.test(path);
-  const maxSize = driveUpload
-    ? PART_BYTES
-    : calendarImport
-      ? 6 * 1024 * 1024 + 1024
-      : profileImage
-        ? 2 * 1024 * 1024
-        : largeUpload
-          ? 26 * 1024 * 1024
-          : mailBody
-            ? 5 * 1024 * 1024
-            : 64 * 1024;
+  const wikiUpload = /^\/api\/wiki\/pages\/[^/]+\/assets$/.test(path);
+  const maxSize = wikiUpload
+    ? 8 * 1024 * 1024
+    : driveUpload
+      ? PART_BYTES
+      : calendarImport
+        ? 6 * 1024 * 1024 + 1024
+        : profileImage
+          ? 2 * 1024 * 1024
+          : largeUpload
+            ? 26 * 1024 * 1024
+            : mailBody
+              ? 5 * 1024 * 1024
+              : 64 * 1024;
   return bodyLimit({
     maxSize,
     onError: () => {
@@ -71,6 +77,8 @@ api.route("/push", push);
 api.route("/drive", drive);
 api.route("/calendar", calendar);
 api.route("/contacts", contacts);
+api.route("/wiki", wiki);
+api.route("/collaboration", collaborationRoutes(collaborationAdapters));
 api.route("/auth", auth);
 api.route("/me", me);
 api.get("/permissions", requireAccess, requirePermission("admin.roles.read"), (c) =>

@@ -69,6 +69,8 @@
     "@base-ui/react": "1.8.0",
     "@js-temporal/polyfill": "0.5.1",
     "@tiptap/core": "3.31.4",
+    "@tiptap/extension-collaboration": "3.31.4",
+    "@tiptap/extension-collaboration-caret": "3.31.4",
     "@tiptap/extension-image": "3.31.4",
     "@tiptap/extension-table": "3.31.4",
     "@tiptap/extension-text-align": "3.31.4",
@@ -76,6 +78,7 @@
     "@tiptap/pm": "3.31.4",
     "@tiptap/react": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
+    "@tiptap/y-tiptap": "3.0.7",
     "css-tree": "3.1.0",
     "drizzle-orm": "0.45.3",
     "firebase": "12.19.0",
@@ -85,6 +88,7 @@
     "image-size": "2.0.2",
     "ipaddr.js": "2.2.0",
     "jose": "6.2.12",
+    "lib0": "0.2.120",
     "pdfjs-dist": "6.4.299",
     "postal-mime": "4.0.4",
     "qrcode.react": "4.2.0",
@@ -92,6 +96,8 @@
     "react-dom": "19.3.0",
     "react-router": "7.18.4",
     "rrule": "2.8.1",
-    "sanitize-html": "2.18.0"
+    "sanitize-html": "2.18.0",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
   }
 }

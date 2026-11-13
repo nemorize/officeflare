@@ -127,6 +127,10 @@ const CalendarInvitationPage = lazy(() =>
   })),
 );
 
+const WikiPage = lazy(() =>
+  import("./routes/wiki").then((module) => ({ default: module.WikiPage })),
+);
+
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route errorElement={<RouteErrorBoundary />}>
@@ -141,13 +145,22 @@ const router = createBrowserRouter(
       />
       <Route element={<WorkspaceLayout />}>
         <Route path="/" element={<WorkspaceHome />} />
+        <Route
+          path="/wiki/:spaceId?/:pageId?"
+          element={
+            <ServiceGate permission="wiki.access">
+              <WikiPage />
+            </ServiceGate>
+          }
+        />
         {workspaceApps
           .filter(
             (app) =>
               app.path !== "/mail" &&
               app.path !== "/drive" &&
               app.path !== "/calendar" &&
-              app.path !== "/contacts",
+              app.path !== "/contacts" &&
+              app.path !== "/wiki",
           )
           .flatMap((app) =>
             app.menu.map((item) => (

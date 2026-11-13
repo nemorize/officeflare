@@ -24,6 +24,8 @@ export async function fixture(
   t,
   {
     assets = false,
+    collaboration = false,
+    workerEntry,
     beforeRolesMigration,
     beforeRegionalPreferencesMigration,
     beforeContactsRolesMigration,
@@ -34,7 +36,12 @@ export async function fixture(
     compatibilityDate: "2026-09-29",
     compatibilityFlags: ["nodejs_compat"],
     d1Databases: { DB: "calendar-tests" },
-    r2Buckets: ["MAIL_BUCKET", "DRIVE_BUCKET", ...(assets ? ["PROFILE_BUCKET"] : [])],
+    r2Buckets: [
+      "MAIL_BUCKET",
+      "DRIVE_BUCKET",
+      ...(collaboration ? ["WIKI_BUCKET"] : []),
+      ...(assets ? ["PROFILE_BUCKET"] : []),
+    ],
     serviceBindings: {
       EMAIL: { name: "calendar-harness", entrypoint: "FakeEmail" },
     },
@@ -58,11 +65,21 @@ export async function fixture(
         {
           ...common,
           name: "officeflare",
-          modules: workerModules,
+          modules: workerEntry ? [workerEntry, ...workerModules] : workerModules,
+          ...(collaboration
+            ? {
+                durableObjects: {
+                  COLLABORATION_ROOM: { className: "CollaborationRoomDO", useSQLite: true },
+                },
+              }
+            : {}),
           ...(assets
             ? {
                 durableObjects: {
                   NOTIFICATION_HUB: { className: "NotificationHubDO", useSQLite: true },
+                  ...(collaboration
+                    ? { COLLABORATION_ROOM: { className: "CollaborationRoomDO", useSQLite: true } }
+                    : {}),
                 },
                 assets: {
                   directory: "dist/client",

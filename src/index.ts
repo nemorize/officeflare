@@ -10,11 +10,14 @@ import { consume, recover } from "./mail/jobs";
 import { consumeNotifications, recoverNotifications } from "./notifications/jobs";
 import { recoverDrive } from "./drive/jobs";
 import { recoverContacts } from "./contacts/jobs";
+import { recoverCollaboration } from "./collaboration/jobs";
+import { recoverWiki } from "./wiki/jobs";
 import { consumeCalendar, recoverCalendar } from "./calendar/jobs";
 import { recoverCalendarFeeds, syncCalendarFeed } from "./calendar/feed-sync";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
 export { NotificationHubDO } from "./notifications/hub";
+export { CollaborationRoomDO } from "./collaboration-bindings";
 
 const app = new Hono<AppEnv>();
 
@@ -107,6 +110,8 @@ export default {
         recoverNotifications(env),
         recoverDrive(env),
         recoverContacts(env),
+        recoverCollaboration(env),
+        recoverWiki(env),
         recoverCalendar(env),
         recoverCalendarFeeds(env),
       ]),

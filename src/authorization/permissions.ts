@@ -1,5 +1,8 @@
 import { t } from "../../shared/i18n/index.ts";
 export const permissionGroups = {
+  get wiki() {
+    return t("wiki.usage");
+  },
   get services() {
     return t("permissions.serviceAccess");
   },
@@ -44,6 +47,126 @@ const assignmentRead = ["admin.users.roles.read"] as const;
 // One catalog drives API policies, role validation and the management UI.
 // Service access never grants access to another user's mailbox or files.
 export const permissionCatalog = {
+  "wiki.access": {
+    get label() {
+      return t("wiki.access");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: [],
+  },
+  "wiki.spaces.create": {
+    get label() {
+      return t("wiki.spacesCreate");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.pages.create": {
+    get label() {
+      return t("wiki.pagesCreate");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.pages.update": {
+    get label() {
+      return t("wiki.pagesUpdate");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.pages.delete": {
+    get label() {
+      return t("wiki.pagesDelete");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.pages.move": {
+    get label() {
+      return t("wiki.pagesMove");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.sharing.internal": {
+    get label() {
+      return t("wiki.sharing");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.comments.create": {
+    get label() {
+      return t("wiki.commentsCreate");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.history.read": {
+    get label() {
+      return t("wiki.historyRead");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.history.restore": {
+    get label() {
+      return t("wiki.historyRestore");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.history.read", "wiki.pages.update"],
+  },
+  "wiki.assets.upload": {
+    get label() {
+      return t("wiki.assetsUpload");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
+  "wiki.pages.export": {
+    get label() {
+      return t("wiki.pagesExport");
+    },
+    get description() {
+      return t("wiki.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["wiki.access"],
+  },
   "admin.notifications.settings.read": {
     get label() {
       return t("push.adminRead");
@@ -757,6 +880,20 @@ export const permissionCatalog = {
 export type Permission = keyof typeof permissionCatalog;
 export const ADMINISTRATOR_ROLE_ID = "system-administrator";
 export const MAIL_USER_ROLE_ID = "system-mail-user";
+export const wikiUserPermissions = [
+  "wiki.access",
+  "wiki.spaces.create",
+  "wiki.pages.create",
+  "wiki.pages.update",
+  "wiki.pages.delete",
+  "wiki.pages.move",
+  "wiki.sharing.internal",
+  "wiki.comments.create",
+  "wiki.history.read",
+  "wiki.history.restore",
+  "wiki.assets.upload",
+  "wiki.pages.export",
+] as const;
 export const CONTACTS_USER_ROLE_ID = "system-contacts-user";
 export const contactsUserPermissions = [
   "contacts.access",
@@ -826,6 +963,7 @@ export function defaultEligible(values: readonly string[]): boolean {
         ...calendarUserPermissions,
         ...driveUserPermissions,
         ...contactsUserPermissions,
+        ...wikiUserPermissions,
       ] as readonly string[]
     ).includes(key),
   );

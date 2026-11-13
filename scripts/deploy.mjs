@@ -95,6 +95,11 @@ export async function ensureProfileResources(config, flags, wrangler = runWrangl
   if (bucket) await ensureBucket(bucket, flags, wrangler);
 }
 
+export async function ensureWikiResources(config, flags, wrangler = runWrangler) {
+  const bucket = config.r2_buckets?.find((entry) => entry.binding === "WIKI_BUCKET");
+  if (bucket) await ensureBucket(bucket, flags, wrangler);
+}
+
 export async function ensureDriveResources(config, flags, wrangler = runWrangler) {
   const bucket = config.r2_buckets?.find((entry) => entry.binding === "DRIVE_BUCKET");
   if (bucket) await ensureBucket(bucket, flags, wrangler);
@@ -209,6 +214,8 @@ export async function deploy(
   await ensureProfileResources(config, flags, wrangler);
   log("Preparing the drive R2 bucket...");
   await ensureDriveResources(config, flags, wrangler);
+  log("Preparing the wiki R2 bucket...");
+  await ensureWikiResources(config, flags, wrangler);
   await bindDatabase(config, options, database, async (path) => {
     const boundFlags = ["--config", path, ...(options.env ? ["--env", options.env] : [])];
     log("Applying D1 migrations...");

@@ -257,6 +257,9 @@ test("the UI copy audit catches text, accessibility copy, callbacks, and lowerca
   assert.deepEqual(
     findUiStrings(`const method = "POST";
     const query = "SELECT * FROM users WHERE id=?";
+    const predicate = "p.parent_id IS ?";
+    const rank = "CASE role WHEN 'editor' THEN 3 ELSE 0 END";
+    const nested = <Dialog viewportProps={{className: ("dialog-viewport "+variant).trim()}} />;
     const view = <Button className="some class" data-status="pending" aria-label={t("common.save")} />;`),
     [],
   );
