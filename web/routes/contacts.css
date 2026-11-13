@@ -268,7 +268,9 @@
   text-align: start;
   justify-content: flex-start;
   white-space: normal;
-  box-shadow: none;
+}
+.contact-list-name[data-ui-button]:focus-visible {
+  box-shadow: inset var(--ui-focus-ring);
 }
 .contact-list-name > span:last-child {
   display: grid;
