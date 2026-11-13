@@ -770,6 +770,18 @@
   }
 }
 @media (max-width: 760px) {
+  .contact-folder-row,
+  .contact-folder-row a {
+    min-height: 44px;
+  }
+  .contact-folder-heading button[data-ui-button],
+  .contact-folder-toggle[data-ui-button],
+  .contact-folder-menu[data-ui-button],
+  .contact-folder-spacer {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
   .contacts-mobile-new[data-ui-button] {
     display: inline-flex;
   }
