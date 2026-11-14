@@ -307,7 +307,11 @@ export const aiAdmin = new Hono<AppEnv>();
 aiAdmin.use("*", requireAccess);
 aiAdmin.get("/settings", async (c) => {
   await permission(c, "settings");
-  return c.json({ settings: await settings(c.env), consumers: consumerCatalog() });
+  return c.json({
+    settings: await settings(c.env),
+    consumers: consumerCatalog(),
+    encryption_ready: !!c.env.AI_ENCRYPTION_KEYS,
+  });
 });
 aiAdmin.patch("/settings", async (c) => {
   const key = await permission(c, "settings", true),
@@ -485,6 +489,19 @@ aiAdmin.post("/attempts/:id/usage", async (c) => {
   ).run();
   return c.json({ adjusted: true });
 });
+aiAdmin.get("/users", async (c) => {
+  await permission(c, "quotas");
+  const q = (c.req.query("q") ?? "").slice(0, 200);
+  return c.json({
+    users: await rows(
+      c.env,
+      "SELECT id,display_name,email_address FROM users WHERE deleted_at IS NULL AND (display_name LIKE ? OR email_address LIKE ? OR id=?) ORDER BY email_address LIMIT 100",
+      "%" + q + "%",
+      "%" + q + "%",
+      q,
+    ),
+  });
+});
 aiAdmin.get("/users/:user/quota", async (c) => {
   await permission(c, "quotas");
   const subject = await ensureUserSubject(c.env, c.req.param("user"));
@@ -556,6 +573,45 @@ aiAdmin.put("/users/:user/quota", async (c) => {
   return c.json({
     subject: await first(c.env, "SELECT * FROM ai_subjects WHERE id=?", subject),
     rules: await rulesFor(c.env, [subject]),
+  });
+});
+aiAdmin.get("/quota-plans/:plan/rules", async (c) => {
+  await permission(c, "quotas");
+  const plan = await first(c.env, "SELECT * FROM ai_quota_plans WHERE id=?", c.req.param("plan"));
+  if (!plan) fail(404, "AI_NOT_FOUND");
+  return c.json({
+    plan,
+    rules: await rows(
+      c.env,
+      "SELECT metric,window_kind,scope_key,limit_value FROM ai_quota_rules WHERE plan_id=? ORDER BY metric,window_kind,scope_key",
+      c.req.param("plan"),
+    ),
+  });
+});
+aiAdmin.get("/pools/:id/members", async (c) => {
+  await permission(c, "providers");
+  const pool = await first(c.env, "SELECT * FROM ai_account_pools WHERE id=?", c.req.param("id"));
+  if (!pool) fail(404, "AI_NOT_FOUND");
+  return c.json({
+    pool,
+    members: await rows(
+      c.env,
+      "SELECT account_id,priority,weight,enabled FROM ai_pool_members WHERE pool_id=? ORDER BY priority,account_id",
+      c.req.param("id"),
+    ),
+  });
+});
+aiAdmin.get("/consumers/:id/profiles", async (c) => {
+  await permission(c, "settings");
+  const consumer = await first(c.env, "SELECT * FROM ai_consumers WHERE key=?", c.req.param("id"));
+  if (!consumer) fail(404, "AI_NOT_FOUND");
+  return c.json({
+    consumer,
+    profiles: await rows(
+      c.env,
+      "SELECT profile_id,is_default FROM ai_consumer_profiles WHERE consumer_key=? AND enabled=1 ORDER BY profile_id",
+      c.req.param("id"),
+    ),
   });
 });
 aiAdmin.put("/quota-plans/:plan/rules", async (c) => {

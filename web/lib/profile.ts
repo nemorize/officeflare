@@ -94,8 +94,16 @@ export const returnToWorkspace = (path: unknown) =>
     "/profile/notifications",
     "/profile/preferences",
     "/notifications",
+    "/ai",
+    "/ai/connections",
+    "/ai/usage",
+    "/console/ai",
   ].includes(path) ||
     /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) ||
+    /^\/ai\/rooms\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
+    /^\/console\/ai\/(?:settings|providers|accounts|gateways|pools|models|deployments|profiles|routes|consumers|mcp-servers|quota-plans|quotas|usage|activity|reconciliation)$/.test(
+      path,
+    ) ||
     /^\/console\/mail\/(?:domains|mailboxes)\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
     /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
     /^\/contacts\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path) ||

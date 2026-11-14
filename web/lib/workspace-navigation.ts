@@ -9,7 +9,12 @@ export interface WorkspaceNavigationItem {
 
 export interface WorkspaceApp extends WorkspaceNavigationItem {
   permission:
-    "mail.access" | "calendar.access" | "drive.access" | "contacts.access" | "wiki.access";
+    | "mail.access"
+    | "calendar.access"
+    | "drive.access"
+    | "contacts.access"
+    | "wiki.access"
+    | "ai.access";
   menuTitle: string;
   menu: WorkspaceNavigationItem[];
 }
@@ -96,5 +101,17 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
     menuTitle: t("wiki.spaces"),
     permission: "wiki.access",
     menu: [{ path: "/wiki", name: t("wiki.title"), icon: "book" }],
+  },
+  {
+    path: "/ai",
+    name: t("aiui.title"),
+    icon: "sparkles",
+    menuTitle: t("aiui.conversations"),
+    permission: "ai.access",
+    menu: [
+      { path: "/ai", name: t("aiui.newChat"), icon: "plus" },
+      { path: "/ai/connections", name: t("aiui.connections"), icon: "link" },
+      { path: "/ai/usage", name: t("aiui.usage"), icon: "layers" },
+    ],
   },
 ];

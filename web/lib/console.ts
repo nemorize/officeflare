@@ -7,6 +7,7 @@ import {
   contactsUserPermissions,
   wikiUserPermissions,
   driveUserPermissions,
+  aiUserPermissions,
   isPermission,
   missingPrerequisites,
   permissionCatalog,
@@ -87,6 +88,14 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     icon: "bell",
     permissions: ["admin.notifications.settings.read"],
   },
+  {
+    path: "/console/ai",
+    name: t("aiui.title"),
+    icon: "sparkles",
+    permissions: ["settings", "providers", "quotas", "usage", "audit"].map(
+      (key) => `admin.ai.${key}.read`,
+    ),
+  },
 ];
 export const consoleMenu = (permissions: readonly string[]) =>
   permissions.includes("console.access")
@@ -100,6 +109,7 @@ export const canGrant = (permissions: readonly string[], grants: readonly string
 export const managedPermissions = (permissions: readonly string[]) =>
   permissions.filter(isPermission);
 export const roleTemplates = [
+  { key: "ai-user", label: t("aiui.aiUser"), permissions: [...aiUserPermissions] },
   { key: "mail-user", label: t("libConsole.mailUser"), permissions: ["mail.access"] },
   {
     key: "wiki-user",

@@ -197,7 +197,7 @@ aiConnections.get("/servers", async (c) =>
   c.json({
     servers: await rows(
       c.env,
-      "SELECT id,key,name,transport,builtin_key,version FROM ai_mcp_servers WHERE enabled=1 ORDER BY name",
+      "SELECT id,key,name,transport,builtin_key,version,CASE WHEN json_type(config_json,'$.oauth')='object' THEN 1 ELSE 0 END oauth FROM ai_mcp_servers WHERE enabled=1 ORDER BY name",
     ),
   }),
 );

@@ -131,6 +131,18 @@ const WikiPage = lazy(() =>
   import("./routes/wiki").then((module) => ({ default: module.WikiPage })),
 );
 const MCPPage = lazy(() => import("./routes/mcp"));
+const AIChatPage = lazy(() =>
+  import("./routes/ai").then((module) => ({ default: module.AIChatPage })),
+);
+const AIConnectionsPage = lazy(() =>
+  import("./routes/ai-connections").then((module) => ({ default: module.AIConnectionsPage })),
+);
+const AIUsagePage = lazy(() =>
+  import("./routes/ai-usage").then((module) => ({ default: module.AIUsagePage })),
+);
+const AIConsolePage = lazy(() =>
+  import("./routes/console-ai").then((module) => ({ default: module.AIConsolePage })),
+);
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -171,6 +183,38 @@ const router = createBrowserRouter(
       <Route element={<WorkspaceLayout />}>
         <Route path="/" element={<WorkspaceHome />} />
         <Route
+          path="/ai"
+          element={
+            <ServiceGate permission="ai.access">
+              <AIChatPage />
+            </ServiceGate>
+          }
+        />
+        <Route
+          path="/ai/rooms/:roomId"
+          element={
+            <ServiceGate permission="ai.access">
+              <AIChatPage />
+            </ServiceGate>
+          }
+        />
+        <Route
+          path="/ai/connections"
+          element={
+            <ServiceGate permission="ai.access">
+              <AIConnectionsPage />
+            </ServiceGate>
+          }
+        />
+        <Route
+          path="/ai/usage"
+          element={
+            <ServiceGate permission="ai.access">
+              <AIUsagePage />
+            </ServiceGate>
+          }
+        />
+        <Route
           path="/wiki/:spaceId?/:pageId?"
           element={
             <ServiceGate permission="wiki.access">
@@ -185,7 +229,8 @@ const router = createBrowserRouter(
               app.path !== "/drive" &&
               app.path !== "/calendar" &&
               app.path !== "/contacts" &&
-              app.path !== "/wiki",
+              app.path !== "/wiki" &&
+              app.path !== "/ai",
           )
           .flatMap((app) =>
             app.menu.map((item) => (
@@ -349,6 +394,18 @@ const router = createBrowserRouter(
         <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
         <Route path="/console" element={<ConsoleGate />}>
           <Route index element={<ConsoleHome />} />
+          <Route
+            path="ai/:page?"
+            element={
+              <ConsoleGate
+                permissions={["settings", "providers", "quotas", "usage", "audit"].map(
+                  (group) => `admin.ai.${group}.read`,
+                )}
+              >
+                <AIConsolePage />
+              </ConsoleGate>
+            }
+          />
           <Route
             path="notifications"
             element={

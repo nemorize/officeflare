@@ -61,6 +61,7 @@ ai.get("/quota", async (c) => {
   const subject = await ensureUserSubject(c.env, c.get("identity").user.id),
     config = await settings(c.env);
   return c.json({
+    user_subject_id: subject,
     time_zone: config.quota_time_zone,
     rules: await rulesFor(c.env, [subject, config.workspace_subject_id, "system-ai-chat"]),
     buckets: await rows(
@@ -132,9 +133,44 @@ ai.post("/rooms", async (c) => {
   ).run();
   return c.json({ room: await ownedRoom(c.env, principal, id) }, 201);
 });
-ai.get("/rooms/:room", async (c) =>
-  c.json({ room: await ownedRoom(c.env, userPrincipal(c.get("identity")), c.req.param("room")) }),
-);
+ai.get("/rooms/:room", async (c) => {
+  const room = await ownedRoom(c.env, userPrincipal(c.get("identity")), c.req.param("room"));
+  let instructions: string | null = null;
+  if (room.instructions_payload_id) {
+    try {
+      instructions = await getPayload<string>(c.env, room.instructions_payload_id);
+    } catch {
+      /* Retention may have removed old instructions. */
+    }
+  }
+  return c.json({ room: { ...room, instructions } });
+});
+ai.get("/rooms/:room/runs", async (c) => {
+  const room = await ownedRoom(c.env, userPrincipal(c.get("identity")), c.req.param("room"));
+  return c.json({
+    runs: await rows(
+      c.env,
+      "SELECT id,room_id,status,error_code,created_at,deadline_at FROM ai_runs WHERE room_id=? ORDER BY created_at DESC,rowid DESC LIMIT 50",
+      room.id,
+    ),
+  });
+});
+ai.get("/rooms/:room/mcp-bindings", async (c) => {
+  const room = await ownedRoom(c.env, userPrincipal(c.get("identity")), c.req.param("room"));
+  return c.json({
+    version: room.version,
+    bindings: (
+      await rows<{ connection_id: string; allowed_tools_json: string }>(
+        c.env,
+        "SELECT connection_id,allowed_tools_json FROM ai_room_mcp_bindings WHERE room_id=? AND enabled=1",
+        room.id,
+      )
+    ).map(({ connection_id, allowed_tools_json }) => ({
+      connection_id,
+      allowed_tools: parse(allowed_tools_json),
+    })),
+  });
+});
 ai.patch("/rooms/:room", async (c) => {
   const principal = userPrincipal(c.get("identity")),
     room = await ownedRoom(c.env, principal, c.req.param("room")),

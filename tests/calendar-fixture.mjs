@@ -93,7 +93,7 @@ export async function fixture(
                 },
                 assets: {
                   directory: "dist/client",
-                  run_worker_first: ["/api", "/api/*"],
+                  run_worker_first: ["/api", "/api/*", ...(ai ? ["/test-ai", "/test-ai/*"] : [])],
                   routerConfig: { has_user_worker: true },
                   assetConfig: { not_found_handling: "single-page-application" },
                 },

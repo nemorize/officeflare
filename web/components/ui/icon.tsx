@@ -1,6 +1,9 @@
 import type { SVGProps } from "react";
 
 const paths = {
+  sparkles: "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z M20 2v4 M18 4h4",
+  message: "M21 14a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8Z M7 8h10 M7 12h6",
+  stop: "M6 6h12v12H6z",
   book: "M12 5v16 M3 3h5a4 4 0 0 1 4 3 4 4 0 0 1 4-3h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3V3Z",
   bold: "M7 3h6a4.5 4.5 0 0 1 0 9H7V3Z M7 12h7a4.5 4.5 0 0 1 0 9H7v-9Z",
   italic: "M10 3h10 M4 21h10 M15 3 9 21",

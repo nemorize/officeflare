@@ -321,6 +321,14 @@ export const oauthCallback =
 aiOAuthCallback.get("/callback", oauthCallback());
 export const aiAccounts = new Hono<AppEnv>();
 aiAccounts.use("*", requireAccess);
+aiAccounts.get("/providers", async (c) =>
+  c.json({
+    providers: await rows(
+      c.env,
+      "SELECT id,key,name FROM ai_providers WHERE enabled=1 AND archived_at IS NULL AND json_type(config_json,'$.oauth')='object' ORDER BY name",
+    ),
+  }),
+);
 aiAccounts.get("/accounts", async (c) =>
   c.json({
     accounts: await rows(

@@ -17,6 +17,7 @@ import { DriveSettingsButton, DriveSidebar, DriveTopbar } from "../components/dr
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
 import { WikiProvider, useWiki } from "../components/wiki-context";
 import { WikiSidebar } from "../components/wiki-chrome";
+import { AIProvider, AISidebar, useAI } from "../components/ai-context";
 import { ContactsProvider } from "../components/contacts-context";
 import {
   ContactsSidebar,
@@ -100,7 +101,8 @@ function WorkspaceChrome() {
   const notify = useNotifications(),
     mail = useMail(),
     calendar = useCalendar(),
-    wiki = useWiki();
+    wiki = useWiki(),
+    ai = useAI();
   const { pathname: locationPath, search } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
@@ -114,6 +116,7 @@ function WorkspaceChrome() {
   const isMail = pathname === "/mail" || pathname.startsWith("/mail/");
   const isDrive = pathname === "/drive" || pathname.startsWith("/drive/");
   const isWiki = pathname === "/wiki" || pathname.startsWith("/wiki/");
+  const isAI = pathname === "/ai" || pathname.startsWith("/ai/");
   const isContacts = pathname === "/contacts" || pathname.startsWith("/contacts/");
   const isCalendar =
     (pathname === "/calendar" || pathname.startsWith("/calendar/")) &&
@@ -149,26 +152,30 @@ function WorkspaceChrome() {
     : wikiView === "members" || wikiView === "favorites" || wikiView === "trash"
       ? t(`wiki.${wikiView}`)
       : wiki.space?.name || t("wiki.overview");
-  const title = isWiki
-    ? wikiTitle
-    : pathname.startsWith("/calendar/invitations/")
-      ? t("routesWorkspace.calendarInvitation")
-      : isContacts
-        ? pathname === "/contacts/fields"
-          ? t("contacts.customFields")
-          : t("contacts.title")
-        : isCalendar
-          ? pathname.startsWith("/calendar/settings")
-            ? t("routesWorkspace.calendarSettings")
-            : t("routesWorkspace.calendar")
-          : (current?.name ??
-            (isDrive
-              ? t("routesWorkspace.folder")
-              : isMail
-                ? pathname.includes("/folders/")
-                  ? t("routesWorkspace.folder")
-                  : t("routesWorkspace.mail")
-                : t("routesWorkspace.pageNotFound")));
+  const title = isAI
+    ? (ai.rooms.find((room) => pathname === `/ai/rooms/${room.id}`)?.title ??
+      current?.name ??
+      t("aiui.title"))
+    : isWiki
+      ? wikiTitle
+      : pathname.startsWith("/calendar/invitations/")
+        ? t("routesWorkspace.calendarInvitation")
+        : isContacts
+          ? pathname === "/contacts/fields"
+            ? t("contacts.customFields")
+            : t("contacts.title")
+          : isCalendar
+            ? pathname.startsWith("/calendar/settings")
+              ? t("routesWorkspace.calendarSettings")
+              : t("routesWorkspace.calendar")
+            : (current?.name ??
+              (isDrive
+                ? t("routesWorkspace.folder")
+                : isMail
+                  ? pathname.includes("/folders/")
+                    ? t("routesWorkspace.folder")
+                    : t("routesWorkspace.mail")
+                  : t("routesWorkspace.pageNotFound")));
   useEffect(() => {
     document.title = t("routesWorkspace.officeflare", { title: title });
   }, [title]);
@@ -193,7 +200,7 @@ function WorkspaceChrome() {
   return (
     <div
       data-ui-theme="neutral"
-      className={`workspace-shell${isWiki ? " workspace-wiki" : ""}${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
+      className={`workspace-shell${isAI ? " workspace-ai" : ""}${isWiki ? " workspace-wiki" : ""}${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
     >
       <a href="#workspace-main" className="workspace-skip-link">
         {t("routesWorkspace.skipToContent")}
@@ -244,6 +251,8 @@ function WorkspaceChrome() {
           </div>
           {access.status === "loading" ? (
             <LoadingSkeleton label={t("routesWorkspace.loadingNavigation")} />
+          ) : isAI && activeApp ? (
+            <AISidebar />
           ) : isWiki && activeApp ? (
             <WikiSidebar />
           ) : isContacts && activeApp ? (
@@ -366,7 +375,9 @@ function WorkspaceChrome() {
                 </div>
               }
             >
-              {isWiki ? (
+              {isAI ? (
+                <AISidebar />
+              ) : isWiki ? (
                 <WikiSidebar onNavigate={() => setMobileMenu(false)} />
               ) : (
                 <nav
@@ -462,7 +473,9 @@ function WorkspaceStartup() {
                   <CalendarProvider key={sessionId}>
                     <ContactsProvider key={sessionId}>
                       <WikiProvider>
-                        <WorkspaceChrome />
+                        <AIProvider>
+                          <WorkspaceChrome />
+                        </AIProvider>
                       </WikiProvider>
                     </ContactsProvider>
                   </CalendarProvider>
