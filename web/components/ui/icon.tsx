@@ -1,6 +1,12 @@
 import type { SVGProps } from "react";
 
 const paths = {
+  book: "M12 5v16 M3 3h5a4 4 0 0 1 4 3 4 4 0 0 1 4-3h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3V3Z",
+  bold: "M7 3h6a4.5 4.5 0 0 1 0 9H7V3Z M7 12h7a4.5 4.5 0 0 1 0 9H7v-9Z",
+  italic: "M10 3h10 M4 21h10 M15 3 9 21",
+  text: "M4 5h16 M12 5v15 M8 20h8",
+  heading: "M5 4v16 M19 4v16 M5 12h14",
+  divider: "M3 12h18",
   upload: "M12 16V3 m-5 5 5-5 5 5 M3 15v6h18v-6",
   download: "M12 3v13 m-5-5 5 5 5-5 M3 15v6h18v-6",
   list: "M8 5h13 M8 12h13 M8 19h13 M3 5h.01 M3 12h.01 M3 19h.01",

@@ -22,6 +22,8 @@ interface WikiContextValue {
   error: string;
   refresh: () => void;
   updateTitle: (id: string, title: string) => void;
+  creatingPage: boolean;
+  updatePage: (page: WikiPage) => void;
   createPage: (parentId?: string | null) => Promise<void>;
   can: (key: string) => boolean;
 }
@@ -48,6 +50,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
   activePage.current = pageId;
   const keepActive = (previous: WikiPage[]) =>
     previous.filter((page) => page.id === activePage.current).map((page) => ({ ...page, role: 0 }));
+  const creating = useRef(false),
+    [creatingPage, setCreatingPage] = useState(false);
   const loadedSpace = useRef<string | undefined>(undefined);
   const refresh = useCallback(() => setRevision((v) => v + 1), []);
   useEffect(() => {
@@ -91,6 +95,11 @@ export function WikiProvider({ children }: { children: ReactNode }) {
         // Keep an open editor mounted after revocation so unsent edits can be copied.
         setPages((previous) => {
           const local = previous.find((page) => page.id === activePage.current);
+          // The open CRDT document owns its title; D1's search projection can lag behind it.
+          if (local) {
+            const projected = all.find((page) => page.id === local.id);
+            if (projected) projected.title = local.title;
+          }
           return local && !all.some((page) => page.id === local.id)
             ? [...all, { ...local, role: 0 }]
             : all;
@@ -124,20 +133,42 @@ export function WikiProvider({ children }: { children: ReactNode }) {
   }, [enabled, refresh]);
   const createPage = useCallback(
     async (parentId: string | null = null) => {
-      if (!spaceId) return;
-      const result = await api<{ page: WikiPage }>(`/api/wiki/spaces/${spaceId}/pages`, {
-        method: "POST",
-        body: { parent_id: parentId },
-      });
-      setPages((old) => [...old, result.page]);
-      navigate(`/wiki/${spaceId}/${result.page.id}`);
-      refresh();
+      if (!spaceId || creating.current) return;
+      creating.current = true;
+      setCreatingPage(true);
+      try {
+        const result = await api<{ page: WikiPage }>(`/api/wiki/spaces/${spaceId}/pages`, {
+          method: "POST",
+          body: { parent_id: parentId },
+        });
+        setPages((old) => [...old, result.page]);
+        navigate(`/wiki/${spaceId}/${result.page.id}`);
+        refresh();
+      } finally {
+        creating.current = false;
+        setCreatingPage(false);
+      }
     },
     [spaceId, navigate, refresh],
   );
   const updateTitle = useCallback(
     (id: string, title: string) =>
       setPages((old) => old.map((p) => (p.id === id ? { ...p, title } : p))),
+    [],
+  );
+  const updatePage = useCallback(
+    (page: WikiPage) =>
+      setPages((old) =>
+        old.map((entry) =>
+          entry.id === page.id
+            ? {
+                ...entry,
+                ...page,
+                title: page.id === activePage.current ? entry.title : page.title,
+              }
+            : entry,
+        ),
+      ),
     [],
   );
   const value = useMemo(
@@ -150,6 +181,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       createPage,
+      creatingPage,
+      updatePage,
       updateTitle,
       can: (key: string) => access.permissions.includes(`wiki.${key}`),
     }),
@@ -162,6 +195,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       createPage,
+      creatingPage,
+      updatePage,
       updateTitle,
       access.permissions,
     ],

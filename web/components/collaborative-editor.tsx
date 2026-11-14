@@ -7,6 +7,7 @@ import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { TableKit } from "@tiptap/extension-table";
 import { t } from "../../shared/i18n/index.ts";
 import { CollaborationClient, type CollaborationTransport } from "../lib/collaboration/client";
+import { EditorBlockMenu } from "./editor-block-menu";
 import { Button, Icon } from "./ui";
 export function downloadText(filename: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
@@ -49,7 +50,17 @@ function Editor({
     },
     [client],
   );
-  useEditorState({ editor, selector: ({ editor: instance }) => instance?.state.selection.from });
+  useEditorState({
+    editor,
+    selector: ({ editor: instance }) =>
+      instance
+        ? {
+            selection: instance.state.selection.from,
+            doc: instance.state.doc,
+            marks: instance.state.storedMarks,
+          }
+        : null,
+  });
   useEffect(
     () =>
       client.subscribe(() => {
@@ -101,19 +112,19 @@ function Editor({
   const actions = [
     {
       label: t("wiki.bold"),
-      icon: "edit" as const,
+      icon: "bold" as const,
       run: () => editor?.chain().focus().toggleBold().run(),
       active: editor?.isActive("bold"),
     },
     {
       label: t("wiki.italic"),
-      icon: "edit" as const,
+      icon: "italic" as const,
       run: () => editor?.chain().focus().toggleItalic().run(),
       active: editor?.isActive("italic"),
     },
     {
       label: t("wiki.heading"),
-      icon: "list" as const,
+      icon: "heading" as const,
       run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(),
       active: editor?.isActive("heading"),
     },
@@ -185,7 +196,7 @@ function Editor({
       </div>
       <input
         className="wiki-title"
-        aria-label={t("wiki.heading")}
+        aria-label={t("wiki.pageTitle")}
         placeholder={t("wiki.untitled")}
         maxLength={500}
         value={title}
@@ -216,6 +227,7 @@ function Editor({
               title={action.label}
               aria-label={action.label}
               aria-pressed={action.active}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={action.run}
             >
               <Icon name={action.icon} />
@@ -223,7 +235,15 @@ function Editor({
           ))}
         </div>
       )}
-      <EditorContent editor={editor} />
+      <div
+        className="wiki-editor-content"
+        data-empty={editor?.isEmpty || undefined}
+        data-placeholder={editable ? t("wiki.editorPlaceholder") : undefined}
+      >
+        <EditorContent editor={editor} />
+      </div>
+      <EditorBlockMenu editor={editor} editable={editable} />
+      {editable && <p className="wiki-editor-help">{t("wiki.editorHint")}</p>}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { DriveResourceProvider } from "../components/drive-resource-context";
 import { DriveProvider } from "../components/drive-context";
 import { DriveSettingsButton, DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
-import { WikiProvider } from "../components/wiki-context";
+import { WikiProvider, useWiki } from "../components/wiki-context";
 import { WikiSidebar } from "../components/wiki-chrome";
 import { ContactsProvider } from "../components/contacts-context";
 import {
@@ -99,8 +99,9 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
 function WorkspaceChrome() {
   const notify = useNotifications(),
     mail = useMail(),
-    calendar = useCalendar();
-  const { pathname: locationPath } = useLocation();
+    calendar = useCalendar(),
+    wiki = useWiki();
+  const { pathname: locationPath, search } = useLocation();
   const pathname = locationPath.replace(/\/+$/, "") || "/";
   const auth = useSession();
   const [busy, setBusy] = useState(false),
@@ -142,8 +143,14 @@ function WorkspaceChrome() {
     sidebarMenu.find(
       (item) => item.path === pathname || (isConsole && pathname.startsWith(`${item.path}/`)),
     ) ?? (isDrive ? driveSettingsPages.find((page) => page.path === pathname) : undefined);
+  const wikiView = new URLSearchParams(search).get("view");
+  const wikiTitle = wiki.pageId
+    ? wiki.pages.find((page) => page.id === wiki.pageId)?.title || t("wiki.untitled")
+    : wikiView === "members" || wikiView === "favorites" || wikiView === "trash"
+      ? t(`wiki.${wikiView}`)
+      : wiki.space?.name || t("wiki.overview");
   const title = isWiki
-    ? t("wiki.title")
+    ? wikiTitle
     : pathname.startsWith("/calendar/invitations/")
       ? t("routesWorkspace.calendarInvitation")
       : isContacts
@@ -186,7 +193,7 @@ function WorkspaceChrome() {
   return (
     <div
       data-ui-theme="neutral"
-      className={`workspace-shell${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
+      className={`workspace-shell${isWiki ? " workspace-wiki" : ""}${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
     >
       <a href="#workspace-main" className="workspace-skip-link">
         {t("routesWorkspace.skipToContent")}

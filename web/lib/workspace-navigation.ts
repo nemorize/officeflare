@@ -92,9 +92,9 @@ export const workspaceApps: [WorkspaceApp, ...WorkspaceApp[]] = [
   {
     path: "/wiki",
     name: t("wiki.title"),
-    icon: "file",
+    icon: "book",
     menuTitle: t("wiki.spaces"),
     permission: "wiki.access",
-    menu: [{ path: "/wiki", name: t("wiki.title"), icon: "file" }],
+    menu: [{ path: "/wiki", name: t("wiki.title"), icon: "book" }],
   },
 ];
