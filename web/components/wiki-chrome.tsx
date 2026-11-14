@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate, useSearchParams } from "react-router";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage } from "../../shared/wiki";
-import { api, errorMessage } from "../lib/api";
+import { errorMessage } from "../lib/api";
 import { useWiki } from "./wiki-context";
 import { WikiSpaceDialog } from "./wiki-controls";
-import { Button, Icon, Input, Menu, MenuPopup } from "./ui";
+import { Button, Icon, Input, Menu, MenuPopup, SearchField, useNotifications } from "./ui";
+import { WorkspaceCreateButton, WorkspaceIconButton } from "./workspace-controls";
+import { WorkspaceNavigationDrawer } from "./workspace-navigation";
+import { useWorkspaceMobile } from "../lib/workspace-responsive";
 export { WikiDialog } from "./wiki-controls";
 
 export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -15,95 +18,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
     view = params.get("view");
   const [dialog, setDialog] = useState<"create" | "settings" | null>(null),
     [error, setError] = useState(""),
-    [query, setQuery] = useState(""),
-    [results, setResults] = useState<WikiPage[] | null>(null),
-    [searching, setSearching] = useState(false),
-    [cursor, setCursor] = useState<string | null>(null),
     [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const input = useRef<HTMLInputElement | null>(null),
-    searchRequest = useRef<AbortController | null>(null);
-  const searchRevision = useMemo(
-    () =>
-      wiki.pages
-        .map(
-          (page) =>
-            `${page.id}:${page.projected_epoch}:${page.projected_seq}:${page.version}:${page.role}`,
-        )
-        .join("|"),
-    [wiki.pages],
-  );
-  useEffect(() => {
-    setQuery("");
-    setResults(null);
-    setError("");
-  }, [wiki.space?.id]);
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "k" &&
-        input.current?.getClientRects().length
-      ) {
-        event.preventDefault();
-        input.current.focus();
-      }
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, []);
-  useEffect(() => {
-    setCursor(null);
-    if (!query.trim() || !wiki.space) {
-      setResults(null);
-      setSearching(false);
-      return;
-    }
-    const controller = new AbortController();
-    searchRequest.current = controller;
-    setResults(null);
-    setSearching(true);
-    setError("");
-    const timer = setTimeout(() => {
-      void api<{ pages: WikiPage[]; next_cursor: string | null }>(
-        `/api/wiki/spaces/${wiki.space!.id}/pages?q=${encodeURIComponent(query.trim())}`,
-        { signal: controller.signal },
-      )
-        .then((result) => {
-          if (!controller.signal.aborted) {
-            setResults(result.pages);
-            setCursor(result.next_cursor);
-          }
-        })
-        .catch((failure) => {
-          if (!controller.signal.aborted) setError(errorMessage(failure));
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setSearching(false);
-        });
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query, wiki.space?.id, searchRevision]);
-  const more = async () => {
-    const controller = searchRequest.current;
-    if (!cursor || !wiki.space || searching || !controller || controller.signal.aborted) return;
-    setSearching(true);
-    try {
-      const result = await api<{ pages: WikiPage[]; next_cursor: string | null }>(
-        `/api/wiki/spaces/${wiki.space.id}/pages?q=${encodeURIComponent(query.trim())}&cursor=${encodeURIComponent(cursor)}`,
-        { signal: controller.signal },
-      );
-      if (controller.signal.aborted) return;
-      setResults((previous) => [...(previous ?? []), ...result.pages]);
-      setCursor(result.next_cursor);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(errorMessage(failure));
-    } finally {
-      if (!controller.signal.aborted) setSearching(false);
-    }
-  };
   const go = (path: string) => {
     navigate(path);
     onNavigate?.();
@@ -203,9 +118,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
             />
           }
         >
-          <span className="wiki-space-avatar">
-            <Icon name={wiki.space?.kind === "personal" ? "user" : "book"} />
-          </span>
+          <Icon name={wiki.space?.kind === "personal" ? "user" : "book"} />
           <span>
             <strong>{wiki.space?.name || t("wiki.spaces")}</strong>
             <small>
@@ -241,23 +154,23 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
       </Menu.Root>
       {wiki.space ? (
         <>
-          <div className="wiki-search">
-            <Icon name="search" />
-            <Input
-              ref={input}
-              type="search"
-              aria-label={t("wiki.search")}
-              placeholder={t("wiki.search")}
-              value={query}
-              maxLength={100}
-              onChange={(event) => setQuery(event.target.value)}
+          <div className="workspace-create-action">
+            <WorkspaceCreateButton
+              label={t("wiki.newPage")}
+              disabled={
+                wiki.space.role < 3 ||
+                !wiki.can("pages.create") ||
+                wiki.creatingPage ||
+                wiki.loading
+              }
+              onClick={() => newPage()}
             />
           </div>
-          <nav className="wiki-quick-nav" aria-label={t("wiki.spaceNavigation")}>
+          <nav className="workspace-nav wiki-quick-nav" aria-label={t("wiki.spaceNavigation")}>
             <Link
               to={`/wiki/${wiki.space.id}`}
               onClick={onNavigate}
-              aria-current={!wiki.pageId && !view ? "page" : undefined}
+              aria-current={!wiki.pageId && !view && !params.has("q") ? "page" : undefined}
             >
               <Icon name="book" />
               {t("wiki.overview")}
@@ -272,7 +185,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
             </Link>
           </nav>
           <div className="wiki-tree-heading">
-            <span>{t(query.trim() ? "wiki.searchResults" : "wiki.allPages")}</span>
+            <span>{t("wiki.allPages")}</span>
             {wiki.space.role >= 3 && wiki.can("pages.create") && (
               <Button
                 variant="ghost"
@@ -286,34 +199,8 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </Button>
             )}
           </div>
-          <nav
-            className="wiki-tree"
-            aria-label={t("wiki.allPages")}
-            aria-busy={searching || wiki.loading}
-          >
-            {query.trim() ? (
-              <>
-                {results && (
-                  <ul>
-                    {results.map((page) => (
-                      <li key={page.id}>{pageLink(page)}</li>
-                    ))}
-                  </ul>
-                )}
-                {searching ? (
-                  <p className="wiki-sidebar-empty" role="status">
-                    {t("wiki.searching")}
-                  </p>
-                ) : results?.length === 0 ? (
-                  <p className="wiki-sidebar-empty">{t("wiki.noResults")}</p>
-                ) : null}
-                {cursor && (
-                  <Button variant="ghost" disabled={searching} onClick={() => void more()}>
-                    {t("wiki.loadMore")}
-                  </Button>
-                )}
-              </>
-            ) : children.size ? (
+          <nav className="wiki-tree" aria-label={t("wiki.allPages")} aria-busy={wiki.loading}>
+            {children.size ? (
               tree(null)
             ) : (
               <p className="wiki-sidebar-empty">
@@ -321,7 +208,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </p>
             )}
           </nav>
-          <div className="wiki-sidebar-footer">
+          <div className="workspace-nav wiki-sidebar-footer">
             <Link
               to={`/wiki/${wiki.space.id}?view=trash`}
               onClick={onNavigate}
@@ -344,10 +231,9 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </>
       ) : (
         wiki.can("spaces.create") && (
-          <Button onClick={() => setDialog("create")}>
-            <Icon name="plus" />
-            {t("wiki.newSpace")}
-          </Button>
+          <div className="workspace-create-action">
+            <WorkspaceCreateButton label={t("wiki.newSpace")} onClick={() => setDialog("create")} />
+          </div>
         )
       )}
       {(error || wiki.error) && (
@@ -362,5 +248,104 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
         />
       )}
     </div>
+  );
+}
+
+export function WikiTopbar({
+  mobileAccount,
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  mobileAccount: ReactNode;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
+  const wiki = useWiki(),
+    navigate = useNavigate(),
+    location = useLocation(),
+    [params] = useSearchParams(),
+    mobile = useWorkspaceMobile(),
+    notify = useNotifications();
+  const [query, setQuery] = useState(params.get("q") ?? ""),
+    [menu, setMenu] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => setQuery(params.get("q") ?? ""), [params]);
+  useEffect(() => setMenu(false), [location.pathname]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        input.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+  const create = (
+    <WorkspaceIconButton
+      icon="plus"
+      label={t("wiki.newPage")}
+      disabled={
+        !wiki.space || wiki.space.role < 3 || !wiki.can("pages.create") || wiki.creatingPage
+      }
+      onClick={() => void wiki.createPage().catch((error) => notify.error(errorMessage(error)))}
+    />
+  );
+  return (
+    <>
+      <header className="workspace-topbar wiki-topbar">
+        <WorkspaceIconButton
+          icon="menu"
+          label={t(mobile ? "routesWorkspace.openNavigation" : "wiki.toggleNavigation")}
+          aria-expanded={mobile ? menu : !sidebarCollapsed}
+          aria-haspopup={mobile ? "dialog" : undefined}
+          onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
+        />
+        {!mobile && sidebarCollapsed && create}
+        <SearchField
+          className="wiki-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!wiki.space) return;
+            const next = new URLSearchParams();
+            if (query.trim()) next.set("q", query.trim());
+            navigate(`/wiki/${wiki.space.id}${next.size ? `?${next}` : ""}`);
+          }}
+        >
+          <Icon name="search" />
+          <Input
+            ref={input}
+            variant="integrated"
+            type="search"
+            disabled={!wiki.space}
+            aria-label={t("wiki.search")}
+            placeholder={t("wiki.search")}
+            value={query}
+            maxLength={100}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {(query || params.has("q")) && (
+            <WorkspaceIconButton
+              icon="close"
+              label={t("wiki.clearSearch")}
+              onClick={() => {
+                setQuery("");
+                if (wiki.space) navigate(`/wiki/${wiki.space.id}`);
+                input.current?.focus();
+              }}
+            />
+          )}
+        </SearchField>
+        {mobile && <div className="wiki-topbar-actions">{create}</div>}
+      </header>
+      <WorkspaceNavigationDrawer
+        open={menu}
+        onOpenChange={setMenu}
+        title={t("wiki.title")}
+        account={mobileAccount}
+      >
+        <WikiSidebar onNavigate={() => setMenu(false)} />
+      </WorkspaceNavigationDrawer>
+    </>
   );
 }

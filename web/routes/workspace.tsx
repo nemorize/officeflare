@@ -16,7 +16,7 @@ import { DriveProvider } from "../components/drive-context";
 import { DriveSettingsButton, DriveSidebar, DriveTopbar } from "../components/drive-chrome";
 import { CalendarProvider, useCalendar } from "../components/calendar-context";
 import { WikiProvider, useWiki } from "../components/wiki-context";
-import { WikiSidebar } from "../components/wiki-chrome";
+import { WikiSidebar, WikiTopbar } from "../components/wiki-chrome";
 import { AIProvider, AISidebar, useAI } from "../components/ai-context";
 import { ContactsProvider } from "../components/contacts-context";
 import {
@@ -108,6 +108,7 @@ function WorkspaceChrome() {
   const auth = useSession();
   const [busy, setBusy] = useState(false),
     [mobileMenu, setMobileMenu] = useState(false),
+    [wikiSidebarCollapsed, setWikiSidebarCollapsed] = useState(false),
     [driveSidebarCollapsed, setDriveSidebarCollapsed] = useState(false),
     [contactsSidebarCollapsed, setContactsSidebarCollapsed] = useState(false);
   const content = useRef<HTMLDivElement>(null);
@@ -200,7 +201,7 @@ function WorkspaceChrome() {
   return (
     <div
       data-ui-theme="neutral"
-      className={`workspace-shell${isAI ? " workspace-ai" : ""}${isWiki ? " workspace-wiki" : ""}${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
+      className={`workspace-shell${isAI ? " workspace-ai" : ""}${isWiki ? " workspace-wiki" : ""}${isWiki && wikiSidebarCollapsed ? " wiki-sidebar-collapsed" : ""}${isContacts ? " workspace-contacts" : ""}${isContacts && contactsSidebarCollapsed ? " contacts-sidebar-collapsed" : ""}${isDrive ? " workspace-drive" : ""}${isDrive && driveSidebarCollapsed ? " drive-sidebar-collapsed" : ""}${isMail ? " workspace-mail" : ""}${isMail && mail.preferences.sidebar_collapsed ? " mail-sidebar-collapsed" : ""}${isCalendar ? " workspace-calendar" : ""}${isCalendar && calendar.sidebarCollapsed ? " calendar-sidebar-collapsed" : ""}`}
     >
       <a href="#workspace-main" className="workspace-skip-link">
         {t("routesWorkspace.skipToContent")}
@@ -285,7 +286,23 @@ function WorkspaceChrome() {
           )}
         </aside>
         <div ref={content} className="workspace-content">
-          {isContacts ? (
+          {isWiki ? (
+            <WikiTopbar
+              sidebarCollapsed={wikiSidebarCollapsed}
+              onToggleSidebar={() => setWikiSidebarCollapsed((value) => !value)}
+              mobileAccount={
+                <div className="notification-mobile-actions">
+                  <NotificationBell />
+                  <ProfileMenu
+                    busy={busy}
+                    signOut={() => {
+                      void signOut();
+                    }}
+                  />
+                </div>
+              }
+            />
+          ) : isContacts ? (
             <ContactsTopbar
               sidebarCollapsed={contactsSidebarCollapsed}
               onToggleSidebar={() => setContactsSidebarCollapsed((value) => !value)}
@@ -358,7 +375,7 @@ function WorkspaceChrome() {
               </div>
             </header>
           )}
-          {!isCalendar && !isDrive && !isMail && !isContacts && (
+          {!isWiki && !isCalendar && !isDrive && !isMail && !isContacts && (
             <WorkspaceNavigationDrawer
               open={mobileMenu}
               onOpenChange={setMobileMenu}
@@ -377,8 +394,6 @@ function WorkspaceChrome() {
             >
               {isAI ? (
                 <AISidebar />
-              ) : isWiki ? (
-                <WikiSidebar onNavigate={() => setMobileMenu(false)} />
               ) : (
                 <nav
                   aria-label={t("workspace.navigation", { name: sidebarName })}

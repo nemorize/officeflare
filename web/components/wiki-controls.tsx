@@ -4,7 +4,18 @@ import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage, WikiSpace } from "../../shared/wiki";
 import { api, errorMessage } from "../lib/api";
 import { useWiki } from "./wiki-context";
-import { Button, Dialog, DialogPopup, Icon, Input, Popover, PopoverPopup } from "./ui";
+import {
+  Button,
+  Dialog,
+  DialogPopup,
+  Icon,
+  Input,
+  Popover,
+  PopoverPopup,
+  Radio,
+  RadioGroup,
+  Textarea,
+} from "./ui";
 
 export function WikiDialog({
   title,
@@ -31,7 +42,8 @@ export function WikiDialog({
             <Icon name="close" />
           </Button>
         </div>
-        {children}
+        <Dialog.Description className="visually-hidden">{title}</Dialog.Description>
+        <div className="wiki-dialog-body">{children}</div>
       </DialogPopup>
     </Dialog.Root>
   );
@@ -98,7 +110,7 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
         </label>
         <label>
           {t("wiki.description")}
-          <textarea
+          <Textarea
             maxLength={1000}
             rows={3}
             value={description}
@@ -107,30 +119,33 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
           />
         </label>
         {!space && (
-          <fieldset className="wiki-space-kinds">
-            <legend>{t("wiki.spaceType")}</legend>
-            {(["team", "personal"] as const).map((value) => (
-              <label key={value} className={kind === value ? "is-selected" : ""}>
-                <input
-                  type="radio"
-                  name="space-kind"
-                  value={value}
-                  checked={kind === value}
-                  disabled={
-                    value === "personal" && wiki.spaces.some((item) => item.kind === "personal")
-                  }
-                  onChange={() => setKind(value)}
-                />
-                <Icon name={value === "team" ? "users" : "user"} />
-                <span>
-                  <strong>{t(value === "team" ? "wiki.teamSpace" : "wiki.personalSpace")}</strong>
-                  <small>
-                    {t(value === "team" ? "wiki.teamSpaceHint" : "wiki.personalSpaceHint")}
-                  </small>
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          <div className="wiki-space-kinds">
+            <span>{t("wiki.spaceType")}</span>
+            <RadioGroup
+              value={kind}
+              onValueChange={(value) => setKind(value as "team" | "personal")}
+              aria-label={t("wiki.spaceType")}
+            >
+              {(["team", "personal"] as const).map((value) => (
+                <label key={value}>
+                  <Radio.Root
+                    value={value}
+                    disabled={
+                      value === "personal" && wiki.spaces.some((item) => item.kind === "personal")
+                    }
+                  >
+                    <Radio.Indicator />
+                  </Radio.Root>
+                  <span>
+                    <strong>{t(value === "team" ? "wiki.teamSpace" : "wiki.personalSpace")}</strong>
+                    <small>
+                      {t(value === "team" ? "wiki.teamSpaceHint" : "wiki.personalSpaceHint")}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </RadioGroup>
+          </div>
         )}
         {error && (
           <p role="alert" className="wiki-error">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import { wikiRoles, type WikiComment, type WikiPage as Page } from "../../shared/wiki";
@@ -6,12 +6,12 @@ import { api, errorMessage } from "../lib/api";
 import type { CollaborationClient, CollaborationTransport } from "../lib/collaboration/client";
 import { useWiki } from "../components/wiki-context";
 import { WikiDialog, WikiPageIcon } from "../components/wiki-controls";
-import { WikiHome } from "../components/wiki-home";
+import { WikiHome, WikiPageTable } from "../components/wiki-home";
 import { formatDateTime } from "../lib/regional";
 import { Confirm } from "../components/console-shared";
 import { useAccount } from "../components/account-context";
 import { CollaborativeEditor, downloadText } from "../components/collaborative-editor";
-import { Button, Icon, Input, Menu, MenuPopup } from "../components/ui";
+import { Button, Icon, Input, Menu, MenuPopup, SelectControl, Textarea } from "../components/ui";
 import "./wiki.css";
 
 const transport: CollaborationTransport = {
@@ -100,17 +100,12 @@ function Members() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <select
+          <SelectControl
             aria-label={t("wiki.role")}
             value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            {wikiRoles.map((r) => (
-              <option key={r} value={r}>
-                {roleName(r)}
-              </option>
-            ))}
-          </select>
+            onValueChange={setRole}
+            options={wikiRoles.map((value) => ({ value, label: roleName(value) }))}
+          />
           <Button type="submit" disabled={busy}>
             {t("wiki.addMember")}
           </Button>
@@ -124,18 +119,13 @@ function Members() {
               <small>{member.email_address}</small>
             </div>
             {member.role !== "owner" && wiki.can("sharing.internal") ? (
-              <select
+              <SelectControl
                 aria-label={`${member.email_address} ${t("wiki.role")}`}
                 disabled={busy}
                 value={member.role}
-                onChange={(event) => void change(member, event.target.value)}
-              >
-                {wikiRoles.map((value) => (
-                  <option key={value} value={value}>
-                    {roleName(value)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => void change(member, value)}
+                options={wikiRoles.map((value) => ({ value, label: roleName(value) }))}
+              />
             ) : (
               <span className="wiki-role-label">{roleName(member.role)}</span>
             )}
@@ -150,7 +140,7 @@ function Members() {
     </section>
   );
 }
-function PageList({ view }: { view: string }) {
+function PageList({ view, query = "" }: { view: string; query?: string }) {
   const wiki = useWiki(),
     [pages, setPages] = useState<Page[]>([]),
     [error, setError] = useState(""),
@@ -159,15 +149,30 @@ function PageList({ view }: { view: string }) {
     [loading, setLoading] = useState(true),
     [cursor, setCursor] = useState<string | null>(null),
     [removing, setRemoving] = useState<Page | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const filter =
+    view === "search"
+      ? `q=${encodeURIComponent(query)}`
+      : view === "trash"
+        ? "trash=true"
+        : "favorites=true";
+  const projection =
+    view === "search"
+      ? wiki.pages
+          .map((page) => `${page.id}:${page.projected_epoch}:${page.projected_seq}:${page.role}`)
+          .join("|")
+      : "";
   useEffect(() => {
     if (!wiki.space) return;
     const abort = new AbortController();
+    request.current = abort;
+    setBusy(false);
     setLoading(true);
     setError("");
     setPages([]);
     setCursor(null);
     void api<{ pages: Page[]; next_cursor: string | null }>(
-      `/api/wiki/spaces/${wiki.space.id}/pages?${view === "trash" ? "trash=true" : "favorites=true"}`,
+      `/api/wiki/spaces/${wiki.space.id}/pages?${filter}`,
       { signal: abort.signal },
     )
       .then((result) => {
@@ -183,20 +188,23 @@ function PageList({ view }: { view: string }) {
         if (!abort.signal.aborted) setLoading(false);
       });
     return () => abort.abort();
-  }, [wiki.space?.id, view, revision]);
+  }, [wiki.space?.id, filter, revision, projection]);
   const more = async () => {
-    if (!wiki.space || !cursor || busy) return;
+    const controller = request.current;
+    if (!wiki.space || !cursor || busy || !controller || controller.signal.aborted) return;
     setBusy(true);
     try {
       const result = await api<{ pages: Page[]; next_cursor: string | null }>(
-        `/api/wiki/spaces/${wiki.space.id}/pages?${view === "trash" ? "trash=true" : "favorites=true"}&cursor=${encodeURIComponent(cursor)}`,
+        `/api/wiki/spaces/${wiki.space.id}/pages?${filter}&cursor=${encodeURIComponent(cursor)}`,
+        { signal: controller.signal },
       );
+      if (controller.signal.aborted) return;
       setPages((previous) => [...previous, ...result.pages]);
       setCursor(result.next_cursor);
     } catch (failure) {
-      setError(errorMessage(failure));
+      if (!controller.signal.aborted) setError(errorMessage(failure));
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
   const change = async (page: Page, remove = false) => {
@@ -217,38 +225,44 @@ function PageList({ view }: { view: string }) {
   };
   return (
     <section className="wiki-settings">
-      <h1>{t(view === "trash" ? "wiki.trash" : "wiki.favorites")}</h1>
+      <h1>
+        {t(
+          view === "search"
+            ? "wiki.searchResults"
+            : view === "trash"
+              ? "wiki.trash"
+              : "wiki.favorites",
+        )}
+      </h1>
+      {view === "search" && <p className="wiki-muted">{query}</p>}
       {view === "trash" && <p>{t("wiki.trashHint")}</p>}
       {error && (
         <p role="alert" className="wiki-error">
           {error}
         </p>
       )}
-      <ul className="wiki-members">
-        {pages.map((page) => (
-          <li key={page.id}>
-            {view === "trash" ? (
-              <strong>{page.title || t("wiki.untitled")}</strong>
-            ) : (
-              <Link to={`/wiki/${page.space_id}/${page.id}`}>
-                {page.title || t("wiki.untitled")}
-              </Link>
-            )}
-            {view === "trash" && wiki.can("pages.delete") && (
-              <>
-                <Button disabled={busy} onClick={() => void change(page)}>
-                  {t("wiki.restore")}
-                </Button>
-                {wiki.space!.role >= 4 && (
-                  <Button variant="danger" disabled={busy} onClick={() => setRemoving(page)}>
-                    {t("wiki.deleteForever")}
-                  </Button>
-                )}
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+      {!!pages.length && (
+        <WikiPageTable
+          pages={pages}
+          trash={view === "trash"}
+          actions={
+            view === "trash" && wiki.can("pages.delete")
+              ? (page) => (
+                  <>
+                    <Button disabled={busy} onClick={() => void change(page)}>
+                      {t("wiki.restore")}
+                    </Button>
+                    {wiki.space!.role >= 4 && (
+                      <Button variant="ghost" disabled={busy} onClick={() => setRemoving(page)}>
+                        {t("wiki.deleteForever")}
+                      </Button>
+                    )}
+                  </>
+                )
+              : undefined
+          }
+        />
+      )}
       {loading ? (
         <p className="wiki-muted" role="status">
           {t("wiki.loading")}
@@ -257,11 +271,21 @@ function PageList({ view }: { view: string }) {
         !pages.length &&
         !error && (
           <div className="wiki-list-empty">
-            <Icon name={view === "trash" ? "trash" : "star"} />
-            <h2>{t(view === "trash" ? "wiki.emptyTrash" : "wiki.noFavorites")}</h2>
-            <p>
-              {t(view === "trash" ? "wiki.emptyTrashDescription" : "wiki.noFavoritesDescription")}
-            </p>
+            <Icon name={view === "search" ? "search" : view === "trash" ? "trash" : "star"} />
+            <h2>
+              {t(
+                view === "search"
+                  ? "wiki.noResults"
+                  : view === "trash"
+                    ? "wiki.emptyTrash"
+                    : "wiki.noFavorites",
+              )}
+            </h2>
+            {view !== "search" && (
+              <p>
+                {t(view === "trash" ? "wiki.emptyTrashDescription" : "wiki.noFavoritesDescription")}
+              </p>
+            )}
           </div>
         )
       )}
@@ -342,15 +366,16 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
   };
   return (
     <WikiDialog title={t("wiki.share")} open onClose={onClose}>
-      <select
+      <SelectControl
         aria-label={t("wiki.share")}
         value={mode}
         disabled={!version || busy}
-        onChange={(e) => setMode(e.target.value)}
-      >
-        <option value="inherit">{t("wiki.inherit")}</option>
-        <option value="restricted">{t("wiki.restricted")}</option>
-      </select>
+        onValueChange={setMode}
+        options={[
+          { value: "inherit", label: t("wiki.inherit") },
+          { value: "restricted", label: t("wiki.restricted") },
+        ]}
+      />
       <p className="wiki-muted">{t("wiki.restrictionHint")}</p>
       <ul className="wiki-members">
         {members
@@ -358,19 +383,16 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
           .map((member) => (
             <li key={member.user_id}>
               <span>{member.display_name || member.email_address}</span>
-              <select
+              <SelectControl
                 aria-label={`${member.email_address} ${t("wiki.role")}`}
                 value={grants[member.user_id] ?? ""}
                 disabled={busy}
-                onChange={(e) => setGrants((old) => ({ ...old, [member.user_id]: e.target.value }))}
-              >
-                <option value="">{t("wiki.none")}</option>
-                {wikiRoles.map((r) => (
-                  <option key={r} value={r}>
-                    {roleName(r)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => setGrants((old) => ({ ...old, [member.user_id]: value }))}
+                options={[
+                  { value: "", label: t("wiki.none") },
+                  ...wikiRoles.map((value) => ({ value, label: roleName(value) })),
+                ]}
+              />
             </li>
           ))}
       </ul>
@@ -499,20 +521,17 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
   };
   return (
     <WikiDialog title={t("wiki.move")} open onClose={onClose}>
-      <select
+      <SelectControl
         aria-label={t("wiki.parent")}
         value={parent}
-        onChange={(e) => setParent(e.target.value)}
-      >
-        {wiki.space!.role >= 4 && <option value="">{t("wiki.root")}</option>}
-        {wiki.pages
-          .filter((p) => !descendants.has(p.id) && p.role >= 4)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.title || t("wiki.untitled")}
-            </option>
-          ))}
-      </select>
+        onValueChange={setParent}
+        options={[
+          ...(wiki.space!.role >= 4 ? [{ value: "", label: t("wiki.root") }] : []),
+          ...wiki.pages
+            .filter((p) => !descendants.has(p.id) && p.role >= 4)
+            .map((p) => ({ value: p.id, label: p.title || t("wiki.untitled") })),
+        ]}
+      />
       {error && <p role="alert">{error}</p>}
       <div className="wiki-dialog-actions">
         <Button disabled={busy} onClick={() => void save()}>
@@ -666,7 +685,7 @@ function Discussion({ page }: { page: Page }) {
             void post();
           }}
         >
-          <textarea
+          <Textarea
             aria-label={t("wiki.comments")}
             placeholder={t("wiki.commentPlaceholder")}
             value={draft}
@@ -919,6 +938,14 @@ export function WikiPage() {
     );
   if (page?.role === 0) return <OpenPage key={page.id} page={page} />;
   if (!wiki.space) return <WikiHome />;
+  if (params.get("q")?.trim())
+    return (
+      <PageList
+        key={`${wiki.space.id}/search/${params.get("q")}`}
+        view="search"
+        query={params.get("q")!.trim()}
+      />
+    );
   if (view === "members") return <Members key={wiki.space.id} />;
   if (view === "trash" || view === "favorites")
     return <PageList key={`${wiki.space.id}/${view}`} view={view} />;

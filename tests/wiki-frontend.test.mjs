@@ -34,10 +34,16 @@ test(
     await tab.goto(`${origin}/wiki`);
     await tab.locator(".wiki-home").getByRole("button", { name: "New space" }).click();
     const dialog = tab.getByRole("dialog");
+    const choose = async (control, label) => {
+      await control.click();
+      await tab.getByRole("option", { name: label, exact: true }).click();
+    };
     await dialog.getByLabel("Space name").fill("Product handbook");
     await dialog
       .getByLabel("Description", { exact: true })
       .fill("Our shared decisions, working agreements, and project notes.");
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/space-dialog.png` });
     await dialog.getByRole("button", { name: "Create", exact: true }).click();
     await tab.waitForURL(/\/wiki\/[^/]+$/);
     const home = tab.url();
@@ -52,6 +58,8 @@ test(
     const editor = tab.locator(".collaborative-prose");
     await editor.pressSequentially("/h1");
     await tab.getByRole("listbox", { name: "Insert a block" }).waitFor();
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/block-menu.png` });
     await editor.press("Enter");
     await tab.keyboard.insertText("Working together");
     assert.equal(await editor.locator("h1").textContent(), "Working together");
@@ -74,7 +82,7 @@ test(
     await tab.getByRole("button", { name: "Add to favorites", exact: true }).click();
     await tab.getByRole("button", { name: "Remove from favorites", exact: true }).waitFor();
     await tab.getByRole("button", { name: "Share", exact: true }).click();
-    await dialog.getByRole("combobox", { name: "Share", exact: true }).selectOption("restricted");
+    await choose(dialog.getByRole("combobox", { name: "Share", exact: true }), "Restricted");
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     await tab.locator(".wiki-page-meta").getByText("Restricted", { exact: true }).waitFor();
@@ -85,20 +93,27 @@ test(
         fullPage: true,
       });
     await tab.locator(".wiki-quick-nav").getByRole("link", { name: "Overview" }).click();
-    await tab.locator(".wiki-recent-card").getByText("How we work", { exact: true }).waitFor();
+    await tab.locator(".wiki-page-table").getByText("How we work", { exact: true }).waitFor();
     await tab.keyboard.press("ControlOrMeta+k");
     assert.equal(
       await tab.getByRole("searchbox").evaluate((input) => input === document.activeElement),
       true,
     );
     await tab.getByRole("searchbox").fill("How we work");
+    await tab.getByRole("searchbox").press("Enter");
     await tab
-      .locator(".wiki-tree")
+      .locator(".wiki-settings")
       .getByRole("link", { name: "How we work", exact: true })
       .waitFor();
     await tab.getByRole("searchbox").fill("unmatched-search");
+    await tab.getByRole("searchbox").press("Enter");
     await tab.getByText("No matching pages", { exact: true }).waitFor();
-    await tab.getByRole("searchbox").fill("");
+    await tab.getByRole("button", { name: "Clear search", exact: true }).click();
+    await tab.locator(".wiki-home").waitFor();
+    await tab.getByRole("button", { name: "Toggle wiki navigation", exact: true }).click();
+    assert.equal(await tab.locator(".workspace-sidebar").isVisible(), false);
+    await tab.getByRole("button", { name: "Toggle wiki navigation", exact: true }).click();
+    await tab.locator(".workspace-sidebar").waitFor();
     if (process.env.WIKI_UI_CAPTURE_DIR)
       await tab.screenshot({
         path: `${process.env.WIKI_UI_CAPTURE_DIR}/overview.png`,
@@ -120,9 +135,11 @@ test(
       .getByRole("link", { name: "Members", exact: true })
       .click();
     await tab.getByRole("textbox", { name: "Email address", exact: true }).fill("bob@office.test");
-    await tab.getByRole("combobox", { name: "Role", exact: true }).selectOption("editor");
+    await choose(tab.getByRole("combobox", { name: "Role", exact: true }), "Editor");
     await tab.getByRole("button", { name: "Add member", exact: true }).click();
     await tab.getByRole("combobox", { name: "bob@office.test Role", exact: true }).waitFor();
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/members.png` });
     await Promise.all([
       tab.waitForResponse(
         (response) =>
@@ -130,9 +147,7 @@ test(
           response.url().endsWith("/members") &&
           response.ok(),
       ),
-      tab
-        .getByRole("combobox", { name: "bob@office.test Role", exact: true })
-        .selectOption("viewer"),
+      choose(tab.getByRole("combobox", { name: "bob@office.test Role", exact: true }), "Viewer"),
     ]);
     await tab.goto(documentUrl);
     await editor.waitFor();
@@ -186,7 +201,17 @@ test(
         path: `${process.env.WIKI_UI_CAPTURE_DIR}/mobile.png`,
         fullPage: true,
       });
+    await tab.getByRole("searchbox").fill("How we work");
+    await tab.getByRole("searchbox").press("Enter");
+    await tab
+      .locator(".wiki-settings")
+      .getByRole("link", { name: "How we work", exact: true })
+      .waitFor();
+    await tab.getByRole("button", { name: "Clear search", exact: true }).click();
+    await tab.locator(".wiki-home").waitFor();
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/mobile-navigation.png` });
     await tab.getByRole("dialog").getByRole("link", { name: "How we work", exact: true }).click();
     await tab.getByRole("dialog").waitFor({ state: "hidden" });
     await editor.waitFor();
