@@ -98,7 +98,10 @@ export const returnToWorkspace = (path: unknown) =>
     /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) ||
     /^\/console\/mail\/(?:domains|mailboxes)\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
     /^\/mail\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
-    /^\/contacts\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path))
+    /^\/contacts\/folders\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
+    /^\/mcp\/authorize\?request=[A-Za-z0-9_-]{1,100}$/.test(path) ||
+    /^\/mcp\/operations\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
+    path === "/mcp/connected")
     ? path
     : typeof path === "string" && /^\/drive\/(?:folders|items)\/[A-Za-z0-9_-]{1,100}$/.test(path)
       ? path

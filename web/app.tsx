@@ -130,11 +130,36 @@ const CalendarInvitationPage = lazy(() =>
 const WikiPage = lazy(() =>
   import("./routes/wiki").then((module) => ({ default: module.WikiPage })),
 );
+const MCPPage = lazy(() => import("./routes/mcp"));
 
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route errorElement={<RouteErrorBoundary />}>
       <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/mcp/authorize"
+        element={
+          <Suspense fallback={null}>
+            <MCPPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/mcp/operations/:id"
+        element={
+          <Suspense fallback={null}>
+            <MCPPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/mcp/connected"
+        element={
+          <Suspense fallback={null}>
+            <MCPPage />
+          </Suspense>
+        }
+      />
       <Route
         path="/share/drive/:token"
         element={

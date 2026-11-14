@@ -34,7 +34,8 @@
     "auth:keys": "node scripts/generate-auth-keys.mjs",
     "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs",
     "audit:ui-strings": "node scripts/audit-ui-strings.mjs",
-    "screenshots": "node scripts/generate-screenshots.mjs"
+    "screenshots": "node scripts/generate-screenshots.mjs",
+    "ai:keys": "node scripts/generate-ai-key.mjs"
   },
   "overrides": {
     "undici": "7.29.1",

@@ -1905,3 +1905,5 @@ export const wikiActivity = sqliteTable("wiki_activity", {
     .notNull()
     .default(sql`unixepoch()`),
 });
+
+export * from "./ai-schema.ts";

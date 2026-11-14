@@ -20,6 +20,8 @@ export type AppEnv = {
   Variables: {
     db: Database;
     identity: Identity;
+    // Set only by an in-process delegated domain request, never from headers.
+    internalIdentity?: { userId: string; sessionId: string; version: number };
     initializeCalendar?: () => Promise<void>;
     drivePolicy?: Promise<import("../drive/policy").DriveSettings>;
     driveWritable?: Promise<boolean>;

@@ -1,5 +1,11 @@
 import { t } from "../../shared/i18n/index.ts";
 export const permissionGroups = {
+  get ai() {
+    return t("ai.usage");
+  },
+  get aiAdmin() {
+    return t("ai.admin");
+  },
   get wiki() {
     return t("wiki.usage");
   },
@@ -47,6 +53,117 @@ const assignmentRead = ["admin.users.roles.read"] as const;
 // One catalog drives API policies, role validation and the management UI.
 // Service access never grants access to another user's mailbox or files.
 export const permissionCatalog = {
+  "ai.access": {
+    get label() {
+      return t("ai.access");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "ai",
+    requires: [],
+  },
+  "ai.runs.create": {
+    get label() {
+      return t("ai.runsCreate");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "ai",
+    requires: ["ai.access"],
+  },
+  "ai.connections.manage": {
+    get label() {
+      return t("ai.connectionsManage");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "ai",
+    requires: ["ai.access"],
+  },
+  "admin.ai.settings.read": {
+    get label() {
+      return t("ai.settingsRead");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["console.access"],
+  },
+  "admin.ai.settings.manage": {
+    get label() {
+      return t("ai.settingsManage");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["admin.ai.settings.read"],
+  },
+  "admin.ai.providers.read": {
+    get label() {
+      return t("ai.providersRead");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["console.access"],
+  },
+  "admin.ai.providers.manage": {
+    get label() {
+      return t("ai.providersManage");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["admin.ai.providers.read"],
+  },
+  "admin.ai.quotas.read": {
+    get label() {
+      return t("ai.quotasRead");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["console.access"],
+  },
+  "admin.ai.quotas.manage": {
+    get label() {
+      return t("ai.quotasManage");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["admin.ai.quotas.read"],
+  },
+  "admin.ai.usage.read": {
+    get label() {
+      return t("ai.usageRead");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["console.access"],
+  },
+  "admin.ai.audit.read": {
+    get label() {
+      return t("ai.auditRead");
+    },
+    get description() {
+      return t("ai.permissionDescription");
+    },
+    group: "aiAdmin",
+    requires: ["console.access"],
+  },
+
   "wiki.access": {
     get label() {
       return t("wiki.access");
@@ -894,6 +1011,7 @@ export const wikiUserPermissions = [
   "wiki.assets.upload",
   "wiki.pages.export",
 ] as const;
+export const aiUserPermissions = ["ai.access", "ai.runs.create", "ai.connections.manage"] as const;
 export const CONTACTS_USER_ROLE_ID = "system-contacts-user";
 export const contactsUserPermissions = [
   "contacts.access",
@@ -964,6 +1082,7 @@ export function defaultEligible(values: readonly string[]): boolean {
         ...driveUserPermissions,
         ...contactsUserPermissions,
         ...wikiUserPermissions,
+        ...aiUserPermissions,
       ] as readonly string[]
     ).includes(key),
   );

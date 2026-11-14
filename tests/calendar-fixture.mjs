@@ -25,6 +25,7 @@ export async function fixture(
   {
     assets = false,
     collaboration = false,
+    ai = false,
     workerEntry,
     beforeRolesMigration,
     beforeRegionalPreferencesMigration,
@@ -39,6 +40,7 @@ export async function fixture(
     r2Buckets: [
       "MAIL_BUCKET",
       "DRIVE_BUCKET",
+      ...(ai ? ["AI_BUCKET"] : []),
       ...(collaboration ? ["WIKI_BUCKET"] : []),
       ...(assets ? ["PROFILE_BUCKET"] : []),
     ],
@@ -46,6 +48,14 @@ export async function fixture(
       EMAIL: { name: "calendar-harness", entrypoint: "FakeEmail" },
     },
     bindings: {
+      ...(ai
+        ? {
+            AI_ENCRYPTION_KEYS: JSON.stringify({
+              active_version: 1,
+              keys: { 1: randomBytes(32).toString("base64url") },
+            }),
+          }
+        : {}),
       AUTH_SIGNING_KEYS: JSON.stringify({
         active_kid: "test",
         keys: [{ ...(await exportJWK(privateKey)), kid: "test" }],

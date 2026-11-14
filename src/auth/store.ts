@@ -50,9 +50,11 @@ import { measured } from "../observability/performance";
 import { recoverNotifications } from "../notifications/jobs";
 
 export const requireAccess = createMiddleware<AppEnv>(async (c, next) => {
-  const token = bearer(c);
+  const internal = c.get("internalIdentity");
+  const token = internal ? "" : bearer(c);
   if (token.startsWith("ofc_") || token.startsWith("ofr_")) unauthorized();
-  const claims = await measured(c, "jwt", () => verifyAccess(c.env, token)),
+  // Delegated requests still execute the complete live session/MFA/account check below.
+  const claims = internal ?? (await measured(c, "jwt", () => verifyAccess(c.env, token))),
     db = c.get("db"),
     timestamp = now();
   const row = await measured(c, "auth", async () =>

@@ -14,6 +14,10 @@ import { recoverCollaboration } from "./collaboration/jobs";
 import { recoverWiki } from "./wiki/jobs";
 import { consumeCalendar, recoverCalendar } from "./calendar/jobs";
 import { recoverCalendarFeeds, syncCalendarFeed } from "./calendar/feed-sync";
+import { consumeAI, recoverAI } from "./ai/jobs";
+import { recoverRuns } from "./ai/hub";
+import { oauthMetadata, resourceUrl } from "./mcp/authorization";
+import { scopes as mcpScopes } from "./mcp/registry";
 export { MailboxDO } from "./mail/mailbox";
 export { MailPartitionDO } from "./mail/partition";
 export { NotificationHubDO } from "./notifications/hub";
@@ -22,6 +26,26 @@ export { CollaborationRoomDO } from "./collaboration-bindings";
 const app = new Hono<AppEnv>();
 
 app.route("/api", api);
+app.get("/.well-known/oauth-authorization-server", (c) => {
+  c.header("Access-Control-Allow-Origin", "*");
+  c.header("Cache-Control", "no-store");
+  return c.json(oauthMetadata(new URL(c.req.url).origin));
+});
+for (const path of [
+  "/.well-known/oauth-protected-resource",
+  "/.well-known/oauth-protected-resource/api/mcp",
+])
+  app.get(path, (c) => {
+    c.header("Access-Control-Allow-Origin", "*");
+    c.header("Cache-Control", "no-store");
+    const origin = new URL(c.req.url).origin;
+    return c.json({
+      resource: resourceUrl(origin),
+      authorization_servers: [origin],
+      scopes_supported: mcpScopes,
+      bearer_methods_supported: ["header"],
+    });
+  });
 app.all("/.well-known/jmap", (c) => {
   const url = new URL(c.req.url);
   url.pathname = "/api/mail/jmap/session";
@@ -72,6 +96,10 @@ export default {
     withRequestLanguage(request, () => app.fetch(request, env, context)),
   email: receive,
   queue: async (batch, env) => {
+    if (batch.queue === (env.AI_QUEUE_NAME ?? "officeflare-ai")) {
+      await consumeAI(batch as MessageBatch<{ id?: unknown }>, env);
+      return;
+    }
     if (batch.queue === (env.NOTIFICATION_QUEUE_NAME ?? "officeflare-notifications"))
       await consumeNotifications(batch, env);
     else {
@@ -114,6 +142,7 @@ export default {
         recoverWiki(env),
         recoverCalendar(env),
         recoverCalendarFeeds(env),
+        recoverAI(env).then(() => recoverRuns(env)),
       ]),
     );
   },

@@ -768,7 +768,7 @@ const toolSchema = (properties: Record<string, unknown>, required: string[]) => 
   additionalProperties: false,
 });
 const field = { type: "string" };
-const tools = [
+export const mailTools = [
   {
     name: "list_mailboxes",
     get description() {
@@ -813,6 +813,64 @@ const tools = [
     inputSchema: toolSchema({ mailbox_id: field, draft_id: field }, ["mailbox_id", "draft_id"]),
   },
 ];
+export async function executeMailTool(
+  env: Env,
+  actor: import("./types").MailActor,
+  name: string,
+  args: Record<string, unknown>,
+  operationKey = id(),
+) {
+  let value: unknown;
+  switch (name) {
+    case "list_mailboxes":
+      value = { mailboxes: await accounts(env, actor) };
+      break;
+    case "search_messages":
+      value = await queryMessages(env, actor, text(args.mailbox_id, "mailbox_id", 36), {
+        limit: 50,
+        search: text(args.query, "query", 1000),
+      });
+      break;
+    case "get_message":
+      value = await getMessage(
+        env,
+        actor,
+        text(args.mailbox_id, "mailbox_id", 36),
+        text(args.message_id, "message_id", 73),
+      );
+      break;
+    case "create_draft":
+      value = await createDraft(
+        env,
+        actor,
+        text(args.mailbox_id, "mailbox_id", 36),
+        { subject: args.subject, text: args.text, to: args.to },
+        operationKey,
+      );
+      break;
+    case "request_send": {
+      const account = text(args.mailbox_id, "mailbox_id", 36),
+        draftId = text(args.draft_id, "draft_id", 73);
+      const message = await getMessage(env, actor, account, draftId);
+      if (!message.draft) fail(409, t("mailProtocols.messageIsNotADraft"));
+      value = {
+        requires_human_approval: true,
+        draft_id: message.id,
+        version: message.draft.version,
+        subject: message.subject,
+        recipients: message.recipients,
+        review_endpoint:
+          "/api/mail/mailboxes/" + account + "/drafts/" + message.id + "/submissions",
+      };
+      break;
+    }
+    default:
+      fail(400, t("mailProtocols.unknownTool"));
+  }
+
+  return value;
+}
+
 export async function mcp(c: import("hono").Context<MailAppEnv>) {
   const origin = c.req.header("origin");
   if (origin && origin !== new URL(c.req.url).origin)
@@ -839,7 +897,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
       serverInfo: { name: "officeflare-mail", version: "0.1.0" },
     };
   else if (request.method === "ping") result = {};
-  else if (request.method === "tools/list") result = { tools };
+  else if (request.method === "tools/list") result = { tools: mailTools };
   else if (request.method === "tools/call") {
     const params = request.params as {
         name?: string;
@@ -848,53 +906,7 @@ export async function mcp(c: import("hono").Context<MailAppEnv>) {
       args = params?.arguments ?? {},
       actor = c.get("mail_actor");
     try {
-      let value: unknown;
-      switch (params?.name) {
-        case "list_mailboxes":
-          value = { mailboxes: await accounts(c.env, actor) };
-          break;
-        case "search_messages":
-          value = await queryMessages(c.env, actor, text(args.mailbox_id, "mailbox_id", 36), {
-            limit: 50,
-            search: text(args.query, "query", 1000),
-          });
-          break;
-        case "get_message":
-          value = await getMessage(
-            c.env,
-            actor,
-            text(args.mailbox_id, "mailbox_id", 36),
-            text(args.message_id, "message_id", 73),
-          );
-          break;
-        case "create_draft":
-          value = await createDraft(
-            c.env,
-            actor,
-            text(args.mailbox_id, "mailbox_id", 36),
-            { subject: args.subject, text: args.text, to: args.to },
-            id(),
-          );
-          break;
-        case "request_send": {
-          const account = text(args.mailbox_id, "mailbox_id", 36),
-            draftId = text(args.draft_id, "draft_id", 73);
-          const message = await getMessage(c.env, actor, account, draftId);
-          if (!message.draft) fail(409, t("mailProtocols.messageIsNotADraft"));
-          value = {
-            requires_human_approval: true,
-            draft_id: message.id,
-            version: message.draft.version,
-            subject: message.subject,
-            recipients: message.recipients,
-            review_endpoint:
-              "/api/mail/mailboxes/" + account + "/drafts/" + message.id + "/submissions",
-          };
-          break;
-        }
-        default:
-          fail(400, t("mailProtocols.unknownTool"));
-      }
+      const value = await executeMailTool(c.env, actor, String(params?.name), args);
       result = {
         content: [{ type: "text", text: JSON.stringify(value) }],
         isError: false,
