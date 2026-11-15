@@ -5,7 +5,7 @@ import { setTimeout } from "node:timers/promises";
 export async function waitForWikiSave(fixture, tab) {
   await tab.locator(".wiki-title").waitFor();
   const pageId = new URL(tab.url()).pathname.split("/").at(-1);
-  const expected = await tab.locator(".collaborative-document").evaluate((element) => {
+  const expected = await tab.locator(".wiki-page").evaluate((element) => {
     const content = element.querySelector(".collaborative-prose").cloneNode(true);
     content
       .querySelectorAll(".collaboration-carets__caret, [data-file-size]")

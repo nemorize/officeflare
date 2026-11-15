@@ -29,11 +29,13 @@ export function downloadText(filename: string, content: string) {
 function Editor({
   client,
   onTitle,
+  titleContainer,
   statusContainer,
   renderParticipant,
 }: {
   client: CollaborationClient;
   onTitle?: (title: string) => void;
+  titleContainer?: HTMLElement | null;
   renderParticipant?: (person: CollaborationParticipant) => ReactNode;
   statusContainer?: HTMLElement | null;
 }) {
@@ -46,10 +48,20 @@ function Editor({
   const titleInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const field = titleInput.current;
-    if (field) {
+    if (!field) return;
+    const resize = () => {
       field.style.height = "auto";
       field.style.height = `${field.scrollHeight}px`;
-    }
+    };
+    resize();
+    let width = field.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (width === field.clientWidth) return;
+      width = field.clientWidth;
+      resize();
+    });
+    observer.observe(field);
+    return () => observer.disconnect();
   }, [title]);
   const composing = useRef(false);
   const composition = useRef<{ doc: Y.Doc; vector: Uint8Array } | null>(null);
@@ -269,45 +281,48 @@ function Editor({
       )}
     </div>
   );
+  const titleField = (
+    <textarea
+      ref={titleInput}
+      rows={1}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          editor?.commands.focus("start");
+        }
+      }}
+      className="wiki-title"
+      aria-label={t("wiki.pageTitle")}
+      placeholder={t("wiki.untitled")}
+      maxLength={500}
+      value={title}
+      readOnly={!editable}
+      onCompositionStart={() => {
+        composing.current = true;
+        composition.current?.doc.destroy();
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, Y.encodeStateAsUpdate(client.doc));
+        composition.current = { doc, vector: Y.encodeStateVector(doc) };
+      }}
+      onCompositionEnd={(event) => {
+        composing.current = false;
+        setSharedTitle(event.currentTarget.value);
+      }}
+      onChange={(event) => {
+        if (composing.current) setTitle(event.target.value);
+        else setSharedTitle(event.target.value);
+      }}
+    />
+  );
   return (
     <div className="collaborative-document">
-      {statusContainer && !mobile ? createPortal(presence, statusContainer) : presence}
+      {statusContainer ? createPortal(presence, statusContainer) : presence}
       {failure && (
         <p role="alert" className="wiki-error">
           {failure}
         </p>
       )}
-      <textarea
-        ref={titleInput}
-        rows={1}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            editor?.commands.focus("start");
-          }
-        }}
-        className="wiki-title"
-        aria-label={t("wiki.pageTitle")}
-        placeholder={t("wiki.untitled")}
-        maxLength={500}
-        value={title}
-        readOnly={!editable}
-        onCompositionStart={() => {
-          composing.current = true;
-          composition.current?.doc.destroy();
-          const doc = new Y.Doc();
-          Y.applyUpdate(doc, Y.encodeStateAsUpdate(client.doc));
-          composition.current = { doc, vector: Y.encodeStateVector(doc) };
-        }}
-        onCompositionEnd={(event) => {
-          composing.current = false;
-          setSharedTitle(event.currentTarget.value);
-        }}
-        onChange={(event) => {
-          if (composing.current) setTitle(event.target.value);
-          else setSharedTitle(event.target.value);
-        }}
-      />
+      {titleContainer ? createPortal(titleField, titleContainer) : titleField}
       {editable && editor && (
         <>
           {!mobile && (
@@ -331,6 +346,7 @@ export function CollaborativeEditor({
   transport,
   onTitle,
   onClient,
+  titleContainer,
   statusContainer,
   renderParticipant,
 }: {
@@ -338,6 +354,7 @@ export function CollaborativeEditor({
   transport: CollaborationTransport;
   onTitle?: (title: string) => void;
   onClient?: (client: CollaborationClient | null) => void;
+  titleContainer?: HTMLElement | null;
   renderParticipant?: (person: CollaborationParticipant) => ReactNode;
   statusContainer?: HTMLElement | null;
 }) {
@@ -387,6 +404,7 @@ export function CollaborativeEditor({
       key={resourceId}
       client={client}
       onTitle={onTitle}
+      titleContainer={titleContainer}
       statusContainer={statusContainer}
       renderParticipant={renderParticipant}
     />

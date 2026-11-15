@@ -939,6 +939,7 @@ function OpenPage({ page }: { page: Page }) {
       "share" | "history" | "move" | "comments" | "rename" | "trash" | null
     >(params.get("panel") === "comments" ? "comments" : null),
     [client, setClient] = useState<CollaborationClient | null>(null),
+    [titleContainer, setTitleContainer] = useState<HTMLDivElement | null>(null),
     [statusContainer, setStatusContainer] = useState<HTMLDivElement | null>(null),
     [revisionState, setRevisionState] = useState<string | null>(null),
     [, render] = useState(0);
@@ -1041,17 +1042,29 @@ function OpenPage({ page }: { page: Page }) {
       className={`wiki-page ${panel === "history" || panel === "comments" ? "has-side-panel" : ""}`}
     >
       <WikiPageHeader>
-        <nav className="wiki-breadcrumbs" aria-label={t("wiki.parent")}>
-          <Link to={`/wiki/${page.space_id}`}>{wiki.space?.name}</Link>
-          {ancestors.map((p) => (
-            <Link key={p.id} to={`/wiki/${p.space_id}/${p.id}`}>
-              {p.title || t("wiki.untitled")}
-            </Link>
-          ))}
-          <span className="wiki-breadcrumb-current" aria-current="page">
-            {page.title || t("wiki.untitled")}
-          </span>
-        </nav>
+        <div className="wiki-document-heading-main">
+          <nav className="wiki-breadcrumbs" aria-label={t("wiki.parent")}>
+            <Link to={`/wiki/${page.space_id}`}>{wiki.space?.name}</Link>
+            {ancestors.map((p) => (
+              <span key={p.id}>
+                <Icon name="chevron" width="12" height="12" />
+                <Link to={`/wiki/${p.space_id}/${p.id}`}>{p.title || t("wiki.untitled")}</Link>
+              </span>
+            ))}
+          </nav>
+          <div className="wiki-document-title">
+            <WikiPageIcon page={page} />
+            <div className="wiki-document-title-field" ref={setTitleContainer}>
+              {!client?.synced && <h1>{page.title || t("wiki.untitled")}</h1>}
+            </div>
+          </div>
+          {page.permission_mode === "restricted" && (
+            <div className="wiki-page-meta">
+              <Icon name="shield" />
+              <span>{t("wiki.restricted")}</span>
+            </div>
+          )}
+        </div>
         <div className="wiki-page-action-buttons">
           <div className="wiki-header-presence" ref={setStatusContainer} />
           <WorkspaceIconButton
@@ -1063,8 +1076,9 @@ function OpenPage({ page }: { page: Page }) {
             onClick={() => void favorite()}
           />
           {page.role >= 4 && wiki.can("sharing.internal") && (
-            <Button variant="ghost" onClick={() => setPanel("share")}>
-              {t("wiki.share")}
+            <Button mobileIcon aria-label={t("wiki.share")} onClick={() => setPanel("share")}>
+              <Icon name="users" />
+              <span>{t("wiki.share")}</span>
             </Button>
           )}
           <Button
@@ -1166,22 +1180,12 @@ function OpenPage({ page }: { page: Page }) {
         </div>
       )}
       <div className="wiki-document-width" hidden={!!revisionState && panel === "history"}>
-        <div className="wiki-page-meta">
-          <WikiPageIcon page={page} />
-          <span>
-            {page.permission_mode === "restricted" && (
-              <>
-                <Icon name="shield" />
-                {t("wiki.restricted")}
-              </>
-            )}
-          </span>
-        </div>
         <CollaborativeEditor
           resourceId={page.resource_id}
           transport={transport}
           onTitle={updateTitle}
           onClient={setClient}
+          titleContainer={titleContainer}
           statusContainer={statusContainer}
           renderParticipant={(p) => <WikiAvatar id={p.user_id} name={p.name} />}
         />

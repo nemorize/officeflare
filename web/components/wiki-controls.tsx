@@ -182,12 +182,7 @@ export function WikiPageIcon({ page }: { page: WikiPage }) {
           />
         }
       >
-        {page.icon || (
-          <>
-            <Icon name="file" />
-            <span>{t("wiki.addIcon")}</span>
-          </>
-        )}
+        {page.icon || <Icon name="file" />}
       </Popover.Trigger>
       <PopoverPopup
         className="wiki-icon-picker"
@@ -223,7 +218,7 @@ export function WikiPageIcon({ page }: { page: WikiPage }) {
 }
 
 export function WikiPageHeader({ children }: { children: ReactNode }) {
-  return <div className="wiki-page-actions">{children}</div>;
+  return <header className="wiki-document-heading">{children}</header>;
 }
 
 export function WikiSidePanel({

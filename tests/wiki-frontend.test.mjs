@@ -257,7 +257,7 @@ test(
       await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/comments.png` });
     await comments.getByRole("button", { name: "Close", exact: true }).click();
 
-    assert.equal(await tab.locator(".wiki-breadcrumb-current").textContent(), "How we work");
+    assert.equal(await tab.locator(".wiki-title").inputValue(), "How we work");
     if (process.env.WIKI_UI_CAPTURE_DIR)
       await tab.screenshot({
         path: `${process.env.WIKI_UI_CAPTURE_DIR}/document.png`,
