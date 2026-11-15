@@ -69,13 +69,20 @@ export function collaborationRoutes(adapters: CollaborationAdapters) {
   for (const [method, path, action] of [
     ["get", "content", "content"],
     ["get", "snapshots", "history"],
+    ["get", "snapshots/:snapshot", "revision"],
     ["post", "snapshots", "checkpoint"],
     ["post", "restores", "restore"],
   ] as const) {
     routes[method](`/resources/:id/${path}`, async (c) => {
       const resource = await resourceFor(c.env, c.req.param("id"), adapters);
       if (!resource) return c.json({ error: t("collaboration.notFound") }, 404);
-      let input: { snapshot_id: string; epoch: number; operation_id: string } | undefined;
+      let input: { snapshot_id?: string; epoch?: number; operation_id?: string } | undefined;
+      if (action === "revision") {
+        const snapshot = c.req.param("snapshot");
+        if (!snapshot || !/^[A-Za-z0-9_-]{1,100}$/.test(snapshot))
+          throw new HTTPException(400, { message: t("collaboration.invalid") });
+        input = { snapshot_id: snapshot };
+      }
       if (action === "restore") {
         const data = await body(c, ["snapshot_id", "epoch"]),
           key = c.req.header("Idempotency-Key");

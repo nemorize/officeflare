@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage, WikiSpace } from "../../shared/wiki";
@@ -216,5 +217,60 @@ export function WikiPageIcon({ page }: { page: WikiPage }) {
         )}
       </PopoverPopup>
     </Popover.Root>
+  );
+}
+
+export function WikiPageHeader({ children }: { children: ReactNode }) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setTarget(document.getElementById("wiki-topbar-content")), []);
+  const header = <div className="wiki-page-actions">{children}</div>;
+  return target ? createPortal(header, target) : header;
+}
+
+export function WikiSidePanel({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const panel = useRef<HTMLElement>(null),
+    close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    panel.current?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !document.querySelector('[role="alertdialog"]')
+      ) {
+        event.preventDefault();
+        close.current();
+      }
+    };
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("keydown", escape);
+      if (previous?.isConnected) previous.focus();
+      else
+        document
+          .querySelector<HTMLElement>('.wiki-page-action-buttons [data-ui="menu-trigger"]')
+          ?.focus();
+    };
+  }, []);
+  return (
+    <aside ref={panel} tabIndex={-1} className="wiki-side-panel" aria-label={title}>
+      <header>
+        <h2>{title}</h2>
+        <Button variant="ghost" size="icon" aria-label={t("wiki.close")} onClick={onClose}>
+          <Icon name="close" />
+        </Button>
+      </header>
+      <div className="wiki-side-panel-body">{children}</div>
+    </aside>
   );
 }

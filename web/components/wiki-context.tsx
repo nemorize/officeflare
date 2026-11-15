@@ -23,6 +23,8 @@ interface WikiContextValue {
   refresh: () => void;
   updateTitle: (id: string, title: string) => void;
   creatingPage: boolean;
+  searchOpen: boolean;
+  setSearchOpen: (open: boolean) => void;
   updatePage: (page: WikiPage) => void;
   createPage: (parentId?: string | null) => Promise<void>;
   can: (key: string) => boolean;
@@ -45,7 +47,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
     [pages, setPages] = useState<WikiPage[]>([]),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useState(0),
+    [searchOpen, setSearchOpen] = useState(false);
   const activePage = useRef(pageId);
   activePage.current = pageId;
   const keepActive = (previous: WikiPage[]) =>
@@ -183,6 +186,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
       refresh,
       createPage,
       creatingPage,
+      searchOpen,
+      setSearchOpen,
       updatePage,
       updateTitle,
       can: (key: string) => access.permissions.includes(`wiki.${key}`),
@@ -197,6 +202,8 @@ export function WikiProvider({ children }: { children: ReactNode }) {
       refresh,
       createPage,
       creatingPage,
+      searchOpen,
+      setSearchOpen,
       updatePage,
       updateTitle,
       access.permissions,

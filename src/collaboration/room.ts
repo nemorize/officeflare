@@ -551,7 +551,7 @@ export class CollaborationRoom extends DurableObject<Env> {
   async inspect(
     resourceId: string,
     actor: CollaborationActor,
-    action: "content" | "history" | "checkpoint" | "restore",
+    action: "content" | "history" | "revision" | "checkpoint" | "restore",
     input?: { snapshot_id?: string; epoch?: number; operation_id?: string },
   ) {
     return this.enqueue(async () => {
@@ -575,6 +575,22 @@ export class CollaborationRoom extends DurableObject<Env> {
           seq: this.state!.seq,
           state: encodeBytes(Y.encodeStateAsUpdate(this.doc!)),
         };
+      if (action === "revision") {
+        const snapshot = this.ctx.storage.sql
+          .exec<{ state: ArrayBuffer; epoch: number; seq: number; created_at: number }>(
+            "SELECT state,epoch,seq,created_at FROM room_snapshots WHERE id=?",
+            input?.snapshot_id ?? "",
+          )
+          .toArray()[0];
+        if (!snapshot) return { status: 404 as const };
+        return {
+          status: 200 as const,
+          epoch: snapshot.epoch,
+          seq: snapshot.seq,
+          created_at: snapshot.created_at,
+          state: encodeBytes(new Uint8Array(snapshot.state)),
+        };
+      }
       if (action === "history")
         return {
           status: 200 as const,

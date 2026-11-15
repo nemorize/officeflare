@@ -5,13 +5,29 @@ import { wikiRoles, type WikiComment, type WikiPage as Page } from "../../shared
 import { api, errorMessage } from "../lib/api";
 import type { CollaborationClient, CollaborationTransport } from "../lib/collaboration/client";
 import { useWiki } from "../components/wiki-context";
-import { WikiDialog, WikiPageIcon } from "../components/wiki-controls";
+import {
+  WikiDialog,
+  WikiPageIcon,
+  WikiPageHeader,
+  WikiSidePanel,
+} from "../components/wiki-controls";
+import { WikiRevisionPreview } from "../components/wiki-revision-preview";
 import { WikiHome, WikiPageTable } from "../components/wiki-home";
 import { formatDateTime } from "../lib/regional";
 import { Confirm } from "../components/console-shared";
 import { useAccount } from "../components/account-context";
 import { CollaborativeEditor, downloadText } from "../components/collaborative-editor";
-import { Button, Icon, Input, Menu, MenuPopup, SelectControl, Textarea } from "../components/ui";
+import {
+  Button,
+  Icon,
+  Input,
+  Menu,
+  MenuPopup,
+  SelectControl,
+  Textarea,
+  Popover,
+  PopoverPopup,
+} from "../components/ui";
 import "./wiki.css";
 
 const transport: CollaborationTransport = {
@@ -359,24 +375,15 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
     }
   };
   return (
-    <WikiDialog title={t("wiki.share")} open onClose={onClose}>
-      <SelectControl
-        aria-label={t("wiki.share")}
-        value={mode}
-        disabled={!version || busy}
-        onValueChange={setMode}
-        options={[
-          { value: "inherit", label: t("wiki.inherit") },
-          { value: "restricted", label: t("wiki.restricted") },
-        ]}
-      />
-      <p className="wiki-muted">{t("wiki.restrictionHint")}</p>
+    <>
+      <Popover.Title>{t("wiki.share")}</Popover.Title>
       <ul className="wiki-members">
-        {members
-          .filter((m) => m.role !== "owner" && m.role !== "manager")
-          .map((member) => (
-            <li key={member.user_id}>
-              <span>{member.display_name || member.email_address}</span>
+        {members.map((member) => (
+          <li key={member.user_id}>
+            <span>{member.display_name || member.email_address}</span>
+            {member.role === "owner" || member.role === "manager" ? (
+              <span className="wiki-role-label">{roleName(member.role)}</span>
+            ) : (
               <SelectControl
                 aria-label={`${member.email_address} ${t("wiki.role")}`}
                 value={grants[member.user_id] ?? ""}
@@ -387,26 +394,54 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
                   ...wikiRoles.map((value) => ({ value, label: roleName(value) })),
                 ]}
               />
-            </li>
-          ))}
+            )}
+          </li>
+        ))}
       </ul>
+      <div className="wiki-share-section">
+        <h3>{t("wiki.generalAccess")}</h3>
+        <SelectControl
+          aria-label={t("wiki.share")}
+          value={mode}
+          disabled={!version || busy}
+          onValueChange={setMode}
+          options={[
+            { value: "inherit", label: t("wiki.inherit") },
+            { value: "restricted", label: t("wiki.restricted") },
+          ]}
+        />
+        <p className="wiki-muted">{t("wiki.restrictionHint")}</p>
+      </div>
       {error && <p role="alert">{error}</p>}
-      <div className="wiki-dialog-actions">
+      <div className="wiki-share-footer">
+        <Button
+          variant="ghost"
+          onClick={() =>
+            void (navigator.clipboard?.writeText(location.href) ?? Promise.reject()).catch(() =>
+              setError(t("wiki.copyLinkFailed")),
+            )
+          }
+        >
+          <Icon name="link" />
+          {t("wiki.copyLink")}
+        </Button>
         <Button variant="primary" onClick={() => void save()} disabled={busy || !version}>
           {t("wiki.save")}
         </Button>
       </div>
-    </WikiDialog>
+    </>
   );
 }
 function History({
   page,
   client,
   onClose,
+  onPreview,
 }: {
   page: Page;
   client: CollaborationClient | null;
   onClose: () => void;
+  onPreview: (state: string | null) => void;
 }) {
   const wiki = useWiki(),
     [revisions, setRevisions] = useState<
@@ -414,7 +449,36 @@ function History({
     >([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [restoring, setRestoring] = useState<string | null>(null);
+    [restoring, setRestoring] = useState<string | null>(null),
+    [selected, setSelected] = useState<string | null>(null),
+    [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected) {
+      setPreview(null);
+      return;
+    }
+    const abort = new AbortController();
+    setPreview(null);
+    onPreview(null);
+    setError("");
+    void api<{ state: string }>(
+      `/api/collaboration/resources/${page.resource_id}/snapshots/${selected}`,
+      { signal: abort.signal },
+    )
+      .then((data) => {
+        if (!abort.signal.aborted) {
+          setPreview(data.state);
+          onPreview(data.state);
+        }
+      })
+      .catch((failure) => {
+        if (!abort.signal.aborted) setError(errorMessage(failure));
+      });
+    return () => {
+      abort.abort();
+      onPreview(null);
+    };
+  }, [selected, page.resource_id, onPreview]);
   const load = useCallback(async () => {
     const result = await api<{ revisions: typeof revisions }>(
       `/api/collaboration/resources/${page.resource_id}/snapshots`,
@@ -446,19 +510,31 @@ function History({
     }
   };
   return (
-    <WikiDialog title={t("wiki.history")} open onClose={onClose}>
+    <WikiSidePanel title={t("wiki.history")} onClose={onClose}>
       {error && <p role="alert">{error}</p>}
       {wiki.can("pages.update") && (
-        <Button disabled={busy || !!client?.unsaved} onClick={() => void change()}>
+        <Button
+          className="wiki-checkpoint"
+          disabled={busy || !!client?.unsaved}
+          onClick={() => void change()}
+        >
           {t("wiki.checkpoint")}
         </Button>
       )}
       <ul className="wiki-members">
         {revisions.map((revision) => (
           <li key={revision.id}>
-            <time dateTime={new Date(revision.created_at).toISOString()}>
-              {formatDateTime(revision.created_at / 1000)}
-            </time>
+            <Button
+              variant="ghost"
+              className="wiki-revision-choice"
+              aria-pressed={selected === revision.id}
+              onClick={() => setSelected(revision.id)}
+            >
+              <Icon name="clock" />
+              <time dateTime={new Date(revision.created_at).toISOString()}>
+                {formatDateTime(revision.created_at / 1000)}
+              </time>
+            </Button>
             {wiki.can("history.restore") && (
               <Button
                 disabled={busy || !client?.epoch || !!client?.unsaved}
@@ -470,6 +546,28 @@ function History({
           </li>
         ))}
       </ul>
+      {selected && !preview && !error && (
+        <p className="wiki-muted" role="status">
+          {t("wiki.loading")}
+        </p>
+      )}
+      {selected && preview && (
+        <div className="wiki-history-mobile-preview">
+          <Button variant="ghost" onClick={() => setSelected(null)}>
+            <Icon name="chevron" className="wiki-back-icon" />
+            {t("wiki.history")}
+          </Button>
+          <WikiRevisionPreview state={preview} />
+          {wiki.can("history.restore") && (
+            <Button
+              disabled={busy || !client?.epoch || !!client?.unsaved}
+              onClick={() => setRestoring(selected)}
+            >
+              {t("wiki.restore")}
+            </Button>
+          )}
+        </div>
+      )}
       {restoring && (
         <Confirm
           open
@@ -480,12 +578,13 @@ function History({
           onConfirm={() => change(restoring)}
         />
       )}
-    </WikiDialog>
+    </WikiSidePanel>
   );
 }
 function Move({ page, onClose }: { page: Page; onClose: () => void }) {
   const wiki = useWiki(),
     [parent, setParent] = useState(page.parent_id ?? ""),
+    [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const descendants = new Set([page.id]);
@@ -515,17 +614,43 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
   };
   return (
     <WikiDialog title={t("wiki.move")} open onClose={onClose}>
-      <SelectControl
+      <Input
+        autoFocus
+        type="search"
         aria-label={t("wiki.parent")}
-        value={parent}
-        onValueChange={setParent}
-        options={[
-          ...(wiki.space!.role >= 4 ? [{ value: "", label: t("wiki.root") }] : []),
-          ...wiki.pages
-            .filter((p) => !descendants.has(p.id) && p.role >= 4)
-            .map((p) => ({ value: p.id, label: p.title || t("wiki.untitled") })),
-        ]}
+        placeholder={t("wiki.search")}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
       />
+      <div className="wiki-move-destinations" role="listbox" aria-label={t("wiki.parent")}>
+        {wiki.space!.role >= 4 && !query && (
+          <button role="option" aria-selected={!parent} onClick={() => setParent("")}>
+            <Icon name="book" />
+            {wiki.space!.name}
+            <small>{t("wiki.root")}</small>
+            {!parent && <Icon name="check" />}
+          </button>
+        )}
+        {wiki.pages
+          .filter(
+            (p) =>
+              !descendants.has(p.id) &&
+              p.role >= 4 &&
+              (p.title || t("wiki.untitled")).toLowerCase().includes(query.toLowerCase()),
+          )
+          .map((p) => (
+            <button
+              key={p.id}
+              role="option"
+              aria-selected={parent === p.id}
+              onClick={() => setParent(p.id)}
+            >
+              <span>{p.icon || <Icon name="file" />}</span>
+              <span>{p.title || t("wiki.untitled")}</span>
+              {parent === p.id && <Icon name="check" />}
+            </button>
+          ))}
+      </div>
       {error && <p role="alert">{error}</p>}
       <div className="wiki-dialog-actions">
         <Button disabled={busy} onClick={() => void save()}>
@@ -535,22 +660,24 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
     </WikiDialog>
   );
 }
-function Discussion({ page }: { page: Page }) {
+function Discussion({ page, comments = false }: { page: Page; comments?: boolean }) {
   const account = useAccount();
+  const uploadInput = useRef<HTMLInputElement>(null);
   const wiki = useWiki(),
-    [comments, setComments] = useState<WikiComment[]>([]),
+    [entries, setComments] = useState<WikiComment[]>([]),
     [assets, setAssets] = useState<Asset[]>([]),
     [draft, setDraft] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
-    const [threads, files] = await Promise.all([
-      api<{ comments: WikiComment[] }>(`/api/wiki/pages/${page.id}/comments`),
-      api<{ assets: Asset[] }>(`/api/wiki/pages/${page.id}/assets`),
-    ]);
-    setComments(threads.comments);
-    setAssets(files.assets);
-  }, [page.id]);
+    if (comments) {
+      const data = await api<{ comments: WikiComment[] }>(`/api/wiki/pages/${page.id}/comments`);
+      setComments(data.comments);
+    } else {
+      const data = await api<{ assets: Asset[] }>(`/api/wiki/pages/${page.id}/assets`);
+      setAssets(data.assets);
+    }
+  }, [page.id, comments]);
   useEffect(() => {
     let active = true;
     const run = () =>
@@ -617,77 +744,92 @@ function Discussion({ page }: { page: Page }) {
     }
   };
   return (
-    <div className="wiki-discussion">
+    <div className={`wiki-discussion ${comments ? "is-comments" : ""}`}>
       {error && (
         <p role="alert" className="wiki-error">
           {error}
         </p>
       )}
-      <div className="wiki-section-heading">
-        <h2>{t("wiki.attachments")}</h2>
-        {page.role >= 3 && wiki.can("assets.upload") && (
-          <label className="wiki-upload-label">
-            <Icon name="attachment" />
-            {t("wiki.attach")}
-            <input
-              type="file"
-              disabled={busy}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void attach(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
-        )}
-      </div>
-      <ul className="wiki-assets">
-        {assets.map((asset) => (
-          <li key={asset.id}>
-            <Button variant="ghost" onClick={() => void download(asset)}>
-              <Icon name="file" />
-              {asset.filename}
-              <small>{t("wiki.fileSize", { size: Math.ceil(asset.byte_size / 1024) })}</small>
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <h2>{t("wiki.comments")}</h2>
-      <ul className="wiki-comments">
-        {comments.map((comment) => (
-          <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>
-            <div>
-              <strong>{comment.author_name}</strong>
-              <time>{new Date(comment.created_at * 1000).toLocaleString()}</time>
-            </div>
-            <p>{comment.body}</p>
-            {(page.role >= 4 || comment.author_user_id === account.user?.id) &&
-              wiki.can("comments.create") && (
-                <Button variant="ghost" size="sm" onClick={() => void resolve(comment)}>
-                  {t(comment.resolved_at ? "wiki.reopen" : "wiki.resolve")}
+      {!comments && (
+        <>
+          <div className="wiki-section-heading">
+            <h2>{t("wiki.attachments")}</h2>
+            {page.role >= 3 && wiki.can("assets.upload") && (
+              <>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => uploadInput.current?.click()}
+                >
+                  <Icon name="attachment" />
+                  {t("wiki.attach")}
                 </Button>
-              )}
-          </li>
-        ))}
-      </ul>
-      {page.role >= 2 && wiki.can("comments.create") && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void post();
-          }}
-        >
-          <Textarea
-            aria-label={t("wiki.comments")}
-            placeholder={t("wiki.commentPlaceholder")}
-            value={draft}
-            maxLength={10000}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <Button type="submit" disabled={busy || !draft.trim()}>
-            {t("wiki.post")}
-          </Button>
-        </form>
+                <input
+                  ref={uploadInput}
+                  type="file"
+                  hidden
+                  disabled={busy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void attach(file);
+                    event.target.value = "";
+                  }}
+                />
+              </>
+            )}
+          </div>
+          <ul className="wiki-assets">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                <Button variant="ghost" onClick={() => void download(asset)}>
+                  <Icon name="file" />
+                  {asset.filename}
+                  <small>{t("wiki.fileSize", { size: Math.ceil(asset.byte_size / 1024) })}</small>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {comments && (
+        <>
+          <ul className="wiki-comments">
+            {entries.map((comment) => (
+              <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>
+                <div>
+                  <strong>{comment.author_name}</strong>
+                  <time>{new Date(comment.created_at * 1000).toLocaleString()}</time>
+                </div>
+                <p>{comment.body}</p>
+                {(page.role >= 4 || comment.author_user_id === account.user?.id) &&
+                  wiki.can("comments.create") && (
+                    <Button variant="ghost" size="sm" onClick={() => void resolve(comment)}>
+                      {t(comment.resolved_at ? "wiki.reopen" : "wiki.resolve")}
+                    </Button>
+                  )}
+              </li>
+            ))}
+          </ul>
+          {page.role >= 2 && wiki.can("comments.create") && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void post();
+              }}
+            >
+              <Textarea
+                aria-label={t("wiki.comments")}
+                placeholder={t("wiki.commentPlaceholder")}
+                value={draft}
+                maxLength={10000}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <Button type="submit" disabled={busy || !draft.trim()}>
+                {t("wiki.post")}
+              </Button>
+            </form>
+          )}
+        </>
       )}
     </div>
   );
@@ -695,9 +837,12 @@ function Discussion({ page }: { page: Page }) {
 function OpenPage({ page }: { page: Page }) {
   const wiki = useWiki(),
     navigate = useNavigate(),
-    [panel, setPanel] = useState<"share" | "history" | "move" | null>(null),
+    [params, setParams] = useSearchParams(),
+    [panel, setPanel] = useState<"share" | "history" | "move" | "comments" | null>(null),
     [error, setError] = useState(""),
     [client, setClient] = useState<CollaborationClient | null>(null),
+    [statusContainer, setStatusContainer] = useState<HTMLDivElement | null>(null),
+    [revisionState, setRevisionState] = useState<string | null>(null),
     [, render] = useState(0);
   useEffect(() => client?.subscribe(() => render((v) => v + 1)), [client]);
   useEffect(() => {
@@ -743,6 +888,23 @@ function OpenPage({ page }: { page: Page }) {
       setError(errorMessage(e));
     }
   };
+  useEffect(() => {
+    if (!client?.synced || !params.has("action")) return;
+    const action = params.get("action");
+    if (action === "move" && page.role >= 4 && wiki.can("pages.move")) setPanel("move");
+    if (action === "rename" && page.role >= 3 && wiki.can("pages.update")) {
+      const title = document.querySelector<HTMLTextAreaElement>(".wiki-title");
+      title?.focus();
+      title?.select();
+    }
+    if (action === "trash" && client.unsaved) return;
+    if (action === "trash" && page.role >= 3 && wiki.can("pages.delete")) {
+      void trash();
+    }
+    const next = new URLSearchParams(params);
+    next.delete("action");
+    setParams(next, { replace: true });
+  }, [client?.synced, client?.unsaved, params, page.role]);
   const [copied, setCopied] = useState(false);
   const ancestors: Page[] = [];
   let parent = page.parent_id;
@@ -753,8 +915,10 @@ function OpenPage({ page }: { page: Page }) {
     parent = entry.parent_id;
   }
   return (
-    <article className="wiki-page">
-      <div className="wiki-page-actions">
+    <article
+      className={`wiki-page ${panel === "history" || panel === "comments" ? "has-side-panel" : ""}`}
+    >
+      <WikiPageHeader>
         <nav className="wiki-breadcrumbs" aria-label={t("wiki.parent")}>
           <Link to={`/wiki/${page.space_id}`}>{wiki.space?.name}</Link>
           {ancestors.map((p) => (
@@ -767,6 +931,7 @@ function OpenPage({ page }: { page: Page }) {
           </span>
         </nav>
         <div className="wiki-page-action-buttons">
+          <div className="wiki-header-presence" ref={setStatusContainer} />
           <Button
             variant="ghost"
             size="icon"
@@ -778,11 +943,30 @@ function OpenPage({ page }: { page: Page }) {
             <Icon name="star" />
           </Button>
           {page.role >= 4 && wiki.can("sharing.internal") && (
-            <Button variant="secondary" onClick={() => setPanel("share")}>
-              <Icon name="users" />
-              {t("wiki.share")}
-            </Button>
+            <Popover.Root
+              open={panel === "share"}
+              onOpenChange={(open) => setPanel(open ? "share" : null)}
+            >
+              <Popover.Trigger render={<Button variant="ghost" />}>
+                {t("wiki.share")}
+              </Popover.Trigger>
+              <PopoverPopup
+                className="wiki-share-popover"
+                positionerProps={{ align: "end", sideOffset: 8 }}
+              >
+                <Share page={page} onClose={() => setPanel(null)} />
+              </PopoverPopup>
+            </Popover.Root>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("wiki.comments")}
+            aria-pressed={panel === "comments"}
+            onClick={() => setPanel(panel === "comments" ? null : "comments")}
+          >
+            <Icon name="message" />
+          </Button>
           <Menu.Root>
             <Menu.Trigger
               render={<Button variant="ghost" size="icon" aria-label={t("wiki.pageActions")} />}
@@ -850,7 +1034,7 @@ function OpenPage({ page }: { page: Page }) {
             </MenuPopup>
           </Menu.Root>
         </div>
-      </div>
+      </WikiPageHeader>
       {error && (
         <p role="alert" className="wiki-error">
           {error}
@@ -861,7 +1045,16 @@ function OpenPage({ page }: { page: Page }) {
           {t("wiki.linkCopied")}
         </p>
       )}
-      <div className="wiki-document-width">
+      {revisionState && panel === "history" && (
+        <div className="wiki-document-width wiki-version-canvas">
+          <div className="wiki-version-label">
+            <Icon name="clock" />
+            {t("wiki.versionPreview")}
+          </div>
+          <WikiRevisionPreview state={revisionState} />
+        </div>
+      )}
+      <div className="wiki-document-width" hidden={!!revisionState && panel === "history"}>
         <div className="wiki-page-meta">
           <WikiPageIcon page={page} />
           <span>
@@ -878,6 +1071,7 @@ function OpenPage({ page }: { page: Page }) {
           transport={transport}
           onTitle={updateTitle}
           onClient={setClient}
+          statusContainer={statusContainer}
         />
         {wiki.pages.some((p) => p.parent_id === page.id) && (
           <ul className="wiki-child-pages">
@@ -898,10 +1092,19 @@ function OpenPage({ page }: { page: Page }) {
         </p>
         <Discussion key={page.id} page={page} />
       </div>
-      {page.role > 0 && panel === "share" && <Share page={page} onClose={() => setPanel(null)} />}{" "}
+      {page.role > 0 && panel === "comments" && (
+        <WikiSidePanel title={t("wiki.comments")} onClose={() => setPanel(null)}>
+          <Discussion key={page.id} page={page} comments />
+        </WikiSidePanel>
+      )}
       {page.role > 0 && panel === "history" && (
-        <History page={page} client={client} onClose={() => setPanel(null)} />
-      )}{" "}
+        <History
+          page={page}
+          client={client}
+          onClose={() => setPanel(null)}
+          onPreview={setRevisionState}
+        />
+      )}
       {page.role > 0 && panel === "move" && <Move page={page} onClose={() => setPanel(null)} />}
       {blocker.state === "blocked" && (
         <WikiDialog title={t("wiki.saving")} open onClose={() => blocker.reset()}>

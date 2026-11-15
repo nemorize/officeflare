@@ -447,6 +447,28 @@ test("Readers cannot write; membership revocation closes live access; restore fe
   const snapshot = await f.call(`/collaboration/resources/${page.resource_id}/snapshots`, {
     method: "POST",
   });
+  const preview = await f.call(
+    `/collaboration/resources/${page.resource_id}/snapshots/${snapshot.id}`,
+  );
+  const previewDoc = new Y.Doc();
+  Y.applyUpdate(previewDoc, decodeBytes(preview.state));
+  assert.equal(previewDoc.getText("title").toString(), document.getText("title").toString());
+  previewDoc.destroy();
+  await f.call(`/collaboration/resources/${page.resource_id}/snapshots/missing`, { expected: 404 });
+  const otherPage = await f.page(space.id);
+  await f.call(`/collaboration/resources/${otherPage.resource_id}/snapshots/${snapshot.id}`, {
+    expected: 404,
+  });
+  await f.call(`/collaboration/resources/${page.resource_id}/snapshots/${snapshot.id}`, {
+    actor: "read-only",
+    expected: 404,
+  });
+  await f.member(space.id, "read-only", "viewer");
+  await f.call(`/collaboration/resources/${page.resource_id}/snapshots/${snapshot.id}`, {
+    actor: "read-only",
+    expected: 403,
+  });
+
   document.on("update", (u) => (update = u));
   document.getText("title").insert(0, "Changed");
   owner.send({
@@ -561,6 +583,14 @@ test("The same collaboration engine supports a non-wiki adapter and restart reco
   Y.applyUpdate(state, decodeBytes(recovered.state));
   assert.equal(state.getMap("properties").get("count"), 55);
   assert.equal(recovered.seq, 55);
+  const snapshot = await f.call(`/collaboration/resources/${resource}/snapshots`, {
+    method: "POST",
+  });
+  const preview = await f.call(`/collaboration/resources/${resource}/snapshots/${snapshot.id}`);
+  const snapshotDoc = new Y.Doc();
+  Y.applyUpdate(snapshotDoc, decodeBytes(preview.state));
+  assert.equal(snapshotDoc.getMap("properties").get("count"), 55);
+  snapshotDoc.destroy();
   const bucket = await f.mf.getR2Bucket("WIKI_BUCKET");
   for (let attempt = 0; attempt < 30; attempt++) {
     const value = await bucket.get(`probe/${resource}`);

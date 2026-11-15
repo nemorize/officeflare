@@ -1,5 +1,9 @@
 import * as Y from "yjs";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { BubbleMenu } from "@tiptap/react/menus";
+import { useWorkspaceMobile } from "../lib/workspace-responsive";
+import { EditorBlockActions } from "./editor-block-actions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -20,14 +24,26 @@ export function downloadText(filename: string, content: string) {
 function Editor({
   client,
   onTitle,
+  statusContainer,
 }: {
   client: CollaborationClient;
   onTitle?: (title: string) => void;
+  statusContainer?: HTMLElement | null;
 }) {
+  const mobile = useWorkspaceMobile();
+  const [focused, setFocused] = useState(false);
   const [, render] = useState(0),
     [title, setTitle] = useState(client.doc.getText("title").toString());
   const onTitleRef = useRef(onTitle);
   onTitleRef.current = onTitle;
+  const titleInput = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const field = titleInput.current;
+    if (field) {
+      field.style.height = "auto";
+      field.style.height = `${field.scrollHeight}px`;
+    }
+  }, [title]);
   const composing = useRef(false);
   const composition = useRef<{ doc: Y.Doc; vector: Uint8Array } | null>(null);
   useEffect(() => () => composition.current?.doc.destroy(), []);
@@ -50,12 +66,24 @@ function Editor({
     },
     [client],
   );
+  useEffect(() => {
+    if (!editor) return;
+    const focus = () => setFocused(true),
+      blur = () => setFocused(false);
+    editor.on("focus", focus);
+    editor.on("blur", blur);
+    return () => {
+      editor.off("focus", focus);
+      editor.off("blur", blur);
+    };
+  }, [editor]);
   useEditorState({
     editor,
     selector: ({ editor: instance }) =>
       instance
         ? {
             selection: instance.state.selection.from,
+            selectionEnd: instance.state.selection.to,
             doc: instance.state.doc,
             marks: instance.state.storedMarks,
           }
@@ -81,6 +109,10 @@ function Editor({
     changed();
     field.observe(changed);
     return () => field.unobserve(changed);
+  }, [client]);
+  useEffect(() => {
+    if (client.capabilities.write && !client.doc.getText("title").length)
+      titleInput.current?.focus();
   }, [client]);
   const editable =
     client.capabilities.write && !["reset", "error", "revoked"].includes(client.status);
@@ -165,36 +197,65 @@ function Editor({
       run: () => editor?.chain().focus().redo().run(),
     },
   ];
+  const toolbar = (
+    <div className="wiki-editor-toolbar" role="toolbar" aria-label={t("wiki.editorLabel")}>
+      {actions.map((action) => (
+        <Button
+          key={action.label}
+          variant="ghost"
+          size="icon"
+          title={action.label}
+          aria-label={action.label}
+          aria-pressed={action.active}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={action.run}
+        >
+          <Icon name={action.icon} />
+        </Button>
+      ))}
+    </div>
+  );
   const statusLabel = client.status === "error" ? t("wiki.syncError") : t(`wiki.${client.status}`);
+  const presence = (
+    <div className="wiki-presence-row">
+      <span role="status" className={`wiki-save-state state-${client.status}`}>
+        {statusLabel}
+      </span>
+      <div className="wiki-participants" aria-label={t("wiki.participants")}>
+        {client.participants.map((p) => (
+          <span key={p.connection_id} title={p.name} style={{ background: p.color }}>
+            {p.name.slice(0, 1)}
+          </span>
+        ))}
+      </div>
+      {["error", "reset", "offline", "revoked"].includes(client.status) && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            downloadText(
+              `${title || t("wiki.untitled")}.txt`,
+              `${title}\n\n${editor?.getText() ?? ""}`,
+            )
+          }
+        >
+          {t("wiki.copyLocal")}
+        </Button>
+      )}
+    </div>
+  );
   return (
     <div className="collaborative-document">
-      <div className="wiki-presence-row">
-        <span role="status" className={`wiki-save-state state-${client.status}`}>
-          {statusLabel}
-        </span>
-        <div className="wiki-participants" aria-label={t("wiki.participants")}>
-          {client.participants.map((p) => (
-            <span key={p.connection_id} title={p.name} style={{ background: p.color }}>
-              {p.name.slice(0, 1)}
-            </span>
-          ))}
-        </div>
-        {(["error", "reset", "offline", "revoked"].includes(client.status) || client.unsaved) && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() =>
-              downloadText(
-                `${title || t("wiki.untitled")}.txt`,
-                `${title}\n\n${editor?.getText() ?? ""}`,
-              )
-            }
-          >
-            {t("wiki.copyLocal")}
-          </Button>
-        )}
-      </div>
-      <input
+      {statusContainer && !mobile ? createPortal(presence, statusContainer) : presence}
+      <textarea
+        ref={titleInput}
+        rows={1}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            editor?.commands.focus("start");
+          }
+        }}
         className="wiki-title"
         aria-label={t("wiki.pageTitle")}
         placeholder={t("wiki.untitled")}
@@ -217,27 +278,20 @@ function Editor({
           else setSharedTitle(event.target.value);
         }}
       />
-      {editable && (
-        <div className="wiki-editor-toolbar" role="toolbar" aria-label={t("wiki.editorLabel")}>
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              variant="ghost"
-              size="icon"
-              title={action.label}
-              aria-label={action.label}
-              aria-pressed={action.active}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={action.run}
-            >
-              <Icon name={action.icon} />
-            </Button>
-          ))}
-        </div>
+      {editable && editor && (
+        <>
+          {!mobile && (
+            <BubbleMenu editor={editor} options={{ placement: "top", offset: 8 }} updateDelay={0}>
+              {toolbar}
+            </BubbleMenu>
+          )}
+          <EditorBlockActions editor={editor} />
+        </>
       )}
       <div className="wiki-editor-content">
         <EditorContent editor={editor} />
       </div>
+      {editable && focused && <div className="wiki-mobile-formatting">{toolbar}</div>}
       <EditorBlockMenu editor={editor} editable={editable} />
     </div>
   );
@@ -247,11 +301,13 @@ export function CollaborativeEditor({
   transport,
   onTitle,
   onClient,
+  statusContainer,
 }: {
   resourceId: string;
   transport: CollaborationTransport;
   onTitle?: (title: string) => void;
   onClient?: (client: CollaborationClient | null) => void;
+  statusContainer?: HTMLElement | null;
 }) {
   const [generation, setGeneration] = useState(0);
   const [client, setClient] = useState<CollaborationClient | null>(null),
@@ -295,5 +351,7 @@ export function CollaborativeEditor({
             : t("wiki.connecting")}
       </p>
     );
-  return <Editor key={resourceId} client={client} onTitle={onTitle} />;
+  return (
+    <Editor key={resourceId} client={client} onTitle={onTitle} statusContainer={statusContainer} />
+  );
 }
