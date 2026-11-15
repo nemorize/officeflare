@@ -1474,6 +1474,8 @@ export const calendarWorkspaceSettings = sqliteTable("calendar_workspace_setting
   updated_at: integer()
     .notNull()
     .default(sql`(unixepoch())`),
+  imports_enabled: integer().notNull().default(1),
+  subscriptions_enabled: integer().notNull().default(1),
 });
 export const calendarGroups = sqliteTable("calendar_groups", {
   id: text().primaryKey().notNull(),
@@ -1907,3 +1909,24 @@ export const wikiActivity = sqliteTable("wiki_activity", {
 });
 
 export * from "./ai-schema.ts";
+
+export const consoleSettings = sqliteTable("console_settings", {
+  service: text().primaryKey(),
+  values_json: text().notNull(),
+  version: integer().notNull().default(1),
+  updated_at: integer(),
+  updated_by: text().references(() => users.id),
+  operation_id: text(),
+});
+export const consoleAudit = sqliteTable("console_audit", {
+  id: text().primaryKey(),
+  service: text().notNull(),
+  actor_user_id: text()
+    .notNull()
+    .references(() => users.id),
+  action: text().notNull(),
+  changed_keys_json: text().notNull(),
+  created_at: integer()
+    .notNull()
+    .default(sql`(unixepoch())`),
+});

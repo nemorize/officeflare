@@ -91,6 +91,8 @@ export interface Registration {
   updated_at: number;
 }
 export interface Settings {
+  imports_enabled: number;
+  subscriptions_enabled: number;
   system_address_id: string | null;
   internal_sharing_enabled: number;
   external_sharing_enabled: number;

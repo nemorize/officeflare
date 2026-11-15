@@ -6,6 +6,7 @@ import type { Bind, CalendarContext, Condition } from "./types";
 import { combine, condition, first, identity, statement } from "./access";
 import { fail, text } from "./input";
 import { seal, receipt } from "./secrets";
+import { policyDenied } from "../console/settings";
 
 export function insert(
   c: CalendarContext,
@@ -123,6 +124,19 @@ export async function replay<T>(
   };
 }
 export async function mutate<T>(c: CalendarContext, input: Mutation<T>): Promise<T> {
+  const policyColumn = input.operation.startsWith("calendar.import:")
+    ? "imports_enabled"
+    : ["calendar.feed.create", "calendar.feed.update", "calendar.feed.refresh"].includes(
+          input.operation,
+        )
+      ? "subscriptions_enabled"
+      : null;
+  const policy = policyColumn
+    ? condition(
+        `EXISTS(SELECT 1 FROM calendar_workspace_settings WHERE id='workspace' AND ${policyColumn}=1)`,
+      )
+    : condition("1");
+  if (!(await first(c.env, `SELECT 1 WHERE ${policy.sql}`))) policyDenied();
   const actor =
       input.principal?.actor_user_id ?? (input.principal ? null : c.get("identity").user.id),
     actorKey = input.principal?.actor_key ?? `user:${actor}`,
@@ -161,6 +175,7 @@ export async function mutate<T>(c: CalendarContext, input: Mutation<T>): Promise
     proof = `EXISTS(SELECT 1 FROM calendar_operations WHERE id='${operation}')`,
     checks = combine(
       auth,
+      policy,
       ...(input.checks ?? []),
       ...(key
         ? [

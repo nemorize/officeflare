@@ -29,7 +29,6 @@ import {
 import { useMailAction, useMailResource } from "../components/mail-common";
 import { api, ApiError } from "../lib/api";
 import { MailOperation, type Address, type Domain, type Mailbox } from "../lib/mail";
-import "./console.css";
 import "./mail.css";
 
 type Person = { id: string; email_address: string; display_name: string | null };

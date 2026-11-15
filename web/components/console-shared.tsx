@@ -1,6 +1,8 @@
 import { t } from "../../shared/i18n/index.ts";
 import { formatDateTime } from "../lib/regional";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router";
+import type { Role } from "../lib/console";
 import {
   AlertDialog,
   AlertDialogPopup,
@@ -15,6 +17,56 @@ import { useAccess } from "./console-access";
 import { LoadingSkeleton } from "./loading-skeleton";
 import "./console-shared.css";
 import "../routes/console.css";
+
+export function ConsolePageFrame({ children }: { children: ReactNode }) {
+  return (
+    <section className="account-page console-page console-settings" data-ui-theme="neutral">
+      {children}
+    </section>
+  );
+}
+
+export function ConsolePage({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <ConsolePageFrame>
+      <ConsolePageHeader title={title} description={description}>
+        {actions && <div className="console-header-actions">{actions}</div>}
+      </ConsolePageHeader>
+      {children}
+    </ConsolePageFrame>
+  );
+}
+
+export function ConsoleRoleLink({ role }: { role: Role }) {
+  return (
+    <Link className="console-role-name" to={`/console/roles/${encodeURIComponent(role.id)}`}>
+      <span className="console-role-icon">
+        <Icon name="shield" />
+      </span>
+      <span>
+        <strong>
+          {role.label}
+          {role.is_system && (
+            <span className="console-badge" data-muted>
+              {t("routesConsoleRoles.system")}
+            </span>
+          )}
+        </strong>
+        <small>{role.description || role.key}</small>
+      </span>
+    </Link>
+  );
+}
 
 export const adminDate = (timestamp: number | null) =>
   timestamp === null ? t("common.never") : formatDateTime(timestamp);
@@ -72,6 +124,8 @@ export function Check({
 }
 export function useResource<T>(path: string | null) {
   const access = useAccess();
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
   const [state, setState] = useState<{
     path?: string | null;
     data: T | null;
@@ -93,9 +147,13 @@ export function useResource<T>(path: string | null) {
         }
       });
     return () => controller.abort();
-  }, [path, access.refresh]);
+  }, [path, access.refresh, revision]);
   const current = state.path === path ? state : { data: null, loading: !!path, error: "" };
-  return { ...current, update: (data: T) => setState({ path, data, loading: false, error: "" }) };
+  return {
+    ...current,
+    reload,
+    update: (data: T) => setState({ path, data, loading: false, error: "" }),
+  };
 }
 export function ResourceState({
   loading,

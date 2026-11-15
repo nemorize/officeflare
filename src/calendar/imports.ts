@@ -8,12 +8,20 @@ import { body, fail, identifier, text } from "./input";
 import { change, insert, mutate, replay } from "./mutations";
 import { insertEvent, makeCopy } from "./event-data";
 import { MAX_IMPORT_BYTES, parseCalendarImport } from "./ical-import";
+import { policyDenied } from "../console/settings";
 
 const routes = new Hono<AppEnv>();
 routes.post(
   "/calendars/:calendarId/imports",
   requirePermission("calendar.events.create"),
   async (c) => {
+    if (
+      !(await first(
+        c.env,
+        "SELECT 1 FROM calendar_workspace_settings WHERE id='workspace' AND imports_enabled=1",
+      ))
+    )
+      policyDenied();
     const cal = await requireCalendar(c, identifier(c.req.param("calendarId")), 3);
     const data = await body(c, ["content", "dry_run"]);
     if (data.dry_run !== undefined && typeof data.dry_run !== "boolean")

@@ -97,6 +97,8 @@ adminSettings.patch("/admin/settings", async (c) => {
       "external_sharing_enabled",
       "public_link_max_days",
       "public_link_password_required",
+      "imports_enabled",
+      "subscriptions_enabled",
     ]),
     version = expectedVersion(c, data),
     values: Record<string, Bind> = { version: version + 1, updated_at: now() };
@@ -104,6 +106,8 @@ adminSettings.patch("/admin/settings", async (c) => {
     "internal_sharing_enabled",
     "external_sharing_enabled",
     "public_link_password_required",
+    "imports_enabled",
+    "subscriptions_enabled",
   ])
     if (key in data) values[key] = flag(data[key], key);
   if ("public_link_max_days" in data)

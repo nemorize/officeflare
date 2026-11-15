@@ -53,6 +53,116 @@ const assignmentRead = ["admin.users.roles.read"] as const;
 // One catalog drives API policies, role validation and the management UI.
 // Service access never grants access to another user's mailbox or files.
 export const permissionCatalog = {
+  "admin.workspace.settings.read": {
+    get label() {
+      return t("consoleAdmin.workspaceRead");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "services",
+    requires: ["console.access"],
+  },
+  "admin.workspace.settings.manage": {
+    get label() {
+      return t("consoleAdmin.workspaceManage");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "services",
+    requires: ["admin.workspace.settings.read"],
+  },
+  "admin.contacts.settings.read": {
+    get label() {
+      return t("consoleAdmin.contactsRead");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "contacts",
+    requires: ["console.access"],
+  },
+  "admin.contacts.settings.manage": {
+    get label() {
+      return t("consoleAdmin.contactsManage");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "contacts",
+    requires: ["admin.contacts.settings.read"],
+  },
+  "admin.contacts.accounts.read": {
+    get label() {
+      return t("consoleAdmin.contactsAccounts");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "contacts",
+    requires: ["console.access"],
+  },
+  "admin.contacts.audit.read": {
+    get label() {
+      return t("consoleAdmin.contactsAudit");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "contacts",
+    requires: ["console.access"],
+  },
+  "admin.wiki.settings.read": {
+    get label() {
+      return t("consoleAdmin.wikiRead");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["console.access"],
+  },
+  "admin.wiki.settings.manage": {
+    get label() {
+      return t("consoleAdmin.wikiManage");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["admin.wiki.settings.read"],
+  },
+  "admin.wiki.content.read": {
+    get label() {
+      return t("consoleAdmin.wikiRecords");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["console.access"],
+  },
+  "admin.wiki.audit.read": {
+    get label() {
+      return t("consoleAdmin.wikiAudit");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "wiki",
+    requires: ["console.access"],
+  },
+  "admin.calendar.records.read": {
+    get label() {
+      return t("consoleAdmin.calendarRecords");
+    },
+    get description() {
+      return t("consoleAdmin.permissionDescription");
+    },
+    group: "calendar",
+    requires: ["console.access"],
+  },
   "ai.access": {
     get label() {
       return t("ai.access");

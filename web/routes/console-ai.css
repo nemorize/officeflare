@@ -1,0 +1,51 @@
+.ai-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 1fr 1fr;
+  gap: 16px;
+  padding-block: 16px;
+  border-block-end: 1px solid var(--ui-border);
+  align-items: center;
+}
+.ai-rule-list {
+  display: grid;
+  gap: 16px;
+}
+.ai-rule-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-panel);
+  padding: 20px;
+  align-items: end;
+}
+.ai-rule-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ai-rule-row details {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.ai-rule-row details[open] > .console-field {
+  margin-block-start: 16px;
+}
+.ai-effective-rules {
+  font-size: 12px;
+  color: var(--ui-muted);
+  line-height: 1.7;
+}
+@media (max-width: 1000px) {
+  .ai-rule-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .ai-member-row,
+  .ai-rule-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

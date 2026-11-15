@@ -11,7 +11,7 @@
   gap: 16px;
   margin-block-end: 22px;
 }
-.console-section-header h3 {
+.console-section-header :is(h2, h3) {
   font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
@@ -23,13 +23,6 @@
   line-height: 1.8;
 }
 .console-section-header > [data-ui="button"] {
-  flex-shrink: 0;
-}
-.console-header-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
   flex-shrink: 0;
 }
 .console-settings [data-ui="field-root"],
@@ -97,6 +90,9 @@
 .console-form-actions > .console-subtext {
   margin: 0 auto 0 0;
 }
+.console-form-actions > .account-actions {
+  margin: 0;
+}
 .console-form[data-ui="form"],
 .console-form-sections[data-ui="fieldset-root"] {
   display: grid;
@@ -107,10 +103,79 @@
   display: grid;
   gap: 16px;
 }
+.console-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.console-form-grid > .console-check {
+  align-self: center;
+  min-height: 42px;
+}
+.console-form > details.console-role-summary {
+  margin-block-start: 0;
+}
+.console-role-summary > .console-form-grid {
+  margin-block-start: 18px;
+}
+.console-settings-table {
+  min-width: 600px;
+}
+.console-settings-table td {
+  vertical-align: middle;
+}
+.console-settings-table td > strong {
+  font-weight: 500;
+}
+.console-settings .console-subtext {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.console-record-list {
+  display: grid;
+}
+.console-record {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-block: 18px;
+  border-block-end: 1px solid var(--ui-border);
+  font-size: 12px;
+}
+.console-record:last-child {
+  border: 0;
+}
+.console-record > div:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+.console-record strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.console-empty > [data-ui="button"] {
+  margin-block-start: 16px;
+}
+.console-setup-steps {
+  font-size: 12px;
+  padding-inline-start: 20px;
+  line-height: 2.7;
+}
+.console-setup-steps a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .console-form > .console-section,
 .console-form-sections > .console-section,
 .console-form > .console-form-actions {
   margin: 0;
+}
+.console-form + .console-section {
+  margin-block-start: 24px;
+}
+.console-form + .console-records-section {
+  margin-block-start: 28px;
 }
 .console-settings .mail-secret-field-row > .console-field {
   min-width: 0;
@@ -198,33 +263,13 @@
   .console-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-.console-record-list {
-  display: grid;
-}
-.console-record {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-block: 18px;
-  border-block-end: 1px solid var(--ui-border);
-  font-size: 12px;
-}
-.console-record:last-child {
-  border: 0;
-}
-.console-record > div:first-of-type {
-  flex: 1;
-  min-width: 0;
-}
-.console-record strong {
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 760px) {
+  .console-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .console-record {
     flex-wrap: wrap;
+  }
+  .console-record > .console-row-actions {
+    width: 100%;
   }
 }

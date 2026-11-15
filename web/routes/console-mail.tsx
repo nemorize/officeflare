@@ -31,7 +31,6 @@ import { useMailAction, useMailResource } from "../components/mail-common";
 import { MailRules } from "../components/mail-rules";
 import { Button, useNotifications } from "../components/ui";
 import { Check } from "../components/console-shared";
-import "./console.css";
 import "./mail.css";
 export function MailConsoleLayout() {
   const { permissions } = useAccess(),

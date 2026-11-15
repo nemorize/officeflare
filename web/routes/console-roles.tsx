@@ -12,7 +12,15 @@ import {
   useNotifications,
 } from "@/components/ui";
 import { AccessDenied, useAccess } from "../components/console-access";
-import { Check, Confirm, Notice, ResourceState, useResource } from "../components/console-shared";
+import {
+  Check,
+  ConsolePage,
+  ConsoleRoleLink,
+  Confirm,
+  Notice,
+  ResourceState,
+  useResource,
+} from "../components/console-shared";
 import { PermissionPicker } from "../components/permission-picker";
 import { ApiError, api, errorMessage } from "../lib/api";
 import {
@@ -23,7 +31,6 @@ import {
   roleTemplates,
   type Role,
 } from "../lib/console";
-import "./console.css";
 
 export function RolesPage() {
   const access = useAccess(),
@@ -34,21 +41,21 @@ export function RolesPage() {
     canRead ? `/api/roles${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}` : null,
   );
   return (
-    <section className="account-page console-page">
-      <header className="account-page-header console-page-header">
-        <div>
-          <h1>{t("routesConsoleRoles.roles")}</h1>
-          <p>
-            {t("routesConsoleRoles.controlServiceAccessAndAdministrationWithExplicitPermissions")}
-          </p>
-        </div>
-        {canRead && access.permissions.includes("admin.roles.create") && (
+    <ConsolePage
+      title={t("routesConsoleRoles.roles")}
+      description={t(
+        "routesConsoleRoles.controlServiceAccessAndAdministrationWithExplicitPermissions",
+      )}
+      actions={
+        canRead &&
+        access.permissions.includes("admin.roles.create") && (
           <Button nativeButton={false} render={<Link to="/console/roles/new" />} variant="primary">
             <Icon name="plus" />
             {t("routesConsoleRoles.newRole")}
           </Button>
-        )}
-      </header>
+        )
+      }
+    >
       <section className="account-panel console-list-panel">
         {!canRead ? (
           <p className="console-empty">
@@ -83,25 +90,7 @@ export function RolesPage() {
                   {resource.data.roles.map((role) => (
                     <tr key={role.id}>
                       <td>
-                        <Link
-                          className="console-role-name"
-                          to={`/console/roles/${encodeURIComponent(role.id)}`}
-                        >
-                          <span className="console-role-icon">
-                            <Icon name="shield" />
-                          </span>
-                          <span>
-                            <strong>
-                              {role.label}
-                              {role.is_system && (
-                                <span className="console-badge" data-muted>
-                                  {t("routesConsoleRoles.system")}
-                                </span>
-                              )}
-                            </strong>
-                            <small>{role.description || role.key}</small>
-                          </span>
-                        </Link>
+                        <ConsoleRoleLink role={role} />
                       </td>
                       <td>{managedPermissions(role.permissions).length}</td>
                       <td>{role.assigned_user_count ?? 0}</td>
@@ -166,7 +155,7 @@ export function RolesPage() {
           </>
         )}
       </section>
-    </section>
+    </ConsolePage>
   );
 }
 

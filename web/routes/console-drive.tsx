@@ -48,7 +48,6 @@ import {
   ConsoleForm,
   ConsoleDateFilters,
 } from "../components/console-settings";
-import "./console.css";
 
 const endpoint = "/api/drive/admin";
 const localDate = (value: number | null) =>

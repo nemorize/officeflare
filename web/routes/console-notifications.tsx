@@ -3,14 +3,17 @@ import { t } from "../../shared/i18n/index.ts";
 import type { PushSettings } from "../../shared/push";
 import { api, errorMessage } from "../lib/api";
 import { useAccess } from "../components/console-access";
+import { Check } from "../components/console-shared";
 import {
+  ConsoleForm,
+  ConsoleFormActions,
   ConsoleSection,
-  ConsoleSettingsHeader,
   ConsoleState,
+  ConsoleSettingsHeader,
 } from "../components/console-settings";
-import { Button, CheckboxControl, CheckboxLabel, useNotifications } from "../components/ui";
+import { Button, useNotifications } from "../components/ui";
 
-export function NotificationConsolePage() {
+export function NotificationSettingsPanel() {
   const access = useAccess(),
     toast = useNotifications();
   const [settings, setSettings] = useState<PushSettings | null>(null);
@@ -51,9 +54,9 @@ export function NotificationConsolePage() {
     }
   }
   return (
-    <section className="account-page console-page console-settings" data-ui-theme="neutral">
+    <>
       <ConsoleSettingsHeader
-        title={t("push.adminTitle")}
+        title={t("consoleAdmin.notifications")}
         description={t("push.adminDescription")}
       />
       <ConsoleState
@@ -62,39 +65,36 @@ export function NotificationConsolePage() {
         retry={() => setRevision((value) => value + 1)}
       />
       {settings && (
-        <form
+        <ConsoleForm
+          aria-busy={busy}
           onSubmit={(event) => {
             event.preventDefault();
             void save();
           }}
         >
           <ConsoleSection
+            level={2}
             title={t("push.title")}
             description={settings.configured ? t("push.configured") : t("push.notConfigured")}
           >
-            <CheckboxLabel className="notification-setting">
-              <span className="notification-setting-content">
-                <strong>{t("push.adminEnable")}</strong>
-                <small>{t("push.adminHint")}</small>
-              </span>
-              <CheckboxControl
-                checked={settings.web_push_enabled}
-                disabled={busy || !editable}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, web_push_enabled: checked })
-                }
-              />
-            </CheckboxLabel>
-            {editable && (
-              <div className="account-actions">
-                <Button type="submit" variant="primary" disabled={busy}>
-                  {t("common.save")}
-                </Button>
-              </div>
-            )}
+            <Check
+              checked={settings.web_push_enabled}
+              disabled={busy || !editable}
+              onChange={(checked) => setSettings({ ...settings, web_push_enabled: checked })}
+            >
+              <strong>{t("push.adminEnable")}</strong>
+              <small>{t("push.adminHint")}</small>
+            </Check>
           </ConsoleSection>
-        </form>
+          {editable && (
+            <ConsoleFormActions>
+              <Button type="submit" variant="primary" disabled={busy}>
+                {t("common.save")}
+              </Button>
+            </ConsoleFormActions>
+          )}
+        </ConsoleForm>
       )}
-    </section>
+    </>
   );
 }

@@ -25,6 +25,7 @@ import {
   mailConsolePages,
   mailConsolePermissions,
 } from "./lib/console";
+import { servicePermissions } from "./lib/service-admin";
 import "./styles.css";
 
 const UIPreviewPage = import.meta.env.DEV ? lazy(() => import("./routes/ui-preview")) : null;
@@ -46,18 +47,8 @@ const NotificationsPage = lazy(() =>
 const NotificationSettingsPage = lazy(() =>
   import("./routes/notifications").then((module) => ({ default: module.NotificationSettingsPage })),
 );
-const NotificationConsolePage = lazy(() =>
-  import("./routes/console-notifications").then((module) => ({
-    default: module.NotificationConsolePage,
-  })),
-);
-const CalendarConsolePage = lazy(() =>
-  import("./routes/console-calendar").then((module) => ({ default: module.CalendarConsolePage })),
-);
-const ServiceRolesConsolePage = lazy(() =>
-  import("./routes/console-service-roles").then((module) => ({
-    default: module.ServiceRolesConsolePage,
-  })),
+const ServiceConsolePage = lazy(() =>
+  import("./routes/console-service").then((module) => ({ default: module.ServiceConsolePage })),
 );
 const UsersPage = lazy(() =>
   import("./routes/console-users").then((module) => ({ default: module.UsersPage })),
@@ -403,21 +394,13 @@ const router = createBrowserRouter(
         <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
         <Route path="/console" element={<ConsoleGate />}>
           <Route index element={<ConsoleHome />} />
-          <Route
-            path="calendar"
-            element={
-              <ConsoleGate permissions={["admin.calendar.settings.read"]}>
-                <CalendarConsolePage />
-              </ConsoleGate>
-            }
-          />
-          {(["contacts", "wiki"] as const).map((service) => (
+          {(["general", "calendar", "contacts", "wiki"] as const).map((service) => (
             <Route
               key={service}
-              path={service}
+              path={`${service}/:page?`}
               element={
-                <ConsoleGate permissions={["admin.roles.read"]}>
-                  <ServiceRolesConsolePage key={service} service={service} />
+                <ConsoleGate permissions={servicePermissions(service)}>
+                  <ServiceConsolePage key={service} service={service} />
                 </ConsoleGate>
               }
             />
@@ -436,11 +419,7 @@ const router = createBrowserRouter(
           />
           <Route
             path="notifications"
-            element={
-              <ConsoleGate permissions={["admin.notifications.settings.read"]}>
-                <NotificationConsolePage />
-              </ConsoleGate>
-            }
+            element={<Navigate to="/console/general/notifications" replace />}
           />
           <Route
             path="users"

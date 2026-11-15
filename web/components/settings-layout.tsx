@@ -15,17 +15,25 @@ interface SettingsLayoutProps {
   children: ReactNode;
 }
 
-export function SettingsLayout({
-  title,
-  description,
-  actions,
+export function SettingsLayout({ title, description, actions, ...tabs }: SettingsLayoutProps) {
+  return (
+    <>
+      <ConsolePageHeader title={title} description={description}>
+        {actions}
+      </ConsolePageHeader>
+      <SettingsTabs {...tabs} />
+    </>
+  );
+}
+
+export function SettingsTabs({
   pages,
   selected,
   onNavigate,
   navigationLabel,
   navigationClassName = "",
   children,
-}: SettingsLayoutProps) {
+}: Omit<SettingsLayoutProps, "title" | "description" | "actions">) {
   const nav = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const reveal = () =>
@@ -38,23 +46,18 @@ export function SettingsLayout({
     return () => observer.disconnect();
   }, [selected]);
   return (
-    <>
-      <ConsolePageHeader title={title} description={description}>
-        {actions}
-      </ConsolePageHeader>
-      <Tabs.Root value={selected} onValueChange={onNavigate}>
-        <div ref={nav} className={`settings-nav ${navigationClassName}`}>
-          <Tabs.List aria-label={navigationLabel}>
-            {pages.map((page) => (
-              <Tabs.Tab key={page.path} value={page.path}>
-                {page.name}
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
-        </div>
-        <Tabs.Panel value={selected}>{children}</Tabs.Panel>
-      </Tabs.Root>
-    </>
+    <Tabs.Root value={selected} onValueChange={onNavigate}>
+      <div ref={nav} className={`settings-nav ${navigationClassName}`}>
+        <Tabs.List aria-label={navigationLabel}>
+          {pages.map((page) => (
+            <Tabs.Tab key={page.path} value={page.path}>
+              {page.name}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </div>
+      <Tabs.Panel value={selected}>{children}</Tabs.Panel>
+    </Tabs.Root>
   );
 }
 

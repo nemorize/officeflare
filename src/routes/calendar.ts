@@ -21,7 +21,7 @@ import personalRoutes from "../calendar/personal";
 import { active, calendars, rows } from "../calendar/access";
 import { pageLimit, fail } from "../calendar/input";
 import { cursor, readCursor } from "../calendar/cursor";
-import sharingRoutes, { adminSettings } from "../calendar/sharing";
+import sharingRoutes, { adminSettings, settings as workspaceSettings } from "../calendar/sharing";
 import linkRoutes, { linkSessions } from "../calendar/links";
 import { publicRoutes } from "../calendar/public";
 import attendeeRoutes, { ownInvitations } from "../calendar/attendees";
@@ -97,15 +97,22 @@ calendar.use("*", async (c, next) => {
   c.set("initializeCalendar", () => ensurePrimary(c));
   await next();
 });
-calendar.get("/capabilities", async (c) =>
-  c.json({
+calendar.get("/capabilities", async (c) => {
+  const config = await workspaceSettings(c);
+  return c.json({
     ...capabilities,
+    ics_import: !!config.imports_enabled,
+    ics_subscriptions: !!config.subscriptions_enabled,
     permissions: (await requestPermissions(c)).filter((key) => key.startsWith("calendar.")),
-  }),
-);
+  });
+});
 calendar.get("/bootstrap", async (c) => {
   await ensurePrimary(c);
-  const [list, prefs] = await Promise.all([calendars(c), preferences(c)]),
+  const [list, prefs, config] = await Promise.all([
+      calendars(c),
+      preferences(c),
+      workspaceSettings(c),
+    ]),
     primary = list.find((cal) => cal.is_primary)!;
   const [labels, subs] = await Promise.all([
     rows(
@@ -180,7 +187,11 @@ calendar.get("/bootstrap", async (c) => {
     subscriptions: subs,
     preferences: prefs,
     labels,
-    capabilities,
+    capabilities: {
+      ...capabilities,
+      ics_import: !!config.imports_enabled,
+      ics_subscriptions: !!config.subscriptions_enabled,
+    },
   });
 });
 calendar.get("/people", requirePermission("calendar.sharing.internal"), async (c) => {

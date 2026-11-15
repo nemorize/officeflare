@@ -1,6 +1,7 @@
 import { t } from "../../shared/i18n/index.ts";
 import { now, uuid } from "../auth/types";
 import { digest } from "../auth/crypto";
+import { contactCreationPolicy } from "../console/settings";
 import { permissionClosure, type Permission } from "../authorization/permissions";
 import { fail, identifier, text } from "./input";
 import {
@@ -242,6 +243,7 @@ export async function mutate<T>(
     key = idempotencyKey(c);
   const checks = combine(
     auth,
+    await contactCreationPolicy(c.env, c.get("identity").user.id, input.operation),
     ...input.checks,
     ...(key
       ? [
@@ -270,6 +272,13 @@ export async function mutate<T>(
         ...checks.args,
       ),
       ...input.build(proof),
+      statement(
+        c.env,
+        `INSERT INTO console_audit(id,service,actor_user_id,action,changed_keys_json) SELECT ?,'contacts',?,?,'[]' WHERE ${proof}`,
+        id,
+        c.get("identity").user.id,
+        input.operation,
+      ),
     ]);
     if (result[0]!.meta.changes !== 1) {
       if (!(await first(c.env, `SELECT 1 WHERE ${auth.sql}`, ...auth.args)))

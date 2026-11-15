@@ -73,6 +73,8 @@ export const returnToWorkspace = (path: unknown) =>
     "/console/mail/activity",
     "/console/mail/domains",
     "/console/mail/mailboxes",
+    "/console/general",
+    "/console/notifications",
     "/console/calendar",
     "/console/contacts",
     "/console/wiki",
@@ -102,6 +104,9 @@ export const returnToWorkspace = (path: unknown) =>
     "/ai/usage",
     "/console/ai",
   ].includes(path) ||
+    /^\/console\/(?:general\/(?:workspace|regional|notifications)|calendar\/(?:overview|calendars|sharing|invitations|integrations|activity)|contacts\/(?:overview|accounts|contacts|folders|fields|activity)|wiki\/(?:overview|spaces|pages|sharing|settings|activity))$/.test(
+      path,
+    ) ||
     /^\/console(?:\/(?:users|roles)(?:\/[A-Za-z0-9_-]{1,100})?)?$/.test(path) ||
     /^\/ai\/rooms\/[A-Za-z0-9_-]{1,100}$/.test(path) ||
     /^\/console\/ai\/(?:settings|providers|accounts|gateways|pools|models|deployments|profiles|routes|consumers|mcp-servers|quota-plans|quotas|usage|activity|reconciliation)$/.test(

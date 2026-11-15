@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Link } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
-import { ConsolePageHeader, Notice } from "./console-shared";
+import { ConsolePageFrame, ConsolePageHeader, Notice } from "./console-shared";
 import { LoadingSkeleton } from "./loading-skeleton";
 import { SettingsLayout } from "./settings-layout";
 import {
@@ -20,9 +20,9 @@ import "./console-settings.css";
 
 export function ConsoleSettingsLayout(props: ComponentProps<typeof SettingsLayout>) {
   return (
-    <section className="account-page console-page console-settings" data-ui-theme="neutral">
+    <ConsolePageFrame>
       <SettingsLayout {...props} />
-    </section>
+    </ConsolePageFrame>
   );
 }
 
@@ -62,19 +62,22 @@ export function ConsoleSection({
   action,
   children,
   className = "",
+  level = 3,
 }: {
   title?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  level?: 2 | 3;
 }) {
+  const Heading = level === 2 ? "h2" : "h3";
   return (
     <section className={`account-panel console-section ${className}`}>
       {title && (
         <header className="console-section-header">
           <div>
-            <h3>{title}</h3>
+            <Heading>{title}</Heading>
             {description && <p>{description}</p>}
           </div>
           {action}
@@ -296,41 +299,74 @@ export function ConsoleTable<T>({
         kind="list"
       />
       {resource.data && (
-        <section className="account-panel console-list-panel" aria-busy={resource.loading}>
-          <div
-            className="console-table-scroll"
-            tabIndex={0}
-            role="region"
-            aria-label={t("consoleSettings.records")}
-          >
-            <table
-              className="console-table console-settings-table"
-              data-actions={headings.at(-1) === t("common.actions")}
-            >
-              <thead>
-                <tr>
-                  {headings.map((heading, index) => (
-                    <th scope="col" key={index}>
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>{children}</tbody>
-            </table>
-            {!resource.data.items.length && <p className="console-empty">{empty}</p>}
-          </div>
-          <ConsolePagination
-            page={resource.page}
-            count={resource.data.items.length}
-            hasNext={!!resource.data.next_cursor}
-            loading={resource.loading}
-            previous={resource.previous}
-            next={resource.next}
-          />
-        </section>
+        <ConsoleDataTable
+          headings={headings}
+          loading={resource.loading}
+          isEmpty={!resource.data.items.length}
+          empty={empty}
+          actions={headings.at(-1) === t("common.actions")}
+          footer={
+            <ConsolePagination
+              page={resource.page}
+              count={resource.data.items.length}
+              hasNext={!!resource.data.next_cursor}
+              loading={resource.loading}
+              previous={resource.previous}
+              next={resource.next}
+            />
+          }
+        >
+          {children}
+        </ConsoleDataTable>
       )}
     </>
+  );
+}
+
+export function ConsoleDataTable({
+  headings,
+  caption = t("consoleSettings.records"),
+  children,
+  empty = t("consoleSettings.noRecords"),
+  isEmpty = false,
+  loading = false,
+  actions = false,
+  footer,
+  tableClassName = "",
+}: {
+  headings: readonly ReactNode[];
+  caption?: string;
+  children: ReactNode;
+  empty?: ReactNode;
+  isEmpty?: boolean;
+  loading?: boolean;
+  actions?: boolean;
+  footer?: ReactNode;
+  tableClassName?: string;
+}) {
+  return (
+    <section className="account-panel console-list-panel" aria-busy={loading}>
+      <div className="console-table-scroll" tabIndex={0} role="region" aria-label={caption}>
+        <table
+          className={`console-table console-settings-table ${tableClassName}`}
+          data-actions={actions}
+        >
+          <caption className="console-sr-only">{caption}</caption>
+          <thead>
+            <tr>
+              {headings.map((heading, index) => (
+                <th scope="col" key={index}>
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{children}</tbody>
+        </table>
+        {isEmpty && <div className="console-empty">{empty}</div>}
+      </div>
+      {footer}
+    </section>
   );
 }
 

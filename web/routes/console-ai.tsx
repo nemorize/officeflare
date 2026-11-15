@@ -24,21 +24,23 @@ import {
 import { AccessDenied, useAccess } from "../components/console-access";
 import { Check, Notice, adminDate } from "../components/console-shared";
 import { Button, Icon } from "../components/ui";
+import { SettingsTabs } from "../components/settings-layout";
 import {
+  ConsoleDataTable,
   ConsoleDialog,
   ConsoleField,
   ConsoleFilters,
   ConsoleFormActions,
+  ConsoleForm,
   ConsoleInput,
-  ConsoleMetrics,
+  ConsolePagination,
   ConsoleSection,
   ConsoleSelectField,
   ConsoleSettingsHeader,
   ConsoleSettingsLayout,
   ConsoleState,
 } from "../components/console-settings";
-import "./console.css";
-import "./ai.css";
+import "./console-ai.css";
 const endpoint = "/api/ai/admin";
 const options = (items: AIRecord[] = [], blank = true) => [
   ...(blank ? [{ value: "", label: t("aiui.choose") }] : []),
@@ -105,6 +107,21 @@ export function AIConsolePage() {
     }))
     .filter((group) => group.pages.length);
   const group = groups.find((item) => item.members.includes(page))!;
+  const content = (
+    <div key={page}>
+      {spec ? (
+        <ResourcePage spec={spec} />
+      ) : page === "settings" ? (
+        <SettingsPage />
+      ) : page === "quotas" ? (
+        <UserQuotas />
+      ) : page === "reconciliation" ? (
+        <ReconciliationPage />
+      ) : (
+        <UsageAudit page={page} />
+      )}
+    </div>
+  );
   return (
     <ConsoleSettingsLayout
       title={t("aiui.administration")}
@@ -115,32 +132,18 @@ export function AIConsolePage() {
       }
       navigationLabel={t("aiui.adminNavigation")}
     >
-      <div key={page}>
-        {group.pages.length > 1 && (
-          <nav className="ai-subnav" aria-label={group.label}>
-            {group.pages.map((item) => (
-              <Link
-                key={item.page}
-                to={`/console/ai/${item.page}`}
-                aria-current={item.page === page ? "page" : undefined}
-              >
-                {t(item.titleKey)}
-              </Link>
-            ))}
-          </nav>
-        )}
-        {spec ? (
-          <ResourcePage spec={spec} />
-        ) : page === "settings" ? (
-          <SettingsPage />
-        ) : page === "quotas" ? (
-          <UserQuotas />
-        ) : page === "reconciliation" ? (
-          <ReconciliationPage />
-        ) : (
-          <UsageAudit page={page} />
-        )}
-      </div>
+      {group.pages.length > 1 ? (
+        <SettingsTabs
+          pages={group.pages.map((item) => ({ path: item.page, name: t(item.titleKey) }))}
+          selected={page}
+          onNavigate={(next) => navigate(`/console/ai/${next}`)}
+          navigationLabel={group.label}
+        >
+          {content}
+        </SettingsTabs>
+      ) : (
+        content
+      )}
     </ConsoleSettingsLayout>
   );
 }
@@ -166,6 +169,10 @@ function ResourcePage({ spec }: { spec: AIAdminSpec }) {
     spec.key === "routes"
       ? `${profiles.data?.items.find((item) => item.id === record.profile_id)?.name ?? record.profile_id} → ${deployments.data?.items.find((item) => item.id === record.deployment_id)?.provider_model_id ?? record.deployment_id}`
       : recordLabel(record);
+  const items =
+    resource.data?.items.filter((item) =>
+      name(item).toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    ) ?? [];
   return (
     <>
       <ConsoleSettingsHeader
@@ -183,7 +190,7 @@ function ResourcePage({ spec }: { spec: AIAdminSpec }) {
         }
       >
         {writable && spec.key !== "consumers" && (
-          <Button onClick={() => setEditing("new")}>
+          <Button variant="primary" onClick={() => setEditing("new")}>
             <Icon name="plus" />
             {t("common.create")}
           </Button>
@@ -202,115 +209,112 @@ function ResourcePage({ spec }: { spec: AIAdminSpec }) {
           {t("aiui.refresh")}
         </Button>
       </ConsoleFilters>
-      <ConsoleState loading={resource.loading} error={resource.error} retry={resource.reload} />
+      <ConsoleState
+        loading={resource.loading && !resource.data}
+        error={resource.error}
+        retry={resource.reload}
+        kind="list"
+      />
       {resource.data && (
-        <div className="console-table-wrap ai-admin-table">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("common.name")}</th>
-                <th>{t("aiui.configuration")}</th>
-                <th>{t("common.status")}</th>
-                <th>
-                  <span className="visually-hidden">{t("aiui.actions")}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {resource.data.items
-                .filter((item) =>
-                  name(item).toLocaleLowerCase().includes(query.toLocaleLowerCase()),
-                )
-                .map((item) => (
-                  <tr key={String(item.id ?? item.key)}>
-                    <td>
-                      <strong>{name(item)}</strong>
-                      {item.key && <small className="console-subtext">{item.key}</small>}
-                    </td>
-                    <td>
-                      {String(
-                        item.adapter_key ??
-                          item.protocol ??
-                          item.strategy ??
-                          item.transport ??
-                          item.auth_kind ??
-                          item.provider_model_id ??
-                          (item.share_scope ? choice(String(item.share_scope)) : ""),
-                      )}
-                      {item.has_secret === true && (
-                        <small className="ai-secret-ready">
-                          <Icon name="shield" />
-                          {t("aiui.credentialSaved")}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className="ai-badge"
-                        data-enabled={item.enabled ?? (item.status === "active" ? 1 : 0)}
-                      >
-                        {item.status
-                          ? aiStatus(item.status)
-                          : item.enabled
-                            ? t("common.enabled")
-                            : t("aiui.disabled")}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="ai-row-actions">
-                        {relational && (
-                          <Button size="sm" variant="ghost" onClick={() => setRelationship(item)}>
-                            {spec.key === "pools"
-                              ? t("aiui.members")
-                              : spec.key === "consumers"
-                                ? t("aiui.profiles")
-                                : t("aiui.rules")}
-                          </Button>
-                        )}
-                        {writable && (
-                          <Button size="sm" onClick={() => setEditing(item)}>
-                            {t("common.edit")}
-                          </Button>
-                        )}
-                        {writable && spec.key === "accounts" && item.auth_kind === "oauth" && (
-                          <Button
-                            size="sm"
-                            disabled={busy}
-                            onClick={async () => {
-                              setBusy(true);
-                              setError("");
-                              try {
-                                const result = await api<{ authorization_url: string }>(
-                                  `/api/ai/accounts/${item.id}/oauth/start`,
-                                  { method: "POST", body: {} },
-                                );
-                                window.location.assign(result.authorization_url);
-                              } catch (failure) {
-                                setError(errorMessage(failure));
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            {t("aiui.connect")}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          {!resource.data.items.length && (
-            <div className="ai-admin-empty">
-              <Icon name="layers" width={28} height={28} />
-              <p>{t("aiui.emptyResources")}</p>
-              {writable && spec.key !== "consumers" && (
-                <Button onClick={() => setEditing("new")}>{t("common.create")}</Button>
+        <ConsoleDataTable
+          caption={t(spec.titleKey)}
+          headings={[
+            t("common.name"),
+            t("aiui.configuration"),
+            t("common.status"),
+            <span className="console-sr-only">{t("common.actions")}</span>,
+          ]}
+          actions
+          loading={resource.loading}
+          isEmpty={!items.length}
+          empty={
+            <>
+              <p>{query ? t("consoleSettings.noRecords") : t("aiui.emptyResources")}</p>
+              {!query && writable && spec.key !== "consumers" && (
+                <Button onClick={() => setEditing("new")}>
+                  <Icon name="plus" />
+                  {t("common.create")}
+                </Button>
               )}
-            </div>
-          )}
-        </div>
+            </>
+          }
+        >
+          {items.map((item) => (
+            <tr key={String(item.id ?? item.key)}>
+              <td>
+                <strong>{name(item)}</strong>
+                {item.key && <small className="console-subtext">{item.key}</small>}
+              </td>
+              <td>
+                {String(
+                  item.adapter_key ??
+                    item.protocol ??
+                    item.strategy ??
+                    item.transport ??
+                    item.auth_kind ??
+                    item.provider_model_id ??
+                    (item.share_scope ? choice(String(item.share_scope)) : ""),
+                )}
+                {item.has_secret === true && (
+                  <small className="console-subtext">{t("aiui.credentialSaved")}</small>
+                )}
+              </td>
+              <td>
+                <span
+                  className="console-badge"
+                  data-muted={item.enabled === undefined ? item.status !== "active" : !item.enabled}
+                >
+                  {item.status
+                    ? aiStatus(item.status)
+                    : item.enabled
+                      ? t("common.enabled")
+                      : t("aiui.disabled")}
+                </span>
+              </td>
+              <td>
+                <div className="console-row-actions">
+                  {relational && (
+                    <Button size="sm" variant="ghost" onClick={() => setRelationship(item)}>
+                      {spec.key === "pools"
+                        ? t("aiui.members")
+                        : spec.key === "consumers"
+                          ? t("aiui.profiles")
+                          : t("aiui.rules")}
+                    </Button>
+                  )}
+                  {writable && (
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(item)}>
+                      {t("common.edit")}
+                    </Button>
+                  )}
+                  {writable && spec.key === "accounts" && item.auth_kind === "oauth" && (
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        setError("");
+                        try {
+                          const result = await api<{ authorization_url: string }>(
+                            `/api/ai/accounts/${item.id}/oauth/start`,
+                            { method: "POST", body: {} },
+                          );
+                          window.location.assign(result.authorization_url);
+                        } catch (failure) {
+                          setError(errorMessage(failure));
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      {t("aiui.connect")}
+                    </Button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </ConsoleDataTable>
       )}
       {!!editing && (
         <ResourceEditor
@@ -508,21 +512,23 @@ function ResourceEditor({
   }
   return (
     <ConsoleDialog open title={t(spec.titleKey)} onClose={onClose} busy={busy} wide>
-      <form className="ai-settings-form" onSubmit={(event) => void save(event)}>
+      <ConsoleForm onSubmit={(event) => void save(event)}>
         <Notice error={error} />
-        <div className="ai-form-grid">
+        <div className="console-form-grid">
           {spec.fields.filter((field) => !field.advanced).map(render)}
         </div>
         {spec.fields.some((field) => field.advanced) && (
-          <details className="ai-advanced">
+          <details className="console-role-summary">
             <summary>{t("aiui.advanced")}</summary>
-            <div className="ai-form-grid">
+            <div className="console-form-grid">
               {spec.fields.filter((field) => field.advanced).map(render)}
             </div>
           </details>
         )}
-        {spec.key === "accounts" && <p className="ai-form-hint">{t("aiui.sharingHint")}</p>}
-        {spec.key === "deployments" && <p className="ai-form-hint">{t("aiui.verifyBoundsHint")}</p>}
+        {spec.key === "accounts" && <p className="console-subtext">{t("aiui.sharingHint")}</p>}
+        {spec.key === "deployments" && (
+          <p className="console-subtext">{t("aiui.verifyBoundsHint")}</p>
+        )}
         <ConsoleFormActions>
           <Button onClick={onClose} disabled={busy}>
             {t("common.cancel")}
@@ -531,7 +537,7 @@ function ResourceEditor({
             {busy ? t("common.saving") : t("common.save")}
           </Button>
         </ConsoleFormActions>
-      </form>
+      </ConsoleForm>
     </ConsoleDialog>
   );
 }
@@ -638,7 +644,7 @@ function Relationships({
       busy={busy}
       wide
     >
-      <form className="ai-settings-form" onSubmit={(event) => void save(event)}>
+      <ConsoleForm onSubmit={(event) => void save(event)}>
         <ConsoleState
           loading={current.loading || available.loading}
           error={current.error || available.error}
@@ -715,7 +721,7 @@ function Relationships({
             </Button>
           )}
         </ConsoleFormActions>
-      </form>
+      </ConsoleForm>
     </ConsoleDialog>
   );
 }
@@ -755,8 +761,7 @@ function SettingsPage() {
       <ConsoleSettingsHeader title={t("aiui.settings")} />
       <ConsoleState loading={resource.loading} error={resource.error} retry={resource.reload} />
       {resource.data && (
-        <form
-          className="ai-settings-form"
+        <ConsoleForm
           onSubmit={async (event) => {
             event.preventDefault();
             setBusy(true);
@@ -791,14 +796,14 @@ function SettingsPage() {
             >
               {t("aiui.enableHub")}
             </Check>
-            <p className="ai-form-hint">
+            <p className="console-subtext">
               {resource.data.encryption_ready
                 ? t("aiui.encryptionReady")
                 : t("aiui.encryptionMissing")}
             </p>
           </ConsoleSection>
           <ConsoleSection title={t("aiui.defaults")}>
-            <div className="ai-form-grid">
+            <div className="console-form-grid">
               <ConsoleSelectField
                 label={t("aiui.defaultPlan")}
                 value={plan}
@@ -836,10 +841,10 @@ function SettingsPage() {
               </Button>
             )}
           </ConsoleFormActions>
-        </form>
+        </ConsoleForm>
       )}
       <ConsoleSection title={t("aiui.setupTitle")}>
-        <ol className="ai-setup-steps">
+        <ol className="console-setup-steps">
           <li>
             <Link to="/console/ai/providers">{t("aiui.setupProvider")}</Link>
           </li>
@@ -884,7 +889,7 @@ function Rules({
     onChange(values.map((rule, i) => (i === index ? { ...rule, ...change } : rule)));
   return (
     <div className="ai-rule-list">
-      <p className="ai-form-hint">{t("aiui.ruleHint")}</p>
+      <p className="console-subtext">{t("aiui.ruleHint")}</p>
       {values.map((rule, index) => (
         <div className="ai-rule-row" key={index}>
           <ConsoleSelectField
@@ -1005,8 +1010,7 @@ function PlanRules({
   }, [resource.data]);
   return (
     <ConsoleDialog open title={recordLabel(plan)} onClose={onClose} busy={busy} wide>
-      <form
-        className="ai-settings-form"
+      <ConsoleForm
         onSubmit={async (event) => {
           event.preventDefault();
           setBusy(true);
@@ -1036,7 +1040,7 @@ function PlanRules({
             </Button>
           )}
         </ConsoleFormActions>
-      </form>
+      </ConsoleForm>
     </ConsoleDialog>
   );
 }
@@ -1070,22 +1074,23 @@ function UserQuotas() {
   return (
     <>
       <ConsoleSettingsHeader title={t("aiui.userLimits")} description={t("aiui.userLimitsHint")} />
-      <form
-        className="ai-user-search"
+      <ConsoleForm
         onSubmit={(event) => {
           event.preventDefault();
           setSearch(query);
           setUserId("");
         }}
       >
-        <ConsoleInput
-          label={t("aiui.searchUsers")}
-          type="search"
-          value={query}
-          onValueChange={setQuery}
-        />
-        <Button type="submit">{t("aiui.search")}</Button>
-      </form>
+        <ConsoleFilters>
+          <ConsoleInput
+            label={t("aiui.searchUsers")}
+            type="search"
+            value={query}
+            onValueChange={setQuery}
+          />
+          <Button type="submit">{t("aiui.search")}</Button>
+        </ConsoleFilters>
+      </ConsoleForm>
       <ConsoleSelectField
         label={t("aiui.user")}
         value={userId}
@@ -1106,8 +1111,7 @@ function UserQuotas() {
         error={users.error || current.error || plans.error}
       />
       {current.data && (
-        <form
-          className="ai-settings-form"
+        <ConsoleForm
           onSubmit={async (event) => {
             event.preventDefault();
             setBusy(true);
@@ -1172,13 +1176,13 @@ function UserQuotas() {
               </Button>
             )}
           </ConsoleFormActions>
-        </form>
+        </ConsoleForm>
       )}
     </>
   );
 }
 function UsageAudit({ page }: { page: string }) {
-  const [after, setAfter] = useState(0);
+  const [cursors, setCursors] = useState([Number.MAX_SAFE_INTEGER]);
   const resource = useAIResource<{
     usage?: (Record<string, unknown> & {
       invocations: number;
@@ -1194,91 +1198,87 @@ function UsageAudit({ page }: { page: string }) {
       target_id: string | null;
       created_at: number;
     })[];
-  }>(
-    `${endpoint}/${page === "usage" ? "usage" : "audit?before=" + (after || Number.MAX_SAFE_INTEGER)}`,
-  );
+  }>(`${endpoint}/${page === "usage" ? "usage" : "audit?before=" + cursors.at(-1)}`);
+  const usage = page === "usage",
+    title = usage ? t("aiui.usage") : t("aiui.audit"),
+    count = (resource.data?.usage ?? resource.data?.events ?? []).length;
   return (
     <>
       <ConsoleSettingsHeader
-        title={page === "usage" ? t("aiui.usage") : t("aiui.audit")}
-        description={page === "usage" ? t("aiui.workspaceUsageHint") : t("aiui.auditHint")}
+        title={title}
+        description={usage ? t("aiui.workspaceUsageHint") : t("aiui.auditHint")}
       >
         <Button variant="ghost" onClick={resource.reload}>
           <Icon name="refresh" />
           {t("aiui.refresh")}
         </Button>
       </ConsoleSettingsHeader>
-      <ConsoleState loading={resource.loading} error={resource.error} />
+      <ConsoleState
+        loading={resource.loading && !resource.data}
+        error={resource.error}
+        retry={resource.reload}
+        kind="list"
+      />
       {resource.data && (
-        <div className="console-table-wrap ai-admin-table">
-          {page === "usage" ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("aiui.subject")}</th>
-                  <th>{t("aiui.feature")}</th>
-                  <th>{t("aiui.requests")}</th>
-                  <th>{t("aiui.totalTokens")}</th>
-                  <th>{t("aiui.cost")}</th>
+        <ConsoleDataTable
+          caption={title}
+          headings={
+            usage
+              ? [
+                  t("aiui.subject"),
+                  t("aiui.feature"),
+                  t("aiui.requests"),
+                  t("aiui.totalTokens"),
+                  t("aiui.cost"),
+                ]
+              : [t("aiui.when"), t("aiui.actor"), t("aiui.action"), t("aiui.target")]
+          }
+          loading={resource.loading}
+          isEmpty={!count}
+          empty={t("aiui.noActivity")}
+          footer={
+            !usage && (
+              <ConsolePagination
+                page={cursors.length}
+                count={count}
+                hasNext={count === 100}
+                loading={resource.loading}
+                previous={() => setCursors((current) => current.slice(0, -1))}
+                next={() => {
+                  const last = resource.data?.events?.at(-1)?.seq;
+                  if (last) setCursors((current) => [...current, last]);
+                }}
+              />
+            )
+          }
+        >
+          {usage
+            ? resource.data.usage?.map((row, index) => (
+                <tr key={index}>
+                  <td>{String(row.billing_subject_id)}</td>
+                  <td>{String(row.consumer_key)}</td>
+                  <td>{row.invocations.toLocaleString()}</td>
+                  <td>{(row.input_tokens + row.output_tokens).toLocaleString()}</td>
+                  <td>
+                    {aiMoney(row.cost_micro_usd)}
+                    {!!row.unknown_cost_events && (
+                      <small className="console-subtext">{t("aiui.unpricedHint")}</small>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {resource.data.usage?.map((row, index) => (
-                  <tr key={index}>
-                    <td>{String(row.billing_subject_id)}</td>
-                    <td>{String(row.consumer_key)}</td>
-                    <td>{row.invocations.toLocaleString()}</td>
-                    <td>{(row.input_tokens + row.output_tokens).toLocaleString()}</td>
-                    <td>
-                      {aiMoney(row.cost_micro_usd)}
-                      {!!row.unknown_cost_events && <small>{t("aiui.unpricedHint")}</small>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("aiui.when")}</th>
-                  <th>{t("aiui.actor")}</th>
-                  <th>{t("aiui.action")}</th>
-                  <th>{t("aiui.target")}</th>
+              ))
+            : resource.data.events?.map((event) => (
+                <tr key={event.seq}>
+                  <td>{adminDate(event.created_at)}</td>
+                  <td>{event.actor_key}</td>
+                  <td>{event.action}</td>
+                  <td>
+                    {event.target_type}
+                    <small className="console-subtext">{event.target_id}</small>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {resource.data.events?.map((event) => (
-                  <tr key={event.seq}>
-                    <td>{adminDate(event.created_at)}</td>
-                    <td>{event.actor_key}</td>
-                    <td>{event.action}</td>
-                    <td>
-                      {event.target_type}
-                      <small className="console-subtext">{event.target_id}</small>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {!(resource.data.usage ?? resource.data.events)?.length && (
-            <p className="ai-empty-inline">{t("aiui.noActivity")}</p>
-          )}
-        </div>
-      )}
-      {page !== "usage" && (
-        <div className="ai-pagination">
-          <Button disabled={!after} onClick={() => setAfter(0)}>
-            {t("aiui.firstPage")}
-          </Button>
-          <Button
-            disabled={!resource.data?.events || resource.data.events.length < 100}
-            onClick={() => setAfter(resource.data?.events?.at(-1)?.seq ?? 0)}
-          >
-            {t("aiui.nextPage")}
-          </Button>
-        </div>
+              ))}
+        </ConsoleDataTable>
       )}
     </>
   );
@@ -1306,7 +1306,7 @@ function ReconciliationPage() {
         title={t("aiui.reconciliation")}
         description={t("aiui.reconciliationHint")}
       >
-        <Button onClick={resource.reload}>
+        <Button variant="ghost" onClick={resource.reload}>
           <Icon name="refresh" />
           {t("aiui.refresh")}
         </Button>
@@ -1315,11 +1315,11 @@ function ReconciliationPage() {
       {groups.map((group) => (
         <ConsoleSection key={group.key} title={group.title}>
           {resource.data?.[group.key].map((item) => (
-            <div className="ai-connection-row" key={item.id}>
+            <div className="console-record" key={item.id}>
               <Icon name="info" />
               <div>
                 <strong>{String(item.tool_name ?? item.id)}</strong>
-                <small>{adminDate(item.created_at)}</small>
+                <small className="console-subtext">{adminDate(item.created_at)}</small>
               </div>
               {writable && group.path && (
                 <Button
@@ -1336,7 +1336,7 @@ function ReconciliationPage() {
             </div>
           ))}
           {!resource.loading && !resource.data?.[group.key].length && (
-            <p className="ai-empty-inline">{t("aiui.noReconciliation")}</p>
+            <p className="console-subtext">{t("aiui.noReconciliation")}</p>
           )}
         </ConsoleSection>
       ))}
@@ -1347,8 +1347,7 @@ function ReconciliationPage() {
         onClose={() => setSelected(null)}
         busy={busy}
       >
-        <form
-          className="ai-settings-form"
+        <ConsoleForm
           onSubmit={async (event) => {
             event.preventDefault();
             if (!selected) return;
@@ -1382,7 +1381,7 @@ function ReconciliationPage() {
               {t("aiui.reconcile")}
             </Button>
           </ConsoleFormActions>
-        </form>
+        </ConsoleForm>
       </ConsoleDialog>
     </>
   );

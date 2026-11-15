@@ -8,9 +8,17 @@
 .console-page-header > a {
   flex-shrink: 0;
 }
+.console-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
 @media (max-width: 640px) {
   .console-page-header {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
   .account-page-header.console-page-header h1 {
     font-size: 24px;

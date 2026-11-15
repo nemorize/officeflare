@@ -8,8 +8,6 @@ import {
   managedPermissions,
   rolePayload,
   roleTemplates,
-  servicePermissions,
-  serviceRoles,
   userChanges,
 } from "../web/lib/console.ts";
 import { workspaceApps } from "../web/lib/workspace-navigation.ts";
@@ -71,7 +69,7 @@ test("console entry and administrative records are separate from service access"
   );
   assert.deepEqual(
     consoleMenu(permissionClosure(["admin.roles.read"])).map((item) => item.path),
-    ["/console/roles", "/console/contacts", "/console/wiki"],
+    ["/console/roles"],
   );
   assert.equal(canGrant(["admin.users.create"], ["admin.users.create"]), false);
   assert.equal(canGrant(permissionClosure(["admin.users.create"]), ["admin.users.read"]), true);
@@ -92,29 +90,6 @@ test("every workspace service has an administrative console entry", () => {
     ["/console/calendar"],
   );
   assert.deepEqual(consoleMenu(["admin.calendar.settings.read"]), []);
-});
-
-test("service administration includes only roles and permissions for the selected service", () => {
-  const roles = [
-    { id: "wiki", permissions: ["wiki.access", "wiki.pages.create", "contacts.access"] },
-    { id: "contacts", permissions: ["contacts.access", "contacts.entries.update"] },
-    { id: "calendar", permissions: ["calendar.access"] },
-    { id: "unknown", permissions: ["wiki.unknown", "contacts-evil.access"] },
-  ];
-  assert.deepEqual(
-    serviceRoles(roles, "wiki").map((role) => role.id),
-    ["wiki"],
-  );
-  assert.deepEqual(
-    serviceRoles(roles, "contacts").map((role) => role.id),
-    ["wiki", "contacts"],
-  );
-  assert.deepEqual(servicePermissions(roles[0].permissions, "wiki"), [
-    "wiki.access",
-    "wiki.pages.create",
-  ]);
-  assert.deepEqual(servicePermissions(roles[0].permissions, "contacts"), ["contacts.access"]);
-  assert.deepEqual(serviceRoles([], "wiki"), []);
 });
 
 test("mail administration shares one console entry for either or both read permissions", () => {
@@ -305,7 +280,12 @@ test("login returns to allowed routes and uses a permission-aware home for inval
     "/console/users/new",
     "/console/users/user-123",
     "/console/roles/system-administrator",
+    "/console/general",
+    "/console/general/notifications",
     "/console/calendar",
+    "/console/calendar/sharing",
+    "/console/wiki/spaces",
+    "/console/contacts/fields",
     "/console/wiki",
     "/console/contacts",
   ])

@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { servicePermissions } from "./service-admin.ts";
 import type { RegionalPreferences } from "../../shared/regional.ts";
 import type { ApiOptions } from "./api-client";
 import type { WorkspaceNavigationItem } from "./workspace-navigation";
@@ -59,6 +60,12 @@ export const mailConsolePages = [
 export const mailConsolePermissions = mailConsolePages.map((page) => page.permission);
 export const consoleSections: (WorkspaceNavigationItem & { permissions: string[] })[] = [
   {
+    path: "/console/general",
+    name: t("consoleAdmin.general"),
+    icon: "settings",
+    permissions: servicePermissions("general"),
+  },
+  {
     path: "/console/users",
     name: t("libConsole.users"),
     icon: "users",
@@ -80,7 +87,7 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     path: "/console/calendar",
     name: t("libWorkspaceNavigation.calendar"),
     icon: "calendar",
-    permissions: ["admin.calendar.settings.read"],
+    permissions: servicePermissions("calendar"),
   },
   {
     path: "/console/drive",
@@ -92,19 +99,13 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     path: "/console/contacts",
     name: t("contacts.title"),
     icon: "users",
-    permissions: ["admin.roles.read"],
+    permissions: servicePermissions("contacts"),
   },
   {
     path: "/console/wiki",
     name: t("wiki.title"),
     icon: "book",
-    permissions: ["admin.roles.read"],
-  },
-  {
-    path: "/console/notifications",
-    name: t("push.adminTitle"),
-    icon: "bell",
-    permissions: ["admin.notifications.settings.read"],
+    permissions: servicePermissions("wiki"),
   },
   {
     path: "/console/ai",
@@ -230,13 +231,6 @@ export interface Role {
   updated_at: number;
   assigned_user_count?: number;
 }
-export type ConsoleRoleService = "contacts" | "wiki";
-export const servicePermissions = (permissions: readonly string[], service: ConsoleRoleService) =>
-  permissions
-    .filter(isPermission)
-    .filter((key) => key.startsWith(`${service}.`) || key.startsWith(`admin.${service}.`));
-export const serviceRoles = (roles: readonly Role[], service: ConsoleRoleService) =>
-  roles.filter((role) => servicePermissions(role.permissions, service).length > 0);
 export interface Page<T> {
   items: T[];
   next_cursor: string | null;

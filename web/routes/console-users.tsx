@@ -19,6 +19,7 @@ import { UserAvatar } from "../components/user-avatar";
 import { useAccess } from "../components/console-access";
 import {
   Check,
+  ConsolePage,
   Confirm,
   Notice,
   ResourceState,
@@ -46,7 +47,6 @@ import {
 } from "../components/user-mail";
 import { useMailResource } from "../components/mail-common";
 import { LoadingSkeleton } from "../components/loading-skeleton";
-import "./console.css";
 
 export function UsersPage() {
   const access = useAccess(),
@@ -59,19 +59,18 @@ export function UsersPage() {
         : null,
     );
   return (
-    <section className="account-page console-page">
-      <header className="account-page-header console-page-header">
-        <div>
-          <h1>{t("routesConsoleUsers.users")}</h1>
-          <p>{t("routesConsoleUsers.managePeoplePersonalMailAddressesAndWorkspaceAccess")}</p>
-        </div>
-        {access.permissions.includes("admin.users.create") && (
+    <ConsolePage
+      title={t("routesConsoleUsers.users")}
+      description={t("routesConsoleUsers.managePeoplePersonalMailAddressesAndWorkspaceAccess")}
+      actions={
+        access.permissions.includes("admin.users.create") && (
           <Button nativeButton={false} render={<Link to="/console/users/new" />} variant="primary">
             <Icon name="plus" />
             {t("routesConsoleUsers.newUser")}
           </Button>
-        )}
-      </header>
+        )
+      }
+    >
       <section className="account-panel console-list-panel">
         {!canRead ? (
           <p className="console-empty">
@@ -203,7 +202,7 @@ export function UsersPage() {
           </>
         )}
       </section>
-    </section>
+    </ConsolePage>
   );
 }
 

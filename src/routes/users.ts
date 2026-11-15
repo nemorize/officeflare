@@ -26,6 +26,8 @@ import {
   userSessions,
 } from "../db/schema";
 import { profileImageResponse } from "../profile/image-response";
+import { serviceSettings } from "../console/settings";
+import type { LanguagePreference } from "../../shared/i18n/locale";
 import {
   defaultRoles,
   defaultsSnapshot,
@@ -403,9 +405,13 @@ userRoutes.post("/", requirePermission("admin.users.create"), async (c) => {
   const email = emailAddress(data.email_address),
     suppliedPassword = password(data.password, true),
     timestamp = now();
+  const configuration = (await serviceSettings(c.env, "general")).values;
   const values = {
     id: uuid(),
     email_address: email,
+    language: configuration.default_language as LanguagePreference,
+    time_zone: String(configuration.default_time_zone),
+    regional_format: String(configuration.default_regional_format),
     display_name:
       "display_name" in data ? nullableText(data.display_name, "display_name", 200) : null,
     profile_image_key:

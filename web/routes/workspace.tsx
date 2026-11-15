@@ -6,6 +6,7 @@ import { AccountProvider, useAccount } from "../components/account-context";
 import { AccountAvatar } from "../components/account-avatar";
 import { ThemeMenu } from "../components/theme-menu";
 import { AccessProvider, WorkspaceHome, useAccess } from "../components/console-access";
+import { useResource } from "../components/console-shared";
 import { MailProvider, MailSidebar, useMail } from "../components/mail-context";
 import { MailSettingsButton, MailTopbar } from "../components/mail-chrome";
 import { MailResourceProvider } from "../components/mail-resource-context";
@@ -99,6 +100,11 @@ function ProfileMenu({ busy, signOut }: { busy: boolean; signOut: () => void }) 
 }
 
 function WorkspaceChrome() {
+  const workspace = useResource<{ workspace_name: string; support_url: string }>("/api/workspace");
+  useEffect(() => {
+    window.addEventListener("workspace-configuration-changed", workspace.reload);
+    return () => window.removeEventListener("workspace-configuration-changed", workspace.reload);
+  }, [workspace.reload]);
   const notify = useNotifications(),
     mail = useMail(),
     calendar = useCalendar(),
@@ -180,8 +186,10 @@ function WorkspaceChrome() {
                     : t("routesWorkspace.mail")
                   : t("routesWorkspace.pageNotFound")));
   useEffect(() => {
-    document.title = t("routesWorkspace.officeflare", { title: title });
-  }, [title]);
+    document.title = workspace.data?.workspace_name
+      ? `${title} · ${workspace.data.workspace_name}`
+      : t("routesWorkspace.officeflare", { title: title });
+  }, [title, workspace.data?.workspace_name]);
   useEffect(() => {
     content.current?.scrollTo(0, 0);
     setMobileMenu(false);
@@ -209,7 +217,15 @@ function WorkspaceChrome() {
         {t("routesWorkspace.skipToContent")}
       </a>
       <aside className="workspace-rail" aria-label={t("routesWorkspace.applications")}>
-        <Link to="/" className="workspace-mark" aria-label={t("routesWorkspace.officeflareHome")}>
+        <Link
+          to="/"
+          className="workspace-mark"
+          aria-label={
+            workspace.data?.workspace_name && workspace.data.workspace_name !== "Officeflare"
+              ? workspace.data.workspace_name
+              : t("routesWorkspace.officeflareHome")
+          }
+        >
           <OfficeflareMark />
         </Link>
         {visibleApps.map((item) => (
@@ -234,6 +250,18 @@ function WorkspaceChrome() {
           </NavLink>
         )}
         <div className="workspace-rail-footer">
+          {workspace.data?.support_url && (
+            <a
+              href={workspace.data.support_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="workspace-rail-link"
+              aria-label={t("consoleAdmin.help")}
+              title={t("consoleAdmin.help")}
+            >
+              <Icon name="info" />
+            </a>
+          )}
           <NotificationBell />
           <ProfileMenu
             busy={busy}

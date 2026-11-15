@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { prepareNotification } from "../notifications/service";
 import { recoverNotifications } from "../notifications/jobs";
 import { profileImageResponse } from "../profile/image-response";
+import { serviceSettings } from "../console/settings";
 import * as Y from "yjs";
 import { decodeBytes, MAX_STATE_BYTES } from "../../shared/collaboration";
 import { richTextValue } from "../../shared/rich-text";
@@ -109,9 +110,19 @@ wiki.use("*", async (c, next) => {
   if (c.req.method !== "GET" && c.res.ok)
     c.executionCtx.waitUntil(recoverNotifications(c.env).catch(() => {}));
 });
-wiki.get("/capabilities", async (c) =>
-  c.json({ permissions: (await requestPermissions(c)).filter((v) => v.startsWith("wiki.")) }),
-);
+wiki.get("/capabilities", async (c) => {
+  const config = (await serviceSettings(c.env, "wiki")).values;
+  const blocked = [
+    ...(!config.spaces_enabled ? ["wiki.spaces.create"] : []),
+    ...(!config.pages_enabled ? ["wiki.pages.create"] : []),
+    ...(!config.comments_enabled ? ["wiki.comments.create"] : []),
+  ];
+  return c.json({
+    permissions: (await requestPermissions(c)).filter(
+      (v) => v.startsWith("wiki.") && !blocked.includes(v),
+    ),
+  });
+});
 wiki.get("/spaces", async (c) =>
   c.json({
     spaces: (

@@ -61,7 +61,7 @@ export const feedDto = (feed: CalendarFeed) => ({
   warnings: JSON.parse(feed.warnings_json) as string[],
 });
 const available = (alias = "f") =>
-  `EXISTS(SELECT 1 FROM calendars cal JOIN users owner ON owner.id=cal.data_owner_user_id WHERE cal.id=${alias}.calendar_id AND cal.kind='external' AND cal.status='active' AND cal.trashed_at IS NULL AND ${active("owner")} AND EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=owner.id AND rp.permission_key='calendar.access'))`;
+  `EXISTS(SELECT 1 FROM calendar_workspace_settings WHERE id='workspace' AND subscriptions_enabled=1) AND EXISTS(SELECT 1 FROM calendars cal JOIN users owner ON owner.id=cal.data_owner_user_id WHERE cal.id=${alias}.calendar_id AND cal.kind='external' AND cal.status='active' AND cal.trashed_at IS NULL AND ${active("owner")} AND EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=owner.id AND rp.permission_key='calendar.access'))`;
 function bulk(
   env: CalendarEnv,
   table: string,

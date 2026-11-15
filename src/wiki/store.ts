@@ -4,6 +4,7 @@ import { en } from "../../shared/i18n/en.ts";
 import { wikiRoles, type WikiPage, type WikiSpace } from "../../shared/wiki";
 import { now, uuid, type AuthContext } from "../auth/types";
 import { invalid } from "../auth/input";
+import { policyDenied, settingEnabled } from "../console/settings";
 import { permissionClosure, type Permission } from "../authorization/permissions";
 import type { CollaborationActor } from "../collaboration/types";
 export type Bind = string | number | null;
@@ -137,9 +138,21 @@ export async function mutate(
   build: (proof: string, operation: string) => D1PreparedStatement[],
   audit?: { space: string; page?: string; action: string },
 ) {
+  const policyKey =
+    action === "wiki.spaces.create"
+      ? "spaces_enabled"
+      : action === "wiki.pages.create"
+        ? "pages_enabled"
+        : action === "wiki.comments.create"
+          ? "comments_enabled"
+          : ["member.granted", "page.shared"].includes(audit?.action ?? "")
+            ? "sharing_enabled"
+            : null;
+  const policy = policyKey ? settingEnabled("wiki", policyKey) : check("1");
+  if (!(await row(c.env, `SELECT 1 WHERE ${policy.sql}`, ...policy.args))) policyDenied();
   const actor = actorOf(c),
     operation = uuid(),
-    all = [actorCondition(actor), permissionCondition(actor.user_id, action), ...checks];
+    all = [actorCondition(actor), permissionCondition(actor.user_id, action), policy, ...checks];
   const proof = `EXISTS(SELECT 1 FROM wiki_operations WHERE id='${operation}')`;
   const result = await c.env.DB.withSession("first-primary").batch([
     stmt(
