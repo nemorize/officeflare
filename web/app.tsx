@@ -12,6 +12,7 @@ import {
 } from "react-router";
 import { LoginPage } from "./routes/login";
 import { UIProvider } from "@/components/ui";
+import { NetworkNotifications } from "./components/network-notifications";
 import { ApplicationErrorBoundary } from "./components/application-error";
 import { RouteErrorBoundary } from "./components/route-error";
 import { EmptyWorkspacePage, WorkspaceLayout } from "./routes/workspace";
@@ -568,6 +569,7 @@ root.render(
   <StrictMode>
     <ApplicationErrorBoundary>
       <UIProvider>
+        <NetworkNotifications />
         <RouterProvider router={router} />
       </UIProvider>
     </ApplicationErrorBoundary>

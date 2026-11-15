@@ -1,3 +1,4 @@
+import { waitForWikiSave } from "./wiki-browser.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -54,9 +55,7 @@ test(
     const personalHome = tab.url();
     await tab.locator(".wiki-home").getByRole("button", { name: "New page", exact: true }).click();
     await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("Private notes");
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
-    );
+    await waitForWikiSave(f, tab);
     await tab.getByRole("button", { name: "Switch space" }).click();
     await tab.getByRole("menuitem", { name: "New space", exact: true }).click();
     const dialog = tab.locator('[role="dialog"]:not([data-ui="toast-root"])');
@@ -171,9 +170,7 @@ test(
       "H1",
     );
 
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
-    );
+    await waitForWikiSave(f, tab);
     await tab.getByRole("button", { name: "Change page icon" }).click();
     await tab.getByRole("button", { name: "📚", exact: true }).click();
     await tab.waitForFunction(
@@ -332,9 +329,7 @@ test(
       .click();
     await tab.getByRole("alertdialog").waitFor({ state: "hidden" });
     await history.waitFor({ state: "hidden" });
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
-    );
+    await waitForWikiSave(f, tab);
     await editor.locator("h1").getByText("Working together", { exact: true }).waitFor();
     await tab
       .locator(".wiki-page-action-buttons")
@@ -345,9 +340,7 @@ test(
       (url) => url.href !== documentUrl && /\/wiki\/[^/]+\/[^/]+$/.test(url.pathname),
     );
     await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("Meeting notes");
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
-    );
+    await waitForWikiSave(f, tab);
     const nestedPageId = new URL(tab.url()).pathname.split("/").at(-1);
     const nestedRow = tab
       .locator(".wiki-tree-row")
@@ -364,9 +357,7 @@ test(
       await tab.getByRole("textbox", { name: "Page title", exact: true }).inputValue(),
       "Meeting archive",
     );
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
-    );
+    await waitForWikiSave(f, tab);
     const renamedRow = tab
       .locator(".wiki-tree-row")
       .filter({ has: tab.getByRole("link", { name: "Meeting archive", exact: true }) });
@@ -579,8 +570,10 @@ test(
         .run();
     }
     let parent = page.id;
+    const nestedIds = [];
     for (let i = 0; i < 9; i++) {
       const child = (await call(`/wiki/spaces/${space.id}/pages`, { parent_id: parent })).page;
+      nestedIds.push(child.id);
       await f.db
         .prepare("UPDATE wiki_pages SET title=? WHERE id=?")
         .bind(`Nested ${i}`, child.id)
@@ -626,12 +619,12 @@ test(
     await tab.waitForURL((u) => u.pathname != "/login");
     const url = `${origin}/wiki/${space.id}/${page.id}`;
     await tab.goto(url);
-    await tab.locator(".wiki-save-state.state-saved").waitFor();
+    await tab.locator('.collaborative-prose[contenteditable="true"]').waitFor();
     await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("Audit document");
     await tab.locator(".wiki-participants img").waitFor();
     const second = await context.newPage();
     await second.goto(url);
-    await second.locator(".wiki-save-state.state-saved").waitFor();
+    await second.locator('.collaborative-prose[contenteditable="true"]').waitFor();
     assert.equal(await tab.locator(".wiki-participants > span").count(), 1);
     await second.close();
     const tree = await tab.locator(".workspace-sidebar .wiki-tree").boundingBox(),
@@ -749,13 +742,11 @@ test(
     await tab.getByRole("searchbox").fill("Nested 7");
     await tab.getByRole("option", { name: /^Nested 7/ }).waitFor();
     await tab.getByRole("searchbox").press("Enter");
+    await tab.waitForURL((u) => u.pathname.endsWith("/" + nestedIds[7]));
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
     drawer = tab.locator(".workspace-navigation-drawer");
     await drawer.getByRole("button", { name: "Collapse Audit document", exact: true }).waitFor();
-    await drawer
-      .locator('.wiki-tree a[aria-current="page"]')
-      .filter({ hasText: "Nested 7" })
-      .waitFor();
+    await drawer.locator(`.wiki-tree a[aria-current="page"][href$="/${nestedIds[7]}"]`).waitFor();
   },
 );
 
@@ -851,7 +842,7 @@ test(
       null,
     );
     await tab.goto(`${origin}/wiki/${space.id}/${page.id}`);
-    await tab.locator(".wiki-save-state.state-saved").waitFor();
+    await tab.locator('.collaborative-prose[contenteditable="true"]').waitFor();
     await tab.getByRole("button", { name: "Share", exact: true }).click();
     await dialog.getByText("Current access: Owner", { exact: true }).waitFor();
     assert.deepEqual(await shape(), driveShape);

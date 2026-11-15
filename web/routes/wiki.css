@@ -337,15 +337,6 @@
   min-height: 28px;
   margin-bottom: 12px;
 }
-.wiki-save-state {
-  flex: 1;
-  color: var(--ui-muted);
-  font-size: 11px;
-}
-.wiki-save-state.state-error,
-.wiki-save-state.state-revoked {
-  color: var(--ui-danger);
-}
 .wiki-participants {
   display: flex;
   gap: 4px;
@@ -835,10 +826,6 @@
   margin: 0;
   min-height: 28px;
 }
-.wiki-header-presence .wiki-save-state {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
 .wiki-header-presence .wiki-participants {
   margin-inline-start: 2px;
 }
@@ -1299,9 +1286,6 @@
   .wiki-side-panel {
     box-shadow: var(--ui-shadow-popup);
   }
-  .wiki-header-presence .wiki-save-state.state-saved {
-    display: none;
-  }
 }
 @media (max-width: 760px) {
   .wiki-document-width {
@@ -1491,15 +1475,9 @@
 .wiki-header-presence {
   max-width: 160px;
 }
-.wiki-header-presence .wiki-save-state {
-  display: none;
-}
 @media (min-width: 1101px) {
   .wiki-header-presence {
     max-width: 230px;
-  }
-  .wiki-header-presence .wiki-save-state {
-    display: block;
   }
 }
 @media (max-width: 760px) {

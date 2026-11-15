@@ -1297,7 +1297,7 @@ function OpenPage({ page }: { page: Page }) {
       )}
 
       {blocker.state === "blocked" && (
-        <WikiDialog title={t("wiki.saving")} open onClose={() => blocker.reset()}>
+        <WikiDialog title={t("wiki.unsavedChanges")} open onClose={() => blocker.reset()}>
           <p>{t("wiki.unsavedNavigation")}</p>
           <div className="wiki-dialog-actions">
             <Button onClick={() => blocker.reset()}>{t("wiki.cancel")}</Button>

@@ -15,6 +15,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { t } from "../../shared/i18n/index.ts";
 import { CollaborationClient, type CollaborationTransport } from "../lib/collaboration/client";
 import { EditorBlockMenu } from "./editor-block-menu";
+import { LoadingSkeleton } from "./loading-skeleton";
 import { Button, Icon, Popover, PopoverPopup } from "./ui";
 export function downloadText(filename: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
@@ -206,13 +207,17 @@ function Editor({
       ))}
     </div>
   );
-  const statusLabel = client.status === "error" ? t("wiki.syncError") : t(`wiki.${client.status}`);
+  const failure =
+    client.status === "error"
+      ? t("wiki.syncError")
+      : client.status === "reset"
+        ? t("wiki.reset")
+        : client.status === "revoked"
+          ? t("wiki.revoked")
+          : null;
   const participants = [...new Map(client.participants.map((p) => [p.user_id, p])).values()];
   const presence = (
     <div className="wiki-presence-row">
-      <span role="status" className={`wiki-save-state state-${client.status}`}>
-        {statusLabel}
-      </span>
       <div className="wiki-participants" aria-label={t("wiki.participants")}>
         {participants.slice(0, 4).map((p) => (
           <span
@@ -246,7 +251,7 @@ function Editor({
           </Popover.Root>
         )}
       </div>
-      {["error", "reset", "offline", "revoked"].includes(client.status) && (
+      {(failure || (client.status === "offline" && client.unsaved)) && (
         <Button
           size="sm"
           variant="ghost"
@@ -265,6 +270,11 @@ function Editor({
   return (
     <div className="collaborative-document">
       {statusContainer && !mobile ? createPortal(presence, statusContainer) : presence}
+      {failure && (
+        <p role="alert" className="wiki-error">
+          {failure}
+        </p>
+      )}
       <textarea
         ref={titleInput}
         rows={1}
@@ -361,16 +371,15 @@ export function CollaborativeEditor({
       window.removeEventListener("beforeunload", unload);
     };
   }, [resourceId, transport, generation]);
-  if (!client?.synced)
-    return (
-      <p role="status">
-        {client?.status === "revoked"
-          ? t("wiki.revoked")
-          : client?.status === "error"
-            ? t("wiki.syncError")
-            : t("wiki.connecting")}
-      </p>
-    );
+  if (!client?.synced) {
+    if (client?.status === "revoked" || client?.status === "error")
+      return (
+        <p role="alert" className="wiki-error">
+          {t(client.status === "revoked" ? "wiki.revoked" : "wiki.syncError")}
+        </p>
+      );
+    return <LoadingSkeleton kind="reader" rows={2} />;
+  }
   return (
     <Editor
       key={resourceId}

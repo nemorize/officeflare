@@ -404,6 +404,9 @@ export const ko = defineTranslations(en, {
   "mcp.calendarRead": "일정 읽기",
   "mcp.calendarWrite": "일정 변경",
 
+  "network.disconnected": "인터넷 연결이 끊겼습니다.",
+  "network.reconnected": "인터넷에 다시 연결되었습니다.",
+  "wiki.unsavedChanges": "저장되지 않은 변경 사항",
   "wiki.shareTitle": "‘{title}’ 공유",
   "wiki.confirmTrash":
     "‘{title}’ 페이지와 하위 페이지를 휴지통으로 이동할까요? 나중에 복원할 수 있습니다.",
@@ -550,11 +553,7 @@ export const ko = defineTranslations(en, {
   "wiki.favorite": "즐겨찾기에 추가",
   "wiki.unfavorite": "즐겨찾기 해제",
   "wiki.favorites": "즐겨찾기",
-  "wiki.connecting": "연결 중…",
   "wiki.saved": "저장됨",
-  "wiki.saving": "저장 중…",
-  "wiki.offline": "오프라인 · 변경 내용은 이 탭에 보관됩니다",
-  "wiki.readonly": "읽기 전용",
   "wiki.revoked": "접근 권한이 회수되었습니다.",
   "wiki.reset": "페이지가 복원되었습니다. 다시 열기 전에 편집 내용을 복사해 보관하세요.",
   "wiki.syncError": "변경 내용을 동기화하지 못했습니다. 다시 열기 전에 편집 내용을 복사하세요.",
