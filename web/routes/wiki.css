@@ -245,9 +245,11 @@
   font-size: 11px;
   color: var(--ui-muted);
 }
-.wiki-page-table td:last-child > svg {
+.wiki-page-link > .wiki-starred-icon {
   color: var(--ui-muted);
-  width: 14px;
+  width: 12px;
+  height: 12px;
+  fill: var(--ui-hover);
 }
 .wiki-row-actions {
   display: flex;
@@ -280,6 +282,27 @@
 .wiki-settings > .wiki-page-table {
   margin-top: 24px;
 }
+.wiki-starred-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-bottom: 0;
+}
+.wiki-starred-page h1 {
+  margin-bottom: 19px;
+}
+.wiki-list-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  height: 59px;
+  padding-bottom: 13px;
+}
+.wiki-starred-page > .wiki-page-table {
+  margin-top: 0;
+}
 .wiki-page-actions {
   display: flex;
   align-items: center;
@@ -311,8 +334,9 @@
   text-overflow: ellipsis;
   color: var(--ui-text);
 }
-.wiki-page-action-buttons [aria-pressed="true"] svg {
-  fill: currentColor;
+.wiki-star-toggle[aria-pressed="true"] svg {
+  fill: var(--ui-hover);
+  color: var(--ui-muted);
 }
 .wiki-page-meta > span {
   display: flex;

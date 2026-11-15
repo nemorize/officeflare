@@ -590,7 +590,6 @@
 .drive-layout-grid .drive-file-row:not(:has(.drive-card-preview)).is-selected {
   background: var(--ui-selected);
 }
-.drive-empty,
 .drive-state {
   display: flex;
   flex-direction: column;
@@ -601,12 +600,6 @@
   color: var(--ui-muted);
   padding: 45px 24px;
 }
-.drive-empty {
-  flex: 1;
-  min-height: 230px;
-  padding-bottom: 80px;
-}
-.drive-empty h2,
 .drive-state h2 {
   margin: 5px 0 0;
   font-weight: 500;
@@ -614,57 +607,11 @@
   font-size: 17px;
   letter-spacing: -0.3px;
 }
-.drive-empty p,
 .drive-state p {
   margin: 0;
   max-width: 325px;
   font-size: 12px;
   line-height: 1.7;
-}
-.drive-empty .drive-empty-art {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 124px;
-  height: 104px;
-  margin-bottom: 8px;
-  color: var(--ui-subtle);
-}
-.drive-empty-art:before {
-  content: "";
-  position: absolute;
-  width: 88px;
-  height: 88px;
-  border: 1px solid var(--ui-border);
-  border-radius: 26px;
-  transform: rotate(-9deg);
-  background: var(--ui-raised);
-}
-.drive-empty-art svg {
-  position: relative;
-  stroke-width: 1.2;
-}
-.drive-empty-art > span:first-child {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  background: var(--ui-control-border);
-  border-radius: 50%;
-  left: 0;
-  top: 21px;
-}
-.drive-empty-art > span:last-child {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  background: var(--ui-border);
-  border-radius: 50%;
-  right: 1px;
-  bottom: 13px;
-}
-.drive-empty button {
-  margin-top: 11px;
 }
 .drive-spinner {
   width: 22px;
@@ -1705,15 +1652,6 @@
   }
   .drive-inline-new .drive-new-button svg:last-child {
     display: none;
-  }
-  .drive-empty {
-    padding-bottom: 50px;
-  }
-  .drive-empty h2 {
-    font-size: 16px;
-  }
-  .drive-empty p {
-    font-size: 11px;
   }
   .drive-layout-grid .drive-row-select {
     opacity: 1;

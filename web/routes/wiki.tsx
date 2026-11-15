@@ -16,7 +16,8 @@ import {
   WikiSidePanel,
 } from "../components/wiki-controls";
 import { WikiRevisionPreview } from "../components/wiki-revision-preview";
-import { WikiHome, WikiPageTable } from "../components/wiki-home";
+import { WikiHome, WikiPageTable, WikiStarred } from "../components/wiki-home";
+import { WorkspaceIconButton } from "../components/workspace-controls";
 import { LoadingSkeleton } from "../components/loading-skeleton";
 import { formatDateTime } from "../lib/regional";
 import { WorkspaceConfirm, WorkspaceNotice } from "../components/workspace-dialog";
@@ -180,7 +181,7 @@ function Members() {
     </section>
   );
 }
-function PageList({ view, query = "" }: { view: string; query?: string }) {
+function PageList({ view, query = "" }: { view: "search" | "trash"; query?: string }) {
   const notify = useNotifications();
   const wiki = useWiki(),
     [pages, setPages] = useState<Page[]>([]),
@@ -191,12 +192,7 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
     [cursor, setCursor] = useState<string | null>(null),
     [removing, setRemoving] = useState<Page | null>(null);
   const request = useRef<AbortController | null>(null);
-  const filter =
-    view === "search"
-      ? `q=${encodeURIComponent(query)}`
-      : view === "trash"
-        ? "trash=true"
-        : "favorites=true";
+  const filter = view === "search" ? `q=${encodeURIComponent(query)}` : "trash=true";
   const projection =
     view === "search"
       ? wiki.pages
@@ -285,15 +281,7 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
       className={`wiki-settings${view === "search" ? " wiki-search-page" : ""}`}
       aria-busy={loading}
     >
-      <h1>
-        {t(
-          view === "search"
-            ? "wiki.searchResults"
-            : view === "trash"
-              ? "wiki.trash"
-              : "wiki.favorites",
-        )}
-      </h1>
+      <h1>{t(view === "search" ? "wiki.searchResults" : "wiki.trash")}</h1>
       {view === "search" && <p className="wiki-muted">{query}</p>}
       {view === "trash" && <p>{t("wiki.trashHint")}</p>}
       {error && (
@@ -335,16 +323,8 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
         !pages.length &&
         !error && (
           <div className="wiki-list-empty">
-            <Icon name={view === "search" ? "search" : view === "trash" ? "trash" : "star"} />
-            <h2>
-              {t(
-                view === "search"
-                  ? "wiki.noResults"
-                  : view === "trash"
-                    ? "wiki.emptyTrash"
-                    : "wiki.noFavorites",
-              )}
-            </h2>
+            <Icon name={view === "search" ? "search" : "trash"} />
+            <h2>{t(view === "search" ? "wiki.noResults" : "wiki.emptyTrash")}</h2>
           </div>
         )
       )}
@@ -1074,16 +1054,14 @@ function OpenPage({ page }: { page: Page }) {
         </nav>
         <div className="wiki-page-action-buttons">
           <div className="wiki-header-presence" ref={setStatusContainer} />
-          <Button
-            variant="ghost"
-            size="icon"
+          <WorkspaceIconButton
+            icon="star"
+            className="wiki-star-toggle"
             disabled={page.role === 0 || commandBusy}
-            aria-label={t(page.favorite ? "wiki.unfavorite" : "wiki.favorite")}
+            label={t(page.favorite ? "wiki.unfavorite" : "wiki.favorite")}
             aria-pressed={!!page.favorite}
             onClick={() => void favorite()}
-          >
-            <Icon name="star" />
-          </Button>
+          />
           {page.role >= 4 && wiki.can("sharing.internal") && (
             <Button variant="ghost" onClick={() => setPanel("share")}>
               {t("wiki.share")}
@@ -1309,8 +1287,8 @@ export function WikiPage() {
         <Members />
       </PersonPhotosProvider>
     );
-  if (view === "trash" || view === "favorites")
-    return <PageList key={`${wiki.space.id}/${view}`} view={view} />;
+  if (view === "favorites") return <WikiStarred />;
+  if (view === "trash") return <PageList key={`${wiki.space.id}/trash`} view="trash" />;
   if (wiki.pageId && !page)
     return (
       <p className="wiki-empty" role="alert">

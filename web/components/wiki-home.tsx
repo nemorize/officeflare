@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage } from "../../shared/wiki";
-import { formatDateTime } from "../lib/regional";
+import { formatDateTime, getRegionalLocale } from "../lib/regional";
 import { useWiki } from "./wiki-context";
 import { WikiSpaceDialog } from "./wiki-controls";
 import { WorkspaceIconButton } from "./workspace-controls";
-import { Button, Icon } from "./ui";
+import { WorkspaceEmptyState } from "./workspace-empty-state";
+import { Button, Icon, Menu, MenuPopup } from "./ui";
 
 export function WikiPageTable({
   pages,
@@ -45,6 +46,13 @@ export function WikiPageTable({
                     {page.icon || <Icon name="file" />}
                   </span>
                   <span>{page.title || t("wiki.untitled")}</span>
+                  {!!page.favorite && (
+                    <Icon
+                      name="star"
+                      className="wiki-starred-icon"
+                      aria-label={t("wiki.favorites")}
+                    />
+                  )}
                   {page.permission_mode === "restricted" && (
                     <Icon name="shield" aria-label={t("wiki.restricted")} />
                   )}
@@ -56,17 +64,80 @@ export function WikiPageTable({
                 {formatDateTime(page.updated_at, { dateStyle: "medium" })}
               </time>
             </td>
-            <td>
-              {actions ? (
-                <div className="wiki-row-actions">{actions(page)}</div>
-              ) : (
-                !!page.favorite && <Icon name="star" aria-label={t("wiki.favorites")} />
-              )}
-            </td>
+            <td>{actions && <div className="wiki-row-actions">{actions(page)}</div>}</td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+export function WikiStarred() {
+  const wiki = useWiki(),
+    [params, setParams] = useSearchParams(),
+    sort = params.get("sort") === "updated_at" ? "updated_at" : "name",
+    order = params.get("order") === "desc" ? "desc" : "asc";
+  // The sidebar loads every page, so sorting includes all starred pages in this space.
+  const pages = wiki.pages
+    .filter((page) => page.favorite && page.role > 0 && !page.trashed_at)
+    .sort((a, b) => {
+      const comparison =
+        sort === "updated_at"
+          ? a.updated_at - b.updated_at
+          : (a.title || t("wiki.untitled")).localeCompare(
+              b.title || t("wiki.untitled"),
+              getRegionalLocale(),
+              { numeric: true, sensitivity: "base" },
+            );
+      return (comparison || a.id.localeCompare(b.id)) * (order === "asc" ? 1 : -1);
+    });
+  const change = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    next.set(key, value);
+    setParams(next);
+  };
+  return (
+    <section className="wiki-settings wiki-starred-page">
+      <h1>{t("wiki.favorites")}</h1>
+      <div className="wiki-list-toolbar">
+        <Menu.Root>
+          <Menu.Trigger
+            render={<Button variant="ghost" size="sm" />}
+            aria-label={t("wiki.sortPages")}
+          >
+            <Icon name="sort" />
+            <span>{t(sort === "name" ? "common.name" : "wiki.lastModified")}</span>
+            <Icon name="down" width="12" height="12" />
+          </Menu.Trigger>
+          <MenuPopup data-ui-theme="neutral" positionerProps={{ align: "end" }}>
+            {[
+              { value: "name", label: t("common.name") },
+              { value: "updated_at", label: t("wiki.lastModified") },
+            ].map((option) => (
+              <Menu.Item key={option.value} onClick={() => change("sort", option.value)}>
+                <Icon name={sort === option.value ? "check" : "circle"} />
+                {option.label}
+              </Menu.Item>
+            ))}
+            <Menu.Separator />
+            <Menu.Item onClick={() => change("order", order === "asc" ? "desc" : "asc")}>
+              <Icon name="sort" />
+              {t(order === "asc" ? "wiki.switchToDescending" : "wiki.switchToAscending")}
+            </Menu.Item>
+          </MenuPopup>
+        </Menu.Root>
+      </div>
+      {wiki.error && (
+        <p className="wiki-error" role="alert">
+          {wiki.error}
+        </p>
+      )}
+      {pages.length ? (
+        <WikiPageTable pages={pages} />
+      ) : !wiki.error ? (
+        <WorkspaceEmptyState icon="star" title={t("wiki.noFavorites")} />
+      ) : null}
+    </section>
   );
 }
 

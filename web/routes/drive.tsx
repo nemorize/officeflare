@@ -35,6 +35,7 @@ import {
   DriveShareDialog,
   freshItem,
 } from "../components/drive-dialogs";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import { DriveDetails } from "../components/drive-details";
 import { DrivePreview, downloadDriveItem } from "../components/drive-preview";
 import { api } from "../lib/api";
@@ -706,30 +707,23 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           }}
         />
         {empty && !folderResource.error && (
-          <div className="drive-empty">
-            <div className="drive-empty-art">
-              <span />
-              <Icon
-                name={
-                  searching
-                    ? "search"
-                    : view === "shared"
-                      ? "users"
-                      : view === "recent"
-                        ? "clock"
-                        : view === "starred"
-                          ? "star"
-                          : view === "trash"
-                            ? "trash"
-                            : "folder"
-                }
-                width="54"
-                height="54"
-              />
-              <span />
-            </div>
-            <h2>
-              {searching
+          <WorkspaceEmptyState
+            className="drive-empty"
+            icon={
+              searching
+                ? "search"
+                : view === "shared"
+                  ? "users"
+                  : view === "recent"
+                    ? "clock"
+                    : view === "starred"
+                      ? "star"
+                      : view === "trash"
+                        ? "trash"
+                        : "folder"
+            }
+            title={
+              searching
                 ? t("routesDrive.noMatchingFiles")
                 : view === "shared"
                   ? t("routesDrive.sharedFilesAppearHere")
@@ -741,10 +735,10 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                         ? t("routesDrive.yourTrashIsEmpty")
                         : kind
                           ? t("routesDrive.noItemsOfThisType")
-                          : t("routesDrive.aPlaceForEverything")}
-            </h2>
-            <p>
-              {searching
+                          : t("routesDrive.aPlaceForEverything")
+            }
+            description={
+              searching
                 ? t("routesDrive.tryADifferentNameOrClearYourFilters")
                 : view === "shared"
                   ? t("routesDrive.filesAndFoldersSharedWithYourAccountWillAppear")
@@ -756,8 +750,9 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                         ? t("routesDrive.itemsYouDeleteCanBeRestoredHereFor30")
                         : kind
                           ? t("routesDrive.chooseAnotherTypeToSeeMoreFiles")
-                          : t("routesDrive.uploadYourFilesOrCreateAFolderToGet")}
-            </p>
+                          : t("routesDrive.uploadYourFilesOrCreateAFolderToGet")
+            }
+          >
             {writable && !kind && (
               <Button variant="primary" onClick={() => drive.chooseFiles()}>
                 <Icon name="upload" />
@@ -767,7 +762,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
             {searching && (
               <Button onClick={() => navigate("/drive")}>{t("routesDrive.clearSearch")}</Button>
             )}
-          </div>
+          </WorkspaceEmptyState>
         )}
         {!collection.loading && !!collection.items.length && (
           <DriveOwnerPhotosProvider>

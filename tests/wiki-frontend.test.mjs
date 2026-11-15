@@ -198,8 +198,8 @@ test(
     await tab.waitForFunction(
       () => document.querySelector(".wiki-page-icon")?.textContent === "📚",
     );
-    await tab.getByRole("button", { name: "Add to favorites", exact: true }).click();
-    await tab.getByRole("button", { name: "Remove from favorites", exact: true }).waitFor();
+    await tab.getByRole("button", { name: "Add to starred", exact: true }).click();
+    await tab.getByRole("button", { name: "Remove from starred", exact: true }).waitFor();
     assert.equal(
       await tab
         .locator('.wiki-favorites a[aria-current="page"]')
@@ -311,7 +311,7 @@ test(
         path: `${process.env.WIKI_UI_CAPTURE_DIR}/overview.png`,
         fullPage: true,
       });
-    await tab.locator(".wiki-quick-nav").getByRole("link", { name: "Favorites" }).click();
+    await tab.locator(".wiki-quick-nav").getByRole("link", { name: "Starred" }).click();
     await tab
       .locator(".wiki-settings")
       .getByRole("link", { name: "How we work", exact: true })
