@@ -808,12 +808,11 @@
 .wiki-space-switch[data-ui-button] {
   width: calc(100% - 32px);
   margin: 0 16px 12px;
-  padding: 8px 0;
+  padding: 8px var(--ui-button-padding-inline);
   justify-content: flex-start;
   gap: 10px;
   text-align: start;
-  height: auto;
-  margin-bottom: 8px;
+  height: var(--ui-control-height);
 }
 .wiki-space-switch small {
   font-size: 11px;
