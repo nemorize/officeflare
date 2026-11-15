@@ -38,6 +38,8 @@ export interface WikiComment {
   page_id: string;
   author_user_id: string;
   author_name: string;
+  has_profile_image?: boolean;
+  profile_image_version?: string | null;
   body: string;
   resolved_at: number | null;
   version: number;

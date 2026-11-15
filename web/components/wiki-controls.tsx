@@ -1,3 +1,4 @@
+import { WorkspaceDialog } from "./workspace-dialog";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
@@ -5,41 +6,41 @@ import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage, WikiSpace } from "../../shared/wiki";
 import { api, errorMessage } from "../lib/api";
 import { useWiki } from "./wiki-context";
-import { Button, Dialog, DialogPopup, Icon, Input, Popover, PopoverPopup, Textarea } from "./ui";
+import { useNotifications, Button, Icon, Input, Popover, PopoverPopup, Textarea } from "./ui";
 
 export function WikiDialog({
   title,
   open,
   onClose,
   children,
+  busy = false,
+  wide = false,
+  className = "",
 }: {
   title: string;
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  busy?: boolean;
+  wide?: boolean;
+  className?: string;
 }) {
-  return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(value) => {
-        if (!value) onClose();
-      }}
+  return open ? (
+    <WorkspaceDialog
+      title={title}
+      onClose={onClose}
+      busy={busy}
+      wide={wide}
+      className={`wiki-dialog ${className}`}
+      closeLabel={t("wiki.close")}
     >
-      <DialogPopup className="wiki-dialog">
-        <div className="wiki-dialog-heading">
-          <Dialog.Title>{title}</Dialog.Title>
-          <Button variant="ghost" size="icon" aria-label={t("wiki.close")} onClick={onClose}>
-            <Icon name="close" />
-          </Button>
-        </div>
-        <Dialog.Description className="visually-hidden">{title}</Dialog.Description>
-        <div className="wiki-dialog-body">{children}</div>
-      </DialogPopup>
-    </Dialog.Root>
-  );
+      <div className="wiki-dialog-body">{children}</div>
+    </WorkspaceDialog>
+  ) : null;
 }
 
 export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose: () => void }) {
+  const notify = useNotifications();
   const wiki = useWiki(),
     navigate = useNavigate();
   const [name, setName] = useState(space?.name ?? ""),
@@ -63,6 +64,7 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
         },
       );
       wiki.refresh();
+      notify.success(t("wiki.saved"));
       onClose();
       if (!space) navigate(`/wiki/${result.space.id}`);
     } catch (failure) {
@@ -74,6 +76,7 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
   return (
     <WikiDialog
       title={t(space ? "wiki.spaceSettings" : "wiki.newSpace")}
+      busy={busy}
       open
       onClose={() => {
         if (!busy) onClose();

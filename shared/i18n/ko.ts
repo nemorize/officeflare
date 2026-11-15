@@ -404,6 +404,25 @@ export const ko = defineTranslations(en, {
   "mcp.calendarRead": "일정 읽기",
   "mcp.calendarWrite": "일정 변경",
 
+  "wiki.shareTitle": "‘{title}’ 공유",
+  "wiki.confirmTrash":
+    "‘{title}’ 페이지와 하위 페이지를 휴지통으로 이동할까요? 나중에 복원할 수 있습니다.",
+  "wiki.renamed": "이름을 변경했습니다.",
+  "wiki.renameChanged":
+    "페이지 이름이 ‘{title}’(으)로 변경되었습니다. 입력한 이름을 확인하고 저장하세요.",
+  "wiki.restored": "페이지를 복원했습니다.",
+  "wiki.deleted": "페이지를 영구 삭제했습니다.",
+  "wiki.moveUp": "페이지 위로 이동",
+  "wiki.moveDown": "페이지 아래로 이동",
+  "wiki.sharedNotice": "위키 공유 변경",
+  "wiki.commentNotice": "새 위키 댓글",
+  "wiki.noticeBody": "위키에서 확인하세요.",
+  "wiki.permissionsReloaded":
+    "변경 사항이 저장되지 않았습니다. 최신 권한을 확인하고 다시 변경하세요.",
+  "wiki.currentAccess": "현재 권한: {role}",
+  "wiki.inheritedRole": "상속: {role}",
+  "wiki.moved": "페이지를 이동했습니다.",
+  "wiki.trashed": "페이지를 휴지통으로 이동했습니다.",
   "wiki.unsavedNavigation":
     "저장되지 않은 편집 내용이 있습니다. 이 페이지에 머물러 보관하거나, 저장되지 않은 내용을 버리고 나갈 수 있습니다.",
   "wiki.leavePage": "페이지 나가기",

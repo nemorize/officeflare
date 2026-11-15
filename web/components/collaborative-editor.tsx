@@ -1,3 +1,6 @@
+import { replaceSharedText } from "../lib/collaboration/text";
+import type { ReactNode } from "react";
+import type { CollaborationParticipant } from "../../shared/collaboration";
 import * as Y from "yjs";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,7 +15,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { t } from "../../shared/i18n/index.ts";
 import { CollaborationClient, type CollaborationTransport } from "../lib/collaboration/client";
 import { EditorBlockMenu } from "./editor-block-menu";
-import { Button, Icon } from "./ui";
+import { Button, Icon, Popover, PopoverPopup } from "./ui";
 export function downloadText(filename: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
@@ -25,9 +28,11 @@ function Editor({
   client,
   onTitle,
   statusContainer,
+  renderParticipant,
 }: {
   client: CollaborationClient;
   onTitle?: (title: string) => void;
+  renderParticipant?: (person: CollaborationParticipant) => ReactNode;
   statusContainer?: HTMLElement | null;
 }) {
   const mobile = useWorkspaceMobile();
@@ -119,21 +124,7 @@ function Editor({
   const setSharedTitle = (value: string) => {
     const branch = composition.current,
       target = branch?.doc ?? client.doc;
-    const field = target.getText("title"),
-      old = field.toString();
-    let start = 0,
-      end = 0;
-    while (start < old.length && start < value.length && old[start] === value[start]) start++;
-    while (
-      end < old.length - start &&
-      end < value.length - start &&
-      old[old.length - 1 - end] === value[value.length - 1 - end]
-    )
-      end++;
-    target.transact(() => {
-      field.delete(start, old.length - start - end);
-      field.insert(start, value.slice(start, value.length - end));
-    });
+    replaceSharedText(target.getText("title"), value);
     if (branch) {
       Y.applyUpdate(client.doc, Y.encodeStateAsUpdate(branch.doc, branch.vector));
       branch.doc.destroy();
@@ -216,17 +207,44 @@ function Editor({
     </div>
   );
   const statusLabel = client.status === "error" ? t("wiki.syncError") : t(`wiki.${client.status}`);
+  const participants = [...new Map(client.participants.map((p) => [p.user_id, p])).values()];
   const presence = (
     <div className="wiki-presence-row">
       <span role="status" className={`wiki-save-state state-${client.status}`}>
         {statusLabel}
       </span>
       <div className="wiki-participants" aria-label={t("wiki.participants")}>
-        {client.participants.map((p) => (
-          <span key={p.connection_id} title={p.name} style={{ background: p.color }}>
-            {p.name.slice(0, 1)}
+        {participants.slice(0, 4).map((p) => (
+          <span
+            key={p.user_id}
+            title={p.name}
+            role="img"
+            aria-label={p.name}
+            style={{ background: p.color }}
+          >
+            {renderParticipant?.(p) ?? p.name.slice(0, 1)}
           </span>
         ))}
+        {participants.length > 4 && (
+          <Popover.Root>
+            <Popover.Trigger
+              render={<Button variant="ghost" size="sm" aria-label={t("wiki.participants")} />}
+            >
+              +{participants.length - 4}
+            </Popover.Trigger>
+            <PopoverPopup>
+              <Popover.Title>{t("wiki.participants")}</Popover.Title>
+              <ul className="wiki-participant-list">
+                {participants.map((p) => (
+                  <li key={p.user_id}>
+                    {renderParticipant?.(p)}
+                    <span>{p.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </PopoverPopup>
+          </Popover.Root>
+        )}
       </div>
       {["error", "reset", "offline", "revoked"].includes(client.status) && (
         <Button
@@ -302,11 +320,13 @@ export function CollaborativeEditor({
   onTitle,
   onClient,
   statusContainer,
+  renderParticipant,
 }: {
   resourceId: string;
   transport: CollaborationTransport;
   onTitle?: (title: string) => void;
   onClient?: (client: CollaborationClient | null) => void;
+  renderParticipant?: (person: CollaborationParticipant) => ReactNode;
   statusContainer?: HTMLElement | null;
 }) {
   const [generation, setGeneration] = useState(0);
@@ -352,6 +372,12 @@ export function CollaborativeEditor({
       </p>
     );
   return (
-    <Editor key={resourceId} client={client} onTitle={onTitle} statusContainer={statusContainer} />
+    <Editor
+      key={resourceId}
+      client={client}
+      onTitle={onTitle}
+      statusContainer={statusContainer}
+      renderParticipant={renderParticipant}
+    />
   );
 }

@@ -1,3 +1,4 @@
+import { WorkspaceDialog } from "./workspace-dialog";
 import { t } from "../../shared/i18n/index.ts";
 import { createDriveCache, useSharedDriveCache } from "./drive-resource-context";
 import {
@@ -15,8 +16,6 @@ import {
   Button,
   CheckboxControl,
   type CheckboxControlProps,
-  Dialog,
-  DialogPopup,
   Field,
   Icon,
   Input,
@@ -159,32 +158,20 @@ export function DriveModal({
   wide?: boolean;
 }) {
   return (
-    <Dialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose();
-      }}
+    <WorkspaceDialog
+      title={title}
+      description={description}
+      onClose={onClose}
+      busy={busy}
+      wide={wide}
+      closeLabel={t("componentsDriveControls.closeDialog")}
+      className={`drive-modal${wide ? " drive-modal-wide" : ""}`}
     >
-      <DialogPopup
-        data-ui-theme="neutral"
-        className={`drive-modal${wide ? " drive-modal-wide" : ""}`}
-        viewportProps={{ className: "drive-modal-viewport" }}
-      >
-        <div className="drive-modal-heading">
-          <Dialog.Title>{title}</Dialog.Title>
-          <DriveIconButton
-            icon="close"
-            label={t("componentsDriveControls.closeDialog")}
-            onClick={onClose}
-            disabled={busy}
-          />
-        </div>
-        <Dialog.Description>{description ?? ""}</Dialog.Description>
-        {children}
-      </DialogPopup>
-    </Dialog.Root>
+      {children}
+    </WorkspaceDialog>
   );
 }
+
 export function DriveNotice({ error }: { error: string }) {
   return error ? (
     <div className="drive-notice" role="alert">

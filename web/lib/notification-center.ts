@@ -46,6 +46,7 @@ export type NotificationState = "inbox" | "unread" | "archived" | "snoozed" | "a
 
 // Paths are also checked on the server. Keep navigation on the current origin.
 export const notificationTarget = (path: string | null) =>
+  /^\/wiki\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+(?:\?panel=comments)?)?$/.test(path ?? "") ||
   path === "/mail" ||
   path === "/profile/sessions" ||
   path === "/notifications" ||

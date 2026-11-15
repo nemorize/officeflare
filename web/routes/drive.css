@@ -719,29 +719,6 @@
 .drive-role-label {
   text-transform: capitalize;
 }
-.drive-modal[data-ui] {
-  max-width: 450px;
-  width: calc(100vw - 32px);
-  max-height: calc(100dvh - 48px);
-  overflow: auto;
-}
-.drive-modal-wide[data-ui] {
-  max-width: 610px;
-}
-.drive-modal-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 3px;
-}
-.drive-modal [data-ui="dialog-title"] {
-  overflow-wrap: anywhere;
-  margin: 0;
-}
-.drive-modal [data-ui="dialog-description"] {
-  margin: 7px 0 21px;
-}
 .drive-modal-actions {
   display: flex;
   gap: 8px;
@@ -1741,9 +1718,6 @@
   .drive-layout-grid .drive-row-select {
     opacity: 1;
   }
-  .drive-modal[data-ui] {
-    max-height: calc(100dvh - 30px);
-  }
   .drive-invite-options {
     flex-wrap: wrap;
   }
@@ -1904,12 +1878,6 @@
 }
 .drive-preview-viewport[data-ui] {
   padding: 25px;
-}
-.drive-modal-viewport[data-ui] {
-  padding: 16px;
-}
-.drive-modal[data-ui] {
-  width: 100%;
 }
 .drive-page-header > div:first-child {
   min-width: 0;

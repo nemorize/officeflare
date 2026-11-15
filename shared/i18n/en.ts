@@ -411,6 +411,23 @@ export const en = defineMessages({
   "mcp.calendarRead": "Read calendars",
   "mcp.calendarWrite": "Change calendar events",
 
+  "wiki.shareTitle": "Share “{title}”",
+  "wiki.confirmTrash": "Move “{title}” and its child pages to trash? You can restore them later.",
+  "wiki.renamed": "Name updated",
+  "wiki.renameChanged": "The page is now named “{title}”. Review your new name before saving.",
+  "wiki.restored": "Page restored",
+  "wiki.deleted": "Page permanently deleted",
+  "wiki.moveUp": "Move page up",
+  "wiki.moveDown": "Move page down",
+  "wiki.sharedNotice": "Wiki sharing updated",
+  "wiki.commentNotice": "New wiki comment",
+  "wiki.noticeBody": "Open Wiki to view the update.",
+  "wiki.permissionsReloaded":
+    "Changes were not saved. Current permissions are shown; review and apply your changes again.",
+  "wiki.currentAccess": "Current access: {role}",
+  "wiki.inheritedRole": "Inherited: {role}",
+  "wiki.moved": "Page moved.",
+  "wiki.trashed": "Page moved to trash.",
   "wiki.unsavedNavigation":
     "Some edits have not been saved. Stay on this page to keep them, or leave and discard the unsaved edits.",
   "wiki.leavePage": "Leave page",

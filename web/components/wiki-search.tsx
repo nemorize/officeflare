@@ -16,17 +16,28 @@ export function WikiSearch() {
     [error, setError] = useState(""),
     [selected, setSelected] = useState(0),
     [cursor, setCursor] = useState<string | null>(null);
+  const chosen = useRef<string | undefined>(undefined);
+  chosen.current = results[selected]?.id;
+  const chooseResults = (next: WikiPage[]) => {
+    setSelected(
+      Math.max(
+        0,
+        next.findIndex((p) => p.id === chosen.current),
+      ),
+    );
+    setResults(next);
+  };
   const controller = useRef<AbortController | null>(null),
     list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!wiki.searchOpen || !wiki.space) return;
     const abort = new AbortController();
     controller.current = abort;
-    setSelected(0);
+
     setError("");
     setCursor(null);
     if (!query.trim()) {
-      setResults(
+      chooseResults(
         wiki.pages
           .filter((p) => p.role > 0)
           .sort((a, b) => b.updated_at - a.updated_at)
@@ -40,7 +51,7 @@ export function WikiSearch() {
         page.role > 0 && page.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
     );
     setBusy(true);
-    setResults(local);
+    chooseResults(local);
     const timer = setTimeout(
       () =>
         void api<{ pages: WikiPage[]; next_cursor: string | null }>(
@@ -51,7 +62,7 @@ export function WikiSearch() {
             if (!abort.signal.aborted) {
               const found = new Map(data.pages.map((page) => [page.id, page]));
               for (const page of local) found.set(page.id, page);
-              setResults([...found.values()]);
+              chooseResults([...found.values()]);
               setCursor(data.next_cursor);
             }
           })
@@ -125,7 +136,11 @@ export function WikiSearch() {
             placeholder={t("wiki.search")}
             value={query}
             maxLength={100}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              chosen.current = undefined;
+              setSelected(0);
+              setQuery(event.target.value);
+            }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) return;
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {

@@ -1,18 +1,12 @@
+import { WorkspaceConfirm } from "./workspace-dialog";
 import { enumLabel } from "../../shared/i18n/labels.ts";
 import { LocalizedMessage } from "./i18n";
 import { t, plural } from "../../shared/i18n/index.ts";
 import { useEffect, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogPopup,
-  CheckboxLabel,
-  Button,
-  Icon,
-  Tabs,
-  useNotifications,
-} from "./ui";
+import { CheckboxLabel, Button, Icon, Tabs, useNotifications } from "./ui";
 import { useDrive } from "./drive-context";
 import {
+  driveFailure,
   DriveCheckbox,
   DriveField,
   DriveFileIcon,
@@ -303,43 +297,20 @@ export function DriveConfirmDialog({
   action: () => Promise<void>;
   destructive?: boolean;
 }) {
-  const action = useDriveAction();
   return (
-    <AlertDialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open && !action.busy) onClose();
-      }}
-    >
-      <AlertDialogPopup
-        data-ui-theme="neutral"
-        className="drive-modal"
-        viewportProps={{ className: "drive-modal-viewport" }}
-      >
-        <AlertDialog.Title>{title}</AlertDialog.Title>
-        <AlertDialog.Description>{description}</AlertDialog.Description>
-        <DriveNotice error={action.error} />
-        <div className="drive-modal-actions">
-          <Button disabled={action.busy} onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant={destructive ? "danger" : "primary"}
-            disabled={action.busy}
-            onClick={() =>
-              void action.run(async () => {
-                await callback();
-                onClose();
-              })
-            }
-          >
-            {action.busy ? t("componentsDriveDialogs.working") : confirm}
-          </Button>
-        </div>
-      </AlertDialogPopup>
-    </AlertDialog.Root>
+    <WorkspaceConfirm
+      title={title}
+      description={description}
+      confirm={confirm}
+      onClose={onClose}
+      action={callback}
+      destructive={destructive}
+      failureMessage={driveFailure}
+      workingLabel={t("componentsDriveDialogs.working")}
+    />
   );
 }
+
 function DrivePeoplePicker({
   selected,
   onSelect,

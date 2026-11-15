@@ -1,3 +1,4 @@
+import { useAccount } from "./account-context";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
@@ -13,13 +14,112 @@ import { WikiSearch } from "./wiki-search";
 export { WikiDialog } from "./wiki-controls";
 
 export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const wiki = useWiki(),
-    navigate = useNavigate(),
+  const account = useAccount(),
+    notify = useNotifications(),
+    wiki = useWiki();
+  const storageKey = `officeflare.wiki.tree.${account.user?.id}.${wiki.space?.id}`;
+  const navigate = useNavigate(),
     [params] = useSearchParams(),
     view = params.get("view");
   const [dialog, setDialog] = useState<"create" | "settings" | null>(null),
-    [error, setError] = useState(""),
-    [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+    [collapsed, setCollapsed] = useState<Set<string>>(() => {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(storageKey) ?? "[]"));
+      } catch {
+        return new Set();
+      }
+    });
+  useEffect(() => {
+    try {
+      setCollapsed(new Set(JSON.parse(localStorage.getItem(storageKey) ?? "[]")));
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [storageKey]);
+  const [sections, setSections] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(storageKey + ".sections") ?? "[]"));
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      setSections(new Set(JSON.parse(localStorage.getItem(storageKey + ".sections") ?? "[]")));
+    } catch {
+      setSections(new Set());
+    }
+  }, [storageKey]);
+  const currentPageLoaded = wiki.pages.some((p) => p.id === wiki.pageId);
+  useEffect(() => {
+    if (wiki.pageId && !currentPageLoaded) return;
+    // Drawer remounts keep the user's choices; a different page reveals its ancestors.
+    try {
+      if (sessionStorage.getItem(storageKey + ".current") === (wiki.pageId ?? "")) return;
+      sessionStorage.setItem(storageKey + ".current", wiki.pageId ?? "");
+    } catch {}
+    if (!wiki.pageId) return;
+    setSections((old) => {
+      const next = new Set(old);
+      next.delete("pages");
+      try {
+        localStorage.setItem(storageKey + ".sections", JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+    setCollapsed((old) => {
+      const next = new Set(old);
+      let page = wiki.pages.find((p) => p.id === wiki.pageId);
+      const seen = new Set<string>();
+      while (page?.parent_id && !seen.has(page.parent_id)) {
+        seen.add(page.parent_id);
+        next.delete(page.parent_id);
+        page = wiki.pages.find((p) => p.id === page?.parent_id);
+      }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+    const frame = requestAnimationFrame(() =>
+      document
+        .querySelector('.wiki-tree a[aria-current="page"]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [storageKey, wiki.pageId, currentPageLoaded]);
+  const toggleSection = (key: string, open: boolean) =>
+    setSections((old) => {
+      const next = new Set(old);
+      if (open) next.delete(key);
+      else next.add(key);
+      try {
+        localStorage.setItem(storageKey + ".sections", JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  const [ordering, setOrdering] = useState(false);
+  const reorder = async (page: WikiPage, direction: string) => {
+    if (ordering) return;
+    setOrdering(true);
+    try {
+      await api(`/api/wiki/pages/${page.id}/order`, {
+        method: "POST",
+        body: { direction, version: page.version },
+      });
+      wiki.refresh();
+    } catch (e) {
+      notify.error(errorMessage(e));
+    } finally {
+      setOrdering(false);
+    }
+  };
+  const persist = (next: Set<string>) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([...next]));
+    } catch {}
+    return next;
+  };
   const go = (path: string) => {
     navigate(path);
     onNavigate?.();
@@ -40,7 +140,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
     void wiki
       .createPage(parentId)
       .then(onNavigate)
-      .catch((failure) => setError(errorMessage(failure)));
+      .catch((failure) => notify.error(errorMessage(failure)));
   const pageLink = (page: WikiPage) => (
     <NavLink
       to={`/wiki/${page.space_id}/${page.id}`}
@@ -78,7 +178,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
                         const next = new Set(previous);
                         if (expanded) next.add(page.id);
                         else next.delete(page.id);
-                        return next;
+                        return persist(next);
                       })
                     }
                   >
@@ -102,13 +202,58 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <Icon name="more" />
                   </Menu.Trigger>
                   <MenuPopup>
+                    {page.role >= 4 && wiki.can("sharing.internal") && (
+                      <Menu.Item
+                        onClick={() => go(`/wiki/${page.space_id}/${page.id}?action=share`)}
+                      >
+                        <Icon name="users" />
+                        {t("wiki.share")}
+                      </Menu.Item>
+                    )}
+                    <Menu.Item
+                      onClick={() =>
+                        void (
+                          navigator.clipboard?.writeText(
+                            `${location.origin}/wiki/${page.space_id}/${page.id}`,
+                          ) ?? Promise.reject()
+                        )
+                          .then(() => notify.success(t("wiki.linkCopied")))
+                          .catch(() => notify.error(t("wiki.copyLinkFailed")))
+                      }
+                    >
+                      <Icon name="link" />
+                      {t("wiki.copyLink")}
+                    </Menu.Item>
+
+                    {page.role >= 3 && wiki.can("pages.create") && (
+                      <Menu.Item disabled={wiki.creatingPage} onClick={() => newPage(page.id)}>
+                        <Icon name="plus" />
+                        {t("wiki.newChildPage")}
+                      </Menu.Item>
+                    )}
+                    {wiki.space &&
+                      wiki.space.role >= 4 &&
+                      wiki.can("pages.move") &&
+                      ["up", "down"].map((direction) => (
+                        <Menu.Item
+                          key={direction}
+                          disabled={
+                            ordering ||
+                            (children.get(parent) ?? []).findIndex((p) => p.id === page.id) ===
+                              (direction === "up" ? 0 : (children.get(parent) ?? []).length - 1)
+                          }
+                          onClick={() => void reorder(page, direction)}
+                        >
+                          {t(direction === "up" ? "wiki.moveUp" : "wiki.moveDown")}
+                        </Menu.Item>
+                      ))}
                     <Menu.Item
                       onClick={() => {
                         void api(`/api/wiki/pages/${page.id}/favorite`, {
                           method: page.favorite ? "DELETE" : "PUT",
                         })
                           .then(wiki.refresh)
-                          .catch((error) => setError(errorMessage(error)));
+                          .catch((error) => notify.error(errorMessage(error)));
                       }}
                     >
                       <Icon name="star" />
@@ -144,18 +289,6 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     )}
                   </MenuPopup>
                 </Menu.Root>
-                {page.role >= 3 && wiki.can("pages.create") && (
-                  <Button
-                    className="wiki-tree-add"
-                    variant="ghost"
-                    size="icon"
-                    disabled={wiki.creatingPage}
-                    aria-label={t("wiki.newChildPage")}
-                    onClick={() => newPage(page.id)}
-                  >
-                    <Icon name="plus" />
-                  </Button>
-                )}
               </div>
               {nested && expanded && tree(page.id, depth + 1)}
             </li>
@@ -243,8 +376,12 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
             </Link>
           </nav>
           {wiki.pages.some((page) => page.favorite && page.role > 0) && (
-            <section className="workspace-nav wiki-favorites">
-              <h2>{t("wiki.favorites")}</h2>
+            <details
+              className="workspace-nav wiki-favorites"
+              open={!sections.has("favorites")}
+              onToggle={(e) => toggleSection("favorites", e.currentTarget.open)}
+            >
+              <summary>{t("wiki.favorites")}</summary>
               <ul>
                 {wiki.pages
                   .filter((page) => page.favorite && page.role > 0)
@@ -252,58 +389,43 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <li key={page.id}>{pageLink(page)}</li>
                   ))}
               </ul>
-            </section>
+            </details>
           )}
-          <div className="wiki-tree-heading">
-            <span>
-              {t(wiki.space.kind === "personal" ? "wiki.privatePages" : "wiki.teamSpace")}
-            </span>
-            {wiki.space.role >= 3 && wiki.can("pages.create") && (
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={wiki.creatingPage}
-                aria-label={t("wiki.newPage")}
-                title={t("wiki.newPage")}
-                onClick={() => newPage()}
-              >
-                <Icon name="plus" />
-              </Button>
-            )}
-          </div>
-          <nav className="wiki-tree" aria-label={t("wiki.allPages")} aria-busy={wiki.loading}>
-            {children.size ? (
-              tree(null)
-            ) : (
-              <p className="wiki-sidebar-empty">
-                {t(wiki.loading ? "wiki.loading" : "wiki.noPagesYet")}
-              </p>
-            )}
-          </nav>
-          {wiki.space.role >= 3 && wiki.can("pages.create") && (
-            <Button
-              className="wiki-add-page"
-              variant="ghost"
-              disabled={wiki.creatingPage}
-              onClick={() => newPage()}
-            >
-              <Icon name="plus" />
-              {t("wiki.newPage")}
-            </Button>
-          )}
-          {wiki.spaces.length > 1 && (
-            <nav className="workspace-nav wiki-other-spaces" aria-label={t("wiki.spaces")}>
-              <h2>{t("wiki.spaces")}</h2>
-              {wiki.spaces
-                .filter((space) => space.id !== wiki.space?.id)
-                .map((space) => (
-                  <Link key={space.id} to={`/wiki/${space.id}`} onClick={onNavigate}>
-                    <Icon name={space.kind === "personal" ? "user" : "book"} />
-                    <span>{space.name}</span>
-                  </Link>
-                ))}
+          <details
+            className="wiki-pages-section"
+            open={!sections.has("pages")}
+            onToggle={(e) => toggleSection("pages", e.currentTarget.open)}
+          >
+            <summary className="wiki-tree-heading">
+              <span>
+                {t(wiki.space.kind === "personal" ? "wiki.privatePages" : "wiki.teamSpace")}
+              </span>
+              {wiki.space.role >= 3 && wiki.can("pages.create") && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={wiki.creatingPage}
+                  aria-label={t("wiki.newPage")}
+                  title={t("wiki.newPage")}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    newPage();
+                  }}
+                >
+                  <Icon name="plus" />
+                </Button>
+              )}
+            </summary>
+            <nav className="wiki-tree" aria-label={t("wiki.allPages")} aria-busy={wiki.loading}>
+              {children.size ? (
+                tree(null)
+              ) : (
+                <p className="wiki-sidebar-empty">
+                  {t(wiki.loading ? "wiki.loading" : "wiki.noPagesYet")}
+                </p>
+              )}
             </nav>
-          )}
+          </details>
           <div className="workspace-nav wiki-sidebar-footer">
             <Link
               to={`/wiki/${wiki.space.id}?view=trash`}
@@ -333,9 +455,9 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
           </Button>
         )
       )}
-      {(error || wiki.error) && (
+      {wiki.error && (
         <p role="alert" className="wiki-error">
-          {error || wiki.error}
+          {wiki.error}
         </p>
       )}
       {dialog && (

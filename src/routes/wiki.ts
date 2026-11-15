@@ -1,3 +1,7 @@
+import { sql } from "drizzle-orm";
+import { prepareNotification } from "../notifications/service";
+import { recoverNotifications } from "../notifications/jobs";
+import { profileImageResponse } from "../profile/image-response";
 import * as Y from "yjs";
 import { decodeBytes, MAX_STATE_BYTES } from "../../shared/collaboration";
 import { richTextValue } from "../../shared/rich-text";
@@ -36,8 +40,75 @@ import {
   version,
 } from "../wiki/store";
 
+const photoFields =
+  "u.profile_image_key IS NOT NULL AS has_profile_image,u.profile_image_key AS profile_image_version";
+async function pagePeople(c: Parameters<typeof getPage>[0], page: WikiPage) {
+  return rows<{
+    user_id: string;
+    email_address: string;
+    display_name: string | null;
+    role: number;
+    inherited_role: number;
+    has_profile_image: number;
+    profile_image_version: string | null;
+  }>(
+    c.env,
+    `SELECT u.id AS user_id,u.email_address,u.display_name,${photoFields},${pageRank()} AS role,${pageRank("p", true)} AS inherited_role
+     FROM users u CROSS JOIN wiki_pages p JOIN wiki_spaces s ON s.id=p.space_id JOIN (SELECT id AS user_id FROM users) actor ON actor.user_id=u.id
+     WHERE p.id=? AND u.deleted_at IS NULL AND u.disabled_at IS NULL AND ${spaceRank()}>=1 ORDER BY u.email_address`,
+    page.id,
+  );
+}
+function wikiNotice(
+  c: Parameters<typeof getPage>[0],
+  proof: string,
+  source: string,
+  type: "wiki.shared" | "wiki.comment",
+  target: string,
+  recipients: string[],
+) {
+  const ids = [...new Set(recipients)].filter((id) => id !== actorOf(c).user_id);
+  return ids.flatMap((userId) => {
+    const parts = target.split("?")[0]!.split("/");
+    const condition = parts[3]
+      ? pageCondition(userId, parts[3])
+      : spaceCondition(userId, parts[2]!);
+    const permission = permissionCondition(userId, "wiki.access");
+    const bindCondition = (value: typeof condition) =>
+      sql.join(
+        value.sql
+          .split("?")
+          .flatMap((part, index) =>
+            index < value.args.length
+              ? [sql.raw(part), sql`${value.args[index]}`]
+              : [sql.raw(part)],
+          ),
+        sql.raw(""),
+      );
+    return prepareNotification(
+      c.get("db"),
+      {
+        source_key: `wiki:${source}:${userId}`,
+        type,
+        title: t(type === "wiki.shared" ? "wiki.sharedNotice" : "wiki.commentNotice"),
+        body: t("wiki.noticeBody"),
+        target_path: target,
+        recipient_ids: [userId],
+      },
+      sql`${sql.raw(proof)} AND ${bindCondition(condition)} AND ${bindCondition(permission)}`,
+    ).map((query) => {
+      const statement = query.toSQL();
+      return stmt(c.env, statement.sql, ...(statement.params as (string | number | null)[]));
+    });
+  });
+}
 const wiki = new Hono<AppEnv>();
 wiki.use("*", requireAccess, requirePermission("wiki.access"));
+wiki.use("*", async (c, next) => {
+  await next();
+  if (c.req.method !== "GET" && c.res.ok)
+    c.executionCtx.waitUntil(recoverNotifications(c.env).catch(() => {}));
+});
 wiki.get("/capabilities", async (c) =>
   c.json({ permissions: (await requestPermissions(c)).filter((v) => v.startsWith("wiki.")) }),
 );
@@ -113,18 +184,37 @@ wiki.get("/spaces/:id/people", async (c) => {
   return c.json({
     members: await rows(
       c.env,
-      "SELECT u.id AS user_id,u.email_address,u.display_name,CASE WHEN u.id=? THEN 'owner' ELSE m.role END AS role FROM users u LEFT JOIN wiki_space_members m ON m.user_id=u.id AND m.space_id=? WHERE (u.id=? OR m.user_id IS NOT NULL) AND u.deleted_at IS NULL AND u.disabled_at IS NULL ORDER BY u.email_address",
+      `SELECT u.id AS user_id,u.email_address,u.display_name,${photoFields},CASE WHEN u.id=? THEN 'owner' ELSE m.role END AS role FROM users u LEFT JOIN wiki_space_members m ON m.user_id=u.id AND m.space_id=? WHERE (u.id=? OR m.user_id IS NOT NULL) AND u.deleted_at IS NULL AND u.disabled_at IS NULL ORDER BY u.email_address`,
       space.owner_user_id,
       space.id,
       space.owner_user_id,
     ),
   });
 });
+wiki.get("/spaces/:id/people/:userId/profile-image", async (c) => {
+  const space = await getSpace(c, c.req.param("id"), 4),
+    userId = id(c.req.param("userId"));
+  const read = () =>
+    row<{ id: string; profile_image_key: string | null }>(
+      c.env,
+      `SELECT u.id,u.profile_image_key FROM users u WHERE u.id=? AND u.deleted_at IS NULL AND u.disabled_at IS NULL AND (u.id=? OR EXISTS(SELECT 1 FROM wiki_space_members m WHERE m.space_id=? AND m.user_id=u.id))`,
+      userId,
+      space.owner_user_id,
+      space.id,
+    );
+  const user = await read();
+  if (!user) fail(404, "wiki.notFound");
+  const response = await profileImageResponse(c, user);
+  await getSpace(c, space.id, 4);
+  const current = await read();
+  if (!current || current.profile_image_key !== user.profile_image_key) fail(404, "wiki.notFound");
+  return response;
+});
 wiki.get("/spaces/:id/members", async (c) => {
   const space = await getSpace(c, c.req.param("id"), 4);
   const members = await rows(
     c.env,
-    `SELECT u.id AS user_id,u.email_address,u.display_name,CASE WHEN u.id=? THEN 'owner' ELSE m.role END AS role
+    `SELECT u.id AS user_id,u.email_address,u.display_name,${photoFields},CASE WHEN u.id=? THEN 'owner' ELSE m.role END AS role
     FROM users u LEFT JOIN wiki_space_members m ON m.user_id=u.id AND m.space_id=?
     WHERE (u.id=? OR m.user_id IS NOT NULL) AND u.deleted_at IS NULL ORDER BY u.email_address`,
     space.owner_user_id,
@@ -163,6 +253,14 @@ wiki.put("/spaces/:id/members", requirePermission("wiki.sharing.internal"), asyn
         c.env,
         `UPDATE wiki_spaces SET acl_version=acl_version+1 WHERE id=? AND ${proof}`,
         space.id,
+      ),
+      ...wikiNotice(
+        c,
+        proof,
+        `member:${space.id}:${space.acl_version}`,
+        "wiki.shared",
+        `/wiki/${space.id}`,
+        [user.id],
       ),
     ],
     { space: space.id, action: "member.granted" },
@@ -382,6 +480,43 @@ wiki.patch("/pages/:id", requirePermission("wiki.pages.update"), async (c) => {
   );
   return c.json({ page: await getPage(c, page.id) });
 });
+wiki.post("/pages/:id/order", requirePermission("wiki.pages.move"), async (c) => {
+  const page = await getPage(c, c.req.param("id"), 4),
+    space = await getSpace(c, page.space_id, 4),
+    data = await body(c, ["direction", "version"]);
+  if (version(data.version) !== page.version) fail(412, "wiki.changed");
+  if (data.direction !== "up" && data.direction !== "down") fail(400);
+  const siblings = await rows<{ id: string }>(
+    c.env,
+    "SELECT id FROM wiki_pages WHERE space_id=? AND parent_id IS ? AND trashed_at IS NULL AND purged_at IS NULL ORDER BY sort_order,id",
+    page.space_id,
+    page.parent_id,
+  );
+  const index = siblings.findIndex((p) => p.id === page.id),
+    next = index + (data.direction === "up" ? -1 : 1);
+  if (index < 0 || next < 0 || next >= siblings.length) return c.body(null, 204);
+  [siblings[index], siblings[next]] = [siblings[next]!, siblings[index]!];
+  await mutate(
+    c,
+    "wiki.pages.move",
+    [pageCondition(actorOf(c).user_id, page.id, 4), spaceVersion(space), pageVersion(page)],
+    (proof) => [
+      stmt(
+        c.env,
+        `UPDATE wiki_pages SET sort_order=(SELECT CAST(key AS INTEGER) FROM json_each(?) WHERE value=wiki_pages.id),version=version+1 WHERE id IN(SELECT value FROM json_each(?)) AND ${proof}`,
+        JSON.stringify(siblings.map((p) => p.id)),
+        JSON.stringify(siblings.map((p) => p.id)),
+      ),
+      stmt(
+        c.env,
+        `UPDATE wiki_spaces SET tree_version=tree_version+1 WHERE id=? AND ${proof}`,
+        space.id,
+      ),
+    ],
+    { space: space.id, page: page.id, action: "page.reordered" },
+  );
+  return c.body(null, 204);
+});
 wiki.post("/pages/:id/moves", requirePermission("wiki.pages.move"), async (c) => {
   const page = await getPage(c, c.req.param("id"), 4),
     space = await getSpace(c, page.space_id),
@@ -429,10 +564,33 @@ wiki.post("/pages/:id/moves", requirePermission("wiki.pages.move"), async (c) =>
   );
   return c.json({ page: await getPage(c, page.id) });
 });
+wiki.get("/pages/:id/people", async (c) => {
+  const page = await getPage(c, c.req.param("id"));
+  return c.json({ members: (await pagePeople(c, page)).filter((p) => p.role > 0) });
+});
+wiki.get("/pages/:id/people/:userId/profile-image", async (c) => {
+  const page = await getPage(c, c.req.param("id"));
+  const person = (await pagePeople(c, page)).find(
+    (p) => p.user_id === c.req.param("userId") && p.role > 0,
+  );
+  if (!person) fail(404, "wiki.notFound");
+  const response = await profileImageResponse(c, {
+    id: person.user_id,
+    profile_image_key: person.profile_image_version,
+  });
+  await getPage(c, page.id);
+  const current = (await pagePeople(c, page)).find(
+    (p) => p.user_id === person.user_id && p.role > 0,
+  );
+  if (!current || current.profile_image_version !== person.profile_image_version)
+    fail(404, "wiki.notFound");
+  return response;
+});
 wiki.get("/pages/:id/grants", async (c) => {
   const page = await getPage(c, c.req.param("id"), 4),
     space = await getSpace(c, page.space_id);
   return c.json({
+    people: await pagePeople(c, page),
     permission_mode: page.permission_mode,
     version: page.version,
     acl_version: space.acl_version,
@@ -489,6 +647,14 @@ wiki.put("/pages/:id/grants", requirePermission("wiki.sharing.internal"), async 
         c.env,
         `UPDATE wiki_spaces SET acl_version=acl_version+1 WHERE id=? AND ${proof}`,
         space.id,
+      ),
+      ...wikiNotice(
+        c,
+        proof,
+        `page:${page.id}:${page.version}`,
+        "wiki.shared",
+        `/wiki/${space.id}/${page.id}`,
+        grants.map((g) => g.user_id),
       ),
     ],
     { space: space.id, page: page.id, action: "page.shared" },
@@ -569,18 +735,42 @@ wiki.delete("/pages/:id", requirePermission("wiki.pages.delete"), async (c) => {
 });
 wiki.get("/pages/:id/comments", async (c) => {
   const page = await getPage(c, c.req.param("id"));
+  const cursor = c.req.query("cursor");
+  let time = Number.MAX_SAFE_INTEGER,
+    key = "";
+  if (cursor) {
+    const parts = cursor.split(":");
+    if (parts.length !== 2 || !/^\d+$/.test(parts[0]!)) fail(400);
+    time = Number(parts[0]);
+    if (!Number.isSafeInteger(time)) fail(400);
+    key = id(parts[1]);
+  }
+  const comments = await rows<WikiComment>(
+    c.env,
+    `SELECT c.*,COALESCE(u.display_name,u.email_address) AS author_name,${photoFields} FROM wiki_comments c JOIN users u ON u.id=c.author_user_id WHERE c.page_id=? AND c.deleted_at IS NULL AND (c.created_at<? OR (c.created_at=? AND c.id<?)) ORDER BY c.created_at DESC,c.id DESC LIMIT 101`,
+    page.id,
+    time,
+    time,
+    key,
+  );
+  const batch = comments.slice(0, 100),
+    last = batch.at(-1);
   return c.json({
-    comments: await rows<WikiComment>(
-      c.env,
-      "SELECT c.*,COALESCE(u.display_name,u.email_address) AS author_name FROM wiki_comments c JOIN users u ON u.id=c.author_user_id WHERE c.page_id=? AND c.deleted_at IS NULL ORDER BY c.created_at,c.id LIMIT 200",
-      page.id,
-    ),
+    comments: batch.reverse(),
+    next_cursor: comments.length > 100 && last ? `${last.created_at}:${last.id}` : null,
   });
 });
 wiki.post("/pages/:id/comments", requirePermission("wiki.comments.create"), async (c) => {
   const page = await getPage(c, c.req.param("id"), 2),
     data = await body(c, ["body"]),
     comment = uuid();
+  const recipients = await rows<{ user_id: string }>(
+    c.env,
+    `SELECT actor.user_id FROM (SELECT owner_user_id AS user_id FROM wiki_spaces WHERE id=? UNION SELECT author_user_id FROM wiki_comments WHERE page_id=? AND deleted_at IS NULL) actor JOIN wiki_pages p ON p.id=? JOIN wiki_spaces s ON s.id=p.space_id WHERE ${pageFilter()}`,
+    page.space_id,
+    page.id,
+    page.id,
+  );
   await mutate(
     c,
     "wiki.comments.create",
@@ -593,6 +783,14 @@ wiki.post("/pages/:id/comments", requirePermission("wiki.comments.create"), asyn
         page.id,
         actorOf(c).user_id,
         text(data.body, 10000),
+      ),
+      ...wikiNotice(
+        c,
+        proof,
+        comment,
+        "wiki.comment",
+        `/wiki/${page.space_id}/${page.id}?panel=comments`,
+        recipients.map((p) => p.user_id),
       ),
     ],
   );

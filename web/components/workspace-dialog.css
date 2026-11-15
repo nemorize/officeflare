@@ -1,0 +1,59 @@
+.workspace-dialog-viewport[data-ui] {
+  padding: 16px;
+}
+.workspace-dialog[data-ui] {
+  width: 100%;
+  max-width: 450px;
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+}
+.workspace-dialog-wide[data-ui] {
+  max-width: 610px;
+}
+.workspace-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.workspace-dialog-heading[data-description="true"] {
+  margin-bottom: 3px;
+}
+.workspace-dialog [data-ui="dialog-title"],
+.workspace-dialog [data-ui="alert-dialog-title"] {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.workspace-dialog [data-ui="dialog-description"]:not(.visually-hidden),
+.workspace-dialog [data-ui="alert-dialog-description"] {
+  margin: 7px 0 21px;
+}
+.workspace-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+.workspace-dialog-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: var(--ui-danger-surface);
+  color: var(--ui-danger);
+  border: 1px solid var(--ui-danger-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  margin: 12px 0;
+  white-space: pre-line;
+}
+.workspace-dialog-notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+@media (max-width: 760px) {
+  .workspace-dialog[data-ui] {
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}

@@ -1,3 +1,6 @@
+import { useSession } from "../lib/session";
+import { WikiPeople, WikiAvatar } from "../components/wiki-people";
+import { PersonPhotosProvider } from "../components/person-avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useSearchParams } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
@@ -14,10 +17,12 @@ import {
 import { WikiRevisionPreview } from "../components/wiki-revision-preview";
 import { WikiHome, WikiPageTable } from "../components/wiki-home";
 import { formatDateTime } from "../lib/regional";
-import { Confirm } from "../components/console-shared";
+import { WorkspaceConfirm, WorkspaceNotice } from "../components/workspace-dialog";
+import { WikiRenameDialog } from "../components/wiki-rename-dialog";
 import { useAccount } from "../components/account-context";
 import { CollaborativeEditor, downloadText } from "../components/collaborative-editor";
 import {
+  useNotifications,
   Button,
   Icon,
   Input,
@@ -25,8 +30,6 @@ import {
   MenuPopup,
   SelectControl,
   Textarea,
-  Popover,
-  PopoverPopup,
 } from "../components/ui";
 import "./wiki.css";
 
@@ -39,7 +42,14 @@ const transport: CollaborationTransport = {
     return url.href;
   },
 };
-type Member = { user_id: string; email_address: string; display_name: string | null; role: string };
+type Member = {
+  user_id: string;
+  email_address: string;
+  display_name: string | null;
+  role: string;
+  has_profile_image?: boolean;
+  profile_image_version?: string | null;
+};
 type Asset = { id: string; filename: string; byte_size: number; content_type: string };
 const roleName = (role: string) =>
   role === "owner"
@@ -49,6 +59,7 @@ const roleName = (role: string) =>
       : t("wiki.none");
 
 function Members() {
+  const notify = useNotifications();
   const wiki = useWiki(),
     [members, setMembers] = useState<Member[]>([]),
     [version, setVersion] = useState(0),
@@ -84,6 +95,7 @@ function Members() {
         });
       setEmail("");
       await load();
+      notify.success(t("wiki.saved"));
       wiki.refresh();
     } catch (e) {
       setError(errorMessage(e));
@@ -129,6 +141,11 @@ function Members() {
       <ul className="wiki-members">
         {members.map((member) => (
           <li key={member.user_id}>
+            <WikiAvatar
+              id={member.user_id}
+              name={member.display_name || member.email_address}
+              person={member}
+            />
             <div>
               <strong>{member.display_name || member.email_address}</strong>
               <small>{member.email_address}</small>
@@ -156,6 +173,7 @@ function Members() {
   );
 }
 function PageList({ view, query = "" }: { view: string; query?: string }) {
+  const notify = useNotifications();
   const wiki = useWiki(),
     [pages, setPages] = useState<Page[]>([]),
     [error, setError] = useState(""),
@@ -232,8 +250,7 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
       });
       setRevision((v) => v + 1);
       wiki.refresh();
-    } catch (e) {
-      setError(errorMessage(e));
+      notify.success(t(remove ? "wiki.deleted" : "wiki.restored"));
     } finally {
       setBusy(false);
     }
@@ -264,7 +281,12 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
             view === "trash" && wiki.can("pages.delete")
               ? (page) => (
                   <>
-                    <Button disabled={busy} onClick={() => void change(page)}>
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void change(page).catch((failure) => notify.error(errorMessage(failure)))
+                      }
+                    >
                       {t("wiki.restore")}
                     </Button>
                     {wiki.space!.role >= 4 && (
@@ -305,20 +327,20 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
         </Button>
       )}
       {removing && (
-        <Confirm
-          open
+        <WorkspaceConfirm
           title={t("wiki.deleteForever")}
           description={t("wiki.confirmDelete")}
-          label={t("wiki.deleteForever")}
+          confirm={t("wiki.deleteForever")}
           destructive
           onClose={() => setRemoving(null)}
-          onConfirm={() => change(removing, true)}
+          action={() => change(removing, true)}
         />
       )}
     </section>
   );
 }
 function Share({ page, onClose }: { page: Page; onClose: () => void }) {
+  const notify = useNotifications();
   const wiki = useWiki(),
     [members, setMembers] = useState<Member[]>([]),
     [grants, setGrants] = useState<Record<string, string>>({}),
@@ -327,31 +349,42 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
     [aclVersion, setAclVersion] = useState(0),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [access, setAccess] = useState<Record<string, { role: number; inherited_role: number }>>(
+    {},
+  );
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const [people, current] = await Promise.all([
+        api<{ members: Member[] }>(`/api/wiki/spaces/${page.space_id}/people`, { signal }),
+        api<{
+          people: { user_id: string; role: number; inherited_role: number }[];
+          grants: Member[];
+          permission_mode: string;
+          version: number;
+          acl_version: number;
+        }>(`/api/wiki/pages/${page.id}/grants`, { signal }),
+      ]);
+      if (signal?.aborted) return;
+      setMembers(people.members);
+      setAccess(Object.fromEntries(current.people.map((p) => [p.user_id, p])));
+      setGrants(Object.fromEntries(current.grants.map((g) => [g.user_id, g.role])));
+      setMode(current.permission_mode);
+      setVersion(current.version);
+      setAclVersion(current.acl_version);
+    },
+    [page.id, page.space_id],
+  );
   useEffect(() => {
     const abort = new AbortController();
-    void Promise.all([
-      api<{ members: Member[] }>(`/api/wiki/spaces/${page.space_id}/people`, {
-        signal: abort.signal,
-      }),
-      api<{ grants: Member[]; permission_mode: string; version: number; acl_version: number }>(
-        `/api/wiki/pages/${page.id}/grants`,
-        { signal: abort.signal },
-      ),
-    ])
-      .then(([people, current]) => {
-        if (abort.signal.aborted) return;
-        setMembers(people.members);
-        setGrants(Object.fromEntries(current.grants.map((g) => [g.user_id, g.role])));
-        setMode(current.permission_mode);
-        setVersion(current.version);
-        setAclVersion(current.acl_version);
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setError(errorMessage(e));
-      });
+    void load(abort.signal).catch((e) => {
+      if (!abort.signal.aborted) setError(errorMessage(e));
+    });
     return () => abort.abort();
-  }, [page.id, page.space_id]);
+  }, [load]);
+  const rankName = (rank: number) =>
+    roleName(["", "viewer", "commenter", "editor", "manager", "owner"][rank] ?? "");
   const save = async () => {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -367,20 +400,46 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
         },
       });
       wiki.refresh();
+      notify.success(t("wiki.saved"));
       onClose();
     } catch (e) {
-      setError(errorMessage(e));
+      if ((e as { status?: number }).status === 412) {
+        setVersion(0);
+        try {
+          await load();
+          setError(t("wiki.permissionsReloaded"));
+        } catch (failure) {
+          setError(errorMessage(failure));
+        }
+      } else setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <>
-      <Popover.Title>{t("wiki.share")}</Popover.Title>
+    <WikiDialog
+      open
+      wide
+      busy={busy}
+      title={t("wiki.shareTitle", { title: page.title || t("wiki.untitled") })}
+      onClose={onClose}
+      className="wiki-share-dialog"
+    >
+      {!version && !error && <p role="status">{t("wiki.loading")}</p>}
       <ul className="wiki-members">
         {members.map((member) => (
           <li key={member.user_id}>
-            <span>{member.display_name || member.email_address}</span>
+            <WikiAvatar
+              id={member.user_id}
+              name={member.display_name || member.email_address}
+              person={member}
+            />
+            <div className="wiki-share-person">
+              <span>{member.display_name || member.email_address}</span>
+              <small>
+                {t("wiki.currentAccess", { role: rankName(access[member.user_id]?.role ?? 0) })}
+              </small>
+            </div>
             {member.role === "owner" || member.role === "manager" ? (
               <span className="wiki-role-label">{roleName(member.role)}</span>
             ) : (
@@ -390,7 +449,15 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
                 disabled={busy}
                 onValueChange={(value) => setGrants((old) => ({ ...old, [member.user_id]: value }))}
                 options={[
-                  { value: "", label: t("wiki.none") },
+                  {
+                    value: "",
+                    label:
+                      mode === "inherit"
+                        ? t("wiki.inheritedRole", {
+                            role: rankName(access[member.user_id]?.inherited_role ?? 0),
+                          })
+                        : t("wiki.none"),
+                  },
                   ...wikiRoles.map((value) => ({ value, label: roleName(value) })),
                 ]}
               />
@@ -412,24 +479,29 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
         />
         <p className="wiki-muted">{t("wiki.restrictionHint")}</p>
       </div>
-      {error && <p role="alert">{error}</p>}
+      <WorkspaceNotice error={error} />
       <div className="wiki-share-footer">
         <Button
           variant="ghost"
           onClick={() =>
-            void (navigator.clipboard?.writeText(location.href) ?? Promise.reject()).catch(() =>
-              setError(t("wiki.copyLinkFailed")),
-            )
+            void (navigator.clipboard?.writeText(location.href) ?? Promise.reject())
+              .then(() => notify.success(t("wiki.linkCopied")))
+              .catch(() => notify.error(t("wiki.copyLinkFailed")))
           }
         >
           <Icon name="link" />
           {t("wiki.copyLink")}
         </Button>
-        <Button variant="primary" onClick={() => void save()} disabled={busy || !version}>
-          {t("wiki.save")}
-        </Button>
+        <div className="wiki-share-actions">
+          <Button onClick={onClose} disabled={busy}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" onClick={() => void save()} disabled={busy || !version}>
+            {t(busy ? "common.saving" : "wiki.save")}
+          </Button>
+        </div>
       </div>
-    </>
+    </WikiDialog>
   );
 }
 function History({
@@ -443,6 +515,7 @@ function History({
   onClose: () => void;
   onPreview: (state: string | null) => void;
 }) {
+  const notify = useNotifications();
   const wiki = useWiki(),
     [revisions, setRevisions] = useState<
       { id: string; epoch: number; seq: number; created_at: number }[]
@@ -498,13 +571,13 @@ function History({
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: { snapshot_id: snapshot, epoch: client?.epoch ?? page.projected_epoch },
         });
+        notify.success(t("wiki.restored"));
         onClose();
       } else {
         await api(`/api/collaboration/resources/${page.resource_id}/snapshots`, { method: "POST" });
         await load();
+        notify.success(t("wiki.saved"));
       }
-    } catch (e) {
-      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -516,7 +589,7 @@ function History({
         <Button
           className="wiki-checkpoint"
           disabled={busy || !!client?.unsaved}
-          onClick={() => void change()}
+          onClick={() => void change().catch((failure) => setError(errorMessage(failure)))}
         >
           {t("wiki.checkpoint")}
         </Button>
@@ -569,19 +642,19 @@ function History({
         </div>
       )}
       {restoring && (
-        <Confirm
-          open
+        <WorkspaceConfirm
           title={t("wiki.restore")}
           description={t("wiki.confirmRestore")}
-          label={t("wiki.restore")}
+          confirm={t("wiki.restore")}
           onClose={() => setRestoring(null)}
-          onConfirm={() => change(restoring)}
+          action={() => change(restoring)}
         />
       )}
     </WikiSidePanel>
   );
 }
 function Move({ page, onClose }: { page: Page; onClose: () => void }) {
+  const notify = useNotifications();
   const wiki = useWiki(),
     [parent, setParent] = useState(page.parent_id ?? ""),
     [query, setQuery] = useState(""),
@@ -598,6 +671,8 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
       }
   }
   const save = async () => {
+    if (busy) return;
+    setError("");
     setBusy(true);
     try {
       await api(`/api/wiki/pages/${page.id}/moves`, {
@@ -605,6 +680,7 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
         body: { parent_id: parent || null, version: page.version },
       });
       wiki.refresh();
+      notify.success(t("wiki.moved"));
       onClose();
     } catch (e) {
       setError(errorMessage(e));
@@ -613,9 +689,10 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
     }
   };
   return (
-    <WikiDialog title={t("wiki.move")} open onClose={onClose}>
+    <WikiDialog title={t("wiki.move")} open busy={busy} onClose={onClose}>
       <Input
         autoFocus
+        disabled={busy}
         type="search"
         aria-label={t("wiki.parent")}
         placeholder={t("wiki.search")}
@@ -624,7 +701,12 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
       />
       <div className="wiki-move-destinations" role="listbox" aria-label={t("wiki.parent")}>
         {wiki.space!.role >= 4 && !query && (
-          <button role="option" aria-selected={!parent} onClick={() => setParent("")}>
+          <button
+            disabled={busy}
+            role="option"
+            aria-selected={!parent}
+            onClick={() => setParent("")}
+          >
             <Icon name="book" />
             {wiki.space!.name}
             <small>{t("wiki.root")}</small>
@@ -641,6 +723,7 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
           .map((p) => (
             <button
               key={p.id}
+              disabled={busy}
               role="option"
               aria-selected={parent === p.id}
               onClick={() => setParent(p.id)}
@@ -651,10 +734,17 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
             </button>
           ))}
       </div>
-      {error && <p role="alert">{error}</p>}
+      <WorkspaceNotice error={error} />
       <div className="wiki-dialog-actions">
-        <Button disabled={busy} onClick={() => void save()}>
-          {t("wiki.move")}
+        <Button onClick={onClose} disabled={busy}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={busy || parent === (page.parent_id ?? "")}
+          onClick={() => void save()}
+        >
+          {t(busy ? "common.saving" : "wiki.move")}
         </Button>
       </div>
     </WikiDialog>
@@ -662,48 +752,90 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
 }
 function Discussion({ page, comments = false }: { page: Page; comments?: boolean }) {
   const account = useAccount();
+  const sessionId = useSession().session?.tokens.session_id;
+  const draftKey = `officeflare.wiki.draft.${sessionId}.${page.id}`;
+  const pending = useRef(false),
+    request = useRef<AbortController | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const wiki = useWiki(),
     [entries, setComments] = useState<WikiComment[]>([]),
     [assets, setAssets] = useState<Asset[]>([]),
-    [draft, setDraft] = useState(""),
+    [draft, setDraft] = useState(() => {
+      try {
+        return sessionStorage.getItem(draftKey) ?? "";
+      } catch {
+        return "";
+      }
+    }),
     [error, setError] = useState(""),
+    [loadError, setLoadError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
-    if (comments) {
-      const data = await api<{ comments: WikiComment[] }>(`/api/wiki/pages/${page.id}/comments`);
-      setComments(data.comments);
-    } else {
-      const data = await api<{ assets: Asset[] }>(`/api/wiki/pages/${page.id}/assets`);
-      setAssets(data.assets);
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      if (comments) {
+        let cursor: string | null = null;
+        const all: WikiComment[] = [];
+        do {
+          const data: { comments: WikiComment[]; next_cursor: string | null } = await api(
+            `/api/wiki/pages/${page.id}/comments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+            { signal: controller.signal },
+          );
+          all.unshift(...data.comments);
+          cursor = data.next_cursor;
+        } while (cursor && !controller.signal.aborted);
+        if (!controller.signal.aborted) setComments(all);
+      } else {
+        const data = await api<{ assets: Asset[] }>(`/api/wiki/pages/${page.id}/assets`, {
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) setAssets(data.assets);
+      }
+      if (!controller.signal.aborted) setLoadError("");
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [page.id, comments]);
   useEffect(() => {
-    let active = true;
-    const run = () =>
-      void load().catch((e) => {
-        if (active) setError(errorMessage(e));
-      });
+    const run = () => {
+      if (!pending.current)
+        void load().catch((e) => {
+          if (e?.name !== "AbortError") setLoadError(errorMessage(e));
+        });
+    };
     run();
     const timer = setInterval(run, 10000);
     return () => {
-      active = false;
       clearInterval(timer);
+      request.current?.abort();
     };
   }, [load]);
   const post = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    setError("");
     setBusy(true);
     try {
       await api(`/api/wiki/pages/${page.id}/comments`, { method: "POST", body: { body: draft } });
       setDraft("");
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {}
       await load();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
   const attach = async (file: File) => {
+    if (pending.current) return;
+    pending.current = true;
+    setError("");
     setBusy(true);
     try {
       await api(`/api/wiki/pages/${page.id}/assets?filename=${encodeURIComponent(file.name)}`, {
@@ -714,10 +846,12 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
   const download = async (asset: Asset) => {
+    setError("");
     try {
       const blob = await api<Blob>(`/api/wiki/pages/${page.id}/assets/${asset.id}`, {
         response: "blob",
@@ -733,6 +867,10 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
     }
   };
   const resolve = async (comment: WikiComment) => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
     try {
       await api(`/api/wiki/pages/${page.id}/comments/${comment.id}`, {
         method: "PATCH",
@@ -741,13 +879,17 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
       await load();
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   };
   return (
     <div className={`wiki-discussion ${comments ? "is-comments" : ""}`}>
-      {error && (
+      {loading && <p role="status">{t("wiki.loading")}</p>}
+      {(error || loadError) && (
         <p role="alert" className="wiki-error">
-          {error}
+          {error || loadError}
         </p>
       )}
       {!comments && (
@@ -797,13 +939,25 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
             {entries.map((comment) => (
               <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>
                 <div>
+                  <WikiAvatar
+                    id={comment.author_user_id}
+                    name={comment.author_name}
+                    person={comment}
+                  />
                   <strong>{comment.author_name}</strong>
-                  <time>{new Date(comment.created_at * 1000).toLocaleString()}</time>
+                  <time dateTime={new Date(comment.created_at * 1000).toISOString()}>
+                    {formatDateTime(comment.created_at)}
+                  </time>
                 </div>
                 <p>{comment.body}</p>
                 {(page.role >= 4 || comment.author_user_id === account.user?.id) &&
                   wiki.can("comments.create") && (
-                    <Button variant="ghost" size="sm" onClick={() => void resolve(comment)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void resolve(comment)}
+                    >
                       {t(comment.resolved_at ? "wiki.reopen" : "wiki.resolve")}
                     </Button>
                   )}
@@ -822,7 +976,12 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
                 placeholder={t("wiki.commentPlaceholder")}
                 value={draft}
                 maxLength={10000}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  try {
+                    sessionStorage.setItem(draftKey, event.target.value);
+                  } catch {}
+                }}
               />
               <Button type="submit" disabled={busy || !draft.trim()}>
                 {t("wiki.post")}
@@ -835,15 +994,27 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
   );
 }
 function OpenPage({ page }: { page: Page }) {
+  const notify = useNotifications();
+  const command = useRef(false);
+  const [commandBusy, setCommandBusy] = useState(false);
   const wiki = useWiki(),
     navigate = useNavigate(),
     [params, setParams] = useSearchParams(),
-    [panel, setPanel] = useState<"share" | "history" | "move" | "comments" | null>(null),
-    [error, setError] = useState(""),
+    [panel, setPanel] = useState<
+      "share" | "history" | "move" | "comments" | "rename" | "trash" | null
+    >(params.get("panel") === "comments" ? "comments" : null),
     [client, setClient] = useState<CollaborationClient | null>(null),
     [statusContainer, setStatusContainer] = useState<HTMLDivElement | null>(null),
     [revisionState, setRevisionState] = useState<string | null>(null),
     [, render] = useState(0);
+  useEffect(() => {
+    if (params.get("panel") === "comments" && page.role > 0) {
+      setPanel("comments");
+      const next = new URLSearchParams(params);
+      next.delete("panel");
+      setParams(next, { replace: true });
+    }
+  }, [params, page.role, setParams]);
   useEffect(() => client?.subscribe(() => render((v) => v + 1)), [client]);
   useEffect(() => {
     if (page.role === 0) setPanel(null);
@@ -859,53 +1030,69 @@ function OpenPage({ page }: { page: Page }) {
     [wiki.updateTitle, page.id],
   );
   const trash = async () => {
+    if (command.current) return;
+    command.current = true;
+    setCommandBusy(true);
     try {
       await api(`/api/wiki/pages/${page.id}/trash`, {
         method: "POST",
         body: { version: page.version },
       });
       wiki.refresh();
+      notify.success(t("wiki.trashed"));
       navigate(`/wiki/${page.space_id}`);
-    } catch (e) {
-      setError(errorMessage(e));
+    } finally {
+      command.current = false;
+      setCommandBusy(false);
     }
   };
   const favorite = async () => {
+    if (command.current) return;
+    command.current = true;
+    setCommandBusy(true);
     try {
       await api(`/api/wiki/pages/${page.id}/favorite`, {
         method: page.favorite ? "DELETE" : "PUT",
       });
       wiki.refresh();
     } catch (e) {
-      setError(errorMessage(e));
+      notify.error(errorMessage(e));
+    } finally {
+      command.current = false;
+      setCommandBusy(false);
     }
   };
   const exportPage = async () => {
+    if (command.current) return;
+    command.current = true;
+    setCommandBusy(true);
     try {
       const content = await api<Blob>(`/api/wiki/pages/${page.id}/export`, { response: "blob" });
       downloadText(`${page.title || t("wiki.untitled")}.txt`, await content.text());
     } catch (e) {
-      setError(errorMessage(e));
+      notify.error(errorMessage(e));
+    } finally {
+      command.current = false;
+      setCommandBusy(false);
     }
   };
   useEffect(() => {
     if (!client?.synced || !params.has("action")) return;
     const action = params.get("action");
+    if (action === "share" && page.role >= 4 && wiki.can("sharing.internal")) setPanel("share");
     if (action === "move" && page.role >= 4 && wiki.can("pages.move")) setPanel("move");
     if (action === "rename" && page.role >= 3 && wiki.can("pages.update")) {
-      const title = document.querySelector<HTMLTextAreaElement>(".wiki-title");
-      title?.focus();
-      title?.select();
+      setPanel("rename");
     }
     if (action === "trash" && client.unsaved) return;
     if (action === "trash" && page.role >= 3 && wiki.can("pages.delete")) {
-      void trash();
+      setPanel("trash");
     }
     const next = new URLSearchParams(params);
     next.delete("action");
     setParams(next, { replace: true });
   }, [client?.synced, client?.unsaved, params, page.role]);
-  const [copied, setCopied] = useState(false);
+
   const ancestors: Page[] = [];
   let parent = page.parent_id;
   while (parent && ancestors.length < 32) {
@@ -935,7 +1122,7 @@ function OpenPage({ page }: { page: Page }) {
           <Button
             variant="ghost"
             size="icon"
-            disabled={page.role === 0}
+            disabled={page.role === 0 || commandBusy}
             aria-label={t(page.favorite ? "wiki.unfavorite" : "wiki.favorite")}
             aria-pressed={!!page.favorite}
             onClick={() => void favorite()}
@@ -943,20 +1130,9 @@ function OpenPage({ page }: { page: Page }) {
             <Icon name="star" />
           </Button>
           {page.role >= 4 && wiki.can("sharing.internal") && (
-            <Popover.Root
-              open={panel === "share"}
-              onOpenChange={(open) => setPanel(open ? "share" : null)}
-            >
-              <Popover.Trigger render={<Button variant="ghost" />}>
-                {t("wiki.share")}
-              </Popover.Trigger>
-              <PopoverPopup
-                className="wiki-share-popover"
-                positionerProps={{ align: "end", sideOffset: 8 }}
-              >
-                <Share page={page} onClose={() => setPanel(null)} />
-              </PopoverPopup>
-            </Popover.Root>
+            <Button variant="ghost" onClick={() => setPanel("share")}>
+              {t("wiki.share")}
+            </Button>
           )}
           <Button
             variant="ghost"
@@ -977,23 +1153,29 @@ function OpenPage({ page }: { page: Page }) {
               <Menu.Item
                 onClick={() => {
                   void (navigator.clipboard?.writeText(location.href) ?? Promise.reject())
-                    .then(() => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    })
-                    .catch(() => setError(t("wiki.copyLinkFailed")));
+                    .then(() => notify.success(t("wiki.linkCopied")))
+                    .catch(() => notify.error(t("wiki.copyLinkFailed")));
                 }}
               >
                 <Icon name="link" />
                 {t("wiki.copyLink")}
               </Menu.Item>
+              {page.role >= 3 && wiki.can("pages.update") && (
+                <Menu.Item
+                  disabled={!client?.capabilities.write}
+                  onClick={() => setPanel("rename")}
+                >
+                  <Icon name="edit" />
+                  {t("wiki.rename")}
+                </Menu.Item>
+              )}
               {page.role >= 3 && wiki.can("pages.create") && (
                 <Menu.Item
                   disabled={wiki.creatingPage}
                   onClick={() =>
                     void wiki
                       .createPage(page.id)
-                      .catch((failure) => setError(errorMessage(failure)))
+                      .catch((failure) => notify.error(errorMessage(failure)))
                   }
                 >
                   <Icon name="plus" />
@@ -1023,8 +1205,8 @@ function OpenPage({ page }: { page: Page }) {
                   <Menu.Separator />
                   <Menu.Item
                     data-variant="danger"
-                    disabled={!!client?.unsaved}
-                    onClick={() => void trash()}
+                    disabled={!!client?.unsaved || commandBusy}
+                    onClick={() => setPanel("trash")}
                   >
                     <Icon name="trash" />
                     {t("wiki.trashPage")}
@@ -1035,16 +1217,6 @@ function OpenPage({ page }: { page: Page }) {
           </Menu.Root>
         </div>
       </WikiPageHeader>
-      {error && (
-        <p role="alert" className="wiki-error">
-          {error}
-        </p>
-      )}
-      {copied && (
-        <p className="wiki-copy-notice" role="status">
-          {t("wiki.linkCopied")}
-        </p>
-      )}
       {revisionState && panel === "history" && (
         <div className="wiki-document-width wiki-version-canvas">
           <div className="wiki-version-label">
@@ -1072,6 +1244,7 @@ function OpenPage({ page }: { page: Page }) {
           onTitle={updateTitle}
           onClient={setClient}
           statusContainer={statusContainer}
+          renderParticipant={(p) => <WikiAvatar id={p.user_id} name={p.name} />}
         />
         {wiki.pages.some((p) => p.parent_id === page.id) && (
           <ul className="wiki-child-pages">
@@ -1106,6 +1279,23 @@ function OpenPage({ page }: { page: Page }) {
         />
       )}
       {page.role > 0 && panel === "move" && <Move page={page} onClose={() => setPanel(null)} />}
+      {page.role >= 4 && wiki.can("sharing.internal") && panel === "share" && (
+        <Share page={page} onClose={() => setPanel(null)} />
+      )}
+      {page.role >= 3 && wiki.can("pages.update") && client && panel === "rename" && (
+        <WikiRenameDialog client={client} onClose={() => setPanel(null)} />
+      )}
+      {page.role >= 3 && wiki.can("pages.delete") && panel === "trash" && (
+        <WorkspaceConfirm
+          title={t("wiki.trashPage")}
+          description={t("wiki.confirmTrash", { title: page.title || t("wiki.untitled") })}
+          confirm={t("wiki.trashPage")}
+          destructive
+          onClose={() => setPanel(null)}
+          action={trash}
+        />
+      )}
+
       {blocker.state === "blocked" && (
         <WikiDialog title={t("wiki.saving")} open onClose={() => blocker.reset()}>
           <p>{t("wiki.unsavedNavigation")}</p>
@@ -1131,7 +1321,12 @@ export function WikiPage() {
         {t("wiki.loading")}
       </p>
     );
-  if (page?.role === 0) return <OpenPage key={page.id} page={page} />;
+  if (page?.role === 0)
+    return (
+      <WikiPeople key={page.id} pageId={page.id}>
+        <OpenPage page={page} />
+      </WikiPeople>
+    );
   if (!wiki.space) return <WikiHome />;
   if (params.get("q")?.trim())
     return (
@@ -1141,7 +1336,15 @@ export function WikiPage() {
         query={params.get("q")!.trim()}
       />
     );
-  if (view === "members") return <Members key={wiki.space.id} />;
+  if (view === "members")
+    return (
+      <PersonPhotosProvider
+        key={wiki.space.id}
+        basePath={`/api/wiki/spaces/${wiki.space.id}/people`}
+      >
+        <Members />
+      </PersonPhotosProvider>
+    );
   if (view === "trash" || view === "favorites")
     return <PageList key={`${wiki.space.id}/${view}`} view={view} />;
   if (wiki.pageId && !page)
@@ -1151,5 +1354,9 @@ export function WikiPage() {
       </p>
     );
   if (!page) return <WikiHome />;
-  return <OpenPage key={page.id} page={page} />;
+  return (
+    <WikiPeople key={page.id} pageId={page.id}>
+      <OpenPage page={page} />
+    </WikiPeople>
+  );
 }

@@ -405,6 +405,24 @@ export const ja = defineTranslations(en, {
   "mcp.calendarRead": "カレンダーの閲覧",
   "mcp.calendarWrite": "予定の変更",
 
+  "wiki.shareTitle": "「{title}」を共有",
+  "wiki.confirmTrash": "「{title}」と子ページをゴミ箱に移動しますか？後で復元できます。",
+  "wiki.renamed": "名前を変更しました",
+  "wiki.renameChanged":
+    "ページ名が「{title}」に変更されました。入力した名前を確認して保存してください。",
+  "wiki.restored": "ページを復元しました",
+  "wiki.deleted": "ページを完全に削除しました",
+  "wiki.moveUp": "ページを上へ移動",
+  "wiki.moveDown": "ページを下へ移動",
+  "wiki.sharedNotice": "Wiki の共有が変更されました",
+  "wiki.commentNotice": "Wiki に新しいコメント",
+  "wiki.noticeBody": "Wiki で確認してください。",
+  "wiki.permissionsReloaded":
+    "変更は保存されませんでした。最新の権限を確認して再度変更してください。",
+  "wiki.currentAccess": "現在の権限: {role}",
+  "wiki.inheritedRole": "継承: {role}",
+  "wiki.moved": "ページを移動しました。",
+  "wiki.trashed": "ページをゴミ箱に移動しました。",
   "wiki.unsavedNavigation":
     "未保存の編集があります。このページに留まるか、未保存の変更を破棄して移動してください。",
   "wiki.leavePage": "ページを離れる",

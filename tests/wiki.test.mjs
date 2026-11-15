@@ -656,3 +656,141 @@ test("Permanent deletion retires collaboration and recovers object cleanup", asy
     expected: 404,
   });
 });
+
+test("Wiki people reflect inherited access and restrict photo reads", async (t) => {
+  const f = await fixture(t, { assets: true }),
+    space = await f.space(),
+    page = await f.page(space.id);
+  await f.member(space.id, "bob", "editor");
+  const people = (await f.call(`/wiki/pages/${page.id}/grants`)).people;
+  assert.equal(people.find((p) => p.user_id === "bob").role, 3);
+  assert.equal(people.find((p) => p.user_id === "bob").inherited_role, 3);
+  const key = "profiles/alice/test.png";
+  await (
+    await f.mf.getR2Bucket("PROFILE_BUCKET")
+  ).put(key, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "image/png" } });
+  await f.db.prepare("UPDATE users SET profile_image_key=? WHERE id=?").bind(key, "alice").run();
+  assert.equal(
+    (await f.raw(`/wiki/pages/${page.id}/people/alice/profile-image`, { actor: "bob" })).status,
+    200,
+  );
+  await f.call(`/wiki/pages/${page.id}/people`, { actor: "read-only", expected: 404 });
+  const current = await f.call(`/wiki/pages/${page.id}/grants`);
+  await f.call(`/wiki/pages/${page.id}/grants`, {
+    method: "PUT",
+    data: {
+      ...{ version: current.version, acl_version: current.acl_version },
+      permission_mode: "restricted",
+      grants: [],
+    },
+  });
+  assert.equal(
+    (await f.raw(`/wiki/pages/${page.id}/people/alice/profile-image`, { actor: "bob" })).status,
+    404,
+  );
+  const restricted = (await f.call(`/wiki/pages/${page.id}/grants`)).people.find(
+    (p) => p.user_id === "bob",
+  );
+  assert.equal(restricted.role, 0);
+  assert.equal(restricted.inherited_role, 3);
+});
+
+test("Wiki comments paginate equal timestamps without dropping new comments and publish scoped notifications", async (t) => {
+  const f = await fixture(t),
+    space = await f.space(),
+    page = await f.page(space.id);
+  await f.member(space.id, "bob", "commenter");
+  await f.db.batch(
+    Array.from({ length: 205 }, (_, i) =>
+      f.db
+        .prepare(
+          "INSERT INTO wiki_comments(id,page_id,author_user_id,body,created_at) VALUES(?,?,?,?,?)",
+        )
+        .bind(`comment-${String(i).padStart(3, "0")}`, page.id, "bob", `Comment ${i}`, 1000),
+    ),
+  );
+  const posted = await f.call(`/wiki/pages/${page.id}/comments`, {
+    method: "POST",
+    data: { body: "Latest comment" },
+    expected: 201,
+  });
+  let cursor = null,
+    ids = [];
+  do {
+    const result = await f.call(
+      `/wiki/pages/${page.id}/comments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    ids.push(...result.comments.map((c) => c.id));
+    cursor = result.next_cursor;
+  } while (cursor);
+  assert.equal(ids.length, 206);
+  assert.equal(new Set(ids).size, 206);
+  assert.ok(ids.includes(posted.id));
+  const notices = await f.db
+    .prepare(
+      "SELECT i.user_id,e.type,e.target_path FROM notification_inbox i JOIN notification_events e ON e.id=i.event_id WHERE e.type LIKE 'wiki.%'",
+    )
+    .all();
+  assert.ok(
+    notices.results.some(
+      (n) =>
+        n.user_id === "bob" &&
+        n.type === "wiki.comment" &&
+        n.target_path.endsWith("?panel=comments"),
+    ),
+  );
+  assert.ok(!notices.results.some((n) => n.user_id === "alice"));
+  const members = await f.call(`/wiki/spaces/${space.id}/members`);
+  await f.call(`/wiki/spaces/${space.id}/members/bob?version=${members.version}`, {
+    method: "DELETE",
+    expected: 204,
+  });
+  const before = notices.results.length;
+  await f.call(`/wiki/pages/${page.id}/comments`, {
+    method: "POST",
+    data: { body: "After revocation" },
+    expected: 201,
+  });
+  assert.equal(
+    (
+      await f.db
+        .prepare(
+          "SELECT COUNT(*) n FROM notification_inbox i JOIN notification_events e ON e.id=i.event_id WHERE e.type LIKE 'wiki.%'",
+        )
+        .first()
+    ).n,
+    before,
+  );
+  await f.call(`/wiki/pages/${page.id}/comments?cursor=invalid`, { expected: 400 });
+});
+
+test("Wiki sibling order changes atomically and rejects stale or unauthorized changes", async (t) => {
+  const f = await fixture(t),
+    space = await f.space(),
+    a = await f.page(space.id),
+    b = await f.page(space.id);
+  await f.call(`/wiki/pages/${b.id}/order`, {
+    method: "POST",
+    data: { direction: "up", version: b.version },
+    expected: 204,
+  });
+  const rows = (await f.call(`/wiki/spaces/${space.id}/pages`)).pages.sort(
+    (x, y) => x.sort_order - y.sort_order,
+  );
+  assert.deepEqual(
+    rows.map((p) => p.id),
+    [b.id, a.id],
+  );
+  await f.call(`/wiki/pages/${b.id}/order`, {
+    method: "POST",
+    data: { direction: "down", version: b.version },
+    expected: 412,
+  });
+  await f.member(space.id, "bob", "editor");
+  await f.call(`/wiki/pages/${b.id}/order`, {
+    actor: "bob",
+    method: "POST",
+    data: { direction: "down", version: rows[0].version },
+    expected: 403,
+  });
+});

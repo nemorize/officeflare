@@ -51,14 +51,14 @@ export const spaceRank = (ref = "s") =>
   `CASE WHEN ${ref}.owner_user_id=actor.user_id THEN 5 WHEN ${ref}.kind='personal' THEN 0 ELSE COALESCE((SELECT ${roleRank("m.role")} FROM wiki_space_members m WHERE m.space_id=${ref}.id AND m.user_id=actor.user_id),0) END`;
 // actor is one bound user ID, shared by every correlated ACL expression.
 export const actorCte = "WITH actor(user_id) AS (VALUES (?))";
-export function pageRank(ref = "p") {
+export function pageRank(ref = "p", inherited = false) {
   return `(WITH RECURSIVE path(id,parent_id,permission_mode,depth) AS (
-    SELECT ${ref}.id,${ref}.parent_id,${ref}.permission_mode,0
+    SELECT ${ref}.id,${ref}.parent_id,${inherited ? "'inherit'" : `${ref}.permission_mode`},0
     UNION ALL SELECT a.id,a.parent_id,a.permission_mode,path.depth+1 FROM wiki_pages a JOIN path ON a.id=path.parent_id WHERE path.depth<32
   ) SELECT CASE WHEN ${spaceRank("s")}>=4 THEN ${spaceRank("s")} ELSE MAX(
     CASE WHEN EXISTS(SELECT 1 FROM path WHERE permission_mode='restricted') THEN 0 ELSE ${spaceRank("s")} END,
     COALESCE((SELECT MAX(${roleRank("g.role")}) FROM wiki_page_grants g JOIN path ON path.id=g.page_id
-      WHERE g.user_id=actor.user_id AND path.depth<=COALESCE((SELECT MIN(depth) FROM path WHERE permission_mode='restricted'),32)),0)
+      WHERE ${inherited ? `g.page_id<>${ref}.id AND ` : ""}g.user_id=actor.user_id AND path.depth<=COALESCE((SELECT MIN(depth) FROM path WHERE permission_mode='restricted'),32)),0)
   ) END)`;
 }
 export function cleanPath(ref = "p") {

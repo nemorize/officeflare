@@ -62,3 +62,10 @@
     transition: none;
   }
 }
+@media (max-width: 760px) {
+  .app-notification [data-ui="toast-close"] {
+    flex-basis: 44px;
+    width: 44px;
+    min-height: 44px;
+  }
+}

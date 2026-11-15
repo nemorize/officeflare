@@ -18,6 +18,7 @@ export const pushTarget = (path: unknown) =>
   typeof path === "string" &&
   (path === "/notifications" ||
     path === "/profile/sessions" ||
+    /^\/wiki\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+(?:\?panel=comments)?)?$/.test(path ?? "") ||
     path === "/mail" ||
     /^\/calendar\/invitations\/[A-Za-z0-9_-]+$/.test(path))
     ? path

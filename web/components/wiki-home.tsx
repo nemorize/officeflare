@@ -7,7 +7,7 @@ import { formatDateTime } from "../lib/regional";
 import { useWiki } from "./wiki-context";
 import { WikiSpaceDialog } from "./wiki-controls";
 import { WorkspaceIconButton } from "./workspace-controls";
-import { Button, Icon } from "./ui";
+import { Button, Icon, useNotifications } from "./ui";
 
 export function WikiPageTable({
   pages,
@@ -72,13 +72,14 @@ export function WikiPageTable({
 }
 
 export function WikiHome() {
+  const notify = useNotifications();
   const wiki = useWiki(),
-    [dialog, setDialog] = useState<"create" | "settings" | null>(null),
-    [error, setError] = useState("");
+    [dialog, setDialog] = useState<"create" | "settings" | null>(null);
   const pages = wiki.pages
     .filter((page) => page.role > 0)
     .sort((a, b) => b.updated_at - a.updated_at || a.id.localeCompare(b.id));
-  const newPage = () => void wiki.createPage().catch((failure) => setError(errorMessage(failure)));
+  const newPage = () =>
+    void wiki.createPage().catch((failure) => notify.error(errorMessage(failure)));
   return (
     <div className="wiki-home">
       <header className="wiki-home-heading">
@@ -109,9 +110,9 @@ export function WikiHome() {
           ) : null}
         </div>
       </header>
-      {(error || wiki.error) && (
+      {wiki.error && (
         <p role="alert" className="wiki-error">
-          {error || wiki.error}
+          {wiki.error}
         </p>
       )}
       {wiki.space && pages.length > 0 ? (

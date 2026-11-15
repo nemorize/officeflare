@@ -8,6 +8,7 @@ import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from "miniflare";
 import { hashPassword } from "../src/auth/password.ts";
 import { workerModules } from "./worker-modules.mjs";
 import { notificationTarget } from "../web/lib/notification-center.ts";
+import { pushTarget } from "../shared/push.ts";
 import { returnToWorkspace } from "../web/lib/profile.ts";
 
 const password = "a long password for notification center tests";
@@ -526,11 +527,21 @@ test("Notification navigation stays on registered workspace routes", () => {
   for (const path of ["/notifications", "/profile/notifications"])
     assert.equal(returnToWorkspace(path), path);
   assert.equal(notificationTarget("/profile/sessions"), "/profile/sessions");
+  for (const path of ["/wiki/team", "/wiki/team/page", "/wiki/team/page?panel=comments"]) {
+    assert.equal(notificationTarget(path), path);
+    assert.equal(pushTarget(path), path);
+  }
   for (const path of [
     "https://attacker.test",
     "//attacker.test",
     "/profile/sessions?redirect=//attacker.test",
+    "/wiki/team/page?redirect=//attacker.test",
+    "/wiki/team/page?panel=comments&redirect=//attacker.test",
+    "/wiki/team/../settings",
+    "/wiki/team/%2Fsettings",
     null,
-  ])
+  ]) {
     assert.equal(notificationTarget(path), null);
+    assert.equal(pushTarget(path), "/notifications");
+  }
 });
