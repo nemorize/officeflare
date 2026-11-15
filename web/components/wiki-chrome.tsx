@@ -165,8 +165,10 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
           return (
             <li key={page.id}>
               <div className="wiki-tree-row">
-                {nested ? (
+                {pageLink(page)}
+                {nested && (
                   <Button
+                    className="wiki-tree-toggle"
                     variant="ghost"
                     size="icon"
                     aria-label={t(expanded ? "wiki.collapsePage" : "wiki.expandPage", {
@@ -184,10 +186,7 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
                   >
                     <Icon name={expanded ? "down" : "chevron"} />
                   </Button>
-                ) : (
-                  <span className="wiki-tree-spacer" />
                 )}
-                {pageLink(page)}
                 <Menu.Root>
                   <Menu.Trigger
                     render={

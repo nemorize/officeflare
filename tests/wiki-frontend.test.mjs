@@ -4,6 +4,32 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { fixture } from "./calendar-fixture.mjs";
 
+async function checkSidebarAlignment(sidebar) {
+  const navigation = await sidebar
+    .locator(".wiki-quick-nav > a")
+    .first()
+    .evaluate((element) => {
+      const text = [...element.childNodes].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+      );
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      return {
+        icon: element.querySelector("svg").getBoundingClientRect().x,
+        text: range.getBoundingClientRect().x,
+        height: element.getBoundingClientRect().height,
+      };
+    });
+  for (const row of await sidebar.locator(".wiki-tree > ul > li > .wiki-tree-row").all()) {
+    const icon = await row.locator(".wiki-tree-icon").boundingBox(),
+      title = await row.locator("a > span:nth-child(2)").boundingBox(),
+      box = await row.boundingBox();
+    assert.equal(icon.x, navigation.icon, "Root page icons align with workspace navigation");
+    assert.equal(title.x, navigation.text, "Root page names align with workspace navigation");
+    assert.equal(box.height, navigation.height, "Page rows use the common navigation height");
+  }
+}
+
 test(
   "Wiki frontend creates spaces, inserts blocks, manages pages and works on mobile",
   { timeout: 90000 },
@@ -634,6 +660,7 @@ test(
       .locator(".workspace-sidebar .wiki-tree-row a > span:nth-child(2)")
       .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
     assert.ok(widths.every((w) => w > 0));
+    await checkSidebarAlignment(tab.locator(".workspace-sidebar"));
     const capture = async (name) => {
       if (process.env.WIKI_UI_CAPTURE_DIR)
         await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/${name}.png` });
@@ -737,6 +764,7 @@ test(
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
     drawer = tab.locator(".workspace-navigation-drawer");
     await drawer.getByRole("button", { name: "Expand Audit document", exact: true }).waitFor();
+    await checkSidebarAlignment(drawer);
     await capture("deep-audit-mobile");
     await drawer.getByRole("button", { name: "Search this space", exact: true }).click();
     await tab.getByRole("searchbox").fill("Nested 7");
