@@ -150,6 +150,7 @@ test("first deployment creates an administrator, forces password change and neve
     assert.equal(temporaryPassword(logs), undefined);
     assert.equal((await db.select().from(users)).length, 1);
   }
+  await db.delete(schema.wikiSpaces).where(eq(schema.wikiSpaces.owner_user_id, user.id));
   await db.delete(users).where(eq(users.id, user.id));
   assert.equal((await bootstrap()).created, false);
   assert.equal((await db.select().from(users)).length, 0);
@@ -180,6 +181,7 @@ test("existing accounts are adopted without assigning privileges or changing pas
   assert.equal((await db.select().from(userRoles)).length, 0);
   assert.equal((await db.select().from(installationState).get()).bootstrap_user_id, null);
   assert.equal(temporaryPassword(logs), undefined);
+  await db.delete(schema.wikiSpaces);
   await db.delete(users);
   assert.equal((await bootstrap()).created, false);
   assert.equal((await db.select().from(users)).length, 0);

@@ -4,18 +4,7 @@ import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage, WikiSpace } from "../../shared/wiki";
 import { api, errorMessage } from "../lib/api";
 import { useWiki } from "./wiki-context";
-import {
-  Button,
-  Dialog,
-  DialogPopup,
-  Icon,
-  Input,
-  Popover,
-  PopoverPopup,
-  Radio,
-  RadioGroup,
-  Textarea,
-} from "./ui";
+import { Button, Dialog, DialogPopup, Icon, Input, Popover, PopoverPopup, Textarea } from "./ui";
 
 export function WikiDialog({
   title,
@@ -54,7 +43,6 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
     navigate = useNavigate();
   const [name, setName] = useState(space?.name ?? ""),
     [description, setDescription] = useState(space?.description ?? ""),
-    [kind, setKind] = useState<"team" | "personal">(space?.kind ?? "team"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const save = async () => {
@@ -69,7 +57,7 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
           body: {
             name,
             description: space ? description : description.trim() || undefined,
-            ...(space ? { version: space.version } : { kind }),
+            ...(space ? { version: space.version } : {}),
           },
         },
       );
@@ -116,32 +104,6 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        {!space && (
-          <div className="wiki-space-kinds">
-            <span>{t("wiki.spaceType")}</span>
-            <RadioGroup
-              value={kind}
-              onValueChange={(value) => setKind(value as "team" | "personal")}
-              aria-label={t("wiki.spaceType")}
-            >
-              {(["team", "personal"] as const).map((value) => (
-                <label key={value}>
-                  <Radio.Root
-                    value={value}
-                    disabled={
-                      value === "personal" && wiki.spaces.some((item) => item.kind === "personal")
-                    }
-                  >
-                    <Radio.Indicator />
-                  </Radio.Root>
-                  <span>
-                    <strong>{t(value === "team" ? "wiki.teamSpace" : "wiki.personalSpace")}</strong>
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
-        )}
         {error && (
           <p role="alert" className="wiki-error">
             {error}

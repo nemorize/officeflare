@@ -67,8 +67,9 @@ export function WikiProvider({ children }: { children: ReactNode }) {
       });
       if (abort.signal.aborted) return;
       setSpaces(result.spaces);
-      if (!spaceId && result.spaces[0]) {
-        navigate(`/wiki/${result.spaces[0].id}`, { replace: true });
+      const initial = result.spaces.find((space) => space.kind === "personal") ?? result.spaces[0];
+      if (!spaceId && initial) {
+        navigate(`/wiki/${initial.id}`, { replace: true });
         return;
       }
       if (spaceId && !result.spaces.some((s) => s.id === spaceId)) {

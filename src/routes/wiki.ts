@@ -27,6 +27,7 @@ import {
   row,
   rows,
   spaceCondition,
+  spaceDto,
   spaceRank,
   spaceVersion,
   stmt,
@@ -42,11 +43,13 @@ wiki.get("/capabilities", async (c) =>
 );
 wiki.get("/spaces", async (c) =>
   c.json({
-    spaces: await rows<WikiSpace>(
-      c.env,
-      `${actorCte} SELECT s.*,${spaceRank()} AS role FROM wiki_spaces s CROSS JOIN actor WHERE s.archived_at IS NULL AND ${spaceRank()}>=1 ORDER BY s.created_at,s.id`,
-      actorOf(c).user_id,
-    ),
+    spaces: (
+      await rows<WikiSpace>(
+        c.env,
+        `${actorCte} SELECT s.*,${spaceRank()} AS role FROM wiki_spaces s CROSS JOIN actor WHERE s.archived_at IS NULL AND ${spaceRank()}>=1 ORDER BY (s.kind='personal') DESC,s.created_at,s.id`,
+        actorOf(c).user_id,
+      )
+    ).map(spaceDto),
   }),
 );
 wiki.post("/spaces", requirePermission("wiki.spaces.create"), async (c) => {
@@ -54,16 +57,8 @@ wiki.post("/spaces", requirePermission("wiki.spaces.create"), async (c) => {
     space = uuid(),
     name = text(data.name),
     kind = data.kind ?? "team";
-  if (kind !== "team" && kind !== "personal") fail(400);
-  if (
-    kind === "personal" &&
-    (await row(
-      c.env,
-      "SELECT 1 FROM wiki_spaces WHERE owner_user_id=? AND kind='personal'",
-      actorOf(c).user_id,
-    ))
-  )
-    fail(409, "wiki.changed");
+  if (kind === "personal") fail(409, "wiki.changed");
+  if (kind !== "team") fail(400);
   const description = data.description === undefined ? "" : text(data.description, 1000);
   await mutate(
     c,

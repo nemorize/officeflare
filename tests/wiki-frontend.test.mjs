@@ -32,12 +32,21 @@ test(
     await tab.locator('button[type="submit"]').click();
     await tab.waitForURL((url) => url.pathname !== "/login");
     await tab.goto(`${origin}/wiki`);
-    await tab.locator(".wiki-home").getByRole("button", { name: "New space" }).click();
+    await tab.getByRole("heading", { name: "Personal space", exact: true }).waitFor();
+    const personalHome = tab.url();
+    await tab.locator(".wiki-home").getByRole("button", { name: "New page", exact: true }).click();
+    await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("Private notes");
+    await tab.waitForFunction(
+      () => document.querySelector(".wiki-save-state")?.textContent === "Saved",
+    );
+    await tab.getByRole("button", { name: "Switch space" }).click();
+    await tab.getByRole("menuitem", { name: "New space", exact: true }).click();
     const dialog = tab.getByRole("dialog");
     const choose = async (control, label) => {
       await control.click();
       await tab.getByRole("option", { name: label, exact: true }).click();
     };
+    assert.equal(await dialog.getByRole("radio").count(), 0);
     await dialog.getByLabel("Space name").fill("Product handbook");
     await dialog
       .getByLabel("Description", { exact: true })
@@ -45,7 +54,9 @@ test(
     if (process.env.WIKI_UI_CAPTURE_DIR)
       await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/space-dialog.png` });
     await dialog.getByRole("button", { name: "Create", exact: true }).click();
-    await tab.waitForURL(/\/wiki\/[^/]+$/);
+    await tab.waitForURL(
+      (url) => url.href !== personalHome && /^\/wiki\/[^/]+$/.test(url.pathname),
+    );
     const home = tab.url();
     await tab
       .locator(".wiki-home")
@@ -183,10 +194,15 @@ test(
     await tab.getByRole("button", { name: "Restore", exact: true }).click();
     await tab.getByRole("heading", { name: "No pages in trash" }).waitFor();
     await tab.getByRole("button", { name: "Switch space" }).click();
-    await tab.getByRole("menuitem", { name: "New space", exact: true }).click();
+    await tab.getByRole("menuitem", { name: "Personal space", exact: true }).click();
+    await tab.waitForURL(personalHome);
+    await tab
+      .locator(".wiki-page-table")
+      .getByRole("link", { name: "Private notes", exact: true })
+      .waitFor();
+    await tab.getByRole("button", { name: "Space settings", exact: true }).click();
     await dialog.getByLabel("Space name").fill("My notes");
-    await dialog.getByRole("radio", { name: /Personal space/ }).check();
-    await dialog.getByRole("button", { name: "Create", exact: true }).click();
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await tab.getByRole("heading", { name: "My notes", exact: true }).waitFor();
     await tab.getByRole("button", { name: "Switch space" }).click();
     await tab.getByRole("menuitem", { name: "Team handbook", exact: true }).click();

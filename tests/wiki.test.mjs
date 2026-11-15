@@ -133,6 +133,128 @@ async function fixture(t, { probe = false, assets = false } = {}) {
   return { ...f, raw, call, space, page, member, connect };
 }
 
+test("Every account receives exactly one private personal space", async (t) => {
+  const f = await fixture(t);
+  const personal = await f.db
+    .prepare(
+      "SELECT owner_user_id,COUNT(*) AS count FROM wiki_spaces WHERE kind='personal' GROUP BY owner_user_id",
+    )
+    .all();
+  assert.deepEqual(
+    personal.results.map((value) => [value.owner_user_id, value.count]).sort(),
+    ["alice", "bob", "read-only", "no-calendar", "admin"].map((user) => [user, 1]).sort(),
+  );
+  const lists = await Promise.all(Array.from({ length: 6 }, () => f.call("/wiki/spaces")));
+  const space = lists[0].spaces[0];
+  assert.equal(space.kind, "personal");
+  assert.equal(space.owner_user_id, "alice");
+  assert.equal(space.role, 5);
+  assert.ok(
+    lists.every(
+      (result) =>
+        result.spaces.filter((value) => value.kind === "personal").length === 1 &&
+        result.spaces[0].id === space.id,
+    ),
+  );
+  assert.equal(
+    (await f.call(`/wiki/spaces/${space.id}`, { headers: { "Accept-Language": "ko" } })).space.name,
+    "개인 스페이스",
+  );
+  const team = await f.space();
+  assert.equal((await f.call("/wiki/spaces")).spaces[0].id, space.id);
+  const page = await f.page(space.id);
+  await f.call(`/wiki/spaces/${space.id}`, { actor: "bob", expected: 404 });
+  await f.call(`/wiki/pages/${page.id}`, { actor: "bob", expected: 404 });
+  await f.call(`/wiki/spaces/${space.id}/members`, {
+    method: "PUT",
+    data: { email: "bob@office.test", role: "manager", version: space.acl_version },
+    expected: 403,
+  });
+  await f.call(`/wiki/spaces/${space.id}/owner`, {
+    method: "POST",
+    data: { user_id: "bob", version: space.version },
+    expected: 400,
+  });
+  await Promise.all(
+    Array.from({ length: 4 }, () =>
+      f.call("/wiki/spaces", {
+        method: "POST",
+        data: { name: "Extra", kind: "personal" },
+        expected: 409,
+      }),
+    ),
+  );
+  await assert.rejects(
+    f.db
+      .prepare(
+        "INSERT INTO wiki_spaces(id,name,kind,owner_user_id) VALUES('duplicate','Duplicate','personal','alice')",
+      )
+      .run(),
+    /UNIQUE/,
+  );
+  // Personal access remains owner-only even if a stale membership row exists.
+  await f.db
+    .prepare("INSERT INTO wiki_space_members(space_id,user_id,role) VALUES(?,'bob','manager')")
+    .bind(space.id)
+    .run();
+  await f.call(`/wiki/spaces/${space.id}`, { actor: "bob", expected: 404 });
+  await f.call(`/wiki/pages/${page.id}`, { actor: "bob", expected: 404 });
+  assert.equal(
+    (await f.call("/wiki/spaces", { actor: "bob" })).spaces.some((value) => value.id === space.id),
+    false,
+  );
+  assert.equal((await f.call(`/wiki/spaces/${team.id}`)).space.kind, "team");
+});
+
+test("Personal space migration backfills accounts and preserves existing spaces", async (t) => {
+  const f = await baseFixture(t, {
+    beforePersonalWikiMigration: async (db) => {
+      await db
+        .prepare(
+          "INSERT INTO users(id,email_address,deleted_at) VALUES('legacy-empty','empty@office.test',NULL),('legacy-custom','custom@office.test',NULL),('legacy-archived','archived@office.test',NULL),('legacy-deleted','deleted@office.test',1)",
+        )
+        .run();
+      await db
+        .prepare(
+          "INSERT INTO wiki_spaces(id,name,description,kind,owner_user_id,version,archived_at) VALUES('custom-space','Private handbook','Keep this description','personal','legacy-custom',7,NULL),('archived-space','Notes','','personal','legacy-archived',2,1)",
+        )
+        .run();
+    },
+  });
+  const spaces = (
+    await f.db
+      .prepare(
+        "SELECT * FROM wiki_spaces WHERE owner_user_id LIKE 'legacy-%' ORDER BY owner_user_id",
+      )
+      .all()
+  ).results;
+  assert.equal(spaces.length, 3);
+  const custom = spaces.find((value) => value.owner_user_id === "legacy-custom");
+  assert.equal(custom.id, "custom-space");
+  assert.equal(custom.name, "Private handbook");
+  assert.equal(custom.description, "Keep this description");
+  assert.equal(custom.version, 7);
+  const archived = spaces.find((value) => value.owner_user_id === "legacy-archived");
+  assert.equal(archived.id, "archived-space");
+  assert.equal(archived.name, "Notes");
+  assert.equal(archived.archived_at, null);
+  assert.equal(archived.version, 3);
+  assert.equal(spaces.find((value) => value.owner_user_id === "legacy-empty").kind, "personal");
+  await f.db
+    .prepare("INSERT INTO users(id,email_address) VALUES('new-account','new@office.test')")
+    .run();
+  assert.equal(
+    (
+      await f.db
+        .prepare(
+          "SELECT count(*) AS count FROM wiki_spaces WHERE owner_user_id='new-account' AND kind='personal'",
+        )
+        .first()
+    ).count,
+    1,
+  );
+});
+
 test("Wiki spaces, nested restrictions, role ceilings and guarded tree mutations", async (t) => {
   const f = await fixture(t),
     space = await f.space(),

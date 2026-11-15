@@ -787,30 +787,6 @@
   display: grid;
   gap: 20px;
 }
-.wiki-space-kinds > span {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  margin-bottom: 12px;
-}
-.wiki-space-kinds [data-ui="radio-group"] {
-  display: grid;
-  gap: 16px;
-}
-.wiki-space-kinds label {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  cursor: pointer;
-}
-.wiki-space-kinds strong {
-  display: block;
-  font-weight: 500;
-}
-.wiki-space-kinds label:has([data-disabled]) {
-  opacity: 0.5;
-  cursor: default;
-}
 .wiki-icon-picker {
   width: 230px;
 }

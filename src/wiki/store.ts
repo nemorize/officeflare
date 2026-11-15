@@ -1,5 +1,6 @@
 import { HTTPException } from "hono/http-exception";
 import { t } from "../../shared/i18n/index.ts";
+import { en } from "../../shared/i18n/en.ts";
 import { wikiRoles, type WikiPage, type WikiSpace } from "../../shared/wiki";
 import { now, uuid, type AuthContext } from "../auth/types";
 import { invalid } from "../auth/input";
@@ -47,7 +48,7 @@ export function role(value: unknown) {
 export const roleRank = (ref: string) =>
   `CASE ${ref} WHEN 'viewer' THEN 1 WHEN 'commenter' THEN 2 WHEN 'editor' THEN 3 WHEN 'manager' THEN 4 ELSE 0 END`;
 export const spaceRank = (ref = "s") =>
-  `CASE WHEN ${ref}.owner_user_id=actor.user_id THEN 5 ELSE COALESCE((SELECT ${roleRank("m.role")} FROM wiki_space_members m WHERE m.space_id=${ref}.id AND m.user_id=actor.user_id),0) END`;
+  `CASE WHEN ${ref}.owner_user_id=actor.user_id THEN 5 WHEN ${ref}.kind='personal' THEN 0 ELSE COALESCE((SELECT ${roleRank("m.role")} FROM wiki_space_members m WHERE m.space_id=${ref}.id AND m.user_id=actor.user_id),0) END`;
 // actor is one bound user ID, shared by every correlated ACL expression.
 export const actorCte = "WITH actor(user_id) AS (VALUES (?))";
 export function pageRank(ref = "p") {
@@ -102,6 +103,11 @@ export const actorOf = (c: AuthContext): CollaborationActor => ({
   session_id: c.get("identity").session.id,
   auth_version: c.get("identity").user.auth_version,
 });
+// The migration seeds a neutral default name; custom names remain unchanged.
+export const spaceDto = (space: WikiSpace): WikiSpace =>
+  space.kind === "personal" && space.name === en["wiki.personalSpace"]
+    ? { ...space, name: t("wiki.personalSpace") }
+    : space;
 export async function getSpace(c: AuthContext, space: string, min = 1) {
   const value = await row<WikiSpace>(
     c.env,
@@ -111,7 +117,7 @@ export async function getSpace(c: AuthContext, space: string, min = 1) {
   );
   if (!value) fail(404, "wiki.notFound");
   if (value.role < min) fail(403, "wiki.denied");
-  return value;
+  return spaceDto(value);
 }
 export async function getPage(c: AuthContext, page: string, min = 1, trash = false) {
   const value = await row<WikiPage>(
