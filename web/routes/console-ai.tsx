@@ -108,7 +108,6 @@ export function AIConsolePage() {
   return (
     <ConsoleSettingsLayout
       title={t("aiui.administration")}
-      description={t("aiui.adminHint")}
       pages={groups.map((item) => ({ path: item.id, name: item.label }))}
       selected={group.id}
       onNavigate={(next) =>
@@ -180,7 +179,7 @@ function ResourcePage({ spec }: { spec: AIAdminSpec }) {
                 ? t("aiui.consumerHint")
                 : spec.key === "accounts"
                   ? t("aiui.accountsHint")
-                  : t("aiui.resourceHint")
+                  : undefined
         }
       >
         {writable && spec.key !== "consumers" && (
@@ -753,7 +752,7 @@ function SettingsPage() {
   }, [resource.data]);
   return (
     <>
-      <ConsoleSettingsHeader title={t("aiui.settings")} description={t("aiui.settingsHint")} />
+      <ConsoleSettingsHeader title={t("aiui.settings")} />
       <ConsoleState loading={resource.loading} error={resource.error} retry={resource.reload} />
       {resource.data && (
         <form
@@ -839,7 +838,7 @@ function SettingsPage() {
           </ConsoleFormActions>
         </form>
       )}
-      <ConsoleSection title={t("aiui.setupTitle")} description={t("aiui.setupHint")}>
+      <ConsoleSection title={t("aiui.setupTitle")}>
         <ol className="ai-setup-steps">
           <li>
             <Link to="/console/ai/providers">{t("aiui.setupProvider")}</Link>

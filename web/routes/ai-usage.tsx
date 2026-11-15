@@ -7,12 +7,8 @@ import {
   type AIQuotaBucket,
   type AIQuotaRule,
 } from "../lib/ai";
-import {
-  ConsoleMetrics,
-  ConsoleSection,
-  ConsoleSettingsHeader,
-  ConsoleState,
-} from "../components/console-settings";
+import { ConsoleMetrics, ConsoleSection, ConsoleState } from "../components/console-settings";
+import { ConsolePageHeader } from "../components/console-shared";
 import { Button, Icon } from "../components/ui";
 export function AIUsagePage() {
   const usage = useAIResource<{
@@ -33,8 +29,8 @@ export function AIUsagePage() {
   const rules =
     quota.data?.rules.filter((rule) => rule.subject_id === quota.data?.user_subject_id) ?? [];
   return (
-    <section className="account-page console-page ai-settings-page">
-      <ConsoleSettingsHeader title={t("aiui.usage")} description={t("aiui.usageHint")}>
+    <section className="account-page console-page console-settings ai-settings-page">
+      <ConsolePageHeader title={t("aiui.usage")} description={t("aiui.usageHint")}>
         <Button
           variant="ghost"
           onClick={() => {
@@ -45,7 +41,7 @@ export function AIUsagePage() {
           <Icon name="refresh" />
           {t("aiui.refresh")}
         </Button>
-      </ConsoleSettingsHeader>
+      </ConsolePageHeader>
       <ConsoleState loading={usage.loading || quota.loading} error={usage.error || quota.error} />
       {usage.data && (
         <ConsoleMetrics

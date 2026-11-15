@@ -199,3 +199,32 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.console-record-list {
+  display: grid;
+}
+.console-record {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-block: 18px;
+  border-block-end: 1px solid var(--ui-border);
+  font-size: 12px;
+}
+.console-record:last-child {
+  border: 0;
+}
+.console-record > div:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+.console-record strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .console-record {
+    flex-wrap: wrap;
+  }
+}

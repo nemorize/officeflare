@@ -5,7 +5,7 @@ import "./settings-layout.css";
 
 interface SettingsLayoutProps {
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   pages: readonly { path: string; name: string }[];
   selected: string;

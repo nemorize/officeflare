@@ -44,6 +44,140 @@ const lastRun = async (f, roomId) =>
     .first();
 
 test(
+  "AI uses workspace chrome with searchable history, composer model switching and mobile navigation",
+  { timeout: 90000 },
+  async (t) => {
+    const f = await browserFixture(t),
+      { page, origin } = f;
+    const second = await f.create("profiles", {
+      key: "fixture-focused",
+      name: "Focused chat",
+      enabled: true,
+    });
+    await f.create("routes", {
+      profile_id: second.id,
+      provider_id: f.provider.id,
+      deployment_id: f.deployment.id,
+      pool_id: f.pool.id,
+      priority: 0,
+      enabled: true,
+    });
+    const consumer = (await f.admin("/consumers")).items.find((item) => item.key === "hub.chat");
+    await f.admin("/consumers/hub.chat/profiles", {
+      method: "PUT",
+      data: {
+        version: consumer.version,
+        profiles: [{ profile_id: f.profile.id, is_default: true }, { profile_id: second.id }],
+      },
+    });
+    await page.goto(origin + "/contacts");
+    await page.locator(".contacts-search").waitFor();
+    const chromeStyle = () =>
+      page.evaluate(() => {
+        const top = getComputedStyle(document.querySelector(".workspace-topbar"));
+        const create = getComputedStyle(
+          document.querySelector(".workspace-sidebar .workspace-create-button"),
+        );
+        const search = getComputedStyle(document.querySelector('[data-ui="search-field"]'));
+        return {
+          height: top.height,
+          padding: top.paddingInline,
+          border: top.borderBottom,
+          create: [create.height, create.backgroundColor, create.borderRadius, create.fontSize],
+          search: [search.height, search.backgroundColor, search.borderRadius],
+        };
+      });
+    const reference = await chromeStyle();
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/reference-contacts.png" });
+    await page.goto(origin + "/ai");
+    await page.getByRole("heading", { name: "New conversation" }).waitFor();
+    await page.getByRole("combobox", { name: "Model profile", exact: true }).waitFor();
+    assert.deepEqual(await chromeStyle(), reference);
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    await input.fill("Review recent mail");
+    assert.ok(
+      await input.evaluate(
+        (element) => element.clientWidth >= element.closest("form").clientWidth - 40,
+      ),
+    );
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/welcome-desktop.png" });
+    await choose(page, "Model profile", "Focused chat");
+    const shortHeight = await input.evaluate((element) => element.clientHeight);
+    await input.fill(Array.from({ length: 55 }, (_, i) => `Plan step ${i + 1}`).join("\n"));
+    assert.ok((await input.evaluate((element) => element.clientHeight)) > shortHeight);
+    await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+    assert.equal((await f.call("/api/ai/rooms")).rooms.length, 0);
+    await input.press("Shift+Enter");
+    assert.equal((await f.call("/api/ai/rooms")).rooms.length, 0);
+    await input.press("Enter");
+    await page.waitForURL(/\/ai\/rooms\//);
+    const roomId = new URL(page.url()).pathname.split("/").at(-1);
+    assert.equal((await f.call(`/api/ai/rooms/${roomId}`)).room.profile_key, "fixture-focused");
+    await page.getByRole("button", { name: "Stop", exact: true }).waitFor();
+    assert.equal(await page.getByRole("combobox", { name: "Model profile" }).isDisabled(), true);
+    const run = await lastRun(f, roomId);
+    await f.testCall("advance", { id: run.id });
+    await page.locator(".ai-run-state").getByText("Completed", { exact: true }).waitFor();
+    await mutation(page, `/rooms/${roomId}`, () => choose(page, "Model profile", "Fixture chat"));
+    assert.equal((await f.call(`/api/ai/rooms/${roomId}`)).room.profile_key, "fixture-chat");
+    await page.locator(".ai-chat-scroll").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await page.getByRole("button", { name: "Jump to latest messages", exact: true }).waitFor();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await page.waitForResponse((response) => response.url().includes(`/rooms/${roomId}/messages?`));
+    assert.equal(await page.locator(".ai-chat-scroll").evaluate((element) => element.scrollTop), 0);
+    await page.getByRole("button", { name: "Jump to latest messages", exact: true }).click();
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    assert.equal(
+      await page
+        .locator(".workspace-ai")
+        .evaluate((element) => element.classList.contains("ai-sidebar-collapsed")),
+      true,
+    );
+    const search = page.getByRole("textbox", { name: "Search conversations", exact: true });
+    await search.fill("no matching conversation");
+    await page.locator(".ai-search-results").getByText("No conversations found.").waitFor();
+    await search.fill("Plan step");
+    await page.locator(".ai-search-results a").first().click();
+    assert.equal(await search.inputValue(), "");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    const drawer = page.getByRole("dialog");
+    await drawer.getByRole("link", { name: "Usage", exact: true }).click();
+    await drawer.waitFor({ state: "hidden" });
+    await page.getByRole("heading", { name: "Usage", exact: true }).waitFor();
+    assert.equal(await page.locator("h1").count(), 1);
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/usage-mobile.png" });
+    await page.goto(origin + "/ai");
+    await page.getByRole("heading", { name: "New conversation" }).waitFor();
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/welcome-mobile.png" });
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/welcome-dark.png" });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "languages", { get: () => ["ko-KR"] });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 1440, height: 1024 });
+    await page.reload();
+    await page.getByRole("heading", { name: "새 대화" }).waitFor();
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/welcome-ko-desktop.png" });
+    await page.setViewportSize({ width: 320, height: 740 });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      true,
+    );
+    assert.deepEqual(f.errors, []);
+  },
+);
+
+test(
   "AI chat restores tasks, approves tools exactly once and cancels queued work on mobile",
   { timeout: 90000 },
   async (t) => {
@@ -57,7 +191,8 @@ test(
       })
     ).connection;
     await page.goto(origin + "/ai");
-    await page.getByRole("heading", { name: "What would you like to get done?" }).waitFor();
+    await page.getByRole("heading", { name: "New conversation" }).waitFor();
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill("My unfinished plan");
     await page.getByRole("button", { name: "Tools", exact: true }).click();
     await page.waitForURL(/\/ai\/rooms\//);
     const roomId = new URL(page.url()).pathname.split("/").at(-1);
@@ -67,6 +202,10 @@ test(
       dialog.getByRole("button", { name: "Save", exact: true }).click(),
     );
     await dialog.waitFor({ state: "hidden" });
+    assert.equal(
+      await page.getByRole("textbox", { name: "Message", exact: true }).inputValue(),
+      "My unfinished plan",
+    );
     assert.equal(
       (await f.call(`/api/ai/rooms/${roomId}/mcp-bindings`)).bindings[0].connection_id,
       connection.id,
@@ -78,6 +217,9 @@ test(
     const run = await lastRun(f, roomId);
     await f.testCall("advance", { id: run.id });
     await page.locator(".ai-message-assistant").getByText("Hello", { exact: true }).waitFor();
+    await f.context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+    await page.getByRole("button", { name: "Copy response", exact: true }).click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Hello");
     await f.bucket.put("ai-fixture-mode", JSON.stringify({ kind: "tools" }));
     await page.getByRole("textbox", { name: "Message", exact: true }).fill("Create a contact");
     await mutation(page, `/rooms/${roomId}/runs`, () =>
@@ -89,6 +231,8 @@ test(
     await page.getByText("Your approval is needed", { exact: true }).waitFor();
     await page.reload();
     await page.getByText("Your approval is needed", { exact: true }).waitFor();
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/approval-desktop.png" });
     const approval = (await f.call(`/api/ai/runs/${toolRun.id}/approvals`)).approvals[0];
     await mutation(page, `/approvals/${approval.id}/decision`, () =>
       page.getByRole("button", { name: "Approve changes", exact: true }).click(),
@@ -174,6 +318,8 @@ test(
         .click(),
     );
     assert.ok((await f.call("/api/mcp/api-keys")).keys[0].revoked_at);
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/connections-desktop.png" });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),

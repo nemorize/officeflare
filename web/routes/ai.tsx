@@ -17,7 +17,16 @@ import {
 } from "../lib/ai";
 import { useAI } from "../components/ai-context";
 import { useAccess } from "../components/console-access";
-import { Button, Icon } from "../components/ui";
+import {
+  Button,
+  Icon,
+  Menu,
+  MenuPopup,
+  SelectControl,
+  Textarea,
+  useNotifications,
+} from "../components/ui";
+import { WorkspaceIconButton } from "../components/workspace-controls";
 import { Check, Confirm, Notice } from "../components/console-shared";
 import {
   ConsoleDialog,
@@ -56,6 +65,7 @@ function MessageText({ content }: { content: string }) {
   );
 }
 function ChatMessage({ message }: { message: AIMessage }) {
+  const notify = useNotifications();
   if (message.role === "tool")
     return (
       <details className="ai-tool-result">
@@ -71,11 +81,7 @@ function ChatMessage({ message }: { message: AIMessage }) {
       className={`ai-message ai-message-${message.role}`}
       aria-label={message.role === "user" ? t("aiui.you") : t("aiui.assistant")}
     >
-      <div className="ai-message-avatar">
-        <Icon name={message.role === "user" ? "user" : "sparkles"} />
-      </div>
       <div className="ai-message-body">
-        <h2>{message.role === "user" ? t("aiui.you") : t("aiui.assistant")}</h2>
         {message.content ? (
           <MessageText content={message.content} />
         ) : message.status === "streaming" ? (
@@ -97,6 +103,20 @@ function ChatMessage({ message }: { message: AIMessage }) {
           </div>
         )}
         {message.status === "interrupted" && <small>{t("aiui.interrupted")}</small>}
+        {message.role === "assistant" && message.content && message.status !== "streaming" && (
+          <div className="ai-message-actions">
+            <WorkspaceIconButton
+              icon="copy"
+              label={t("aiui.copyMessage")}
+              onClick={() => {
+                void navigator.clipboard.writeText(message.content!).then(
+                  () => notify.success(t("aiui.copiedMessage")),
+                  (failure) => notify.error(errorMessage(failure)),
+                );
+              }}
+            />
+          </div>
+        )}
       </div>
     </article>
   );
@@ -297,9 +317,12 @@ function ChatSession({ roomId }: { roomId?: string }) {
     { permissions } = useAccess();
   const location = useLocation();
   const canRun = permissions.includes("ai.runs.create");
-  const [draft, setDraft] = useState(""),
+  const [draft, setDraft] = useState<string>(
+      typeof location.state?.draft === "string" ? location.state.draft : "",
+    ),
     [profile, setProfile] = useState(""),
     [sending, setSending] = useState(false),
+    [changingProfile, setChangingProfile] = useState(false),
     [error, setError] = useState(""),
     [settings, setSettings] = useState(!!location.state?.configureTools),
     [deleting, setDeleting] = useState(false);
@@ -322,12 +345,20 @@ function ChatSession({ roomId }: { roomId?: string }) {
     [messageRevision, setMessageRevision] = useState(0);
   const messagesRef = useRef<AIMessage[]>([]),
     scroll = useRef<HTMLDivElement>(null),
+    input = useRef<HTMLTextAreaElement>(null),
     nearBottom = useRef(true),
     lastActive = useRef(false);
+  const [showLatest, setShowLatest] = useState(false);
   const request = useRef<{ content: string; room?: string; profile: string; key: string } | null>(
     null,
   );
   const [createdRoom, setCreatedRoom] = useState<string>();
+  useEffect(() => {
+    const element = input.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 220)}px`;
+  }, [draft]);
   useEffect(() => {
     setPoll(active ? 1200 : 0);
     if (lastActive.current && !active) {
@@ -387,7 +418,7 @@ function ChatSession({ roomId }: { roomId?: string }) {
     if (location.state?.configureTools) navigate(location.pathname, { replace: true, state: null });
   }, [location.state, location.pathname, navigate]);
   async function configureTools() {
-    if (active || sending) return;
+    if (active || sending || changingProfile) return;
     setSending(true);
     setError("");
     try {
@@ -401,7 +432,7 @@ function ChatSession({ roomId }: { roomId?: string }) {
           body: { title: t("ai.newConversation"), profile_key: profile || ai.profiles[0]?.key },
         });
         ai.refresh();
-        navigate(`/ai/rooms/${result.room.id}`, { state: { configureTools: true } });
+        navigate(`/ai/rooms/${result.room.id}`, { state: { configureTools: true, draft } });
       }
     } catch (failure) {
       setError(errorMessage(failure));
@@ -412,7 +443,7 @@ function ChatSession({ roomId }: { roomId?: string }) {
   async function send(event: FormEvent) {
     event.preventDefault();
     const content = draft.trim();
-    if (!content || sending || active || !canRun) return;
+    if (!content || sending || changingProfile || active || !canRun) return;
     setSending(true);
     setError("");
     const selectedProfile = profile || ai.profiles[0]?.key || "";
@@ -445,6 +476,8 @@ function ChatSession({ roomId }: { roomId?: string }) {
         body: { message: content },
       });
       request.current = null;
+      nearBottom.current = true;
+      setShowLatest(false);
       setDraft("");
       ai.refresh();
       if (!roomId) navigate(`/ai/rooms/${target}`);
@@ -492,73 +525,187 @@ function ChatSession({ roomId }: { roomId?: string }) {
       setDecisionBusy(false);
     }
   }
+  async function changeProfile(value: string) {
+    if (active || sending || changingProfile) return;
+    if (!roomId) {
+      setProfile(value);
+      setCreatedRoom(undefined);
+      return;
+    }
+    if (!room.data) return;
+    setChangingProfile(true);
+    setError("");
+    try {
+      const current = await api<{ room: AIRoom }>(`/api/ai/rooms/${roomId}`);
+      const result = await api<{ room: AIRoom }>(`/api/ai/rooms/${roomId}`, {
+        method: "PATCH",
+        body: { version: current.room.version, profile_key: value },
+      });
+      room.update(result);
+      ai.refresh();
+    } catch (failure) {
+      setError(errorMessage(failure));
+      room.reload();
+    } finally {
+      setChangingProfile(false);
+    }
+  }
   const unavailable = !ai.enabled || (!roomId && !ai.profiles.length);
-  return (
-    <section className="ai-chat" aria-label={t("aiui.title")}>
-      <div className="ai-chat-toolbar">
-        <div>
-          <Icon name="sparkles" />
-          <strong>{room.data?.room.title ?? t("aiui.newChat")}</strong>
-          <span>
-            {room.data?.room.profile_key
-              ? (ai.profiles.find((item) => item.key === room.data?.room.profile_key)?.name ??
-                room.data.room.profile_key)
-              : t("aiui.privateChat")}
-          </span>
+  const composer = (
+    <div className="ai-composer-wrap">
+      {roomId && showLatest && (
+        <div className="ai-latest">
+          <Button
+            size="sm"
+            onClick={() => {
+              nearBottom.current = true;
+              setShowLatest(false);
+              scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "instant" });
+            }}
+          >
+            <Icon name="down" />
+            {t("aiui.latestMessages")}
+          </Button>
         </div>
-        {roomId && (
+      )}
+
+      <Notice error={error || ai.error} />
+      {unavailable && !ai.loading && (
+        <p className="ai-setup-notice">
+          <Icon name="info" />
+          {t("aiui.notConfigured")}
+          {permissions.includes("admin.ai.settings.read") && (
+            <Link to="/console/ai">{t("aiui.openConsole")}</Link>
+          )}
+        </p>
+      )}
+      <form className="ai-composer" onSubmit={(event) => void send(event)}>
+        <Textarea
+          ref={input}
+          variant="integrated"
+          aria-label={t("aiui.message")}
+          placeholder={canRun ? t("aiui.messagePlaceholder") : t("aiui.readOnly")}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          maxLength={64000}
+          rows={1}
+          disabled={sending || active || changingProfile || !canRun || unavailable}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing &&
+              !event.repeat
+            ) {
+              event.preventDefault();
+              if (draft.trim() && !sending && !active && !changingProfile && !unavailable)
+                event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+        <div className="ai-composer-actions">
           <div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("aiui.chatSettings")}
-              disabled={active || !room.data}
-              onClick={() => void configureTools()}
-            >
-              <Icon name="settings" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("aiui.deleteChat")}
-              onClick={() => setDeleting(true)}
-            >
-              <Icon name="trash" />
-            </Button>
+            <SelectControl
+              aria-label={t("aiui.profile")}
+              variant="integrated"
+              theme="neutral"
+              value={room.data?.room.profile_key || profile || ai.profiles[0]?.key || ""}
+              disabled={
+                sending ||
+                active ||
+                changingProfile ||
+                !canRun ||
+                unavailable ||
+                (!!roomId && !room.data)
+              }
+              onValueChange={(value) => void changeProfile(value)}
+              options={ai.profiles.map((item) => ({ value: item.key, label: item.name }))}
+            />
+            {permissions.includes("ai.connections.manage") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={active || sending || changingProfile || unavailable}
+                onClick={() => void configureTools()}
+              >
+                <Icon name="link" />
+                {t("aiui.tools")}
+              </Button>
+            )}
           </div>
-        )}
-      </div>
+          {busy ? (
+            <Button
+              variant="secondary"
+              disabled={decisionBusy}
+              onClick={() => void action("cancel")}
+            >
+              <Icon name="stop" />
+              {t("aiui.stop")}
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              aria-label={t("aiui.send")}
+              disabled={
+                sending || active || changingProfile || unavailable || !canRun || !draft.trim()
+              }
+            >
+              <Icon name="arrow" />
+            </Button>
+          )}
+        </div>
+      </form>
+      <p className="ai-composer-note">{t("aiui.composerHint")}</p>
+    </div>
+  );
+  return (
+    <section className="ai-chat" data-empty={!roomId || undefined} aria-label={t("aiui.title")}>
       <div
         className="ai-chat-scroll"
         ref={scroll}
         onScroll={() => {
           const element = scroll.current;
-          if (element)
+          if (element) {
             nearBottom.current =
               element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+            setShowLatest(!nearBottom.current);
+          }
         }}
       >
         {!roomId ? (
           <div className="ai-welcome">
-            <span className="ai-welcome-mark">
-              <Icon name="sparkles" width={28} height={28} />
-            </span>
-            <p className="ai-eyebrow">{t("aiui.title")}</p>
-            <h1>{t("aiui.welcome")}</h1>
-            <p>{t("aiui.welcomeHint")}</p>
-            <div className="ai-suggestions">
-              {[t("aiui.suggestMail"), t("aiui.suggestContacts"), t("aiui.suggestCalendar")].map(
-                (suggestion) => (
-                  <button key={suggestion} onClick={() => setDraft(suggestion)}>
-                    <Icon name="arrow" />
-                    {suggestion}
-                  </button>
-                ),
-              )}
-            </div>
+            <h1>{t("aiui.newChat")}</h1>
+            {composer}
           </div>
         ) : (
           <div className="ai-transcript">
+            <header className="ai-conversation-heading">
+              <h1>{room.data?.room.title ?? t("aiui.newChat")}</h1>
+              <Menu.Root>
+                <Menu.Trigger
+                  render={<Button variant="ghost" size="icon" />}
+                  aria-label={t("aiui.conversationActions")}
+                >
+                  <Icon name="more" />
+                </Menu.Trigger>
+                <MenuPopup>
+                  <Menu.Item
+                    disabled={active || sending || changingProfile || !room.data}
+                    onClick={() => void configureTools()}
+                  >
+                    <Icon name="settings" />
+                    {t("aiui.chatSettings")}
+                  </Menu.Item>
+                  <Menu.Separator />
+                  <Menu.Item data-variant="danger" onClick={() => setDeleting(true)}>
+                    <Icon name="trash" />
+                    {t("aiui.deleteChat")}
+                  </Menu.Item>
+                </MenuPopup>
+              </Menu.Root>
+            </header>
             {room.loading && <LoadingSkeleton kind="list" rows={3} />}
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
@@ -605,6 +752,7 @@ function ChatSession({ roomId }: { roomId?: string }) {
                       {t("mcp.deny")}
                     </Button>
                     <Button
+                      variant="primary"
                       disabled={decisionBusy || !canRun}
                       onClick={() => void decide(approval, "allow")}
                     >
@@ -624,93 +772,7 @@ function ChatSession({ roomId }: { roomId?: string }) {
           )}
         </div>
       </div>
-      <div className="ai-composer-wrap">
-        <Notice error={error || ai.error} />
-        {unavailable && !ai.loading && (
-          <p className="ai-setup-notice">
-            <Icon name="info" />
-            {t("aiui.notConfigured")}
-            {permissions.includes("admin.ai.settings.read") && (
-              <Link to="/console/ai">{t("aiui.openConsole")}</Link>
-            )}
-          </p>
-        )}
-        <form className="ai-composer" onSubmit={(event) => void send(event)}>
-          <textarea
-            aria-label={t("aiui.message")}
-            placeholder={canRun ? t("aiui.messagePlaceholder") : t("aiui.readOnly")}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            maxLength={64000}
-            rows={3}
-            disabled={sending || active || !canRun || unavailable}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing &&
-                !event.repeat
-              ) {
-                event.preventDefault();
-                if (draft.trim() && !sending && !active && !unavailable)
-                  event.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-          <div className="ai-composer-actions">
-            <div>
-              {!roomId && (
-                <select
-                  aria-label={t("aiui.profile")}
-                  value={profile || ai.profiles[0]?.key || ""}
-                  disabled={sending}
-                  onChange={(event) => {
-                    setProfile(event.target.value);
-                    setCreatedRoom(undefined);
-                  }}
-                >
-                  {ai.profiles.map((item) => (
-                    <option key={item.id} value={item.key}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {permissions.includes("ai.connections.manage") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={active || sending || unavailable}
-                  onClick={() => void configureTools()}
-                >
-                  <Icon name="link" />
-                  {t("aiui.tools")}
-                </Button>
-              )}
-            </div>
-            {busy ? (
-              <Button
-                variant="secondary"
-                disabled={decisionBusy}
-                onClick={() => void action("cancel")}
-              >
-                <Icon name="stop" />
-                {t("aiui.stop")}
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                size="icon"
-                aria-label={t("aiui.send")}
-                disabled={sending || active || unavailable || !canRun || !draft.trim()}
-              >
-                <Icon name="arrow" />
-              </Button>
-            )}
-          </div>
-        </form>
-        <p className="ai-composer-note">{t("aiui.composerHint")}</p>
-      </div>
+      {roomId && composer}
       {settings && room.data && (
         <RoomSettings
           room={room.data.room}

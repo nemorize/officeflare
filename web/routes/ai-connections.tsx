@@ -4,7 +4,7 @@ import { api, errorMessage } from "../lib/api";
 import { aiStatus, useAIResource, type AIConnection, type AIServer } from "../lib/ai";
 import { useAccess } from "../components/console-access";
 import { Button, Icon } from "../components/ui";
-import { Check, Confirm, Notice, adminDate } from "../components/console-shared";
+import { Check, Confirm, Notice, adminDate, ConsolePageHeader } from "../components/console-shared";
 import {
   ConsoleDialog,
   ConsoleField,
@@ -13,7 +13,6 @@ import {
   ConsoleSelectField,
   ConsoleState,
   ConsoleSection,
-  ConsoleSettingsHeader,
 } from "../components/console-settings";
 
 const scopeLabels = () => ({
@@ -158,13 +157,13 @@ export function AIConnectionsPage() {
   }
   const server = servers.data?.servers.find((item) => item.id === selected);
   return (
-    <section className="account-page console-page ai-settings-page">
-      <ConsoleSettingsHeader title={t("aiui.connections")} description={t("aiui.connectionsHint")}>
+    <section className="account-page console-page console-settings ai-settings-page">
+      <ConsolePageHeader title={t("aiui.connections")}>
         <Button variant="ghost" onClick={refresh}>
           <Icon name="refresh" />
           {t("aiui.refresh")}
         </Button>
-      </ConsoleSettingsHeader>
+      </ConsolePageHeader>
       <Notice
         error={
           error ||
@@ -179,7 +178,6 @@ export function AIConnectionsPage() {
       {canManage && (
         <ConsoleSection
           title={t("aiui.toolConnections")}
-          description={t("aiui.toolConnectionsHint")}
           action={
             <Button onClick={() => open("tool")}>
               <Icon name="plus" />
@@ -191,11 +189,11 @@ export function AIConnectionsPage() {
           {!connections.loading && !connections.data?.connections.length && (
             <p className="ai-empty-inline">{t("aiui.noConnections")}</p>
           )}
-          <div className="ai-connection-list">
+          <div className="console-record-list">
             {connections.data?.connections
               .filter((connection) => connection.status !== "disabled")
               .map((connection) => (
-                <div className="ai-connection-row" key={connection.id}>
+                <div className="console-record ai-connection-row" key={connection.id}>
                   <span className="ai-connection-icon">
                     <Icon name="code" />
                   </span>
@@ -265,7 +263,6 @@ export function AIConnectionsPage() {
       {canManage && (
         <ConsoleSection
           title={t("aiui.personalAccounts")}
-          description={t("aiui.personalAccountsHint")}
           action={
             <Button disabled={!providers.data?.providers.length} onClick={() => open("account")}>
               <Icon name="plus" />
@@ -276,11 +273,11 @@ export function AIConnectionsPage() {
           {!providers.loading && !providers.data?.providers.length && (
             <p className="ai-empty-inline">{t("aiui.noOAuthProviders")}</p>
           )}
-          <div className="ai-connection-list">
+          <div className="console-record-list">
             {accounts.data?.accounts
               .filter((account) => account.status !== "revoked")
               .map((account) => (
-                <div className="ai-connection-row" key={account.id}>
+                <div className="console-record ai-connection-row" key={account.id}>
                   <span className="ai-connection-icon">
                     <Icon name="user" />
                   </span>
@@ -314,7 +311,7 @@ export function AIConnectionsPage() {
           </div>
         </ConsoleSection>
       )}
-      <ConsoleSection title={t("aiui.externalApps")} description={t("aiui.externalAppsHint")}>
+      <ConsoleSection title={t("aiui.externalApps")}>
         <div className="ai-endpoint">
           <span>{t("aiui.mcpEndpoint")}</span>
           <code>{new URL("/api/mcp", window.location.origin).href}</code>
@@ -322,11 +319,11 @@ export function AIConnectionsPage() {
         {!grants.loading && !grants.data?.grants.some((grant) => !grant.revoked_at) && (
           <p className="ai-empty-inline">{t("aiui.noExternalApps")}</p>
         )}
-        <div className="ai-connection-list">
+        <div className="console-record-list">
           {grants.data?.grants
             .filter((grant) => !grant.revoked_at)
             .map((grant) => (
-              <div className="ai-connection-row" key={grant.id}>
+              <div className="console-record ai-connection-row" key={grant.id}>
                 <Icon name="laptop" />
                 <div>
                   <strong>{grant.client_name}</strong>
@@ -354,7 +351,6 @@ export function AIConnectionsPage() {
       </ConsoleSection>
       <ConsoleSection
         title={t("aiui.apiKeys")}
-        description={t("aiui.apiKeysHint")}
         action={
           <Button onClick={() => open("key")}>
             <Icon name="plus" />
@@ -365,11 +361,11 @@ export function AIConnectionsPage() {
         {!keys.loading && !keys.data?.keys.some((key) => !key.revoked_at) && (
           <p className="ai-empty-inline">{t("aiui.noKeys")}</p>
         )}
-        <div className="ai-connection-list">
+        <div className="console-record-list">
           {keys.data?.keys
             .filter((key) => !key.revoked_at)
             .map((key) => (
-              <div className="ai-connection-row" key={key.id}>
+              <div className="console-record ai-connection-row" key={key.id}>
                 <Icon name="shield" />
                 <div>
                   <strong>{key.name}</strong>

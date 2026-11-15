@@ -14,6 +14,7 @@ import { ApiError, api, errorMessage } from "../lib/api";
 import { useAccess } from "./console-access";
 import { LoadingSkeleton } from "./loading-skeleton";
 import "./console-shared.css";
+import "../routes/console.css";
 
 export const adminDate = (timestamp: number | null) =>
   timestamp === null ? t("common.never") : formatDateTime(timestamp);
@@ -24,7 +25,7 @@ export function ConsolePageHeader({
   level = 1,
 }: {
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   children?: ReactNode;
   level?: 1 | 2;
 }) {
@@ -35,7 +36,7 @@ export function ConsolePageHeader({
     >
       <div>
         <Heading>{title}</Heading>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {children}
     </header>

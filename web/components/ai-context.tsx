@@ -2,7 +2,8 @@ import { createContext, useContext, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useState } from "react";
 import { useAccess } from "./console-access";
-import { Button, Icon, Input } from "./ui";
+import { Icon } from "./ui";
+import { WorkspaceCreateButton } from "./workspace-controls";
 import { useAIResource, type AIProfile, type AIRoom } from "../lib/ai";
 import { t } from "../../shared/i18n/index.ts";
 import "../routes/ai.css";
@@ -13,6 +14,8 @@ interface AIContextValue {
   enabled: boolean;
   loading: boolean;
   error: string;
+  query: string;
+  setQuery: (query: string) => void;
   refresh: () => void;
 }
 const AIContext = createContext<AIContextValue>({
@@ -21,12 +24,15 @@ const AIContext = createContext<AIContextValue>({
   enabled: false,
   loading: false,
   error: "",
+  query: "",
+  setQuery: () => {},
   refresh: () => {},
 });
 export const useAI = () => useContext(AIContext);
 export function AIProvider({ children }: { children: ReactNode }) {
   const location = useLocation(),
     access = useAccess();
+  const [query, setQuery] = useState("");
   const enabled =
     /^\/ai(?:\/|$)/.test(location.pathname) && access.permissions.includes("ai.access");
   const rooms = useAIResource<{ rooms: AIRoom[] }>(enabled ? "/api/ai/rooms" : null);
@@ -40,6 +46,8 @@ export function AIProvider({ children }: { children: ReactNode }) {
         enabled: capabilities.data?.enabled ?? false,
         loading: rooms.loading || profiles.loading || capabilities.loading,
         error: rooms.error || profiles.error || capabilities.error,
+        query,
+        setQuery,
         refresh: () => {
           rooms.reload();
           profiles.reload();
@@ -51,56 +59,53 @@ export function AIProvider({ children }: { children: ReactNode }) {
     </AIContext>
   );
 }
-export function AISidebar() {
+export function AISidebar({ onNavigate }: { onNavigate?: () => void }) {
   const ai = useAI(),
-    { permissions } = useAccess(),
-    [query, setQuery] = useState("");
+    { permissions } = useAccess();
+  const rooms = ai.rooms.filter((room) =>
+    room.title.toLocaleLowerCase().includes(ai.query.trim().toLocaleLowerCase()),
+  );
+  function navigate() {
+    ai.setQuery("");
+    onNavigate?.();
+  }
   return (
-    <>
+    <div className="ai-sidebar-body">
       <div className="workspace-create-action">
-        <Button
-          className="workspace-create-button"
+        <WorkspaceCreateButton
+          label={t("aiui.newChat")}
+          nativeButton={false}
           render={<NavLink to="/ai" />}
+          onClick={navigate}
           disabled={!permissions.includes("ai.runs.create")}
-        >
-          <Icon name="plus" />
-          <span>{t("aiui.newChat")}</span>
-        </Button>
-      </div>
-      <div className="ai-sidebar-search">
-        <Icon name="search" />
-        <Input
-          variant="integrated"
-          aria-label={t("aiui.searchChats")}
-          placeholder={t("aiui.searchChats")}
-          value={query}
-          onValueChange={setQuery}
         />
       </div>
       <nav className="workspace-nav ai-room-nav" aria-label={t("aiui.conversations")}>
         <h2>{t("aiui.conversations")}</h2>
-        {ai.rooms
-          .filter((room) => room.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-          .map((room) => (
-            <NavLink to={`/ai/rooms/${room.id}`} key={room.id}>
-              <Icon name="message" />
-              <span>{room.title}</span>
-            </NavLink>
-          ))}
-        {!ai.loading && !ai.rooms.length && <p className="ai-sidebar-empty">{t("aiui.noChats")}</p>}
+        {rooms.map((room) => (
+          <NavLink to={`/ai/rooms/${room.id}`} key={room.id} onClick={navigate}>
+            <Icon name="message" />
+            <span>{room.title}</span>
+          </NavLink>
+        ))}
+        {!ai.loading && !rooms.length && (
+          <p className="ai-sidebar-empty">
+            {t(ai.query.trim() ? "aiui.noSearchResults" : "aiui.noChats")}
+          </p>
+        )}
       </nav>
       <nav className="workspace-nav ai-sidebar-footer" aria-label={t("common.settings")}>
         {permissions.includes("ai.connections.manage") && (
-          <NavLink to="/ai/connections">
+          <NavLink to="/ai/connections" onClick={navigate}>
             <Icon name="link" />
             <span>{t("aiui.connections")}</span>
           </NavLink>
         )}
-        <NavLink to="/ai/usage">
+        <NavLink to="/ai/usage" onClick={navigate}>
           <Icon name="layers" />
           <span>{t("aiui.usage")}</span>
         </NavLink>
       </nav>
-    </>
+    </div>
   );
 }
