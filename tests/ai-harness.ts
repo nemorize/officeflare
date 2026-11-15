@@ -10,6 +10,7 @@ import { registerAIConsumer } from "../src/ai/consumers";
 import { advanceRun, recoverRuns } from "../src/ai/hub";
 import { recoverInvocations } from "../src/ai/service";
 import { executeOperation } from "../src/mcp/operations";
+import { runBuiltinTool } from "../src/mcp/registry";
 import type { AuthEnv } from "../src/auth/types";
 import type { AIRequest, Fetcher } from "../src/ai/types";
 import { seal, unseal } from "../src/ai/secrets";
@@ -175,7 +176,9 @@ export default {
               id: "fc_fixture",
               call_id: "fixture-call",
               name: tools[0].name,
-              arguments: JSON.stringify({ data: { display_name: "Agent contact" } }),
+              arguments: JSON.stringify(
+                mode.arguments ?? { data: { display_name: "Agent contact" } },
+              ),
             },
           ]
         : [
@@ -203,6 +206,16 @@ export default {
     if (pathname.startsWith("/test-ai/")) {
       try {
         const body = (await request.json()) as Record<string, unknown>;
+        if (pathname === "/test-ai/tool")
+          return Response.json(
+            await runBuiltinTool(
+              env,
+              body.principal as never,
+              String(body.name),
+              body.args as never,
+              String(body.operation),
+            ),
+          );
         if (pathname === "/test-ai/infer")
           return Response.json(
             await new AIService(env, { fetcher }).execute(body as unknown as AIRequest),

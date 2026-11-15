@@ -12,6 +12,8 @@ import type { WikiComment, WikiPage, WikiSpace } from "../../shared/wiki";
 import { requireAccess } from "../auth/store";
 import { body } from "../auth/input";
 import { uuid, type AppEnv } from "../auth/types";
+import { digest } from "../auth/crypto";
+import { HTTPException } from "hono/http-exception";
 import { requirePermission, requestPermissions } from "../authorization/access";
 import {
   actorCte,
@@ -402,11 +404,25 @@ wiki.post("/spaces/:id/pages", requirePermission("wiki.pages.create"), async (c)
         : await getPage(c, id(data.parent_id), 3);
   if (parent && parent.space_id !== space.id) fail(400);
   if (!parent && space.role < 3) fail(403, "wiki.denied");
-  const page = uuid(),
-    resource = uuid(),
-    user = actorOf(c).user_id;
+  const user = actorOf(c).user_id,
+    key = c.req.header("Idempotency-Key");
+  if (key !== undefined && (!key || key.length > 128)) fail(400);
+  const page = key ? await digest(JSON.stringify(["wiki.page", user, space.id, key])) : uuid(),
+    resource = key ? await digest(JSON.stringify(["wiki.resource", user, space.id, key])) : uuid();
+  const existing = async () => {
+    const found = await row<WikiPage>(c.env, "SELECT * FROM wiki_pages WHERE id=?", page);
+    if (!found) return null;
+    if (found.parent_id !== (parent?.id ?? null) || found.created_by !== user)
+      fail(409, "wiki.changed");
+    return getPage(c, page, 3);
+  };
+  if (key) {
+    const replay = await existing();
+    if (replay) return c.json({ page: replay }, 201);
+  }
   const checks = [
     spaceVersion(space),
+    check("NOT EXISTS(SELECT 1 FROM wiki_pages WHERE id=?)", page),
     parent ? pageCondition(user, parent.id, 3) : spaceCondition(user, space.id, 3),
   ];
   if (parent)
@@ -416,36 +432,44 @@ wiki.post("/spaces/:id/pages", requirePermission("wiki.pages.create"), async (c)
         parent.id,
       ),
     );
-  await mutate(
-    c,
-    "wiki.pages.create",
-    checks,
-    (proof) => [
-      stmt(
-        c.env,
-        `INSERT INTO collaboration_resources(id,service,resource_id,schema_key) SELECT ?,'wiki',?,'rich-text.v1' WHERE ${proof}`,
-        resource,
-        page,
-      ),
-      stmt(
-        c.env,
-        `INSERT INTO wiki_pages(id,space_id,parent_id,resource_id,created_by,sort_order) SELECT ?,?,?,?,?,COALESCE((SELECT MAX(sort_order)+1 FROM wiki_pages WHERE space_id=? AND parent_id IS ?),0) WHERE ${proof}`,
-        page,
-        space.id,
-        parent?.id ?? null,
-        resource,
-        user,
-        space.id,
-        parent?.id ?? null,
-      ),
-      stmt(
-        c.env,
-        `UPDATE wiki_spaces SET tree_version=tree_version+1 WHERE id=? AND ${proof}`,
-        space.id,
-      ),
-    ],
-    { space: space.id, page, action: "page.created" },
-  );
+  try {
+    await mutate(
+      c,
+      "wiki.pages.create",
+      checks,
+      (proof) => [
+        stmt(
+          c.env,
+          `INSERT INTO collaboration_resources(id,service,resource_id,schema_key) SELECT ?,'wiki',?,'rich-text.v1' WHERE ${proof}`,
+          resource,
+          page,
+        ),
+        stmt(
+          c.env,
+          `INSERT INTO wiki_pages(id,space_id,parent_id,resource_id,created_by,sort_order) SELECT ?,?,?,?,?,COALESCE((SELECT MAX(sort_order)+1 FROM wiki_pages WHERE space_id=? AND parent_id IS ?),0) WHERE ${proof}`,
+          page,
+          space.id,
+          parent?.id ?? null,
+          resource,
+          user,
+          space.id,
+          parent?.id ?? null,
+        ),
+        stmt(
+          c.env,
+          `UPDATE wiki_spaces SET tree_version=tree_version+1 WHERE id=? AND ${proof}`,
+          space.id,
+        ),
+      ],
+      { space: space.id, page, action: "page.created" },
+    );
+  } catch (error) {
+    if (key && error instanceof HTTPException && error.status === 412) {
+      const replay = await existing();
+      if (replay) return c.json({ page: replay }, 201);
+    }
+    throw error;
+  }
   return c.json({ page: await getPage(c, page) }, 201);
 });
 wiki.get("/pages/:id", async (c) => c.json({ page: await getPage(c, c.req.param("id")) }));

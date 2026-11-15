@@ -138,6 +138,12 @@ mcp.post("/", async (c) => {
               auth.constraints.calendar_ids!.includes(item.id),
             );
           }
+          if (name === "wiki.list_spaces" && auth.constraints.wiki_space_ids) {
+            const output = object(value);
+            output.spaces = (output.spaces as { id: string }[]).filter((item) =>
+              auth.constraints.wiki_space_ids!.includes(item.id),
+            );
+          }
         }
       }
       const encoded = canonical(value);

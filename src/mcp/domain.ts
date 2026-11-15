@@ -5,6 +5,7 @@ import type { AppEnv } from "../auth/types";
 import contacts from "../routes/contacts";
 import drive from "../routes/drive";
 import calendar from "../routes/calendar";
+import wiki from "../routes/wiki";
 import { identity } from "../ai/store";
 import { fail } from "../ai/errors";
 import type { AIEnv, AIPrincipal } from "../ai/types";
@@ -22,7 +23,10 @@ export async function domainRequest(
 ) {
   await identity(env, principal);
   const target = new URL("https://domain.officeflare.internal" + path);
-  if (principal.kind !== "user" || !/^\/api\/(contacts|drive|calendar)(\/|$)/.test(target.pathname))
+  if (
+    principal.kind !== "user" ||
+    !/^\/api\/(contacts|drive|calendar|wiki)(\/|$)/.test(target.pathname)
+  )
     fail(403, "AI_FORBIDDEN");
   const pending: Promise<unknown>[] = [],
     app = new Hono<AppEnv>();
@@ -38,6 +42,7 @@ export async function domainRequest(
   app.route("/api/contacts", contacts);
   app.route("/api/drive", drive);
   app.route("/api/calendar", calendar);
+  app.route("/api/wiki", wiki);
   app.onError((error, c) =>
     error instanceof HTTPException ? error.getResponse() : c.json({ error: "DOMAIN_FAILURE" }, 500),
   );

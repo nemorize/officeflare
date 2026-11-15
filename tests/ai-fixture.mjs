@@ -12,10 +12,11 @@ const harness = await build({
   loader: { ".sql": "text" },
   target: "es2022",
 });
-export async function fixture(t, { configure = true, assets = false } = {}) {
+export async function fixture(t, { configure = true, assets = false, wiki = false } = {}) {
   const f = await calendarFixture(t, {
     ai: true,
     assets,
+    collaboration: wiki,
     workerEntry: {
       type: "ESModule",
       path: "tests/ai-harness.js",
@@ -23,7 +24,11 @@ export async function fixture(t, { configure = true, assets = false } = {}) {
     },
   });
   for (const user of ["alice", "bob"])
-    for (const role of ["system-ai-user", "system-contacts-user"])
+    for (const role of [
+      "system-ai-user",
+      "system-contacts-user",
+      ...(wiki ? ["system-wiki-user"] : []),
+    ])
       await f.db
         .prepare("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)")
         .bind(user, role)

@@ -561,6 +561,15 @@ export const en = defineMessages({
   "mcp.driveRead": "Read Drive files",
   "mcp.driveWrite": "Change Drive files",
   "mcp.calendarRead": "Read calendars",
+  "mcp.wikiRead": "Read wiki",
+  "mcp.wikiWrite": "Edit wiki",
+  "mcp.tool.wikiSpaces": "List wiki spaces accessible to the signed-in user.",
+  "mcp.tool.wikiSearch": "List or search pages by title and body within an accessible wiki space.",
+  "mcp.tool.wikiGet":
+    "Read a wiki page title, plain text body, metadata, and current epoch and sequence.",
+  "mcp.tool.wikiCreate": "Create a wiki page with a title and plain text body. Requires approval.",
+  "mcp.tool.wikiUpdate":
+    "Replace the supplied title or the entire body with plain text. Omitted fields are preserved. Use version, epoch and seq from wiki.get_page; concurrent edits require another review.",
   "mcp.calendarWrite": "Change calendar events",
 
   "network.disconnected": "Internet connection lost.",

@@ -9,6 +9,7 @@ import { validateSchema } from "../ai/json-schema";
 import { canonical, first, hash, identity, object, rows, statement, text } from "../ai/store";
 import type { AIEnv, AIPrincipal, AITool, ObjectValue } from "../ai/types";
 import { domainRequest } from "./domain";
+import { createWikiPage, updateWikiPage, validateWikiChanges, wikiPage } from "./wiki";
 
 export const scopes = [
   "mail.read",
@@ -20,6 +21,8 @@ export const scopes = [
   "drive.write",
   "calendar.read",
   "calendar.write",
+  "wiki.read",
+  "wiki.write",
 ] as const;
 export type MCPScope = (typeof scopes)[number];
 export interface ToolDefinition extends AITool {
@@ -27,6 +30,7 @@ export interface ToolDefinition extends AITool {
   server: string;
   scope: MCPScope;
   permission: string;
+  additionalPermissions: string[];
   execution: "read" | "write" | "external";
   replay: "read_only" | "idempotent" | "reconcile" | "never";
   run: (
@@ -56,6 +60,7 @@ function tool(
   execution: ToolDefinition["execution"],
   run: ToolDefinition["run"],
   replay?: ToolDefinition["replay"],
+  additionalPermissions: string[] = [],
 ): ToolDefinition {
   return {
     id: "builtin:" + name + ":1",
@@ -67,6 +72,7 @@ function tool(
     server: name.split(".")[0]!,
     scope,
     permission,
+    additionalPermissions,
     execution,
     replay: replay ?? (execution === "read" ? "read_only" : "idempotent"),
     run,
@@ -406,6 +412,87 @@ const builtin: ToolDefinition[] = [
         operation,
       ),
   ),
+  tool(
+    "wiki.list_spaces",
+    () => t("mcp.tool.wikiSpaces"),
+    schema({}),
+    "wiki.read",
+    "wiki.access",
+    "read",
+    (env, principal) => domainRequest(env, principal, "/api/wiki/spaces"),
+  ),
+  tool(
+    "wiki.search",
+    () => t("mcp.tool.wikiSearch"),
+    schema({ space_id: field, query: { type: "string", maxLength: 100 }, cursor: field }, [
+      "space_id",
+    ]),
+    "wiki.read",
+    "wiki.access",
+    "read",
+    (env, principal, args) =>
+      domainRequest(
+        env,
+        principal,
+        "/api/wiki/spaces/" +
+          path(args.space_id) +
+          "/pages?" +
+          new URLSearchParams({
+            q: String(args.query ?? ""),
+            ...(args.cursor ? { cursor: String(args.cursor) } : {}),
+          }),
+      ),
+  ),
+  tool(
+    "wiki.get_page",
+    () => t("mcp.tool.wikiGet"),
+    schema({ page_id: field }, ["page_id"]),
+    "wiki.read",
+    "wiki.access",
+    "read",
+    async (env, principal, args) => ({
+      page: await wikiPage(env, principal, String(args.page_id)),
+    }),
+  ),
+  tool(
+    "wiki.create_page",
+    () => t("mcp.tool.wikiCreate"),
+    schema(
+      {
+        space_id: field,
+        parent_id: { type: ["string", "null"], maxLength: 100 },
+        title: { type: "string", minLength: 1, maxLength: 500 },
+        text: { type: "string", maxLength: 64000 },
+      },
+      ["space_id", "title", "text"],
+    ),
+    "wiki.write",
+    "wiki.pages.create",
+    "write",
+    createWikiPage,
+    "idempotent",
+    ["wiki.pages.update"],
+  ),
+  tool(
+    "wiki.update_page",
+    () => t("mcp.tool.wikiUpdate"),
+    schema(
+      {
+        page_id: field,
+        version: number,
+        epoch: number,
+        seq: { type: "integer", minimum: 0 },
+        title: { type: "string", maxLength: 500 },
+        text: { type: "string", maxLength: 64000 },
+      },
+      ["page_id", "version", "epoch", "seq"],
+    ),
+    "wiki.write",
+    "wiki.pages.update",
+    "write",
+    updateWikiPage,
+    "reconcile",
+  ),
 ];
 export const builtinTool = (name: string) => builtin.find((entry) => entry.name === name);
 export async function availableTools(env: AIEnv, principal: AIPrincipal) {
@@ -418,6 +505,9 @@ export async function availableTools(env: AIEnv, principal: AIPrincipal) {
   return builtin.filter(
     (entry) =>
       permissions.includes(entry.permission as never) &&
+      entry.additionalPermissions.every((permission) =>
+        permissions.includes(permission as never),
+      ) &&
       servers.some((server) => server.builtin_key === entry.server),
   );
 }
@@ -454,9 +544,24 @@ export async function toolIntent(
   const actor = await identity(env, principal);
   const permissions = await permissionsFor(createDatabase(env.DB), actor.user.id);
   if (!permissions.includes(definition.permission as never)) fail(403, "AI_FORBIDDEN");
+  if (
+    definition.additionalPermissions.some(
+      (permission) => !permissions.includes(permission as never),
+    )
+  )
+    fail(403, "AI_FORBIDDEN");
+  if (definition.server === "wiki" && definition.execution === "write") validateWikiChanges(args);
   const record = await ensureToolRecord(env, definition);
   let revision: unknown = null;
-  if (args.contact_id)
+  if (definition.server === "wiki" && args.page_id) {
+    const page = await wikiPage(env, principal, String(args.page_id));
+    revision = page;
+    if (
+      (args.epoch !== undefined && args.epoch !== page.epoch) ||
+      (args.seq !== undefined && args.seq !== page.seq)
+    )
+      fail(409, "AI_APPROVAL_STALE");
+  } else if (args.contact_id)
     revision = object(
       await domainRequest(env, principal, "/api/contacts/" + path(args.contact_id)),
     ).contact;
@@ -487,7 +592,15 @@ export async function toolIntent(
     ...record,
     args_hash: await hash(args),
     resource_version: version,
-    snapshot_hash: await hash([definition.name, schemaHashOf(record), args, version]),
+    snapshot_hash: await hash([
+      definition.name,
+      schemaHashOf(record),
+      args,
+      version,
+      ...(definition.server === "wiki" && revision
+        ? [object(revision).epoch, object(revision).seq]
+        : []),
+    ]),
   };
 }
 const schemaHashOf = (record: { schemaHash: string }) => record.schemaHash;

@@ -555,6 +555,14 @@ export const ko = defineTranslations(en, {
   "mcp.driveRead": "드라이브 파일 읽기",
   "mcp.driveWrite": "드라이브 파일 변경",
   "mcp.calendarRead": "일정 읽기",
+  "mcp.wikiRead": "위키 읽기",
+  "mcp.wikiWrite": "위키 변경",
+  "mcp.tool.wikiSpaces": "로그인한 사용자가 접근할 수 있는 위키 공간을 나열합니다.",
+  "mcp.tool.wikiSearch": "위키 공간의 페이지를 나열하거나 제목과 본문으로 검색합니다.",
+  "mcp.tool.wikiGet": "위키 페이지의 제목, 텍스트 본문, 메타데이터, 현재 epoch와 seq를 읽습니다.",
+  "mcp.tool.wikiCreate": "제목과 텍스트 본문으로 위키 페이지를 만듭니다. 승인이 필요합니다.",
+  "mcp.tool.wikiUpdate":
+    "입력한 제목 또는 본문 전체를 텍스트로 교체합니다. 생략한 필드는 유지합니다. wiki.get_page의 version, epoch, seq가 필요하며 다른 편집이 있으면 다시 검토해야 합니다.",
   "mcp.calendarWrite": "일정 변경",
 
   "network.disconnected": "인터넷 연결이 끊겼습니다.",

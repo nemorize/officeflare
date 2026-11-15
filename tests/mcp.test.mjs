@@ -114,6 +114,22 @@ test("external OAuth authorizes only scoped tools and tokens cannot access Offic
   });
 });
 
+test("external OAuth grants wiki read scope without exposing write tools", async (t) => {
+  const f = await fixture(t, { configure: false, wiki: true }),
+    connection = await grant(f, "wiki.read");
+  const listed = await rpc(f, connection.tokens.access_token, "tools/list", {});
+  assert.deepEqual(
+    listed.result.tools.filter((tool) => tool.name.startsWith("wiki.")).map((tool) => tool.name),
+    ["wiki.list_spaces", "wiki.search", "wiki.get_page"],
+  );
+  const result = await rpc(f, connection.tokens.access_token, "tools/call", {
+    name: "wiki.list_spaces",
+    arguments: {},
+  });
+  assert.equal(result.result.isError, false);
+  assert.equal(result.result.structuredContent.spaces[0].owner_user_id, "alice");
+});
+
 test("OAuth PKCE, redirect matching, token replay and scope expansion are rejected", async (t) => {
   const f = await fixture(t, { configure: false }),
     connection = await grant(f);

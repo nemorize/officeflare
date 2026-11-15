@@ -15,6 +15,8 @@ const labels = () => ({
   "drive.write": t("mcp.driveWrite"),
   "calendar.read": t("mcp.calendarRead"),
   "calendar.write": t("mcp.calendarWrite"),
+  "wiki.read": t("mcp.wikiRead"),
+  "wiki.write": t("mcp.wikiWrite"),
 });
 export default function MCPPage() {
   const auth = useSession(),

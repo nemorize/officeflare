@@ -554,6 +554,15 @@ export const ja = defineTranslations(en, {
   "mcp.driveRead": "ドライブファイルの閲覧",
   "mcp.driveWrite": "ドライブファイルの変更",
   "mcp.calendarRead": "カレンダーの閲覧",
+  "mcp.wikiRead": "Wikiを読む",
+  "mcp.wikiWrite": "Wikiを変更",
+  "mcp.tool.wikiSpaces": "ログインしたユーザーがアクセスできるWikiスペースを一覧表示します。",
+  "mcp.tool.wikiSearch": "Wikiスペースのページを一覧表示し、タイトルと本文で検索します。",
+  "mcp.tool.wikiGet":
+    "Wikiページのタイトル、テキスト本文、メタデータ、現在のepochとseqを取得します。",
+  "mcp.tool.wikiCreate": "タイトルとテキスト本文でWikiページを作成します。承認が必要です。",
+  "mcp.tool.wikiUpdate":
+    "指定したタイトルまたは本文全体をテキストで置き換えます。省略した項目は維持します。wiki.get_pageのversion、epoch、seqが必要です。他の編集があった場合は再確認が必要です。",
   "mcp.calendarWrite": "予定の変更",
 
   "network.disconnected": "インターネット接続が切れました。",

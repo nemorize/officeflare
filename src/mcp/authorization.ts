@@ -59,6 +59,7 @@ export function constraints(value: unknown) {
     "mailbox_ids",
     "calendar_ids",
     "drive_root_ids",
+    "wiki_space_ids",
   ]) as Record<string, string[]>;
   for (const items of Object.values(result))
     if (
@@ -84,7 +85,9 @@ async function eligibleScopes(env: AIEnv, principal: AIPrincipal, requested: MCP
           ? /^contacts\.entries\.(create|update|delete)$/.test(key)
           : domain === "calendar"
             ? /^calendar\.events\.(create|update|delete)$/.test(key)
-            : /^drive\.files\.(create|update|delete)$/.test(key),
+            : domain === "wiki"
+              ? /^wiki\.pages\.(create|update)$/.test(key)
+              : /^drive\.files\.(create|update|delete)$/.test(key),
       )
     )
       fail(403, "AI_FORBIDDEN");
@@ -285,6 +288,23 @@ export async function scopeTool(
     )
       fail(403, "AI_FORBIDDEN");
   }
+  if (
+    tool.server === "wiki" &&
+    auth.constraints.wiki_space_ids &&
+    tool.name !== "wiki.list_spaces"
+  ) {
+    const space = args.page_id
+      ? (
+          await first<{ space_id: string }>(
+            env,
+            "SELECT space_id FROM wiki_pages WHERE id=?",
+            String(args.page_id),
+          )
+        )?.space_id
+      : args.space_id;
+    if (!space || !auth.constraints.wiki_space_ids.includes(String(space)))
+      fail(403, "AI_FORBIDDEN");
+  }
 }
 function redirectUri(value: unknown) {
   const raw = text(value, 2048),
@@ -420,7 +440,8 @@ mcpOAuth.get("/authorize", async (c) => {
   if (query.resource !== undefined && query.resource !== resourceUrl(origin))
     return oauthError("invalid_target");
   const requested = requestedScopes(
-      query.scope ?? ["mail.read", "contacts.read", "drive.read", "calendar.read"].join(" "),
+      query.scope ??
+        ["mail.read", "contacts.read", "drive.read", "calendar.read", "wiki.read"].join(" "),
     ),
     id = uuid();
   await statement(

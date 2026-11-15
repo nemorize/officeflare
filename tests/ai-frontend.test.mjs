@@ -277,6 +277,75 @@ test(
 );
 
 test(
+  "AI chat connects Wiki and creates a page only after tool approval",
+  { timeout: 90000 },
+  async (t) => {
+    const f = await browserFixture(t, { wiki: true }),
+      { page, origin } = f;
+    const space = (await f.call("/api/wiki/spaces")).spaces[0];
+    await page.goto(origin + "/ai/connections");
+    await page.getByRole("button", { name: "Add connection", exact: true }).click();
+    let dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("My wiki");
+    await choose(page, "MCP server", "Wiki");
+    await mutation(page, "/api/ai/mcp/connections", () =>
+      dialog.getByRole("button", { name: "Connect", exact: true }).click(),
+    );
+    await dialog.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "View tools", exact: true }).click();
+    await page.getByRole("dialog").getByText("wiki.get_page", { exact: true }).waitFor();
+    await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Create API key", exact: true }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("checkbox", { name: "Read wiki", exact: true })
+      .waitFor();
+    await page
+      .getByRole("dialog")
+      .getByRole("checkbox", { name: "Edit wiki", exact: true })
+      .waitFor();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.goto(origin + "/ai");
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page.waitForURL(/\/ai\/rooms\//);
+    const roomId = new URL(page.url()).pathname.split("/").at(-1);
+    dialog = page.getByRole("dialog");
+    await dialog.getByRole("checkbox", { name: /wiki.create_page/ }).check();
+    await mutation(page, "/mcp-bindings", () =>
+      dialog.getByRole("button", { name: "Save", exact: true }).click(),
+    );
+    await dialog.waitFor({ state: "hidden" });
+    await f.bucket.put(
+      "ai-fixture-mode",
+      JSON.stringify({
+        kind: "tools",
+        arguments: { space_id: space.id, title: "Agent notes", text: "Page created through chat" },
+      }),
+    );
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill("Create a wiki page");
+    await mutation(page, `/rooms/${roomId}/runs`, () =>
+      page.getByRole("button", { name: "Send message", exact: true }).click(),
+    );
+    const run = await lastRun(f, roomId);
+    await f.testCall("advance", { id: run.id });
+    await f.testCall("advance", { id: run.id });
+    await page.getByText("Your approval is needed", { exact: true }).waitFor();
+    assert.equal((await f.db.prepare("SELECT COUNT(*) n FROM wiki_pages").first()).n, 0);
+    const approval = (await f.call(`/api/ai/runs/${run.id}/approvals`)).approvals[0];
+    await mutation(page, `/approvals/${approval.id}/decision`, () =>
+      page.getByRole("button", { name: "Approve changes", exact: true }).click(),
+    );
+    await f.testCall("advance", { id: run.id });
+    await f.testCall("advance", { id: run.id });
+    await page.locator(".ai-run-state").getByText("Completed", { exact: true }).waitFor();
+    const pages = (await f.call(`/api/wiki/spaces/${space.id}/pages?q=Agent`)).pages;
+    assert.equal(pages.length, 1);
+    assert.equal(pages[0].title, "Agent notes");
+    assert.deepEqual(f.errors, []);
+  },
+);
+
+test(
   "AI connection screens issue scoped one-time keys and revoke them without exposing stored credentials",
   { timeout: 60000 },
   async (t) => {

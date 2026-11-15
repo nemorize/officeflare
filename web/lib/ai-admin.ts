@@ -305,7 +305,7 @@ export const aiAdminSpecs: AIAdminSpec[] = [
       field("endpoint_url", "aiui.endpointURL", { kind: "url" }),
       field("builtin_key", "aiui.builtinKey", {
         kind: "select",
-        options: ["", "mail", "contacts", "drive", "calendar"],
+        options: ["", "mail", "contacts", "drive", "calendar", "wiki"],
         initial: "",
       }),
       enabled,

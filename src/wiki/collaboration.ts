@@ -1,4 +1,5 @@
 import { CollaborationFault } from "../../shared/collaboration";
+import * as Y from "yjs";
 import { initialRichText, richTextValue, validateRichText } from "../../shared/rich-text";
 import type { CollaborationAdapter } from "../collaboration/types";
 import { actorCte, pageRank, pageFilter, permissionCondition, row, stmt } from "./store";
@@ -33,6 +34,40 @@ export const wikiCollaboration: CollaborationAdapter = {
     };
   },
   initialize: initialRichText,
+  edit(state, changes) {
+    if (
+      !Object.keys(changes).length ||
+      Object.keys(changes).some((key) => key !== "title" && key !== "text") ||
+      (changes.title !== undefined &&
+        (typeof changes.title !== "string" || changes.title.length > 500)) ||
+      (changes.text !== undefined &&
+        (typeof changes.text !== "string" || changes.text.length > 64000))
+    )
+      throw new CollaborationFault("invalid_update");
+    state.transact(() => {
+      if (typeof changes.title === "string") {
+        const title = state.getText("title");
+        title.delete(0, title.length);
+        title.insert(0, changes.title);
+      }
+      if (typeof changes.text === "string") {
+        const content = state.getXmlFragment("content");
+        content.delete(0, content.length);
+        content.insert(
+          0,
+          changes.text.split(/\r?\n/).map((line) => {
+            const paragraph = new Y.XmlElement("paragraph");
+            if (line) {
+              const text = new Y.XmlText();
+              text.insert(0, line);
+              paragraph.insert(0, [text]);
+            }
+            return paragraph;
+          }),
+        );
+      }
+    });
+  },
   validate(state, resource) {
     if (resource.schema_key !== "rich-text.v1") throw new CollaborationFault("invalid_schema");
     validateRichText(state);

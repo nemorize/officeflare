@@ -24,6 +24,7 @@ export interface CollaborationAdapter {
   ): Promise<CollaborationCapabilities>;
   initialize(resource: CollaborationResource): Y.Doc;
   validate(state: Y.Doc, resource: CollaborationResource): void;
+  edit?(state: Y.Doc, changes: Record<string, unknown>): void;
   project(
     env: Env,
     resource: CollaborationResource,

@@ -548,6 +548,103 @@ export class CollaborationRoom extends DurableObject<Env> {
       return true;
     });
   }
+  async edit(
+    resourceId: string,
+    actor: CollaborationActor,
+    input: { operation_id: string; epoch: number; seq: number; changes: Record<string, unknown> },
+  ) {
+    return this.enqueue(async () => {
+      await this.load(resourceId);
+      const adapter = this.adapters[this.resource!.service]!;
+      const allowed = async () =>
+        (await actorAccount(this.env, actor))
+          ? adapter.authorize(this.env, actor, this.resource!)
+          : null;
+      const cap = await allowed();
+      if (!cap?.read) return { status: 404 as const };
+      if (!cap.write || !adapter.edit) return { status: 403 as const };
+      if (
+        !/^[A-Za-z0-9_-]{1,100}$/.test(input.operation_id) ||
+        !Number.isSafeInteger(input.epoch) ||
+        input.epoch < 1 ||
+        !Number.isSafeInteger(input.seq) ||
+        input.seq < 0
+      )
+        return { status: 400 as const };
+      const mutationId = "command:" + input.operation_id;
+      const hash = await digest(JSON.stringify([input.epoch, input.seq, input.changes]));
+      const receipt = this.ctx.storage.sql
+        .exec<{ hash: string; seq: number }>(
+          "SELECT hash,seq FROM room_receipts WHERE epoch=? AND user_id=? AND mutation_id=?",
+          input.epoch,
+          actor.user_id,
+          mutationId,
+        )
+        .toArray()[0];
+      if (receipt)
+        return receipt.hash === hash
+          ? { status: 200 as const, epoch: input.epoch, seq: receipt.seq }
+          : { status: 409 as const };
+      if (input.epoch !== this.state!.epoch || input.seq !== this.state!.seq)
+        return { status: 412 as const };
+      const candidate = new Y.Doc();
+      let accepted = false;
+      try {
+        Y.applyUpdate(candidate, Y.encodeStateAsUpdate(this.doc!));
+        adapter.edit(candidate, input.changes);
+        adapter.validate(candidate, this.resource!);
+        const full = Y.encodeStateAsUpdate(candidate);
+        if (full.length > MAX_STATE_BYTES) throw new CollaborationFault("state_too_large");
+        const update = Y.encodeStateAsUpdate(candidate, Y.encodeStateVector(this.doc!));
+        await this.schedule(2000);
+        if (!(await allowed())?.write) return { status: 403 as const };
+        const epoch = this.state!.epoch,
+          seq = this.state!.seq + 1;
+        this.ctx.storage.transactionSync(() => {
+          this.snapshot(actor.user_id, "manual");
+          this.ctx.storage.sql.exec(
+            "UPDATE room_state SET seq=?,snapshot_seq=?,state=? WHERE id=1",
+            seq,
+            seq,
+            full,
+          );
+          this.ctx.storage.sql.exec("DELETE FROM room_updates");
+          this.ctx.storage.sql.exec(
+            "INSERT INTO room_receipts(epoch,user_id,mutation_id,hash,seq) VALUES(?,?,?,?,?)",
+            epoch,
+            actor.user_id,
+            mutationId,
+            hash,
+            seq,
+          );
+          this.ctx.storage.sql.exec(
+            "DELETE FROM room_receipts WHERE epoch<>? OR seq<?",
+            epoch,
+            seq - 1000,
+          );
+        });
+        await this.ctx.storage.sync();
+        this.doc!.destroy();
+        this.doc = candidate;
+        accepted = true;
+        this.state!.seq = seq;
+        this.state!.snapshot_seq = seq;
+        await this.broadcast({ type: "update", epoch, seq, update: encodeBytes(update) });
+        // Projection also runs from the durable alarm if the index update fails.
+        await adapter
+          .project(this.env, this.resource!, { state: candidate, epoch, seq })
+          .catch(() => {});
+        return { status: 200 as const, epoch, seq };
+      } catch (error) {
+        this.doc?.destroy();
+        this.doc = undefined;
+        this.state = undefined;
+        throw error;
+      } finally {
+        if (!accepted) candidate.destroy();
+      }
+    });
+  }
   async inspect(
     resourceId: string,
     actor: CollaborationActor,
