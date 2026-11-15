@@ -192,7 +192,10 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
   const projection =
     view === "search"
       ? wiki.pages
-          .map((page) => `${page.id}:${page.projected_epoch}:${page.projected_seq}:${page.role}`)
+          .map(
+            (page) =>
+              `${page.id}:${page.projected_epoch}:${page.projected_seq}:${page.role}:${page.title}`,
+          )
           .join("|")
       : "";
   useEffect(() => {
@@ -202,7 +205,15 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
     setBusy(false);
     setLoading(true);
     setError("");
-    setPages([]);
+    const local =
+      view === "search"
+        ? wiki.pages.filter(
+            (page) =>
+              page.role > 0 && page.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+          )
+        : [];
+    if (view === "search") setPages((previous) => (previous.length ? previous : local));
+    else setPages([]);
     setCursor(null);
     void api<{ pages: Page[]; next_cursor: string | null }>(
       `/api/wiki/spaces/${wiki.space.id}/pages?${filter}`,
@@ -210,7 +221,11 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
     )
       .then((result) => {
         if (!abort.signal.aborted) {
-          setPages(result.pages);
+          setPages(
+            view === "search"
+              ? [...new Map([...result.pages, ...local].map((page) => [page.id, page])).values()]
+              : result.pages,
+          );
           setCursor(result.next_cursor);
         }
       })
@@ -232,7 +247,9 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
         { signal: controller.signal },
       );
       if (controller.signal.aborted) return;
-      setPages((previous) => [...previous, ...result.pages]);
+      setPages((previous) => [
+        ...new Map([...previous, ...result.pages].map((page) => [page.id, page])).values(),
+      ]);
       setCursor(result.next_cursor);
     } catch (failure) {
       if (!controller.signal.aborted) setError(errorMessage(failure));
@@ -256,7 +273,10 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
     }
   };
   return (
-    <section className="wiki-settings">
+    <section
+      className={`wiki-settings${view === "search" ? " wiki-search-page" : ""}`}
+      aria-busy={loading}
+    >
       <h1>
         {t(
           view === "search"

@@ -2,12 +2,11 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage } from "../../shared/wiki";
-import { errorMessage } from "../lib/api";
 import { formatDateTime } from "../lib/regional";
 import { useWiki } from "./wiki-context";
 import { WikiSpaceDialog } from "./wiki-controls";
 import { WorkspaceIconButton } from "./workspace-controls";
-import { Button, Icon, useNotifications } from "./ui";
+import { Button, Icon } from "./ui";
 
 export function WikiPageTable({
   pages,
@@ -72,14 +71,11 @@ export function WikiPageTable({
 }
 
 export function WikiHome() {
-  const notify = useNotifications();
   const wiki = useWiki(),
     [dialog, setDialog] = useState<"create" | "settings" | null>(null);
   const pages = wiki.pages
     .filter((page) => page.role > 0)
     .sort((a, b) => b.updated_at - a.updated_at || a.id.localeCompare(b.id));
-  const newPage = () =>
-    void wiki.createPage().catch((failure) => notify.error(errorMessage(failure)));
   return (
     <div className="wiki-home">
       <header className="wiki-home-heading">
@@ -97,17 +93,12 @@ export function WikiHome() {
               onClick={() => setDialog("settings")}
             />
           )}
-          {wiki.space && wiki.space.role >= 3 && wiki.can("pages.create") ? (
-            <Button disabled={wiki.creatingPage} onClick={newPage}>
-              <Icon name="plus" />
-              {t("wiki.newPage")}
-            </Button>
-          ) : !wiki.space && wiki.can("spaces.create") ? (
+          {!wiki.space && wiki.can("spaces.create") && (
             <Button variant="primary" onClick={() => setDialog("create")}>
               <Icon name="plus" />
               {t("wiki.newSpace")}
             </Button>
-          ) : null}
+          )}
         </div>
       </header>
       {wiki.error && (

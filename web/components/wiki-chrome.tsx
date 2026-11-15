@@ -7,7 +7,7 @@ import { api, errorMessage } from "../lib/api";
 import { useWiki } from "./wiki-context";
 import { WikiSpaceDialog } from "./wiki-controls";
 import { Button, Icon, Menu, MenuPopup, useNotifications } from "./ui";
-import { WorkspaceIconButton } from "./workspace-controls";
+import { WorkspaceCreateButton, WorkspaceIconButton } from "./workspace-controls";
 import { WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { useWorkspaceMobile } from "../lib/workspace-responsive";
 import { WikiSearch } from "./wiki-search";
@@ -297,6 +297,15 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
     );
   return (
     <div className="wiki-sidebar">
+      <div className="workspace-create-action">
+        <WorkspaceCreateButton
+          label={t("wiki.newPage")}
+          disabled={
+            !wiki.space || wiki.space.role < 3 || !wiki.can("pages.create") || wiki.creatingPage
+          }
+          onClick={() => newPage()}
+        />
+      </div>
       <Menu.Root>
         <Menu.Trigger
           render={
@@ -344,19 +353,6 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
       {wiki.space ? (
         <>
           <nav className="workspace-nav wiki-quick-nav" aria-label={t("wiki.spaceNavigation")}>
-            <Button
-              variant="ghost"
-              className="wiki-sidebar-search"
-              aria-label={t("wiki.search")}
-              onClick={() => {
-                onNavigate?.();
-                wiki.setSearchOpen(true);
-              }}
-            >
-              <Icon name="search" />
-              <span>{t("wiki.search")}</span>
-              <kbd aria-hidden="true">{t("wiki.searchShortcut")}</kbd>
-            </Button>
             <Link
               to={`/wiki/${wiki.space.id}`}
               onClick={onNavigate}
@@ -399,21 +395,6 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
               <span>
                 {t(wiki.space.kind === "personal" ? "wiki.privatePages" : "wiki.teamSpace")}
               </span>
-              {wiki.space.role >= 3 && wiki.can("pages.create") && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={wiki.creatingPage}
-                  aria-label={t("wiki.newPage")}
-                  title={t("wiki.newPage")}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    newPage();
-                  }}
-                >
-                  <Icon name="plus" />
-                </Button>
-              )}
             </summary>
             <nav className="wiki-tree" aria-label={t("wiki.allPages")} aria-busy={wiki.loading}>
               {children.size ? (
@@ -484,32 +465,6 @@ export function WikiTopbar({
     notify = useNotifications();
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [location.pathname]);
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && ["k", "p"].includes(event.key.toLowerCase())) {
-        if (
-          event.key.toLowerCase() === "k" &&
-          (event.target as HTMLElement).closest('[contenteditable="true"]') &&
-          !window.getSelection()?.isCollapsed
-        )
-          return;
-        event.preventDefault();
-        wiki.setSearchOpen(true);
-      }
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, [wiki.setSearchOpen]);
-  const create = (
-    <WorkspaceIconButton
-      icon="plus"
-      label={t("wiki.newPage")}
-      disabled={
-        !wiki.space || wiki.space.role < 3 || !wiki.can("pages.create") || wiki.creatingPage
-      }
-      onClick={() => void wiki.createPage().catch((error) => notify.error(errorMessage(error)))}
-    />
-  );
   return (
     <>
       <header className="workspace-topbar wiki-topbar">
@@ -520,23 +475,19 @@ export function WikiTopbar({
           aria-haspopup={mobile ? "dialog" : undefined}
           onClick={() => (mobile ? setMenu(true) : onToggleSidebar())}
         />
-        <div id="wiki-topbar-content" className="wiki-topbar-content">
-          {!wiki.pageId && (
-            <>
-              <span className="wiki-topbar-space">{wiki.space?.name || t("wiki.title")}</span>
-              <div className="wiki-topbar-end">
-                <WorkspaceIconButton
-                  icon="search"
-                  label={t("wiki.search")}
-                  onClick={() => wiki.setSearchOpen(true)}
-                />
-                {create}
-              </div>
-            </>
-          )}
-        </div>
+        <WikiSearch />
       </header>
-      <WikiSearch />
+      {mobile && wiki.space && wiki.space.role >= 3 && wiki.can("pages.create") && (
+        <Button
+          className="wiki-create-page"
+          variant="primary"
+          disabled={wiki.creatingPage}
+          onClick={() => void wiki.createPage().catch((error) => notify.error(errorMessage(error)))}
+        >
+          <Icon name="plus" />
+          {t("wiki.newPage")}
+        </Button>
+      )}
       <WorkspaceNavigationDrawer
         open={menu}
         onOpenChange={setMenu}

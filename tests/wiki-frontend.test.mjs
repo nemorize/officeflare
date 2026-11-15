@@ -79,7 +79,7 @@ test(
     await tab.goto(`${origin}/wiki`);
     await tab.getByRole("heading", { name: "Personal space", exact: true }).waitFor();
     const personalHome = tab.url();
-    await tab.locator(".wiki-home").getByRole("button", { name: "New page", exact: true }).click();
+    await tab.getByRole("button", { name: "New page", exact: true }).click();
     await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("Private notes");
     await waitForWikiSave(f, tab);
     await tab.getByRole("button", { name: "Switch space" }).click();
@@ -101,11 +101,7 @@ test(
       (url) => url.href !== personalHome && /^\/wiki\/[^/]+$/.test(url.pathname),
     );
     const home = tab.url();
-    await tab
-      .locator(".wiki-home")
-      .getByRole("button", { name: "New page", exact: true })
-      .first()
-      .click();
+    await tab.getByRole("button", { name: "New page", exact: true }).click();
     await tab.locator('.collaborative-prose[contenteditable="true"]').waitFor();
     const documentUrl = tab.url();
     await tab.getByRole("textbox", { name: "Page title", exact: true }).fill("How we work");
@@ -260,34 +256,41 @@ test(
     await tab.locator(".wiki-quick-nav").getByRole("link", { name: "Overview" }).click();
     await tab.locator(".wiki-page-table").getByText("How we work", { exact: true }).waitFor();
     await tab.keyboard.press("ControlOrMeta+k");
-    await dialog.getByRole("searchbox").fill("How we work");
-    await dialog.getByRole("option", { name: /^How we work/ }).waitFor();
-    const searchBox = await dialog.boundingBox();
-    assert.ok(Math.abs(searchBox.x + searchBox.width / 2 - tab.viewportSize().width / 2) <= 1);
+    const search = tab.getByRole("searchbox", { name: "Search this space", exact: true });
+    assert.equal(await search.evaluate((el) => el === document.activeElement), true);
+    assert.equal(await dialog.count(), 0);
+    await search.fill("How we work");
+    assert.equal(tab.url(), home);
+    await search.press("Enter");
+    await tab.waitForURL((u) => u.searchParams.get("q") === "How we work");
+    await tab.getByRole("heading", { name: "Search results", exact: true }).waitFor();
+    const result = tab
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "How we work", exact: true });
+    await result.waitFor();
+    assert.equal(await dialog.count(), 0);
     assert.equal(
-      await tab.locator(".wiki-search-input").evaluate((el) => {
-        const style = getComputedStyle(el);
-        return (
-          style.borderTopStyle !== "none" &&
-          parseFloat(style.borderTopWidth) > 0 &&
-          style.borderTopColor !== "rgba(0, 0, 0, 0)"
-        );
-      }),
+      await tab
+        .locator(".wiki-search")
+        .evaluate((el) => getComputedStyle(el).borderTopColor !== "rgba(0, 0, 0, 0)"),
       true,
     );
     if (process.env.WIKI_UI_CAPTURE_DIR)
       await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/search.png` });
-    await dialog.getByRole("searchbox").press("Enter");
+    await result.click();
     await tab.waitForURL(documentUrl);
     await editor.waitFor();
-    await tab.keyboard.press("ControlOrMeta+k");
-    await dialog.getByRole("searchbox").fill("unmatched-search");
-    await dialog.getByText("No matching pages", { exact: true }).waitFor();
-    await dialog.getByRole("button", { name: "Clear search", exact: true }).click();
-    await dialog.getByRole("option", { name: /^How we work/ }).waitFor();
-    await tab.keyboard.press("Escape");
-    await dialog.waitFor({ state: "hidden" });
-    await tab.locator(".wiki-quick-nav").getByRole("link", { name: "Overview" }).click();
+    await tab.goBack();
+    await tab.getByRole("heading", { name: "Search results", exact: true }).waitFor();
+    assert.equal(await search.inputValue(), "How we work");
+    await tab.goForward();
+    await tab.waitForURL(documentUrl);
+    await editor.waitFor();
+    await search.fill("unmatched-search");
+    await search.press("Enter");
+    await tab.getByRole("heading", { name: "No matching pages", exact: true }).waitFor();
+    await tab.getByRole("button", { name: "Clear search", exact: true }).click();
+    await tab.waitForURL(home);
     await tab.locator(".wiki-home").waitFor();
     await tab.getByRole("button", { name: "Toggle wiki navigation", exact: true }).click();
     assert.equal(await tab.locator(".workspace-sidebar").isVisible(), false);
@@ -449,10 +452,22 @@ test(
         path: `${process.env.WIKI_UI_CAPTURE_DIR}/mobile.png`,
         fullPage: true,
       });
-    await tab.getByRole("button", { name: "Search this space", exact: true }).click();
-    await dialog.getByRole("searchbox").fill("How we work");
-    await dialog.getByRole("option", { name: /^How we work/ }).waitFor();
-    await dialog.getByRole("searchbox").press("Enter");
+    const floating = await tab.getByRole("button", { name: "New page", exact: true }).boundingBox();
+    assert.ok(Math.abs(floating.x + floating.width - 374) <= 1);
+    assert.ok(Math.abs(floating.y + floating.height - 828) <= 1);
+    assert.equal(
+      await tab
+        .locator(".wiki-topbar")
+        .getByRole("button", { name: "New page", exact: true })
+        .count(),
+      0,
+    );
+    await search.fill("How we work");
+    await search.press("Enter");
+    await tab
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "How we work", exact: true })
+      .click();
     await editor.waitFor();
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
     await checkControlSizes(
@@ -469,19 +484,14 @@ test(
     await editor.waitFor();
     await tab.locator(".workspace-navigation-drawer").waitFor({ state: "detached" });
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await tab.getByRole("button", { name: "Close navigation", exact: true }).click();
+    await search.fill("How we work");
+    await search.press("Enter");
     await tab
-      .getByRole("dialog")
-      .getByRole("button", { name: "Search this space", exact: true })
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "How we work", exact: true })
       .click();
-    await tab
-      .locator('[role="dialog"]:not([data-ui="toast-root"])')
-      .getByRole("searchbox")
-      .fill("How we work");
-    await tab
-      .locator('[role="dialog"]:not([data-ui="toast-root"])')
-      .getByRole("searchbox")
-      .press("Enter");
-    await tab.locator('[role="dialog"]:not([data-ui="toast-root"])').waitFor({ state: "hidden" });
+    await editor.waitFor();
     assert.equal(
       await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       true,
@@ -579,7 +589,7 @@ test(
       "PUT",
     );
     const page = (await call(`/wiki/spaces/${space.id}/pages`, {})).page;
-    for (let i = 0; i < 48; i++) {
+    for (let i = 0; i < 128; i++) {
       const id = crypto.randomUUID(),
         resource = crypto.randomUUID();
       await f.db
@@ -742,19 +752,29 @@ test(
     await tab.keyboard.press("ControlOrMeta+k");
     const search = tab.getByRole("searchbox");
     await search.waitFor();
-    await search.press("ArrowDown");
-    await search.press("ArrowDown");
-    const chosen = await tab.getByRole("option", { selected: true }).getAttribute("id");
+    await search.fill("Guide");
+    await search.press("Enter");
+    const searchRows = tab.locator(".wiki-search-page .wiki-page-table tbody tr");
+    await searchRows.nth(127).waitFor();
+    const more = tab.getByRole("button", { name: "Load more", exact: true });
+    await more.click();
+    await more.waitFor({ state: "hidden" });
+    assert.equal(await searchRows.count(), 128);
+    await search.fill("Nested");
+    await search.press("Enter");
+    await tab
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "Nested 8", exact: true })
+      .waitFor();
     const response = tab.waitForResponse((r) => r.url().includes(`/spaces/${space.id}/pages`));
     await tab.evaluate(() => window.dispatchEvent(new Event("focus")));
     await response;
-    await tab.waitForFunction(
-      () => document.querySelector(".wiki-search-results")?.getAttribute("aria-busy") === "false",
-    );
-    assert.equal(await tab.getByRole("option", { selected: true }).getAttribute("id"), chosen);
-    await search.fill("Nested 8");
-    await tab.getByRole("option", { name: /^Nested 8/ }).waitFor();
-    await search.press("Enter");
+    assert.equal(await search.inputValue(), "Nested");
+    assert.equal(await tab.locator('[role="dialog"]:not([data-ui="toast-root"])').count(), 0);
+    await tab
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "Nested 8", exact: true })
+      .click();
     await tab.waitForURL((u) => u.pathname.endsWith("/" + parent));
     await tab.setViewportSize({ width: 390, height: 844 });
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
@@ -766,10 +786,13 @@ test(
     await drawer.getByRole("button", { name: "Expand Audit document", exact: true }).waitFor();
     await checkSidebarAlignment(drawer);
     await capture("deep-audit-mobile");
-    await drawer.getByRole("button", { name: "Search this space", exact: true }).click();
-    await tab.getByRole("searchbox").fill("Nested 7");
-    await tab.getByRole("option", { name: /^Nested 7/ }).waitFor();
-    await tab.getByRole("searchbox").press("Enter");
+    await tab.getByRole("button", { name: "Close navigation", exact: true }).click();
+    await search.fill("Nested 7");
+    await search.press("Enter");
+    await tab
+      .locator(".wiki-search-page")
+      .getByRole("link", { name: "Nested 7", exact: true })
+      .click();
     await tab.waitForURL((u) => u.pathname.endsWith("/" + nestedIds[7]));
     await tab.getByRole("button", { name: "Open navigation", exact: true }).click();
     drawer = tab.locator(".workspace-navigation-drawer");
@@ -825,6 +848,23 @@ test(
     await tab.locator('button[type="submit"]').click();
     await tab.waitForURL((u) => u.pathname !== "/login");
     await tab.goto(`${origin}/drive`);
+    const headerShape = () =>
+      tab.locator(".workspace-topbar").evaluate((element) => {
+        const style = getComputedStyle(element),
+          field = element.querySelector('[data-ui="search-field"]'),
+          search = getComputedStyle(field);
+        return {
+          height: element.getBoundingClientRect().height,
+          padding: style.padding,
+          gap: style.gap,
+          searchHeight: field.getBoundingClientRect().height,
+          searchWidth: field.getBoundingClientRect().width,
+          searchPadding: search.padding,
+          searchRadius: search.borderRadius,
+          searchBackground: search.backgroundColor,
+        };
+      });
+    const driveHeader = await headerShape();
     await tab.getByRole("button", { name: "Actions for Shared handbook", exact: true }).click();
     await tab.getByRole("menuitem", { name: "Share", exact: true }).click();
     const dialog = tab.locator('[role="dialog"].workspace-dialog');
@@ -871,6 +911,13 @@ test(
     );
     await tab.goto(`${origin}/wiki/${space.id}/${page.id}`);
     await tab.locator('.collaborative-prose[contenteditable="true"]').waitFor();
+    assert.deepEqual(await headerShape(), driveHeader);
+    assert.equal(await tab.locator(".wiki-create-page").count(), 0);
+    const create = tab
+      .locator(".workspace-sidebar .workspace-create-action")
+      .getByRole("button", { name: "New page", exact: true });
+    await create.waitFor();
+    assert.equal(await create.getAttribute("data-variant"), "primary");
     await tab.getByRole("button", { name: "Share", exact: true }).click();
     await dialog.getByText("Current access: Owner", { exact: true }).waitFor();
     assert.deepEqual(await shape(), driveShape);

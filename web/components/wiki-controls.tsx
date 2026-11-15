@@ -1,6 +1,5 @@
 import { WorkspaceDialog } from "./workspace-dialog";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { t } from "../../shared/i18n/index.ts";
 import type { WikiPage, WikiSpace } from "../../shared/wiki";
@@ -224,10 +223,7 @@ export function WikiPageIcon({ page }: { page: WikiPage }) {
 }
 
 export function WikiPageHeader({ children }: { children: ReactNode }) {
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => setTarget(document.getElementById("wiki-topbar-content")), []);
-  const header = <div className="wiki-page-actions">{children}</div>;
-  return target ? createPortal(header, target) : header;
+  return <div className="wiki-page-actions">{children}</div>;
 }
 
 export function WikiSidePanel({
