@@ -968,3 +968,95 @@ test(
     await capture("common-wiki-share-mobile");
   },
 );
+
+test(
+  "Wiki waits show skeletons for documents, sharing, comments and history",
+  { timeout: 60000 },
+  async (t) => {
+    const f = await fixture(t, { assets: true, collaboration: true });
+    await f.db
+      .prepare("INSERT INTO user_roles(user_id,role_id) VALUES('alice','system-wiki-user')")
+      .run();
+    const call = async (path, data) => {
+      const response = await f.mf.dispatchFetch(`https://office.test/api/wiki${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${f.tokens.alice}`, "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      assert.ok(response.ok, await response.clone().text());
+      return response.json();
+    };
+    const { space } = await call("/spaces", { name: "Skeletons" }),
+      { page } = await call(`/spaces/${space.id}/pages`, {});
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const tab = await browser.newPage({ locale: "en-US" }),
+      origin = (await f.mf.ready).origin;
+    await tab.goto(origin + "/login");
+    await tab.locator("input[type=email]").fill("alice@office.test");
+    await tab
+      .locator("input[type=password]")
+      .fill("a long password for calendar integration tests");
+    await tab.locator("button[type=submit]").click();
+    await tab.waitForURL((u) => u.pathname != "/login");
+    const delayed = async (pattern, action, skeleton) => {
+      let release;
+      const barrier = new Promise((resolve) => (release = resolve));
+      const handler = async (route) => {
+        await barrier;
+        await route.continue();
+      };
+      await tab.route(pattern, handler);
+      try {
+        await action();
+        await skeleton.waitFor();
+        assert.equal(
+          await tab
+            .locator("p")
+            .filter({ hasText: /^(Loading|Connecting|Opening)[. …]*$/ })
+            .count(),
+          0,
+        );
+        assert.equal(await skeleton.getAttribute("role"), "status");
+        release();
+        await skeleton.waitFor({ state: "hidden" });
+      } finally {
+        release();
+        await tab.unroute(pattern, handler);
+      }
+    };
+    await delayed(
+      `**/api/wiki/spaces/${space.id}/pages`,
+      () => tab.goto(`${origin}/wiki/${space.id}/${page.id}`),
+      tab.locator(".workspace-main .loading-skeleton-reader"),
+    );
+    await tab.locator(".collaborative-prose[contenteditable=true]").waitFor();
+    await delayed(
+      `**/api/wiki/pages/${page.id}/grants`,
+      () => tab.getByRole("button", { name: "Share", exact: true }).click(),
+      tab.locator(".workspace-dialog .loading-skeleton-list"),
+    );
+    await tab
+      .locator(".wiki-share-dialog")
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await delayed(
+      `**/api/wiki/pages/${page.id}/comments`,
+      () => tab.getByRole("button", { name: "Comments", exact: true }).click(),
+      tab.locator(".wiki-side-panel .loading-skeleton-list"),
+    );
+    await tab
+      .getByRole("complementary", { name: "Comments" })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await tab
+      .locator(".wiki-page-action-buttons")
+      .getByRole("button", { name: "Page actions", exact: true })
+      .click();
+    await delayed(
+      `**/api/collaboration/resources/${page.resource_id}/snapshots`,
+      () => tab.getByRole("menuitem", { name: "Version history", exact: true }).click(),
+      tab.locator(".wiki-side-panel .loading-skeleton-list"),
+    );
+  },
+);

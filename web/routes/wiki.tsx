@@ -16,6 +16,7 @@ import {
 } from "../components/wiki-controls";
 import { WikiRevisionPreview } from "../components/wiki-revision-preview";
 import { WikiHome, WikiPageTable } from "../components/wiki-home";
+import { LoadingSkeleton } from "../components/loading-skeleton";
 import { formatDateTime } from "../lib/regional";
 import { WorkspaceConfirm, WorkspaceNotice } from "../components/workspace-dialog";
 import { WikiRenameDialog } from "../components/wiki-rename-dialog";
@@ -103,6 +104,13 @@ function Members() {
       setBusy(false);
     }
   };
+  if (!version && !error)
+    return (
+      <section className="wiki-settings">
+        <h1>{t("wiki.members")}</h1>
+        <LoadingSkeleton kind="list" rows={4} />
+      </section>
+    );
   return (
     <section className="wiki-settings">
       <h1>{t("wiki.members")}</h1>
@@ -320,11 +328,10 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
           }
         />
       )}
-      {loading ? (
-        <p className="wiki-muted" role="status">
-          {t("wiki.loading")}
-        </p>
+      {loading && !pages.length ? (
+        <LoadingSkeleton kind="list" rows={4} />
       ) : (
+        !loading &&
         !pages.length &&
         !error && (
           <div className="wiki-list-empty">
@@ -436,6 +443,18 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
       setBusy(false);
     }
   };
+  if (!version && !error)
+    return (
+      <WikiDialog
+        open
+        wide
+        busy={busy}
+        title={t("wiki.shareTitle", { title: page.title || t("wiki.untitled") })}
+        onClose={onClose}
+      >
+        <LoadingSkeleton kind="list" rows={3} />
+      </WikiDialog>
+    );
   return (
     <WikiDialog
       open
@@ -445,7 +464,6 @@ function Share({ page, onClose }: { page: Page; onClose: () => void }) {
       onClose={onClose}
       className="wiki-share-dialog"
     >
-      {!version && !error && <p role="status">{t("wiki.loading")}</p>}
       <ul className="wiki-members">
         {members.map((member) => (
           <li key={member.user_id}>
@@ -545,6 +563,7 @@ function History({
     [restoring, setRestoring] = useState<string | null>(null),
     [selected, setSelected] = useState<string | null>(null),
     [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!selected) {
       setPreview(null);
@@ -573,10 +592,14 @@ function History({
     };
   }, [selected, page.resource_id, onPreview]);
   const load = useCallback(async () => {
-    const result = await api<{ revisions: typeof revisions }>(
-      `/api/collaboration/resources/${page.resource_id}/snapshots`,
-    );
-    setRevisions(result.revisions);
+    try {
+      const result = await api<{ revisions: typeof revisions }>(
+        `/api/collaboration/resources/${page.resource_id}/snapshots`,
+      );
+      setRevisions(result.revisions);
+    } finally {
+      setLoading(false);
+    }
   }, [page.resource_id]);
   useEffect(() => {
     void load().catch((e) => setError(errorMessage(e)));
@@ -608,12 +631,13 @@ function History({
       {wiki.can("pages.update") && (
         <Button
           className="wiki-checkpoint"
-          disabled={busy || !!client?.unsaved}
+          disabled={busy || loading || !!client?.unsaved}
           onClick={() => void change().catch((failure) => setError(errorMessage(failure)))}
         >
           {t("wiki.checkpoint")}
         </Button>
       )}
+      {loading && !error && <LoadingSkeleton kind="list" rows={3} />}
       <ul className="wiki-members">
         {revisions.map((revision) => (
           <li key={revision.id}>
@@ -639,11 +663,7 @@ function History({
           </li>
         ))}
       </ul>
-      {selected && !preview && !error && (
-        <p className="wiki-muted" role="status">
-          {t("wiki.loading")}
-        </p>
-      )}
+      {selected && !preview && !error && <LoadingSkeleton kind="reader" rows={2} />}
       {selected && preview && (
         <div className="wiki-history-mobile-preview">
           <Button variant="ghost" onClick={() => setSelected(null)}>
@@ -906,7 +926,7 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
   };
   return (
     <div className={`wiki-discussion ${comments ? "is-comments" : ""}`}>
-      {loading && <p role="status">{t("wiki.loading")}</p>}
+      {loading && <LoadingSkeleton kind="list" rows={3} />}
       {(error || loadError) && (
         <p role="alert" className="wiki-error">
           {error || loadError}
@@ -1336,10 +1356,12 @@ export function WikiPage() {
     view = params.get("view"),
     page = wiki.pages.find((p) => p.id === wiki.pageId);
   if (wiki.loading)
-    return (
-      <p className="wiki-empty" role="status">
-        {t("wiki.loading")}
-      </p>
+    return wiki.pageId ? (
+      <div className="wiki-document-width">
+        <LoadingSkeleton kind="reader" rows={3} />
+      </div>
+    ) : (
+      <LoadingSkeleton kind="page" rows={4} />
     );
   if (page?.role === 0)
     return (

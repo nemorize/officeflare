@@ -11,6 +11,7 @@ import { WorkspaceCreateButton, WorkspaceIconButton } from "./workspace-controls
 import { WorkspaceNavigationDrawer } from "./workspace-navigation";
 import { useWorkspaceMobile } from "../lib/workspace-responsive";
 import { WikiSearch } from "./wiki-search";
+import { LoadingSkeleton } from "./loading-skeleton";
 export { WikiDialog } from "./wiki-controls";
 
 export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -397,12 +398,12 @@ export function WikiSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </span>
             </summary>
             <nav className="wiki-tree" aria-label={t("wiki.allPages")} aria-busy={wiki.loading}>
-              {children.size ? (
+              {wiki.loading && !children.size ? (
+                <LoadingSkeleton kind="list" rows={3} />
+              ) : children.size ? (
                 tree(null)
               ) : (
-                <p className="wiki-sidebar-empty">
-                  {t(wiki.loading ? "wiki.loading" : "wiki.noPagesYet")}
-                </p>
+                <p className="wiki-sidebar-empty">{t("wiki.noPagesYet")}</p>
               )}
             </nav>
           </details>
