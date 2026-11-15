@@ -2,6 +2,26 @@ import { defineMessages } from "./resource.ts";
 
 // English source messages. Keep keys stable when editing copy.
 export const en = defineMessages({
+  "consoleCalendar.description":
+    "Manage calendar sharing policies and invitation email for the workspace.",
+  "consoleCalendar.sharing": "Sharing policies",
+  "consoleCalendar.internalSharing": "Allow calendar sharing within the workspace",
+  "consoleCalendar.externalSharing": "Allow external calendar sharing",
+  "consoleCalendar.passwordRequired": "Require a password for public links",
+  "consoleCalendar.maxLinkDays": "Maximum public link validity (days)",
+  "consoleCalendar.sender": "Invitation email",
+  "consoleCalendar.senderHint":
+    "Choose an enabled sending address for system invitation and registration emails.",
+  "consoleCalendar.senderAddress": "Sending address",
+  "consoleCalendar.noSender": "Not configured",
+  "consoleCalendar.unavailableSender": "Current sending address is unavailable",
+  "consoleCalendar.saved": "Calendar settings saved.",
+  "consoleServiceRoles.wikiHint":
+    "Manage roles that grant wiki access, editing, and sharing. Individual space and page access is managed in the wiki.",
+  "consoleServiceRoles.contactsHint":
+    "Manage roles that grant address book access and permission to edit contacts, folders, and custom fields.",
+  "consoleServiceRoles.accessRoles": "Service access roles",
+  "consoleServiceRoles.noRoles": "No roles grant access to this service.",
   "aiui.protocolName.responses": "OpenAI Responses",
   "aiui.protocolName.chat": "OpenAI Chat Completions",
   "aiui.protocolName.anthropic": "Anthropic Messages",

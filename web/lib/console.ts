@@ -77,10 +77,28 @@ export const consoleSections: (WorkspaceNavigationItem & { permissions: string[]
     permissions: mailConsolePermissions,
   },
   {
+    path: "/console/calendar",
+    name: t("libWorkspaceNavigation.calendar"),
+    icon: "calendar",
+    permissions: ["admin.calendar.settings.read"],
+  },
+  {
     path: "/console/drive",
     name: t("libConsole.drive"),
     icon: "drive",
     permissions: driveAdminPermissions,
+  },
+  {
+    path: "/console/contacts",
+    name: t("contacts.title"),
+    icon: "users",
+    permissions: ["admin.roles.read"],
+  },
+  {
+    path: "/console/wiki",
+    name: t("wiki.title"),
+    icon: "book",
+    permissions: ["admin.roles.read"],
   },
   {
     path: "/console/notifications",
@@ -212,6 +230,13 @@ export interface Role {
   updated_at: number;
   assigned_user_count?: number;
 }
+export type ConsoleRoleService = "contacts" | "wiki";
+export const servicePermissions = (permissions: readonly string[], service: ConsoleRoleService) =>
+  permissions
+    .filter(isPermission)
+    .filter((key) => key.startsWith(`${service}.`) || key.startsWith(`admin.${service}.`));
+export const serviceRoles = (roles: readonly Role[], service: ConsoleRoleService) =>
+  roles.filter((role) => servicePermissions(role.permissions, service).length > 0);
 export interface Page<T> {
   items: T[];
   next_cursor: string | null;

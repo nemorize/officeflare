@@ -3,6 +3,25 @@ import { defineTranslations } from "./resource.ts";
 
 // Keep every source key and named parameter; do not fall back to English.
 export const ko = defineTranslations(en, {
+  "consoleCalendar.description": "워크스페이스의 캘린더 공유 정책과 초대 이메일을 관리합니다.",
+  "consoleCalendar.sharing": "공유 정책",
+  "consoleCalendar.internalSharing": "워크스페이스 내부 캘린더 공유 허용",
+  "consoleCalendar.externalSharing": "캘린더 외부 공유 허용",
+  "consoleCalendar.passwordRequired": "공개 링크 비밀번호 필수",
+  "consoleCalendar.maxLinkDays": "공개 링크 최대 유효 기간(일)",
+  "consoleCalendar.sender": "초대 이메일",
+  "consoleCalendar.senderHint":
+    "시스템 초대·등록 이메일에 사용할 발신 가능한 메일 주소를 선택하세요.",
+  "consoleCalendar.senderAddress": "발신 주소",
+  "consoleCalendar.noSender": "설정 안 함",
+  "consoleCalendar.unavailableSender": "현재 발신 주소를 사용할 수 없음",
+  "consoleCalendar.saved": "캘린더 설정을 저장했습니다.",
+  "consoleServiceRoles.wikiHint":
+    "위키 접근·편집·공유 권한을 부여하는 역할을 관리합니다. 개별 공간과 페이지 접근 권한은 위키에서 관리합니다.",
+  "consoleServiceRoles.contactsHint":
+    "주소록 접근과 연락처·폴더·사용자 정의 필드 편집 권한을 부여하는 역할을 관리합니다.",
+  "consoleServiceRoles.accessRoles": "기능 접근 역할",
+  "consoleServiceRoles.noRoles": "이 기능의 접근 권한을 부여하는 역할이 없습니다.",
   "aiui.protocolName.responses": "OpenAI Responses",
   "aiui.protocolName.chat": "OpenAI Chat Completions",
   "aiui.protocolName.anthropic": "Anthropic Messages",

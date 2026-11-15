@@ -79,7 +79,16 @@ adminSettings.post("/admin/invitation-deliveries/:deliveryId/resolve", async (c)
   wakeCalendar(c);
   return c.json({ status: decision === "retry" ? "queued" : decision });
 });
-adminSettings.get("/admin/settings", async (c) => c.json({ settings: await settings(c) }));
+adminSettings.get("/admin/settings", async (c) => {
+  const [config, sendingAddresses] = await Promise.all([
+    settings(c),
+    rows<{ id: string; email_address: string }>(
+      c.env,
+      "SELECT a.id,a.local_part||'@'||d.name AS email_address FROM mail_addresses a JOIN mail_domains d ON d.id=a.domain_id WHERE a.send_enabled=1 AND d.outbound_enabled=1 AND json_type(d.provider_settings_json,'$.outbound')='object' ORDER BY d.name,a.local_part,a.id",
+    ),
+  ]);
+  return c.json({ settings: config, sending_addresses: sendingAddresses });
+});
 adminSettings.patch("/admin/settings", async (c) => {
   const data = await body(c, [
       "version",

@@ -51,6 +51,14 @@ const NotificationConsolePage = lazy(() =>
     default: module.NotificationConsolePage,
   })),
 );
+const CalendarConsolePage = lazy(() =>
+  import("./routes/console-calendar").then((module) => ({ default: module.CalendarConsolePage })),
+);
+const ServiceRolesConsolePage = lazy(() =>
+  import("./routes/console-service-roles").then((module) => ({
+    default: module.ServiceRolesConsolePage,
+  })),
+);
 const UsersPage = lazy(() =>
   import("./routes/console-users").then((module) => ({ default: module.UsersPage })),
 );
@@ -395,6 +403,25 @@ const router = createBrowserRouter(
         <Route path="/profile/notifications" element={<NotificationSettingsPage />} />
         <Route path="/console" element={<ConsoleGate />}>
           <Route index element={<ConsoleHome />} />
+          <Route
+            path="calendar"
+            element={
+              <ConsoleGate permissions={["admin.calendar.settings.read"]}>
+                <CalendarConsolePage />
+              </ConsoleGate>
+            }
+          />
+          {(["contacts", "wiki"] as const).map((service) => (
+            <Route
+              key={service}
+              path={service}
+              element={
+                <ConsoleGate permissions={["admin.roles.read"]}>
+                  <ServiceRolesConsolePage key={service} service={service} />
+                </ConsoleGate>
+              }
+            />
+          ))}
           <Route
             path="ai/:page?"
             element={

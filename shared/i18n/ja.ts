@@ -3,6 +3,25 @@ import { defineTranslations } from "./resource.ts";
 
 // Keep every source key and named parameter; do not fall back to English.
 export const ja = defineTranslations(en, {
+  "consoleCalendar.description": "ワークスペースのカレンダー共有ポリシーと招待メールを管理します。",
+  "consoleCalendar.sharing": "共有ポリシー",
+  "consoleCalendar.internalSharing": "ワークスペース内のカレンダー共有を許可",
+  "consoleCalendar.externalSharing": "カレンダーの外部共有を許可",
+  "consoleCalendar.passwordRequired": "公開リンクにパスワードを必須にする",
+  "consoleCalendar.maxLinkDays": "公開リンクの最大有効期間（日）",
+  "consoleCalendar.sender": "招待メール",
+  "consoleCalendar.senderHint":
+    "システムの招待・登録メールに使用する、送信可能なメールアドレスを選択してください。",
+  "consoleCalendar.senderAddress": "送信元アドレス",
+  "consoleCalendar.noSender": "未設定",
+  "consoleCalendar.unavailableSender": "現在の送信元アドレスは利用できません",
+  "consoleCalendar.saved": "カレンダー設定を保存しました。",
+  "consoleServiceRoles.wikiHint":
+    "Wikiへのアクセス・編集・共有権限を付与するロールを管理します。各スペースとページへのアクセス権限はWikiで管理します。",
+  "consoleServiceRoles.contactsHint":
+    "アドレス帳へのアクセスと、連絡先・フォルダー・カスタムフィールドの編集権限を付与するロールを管理します。",
+  "consoleServiceRoles.accessRoles": "機能へのアクセスロール",
+  "consoleServiceRoles.noRoles": "この機能へのアクセス権限を付与するロールはありません。",
   "aiui.protocolName.responses": "OpenAI Responses",
   "aiui.protocolName.chat": "OpenAI Chat Completions",
   "aiui.protocolName.anthropic": "Anthropic Messages",
