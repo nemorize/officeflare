@@ -96,7 +96,7 @@ export function EditorBlockActions({ editor }: { editor: Editor }) {
           <Icon name="grip" />
         </Menu.Trigger>
         <MenuPopup className="wiki-block-actions">
-          {node()?.type.name !== "table" && (
+          {!["table", "fileAttachment"].includes(node()?.type.name ?? "") && (
             <Menu.Group>
               <Menu.GroupLabel>{t("wiki.turnInto")}</Menu.GroupLabel>
               <Menu.Item onClick={() => select().setParagraph().run()}>

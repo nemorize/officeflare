@@ -937,6 +937,7 @@ wiki.get("/pages/:id/assets/:assetId", async (c) => {
   if (!asset) fail(404, "wiki.notFound");
   const object = await c.env.WIKI_BUCKET.get(asset.object_key);
   if (!object) fail(404, "wiki.notFound");
+  await getPage(c, page.id);
   return new Response(object.body, {
     headers: {
       "Content-Type": "application/octet-stream",

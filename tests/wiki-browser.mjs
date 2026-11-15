@@ -7,7 +7,9 @@ export async function waitForWikiSave(fixture, tab) {
   const pageId = new URL(tab.url()).pathname.split("/").at(-1);
   const expected = await tab.locator(".collaborative-document").evaluate((element) => {
     const content = element.querySelector(".collaborative-prose").cloneNode(true);
-    content.querySelectorAll(".collaboration-carets__caret").forEach((node) => node.remove());
+    content
+      .querySelectorAll(".collaboration-carets__caret, [data-file-size]")
+      .forEach((node) => node.remove());
     return (element.querySelector(".wiki-title").value + content.textContent).replace(/\s+/g, "");
   });
   let actual;

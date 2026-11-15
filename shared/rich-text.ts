@@ -3,7 +3,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import * as Y from "yjs";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
-export const richTextSchema = getSchema([StarterKit.configure({ undoRedo: false }), TableKit]);
+import { FileBlock, validFileReference } from "./file-block";
+export const richTextSchema = getSchema([
+  StarterKit.configure({ undoRedo: false }),
+  TableKit,
+  FileBlock,
+]);
 export function initialRichText() {
   const doc = prosemirrorJSONToYDoc(
     richTextSchema,
@@ -18,7 +23,13 @@ export function richTextValue(doc: Y.Doc) {
   const json = yDocToProsemirrorJSON(doc, "content");
   const node = richTextSchema.nodeFromJSON(json);
   node.check();
-  return { title, json, text: node.textBetween(0, node.content.size, "\n") };
+  return {
+    title,
+    json,
+    text: node.textBetween(0, node.content.size, "\n", (leaf) =>
+      leaf.type.name === "fileAttachment" ? leaf.attrs.name : "",
+    ),
+  };
 }
 export function validateRichText(doc: Y.Doc) {
   for (const key of doc.share.keys())
@@ -31,6 +42,11 @@ export function validateRichText(doc: Y.Doc) {
     throw new Error("state_too_large");
   const walk = (node: Record<string, unknown>, depth = 0) => {
     if (depth > 32) throw new Error("invalid_schema");
+    if (
+      node.type === "fileAttachment" &&
+      (!node.attrs || !validFileReference(node.attrs as Record<string, unknown>))
+    )
+      throw new Error("invalid_file_reference");
     if (Array.isArray(node.marks))
       for (const mark of node.marks) {
         if (mark?.type === "link" && !/^(https?:\/\/|mailto:)/i.test(mark.attrs?.href ?? ""))

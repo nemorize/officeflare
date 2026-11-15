@@ -209,19 +209,29 @@ test(
         .evaluate((el) => getComputedStyle(el).backgroundColor),
     );
     await checkControlSizes(tab.locator(".wiki-page-action-buttons > [data-ui-button]"));
+    let fileChoices = 0;
+    tab.on("filechooser", () => fileChoices++);
+    assert.equal(await tab.locator(".wiki-assets").count(), 0);
+    await editor.locator("p").filter({ hasText: "Write decisions down." }).first().click();
+    await tab.keyboard.press("End");
+    await tab.keyboard.press("Enter");
+    await tab.keyboard.insertText("/file");
+    await tab.getByRole("option", { name: "File", exact: true }).click();
+    const fileDialog = tab.getByRole("dialog", { name: "Attach file", exact: true });
+    await fileDialog.waitFor();
+    assert.equal(fileChoices, 0);
     const [chooser] = await Promise.all([
       tab.waitForEvent("filechooser"),
-      tab.getByRole("button", { name: "Attach file", exact: true }).press("Enter"),
+      fileDialog.getByRole("button", { name: "Choose a file", exact: true }).click(),
     ]);
     await chooser.setFiles({
       name: "guidelines.txt",
       mimeType: "text/plain",
       buffer: Buffer.from("Team editing guidelines"),
     });
-    await tab
-      .locator(".wiki-assets")
-      .getByRole("button", { name: /guidelines.txt/ })
-      .waitFor();
+    await fileDialog.waitFor({ state: "hidden" });
+    await editor.getByRole("button", { name: /guidelines.txt/ }).waitFor();
+    await waitForWikiSave(f, tab);
     await tab.getByRole("button", { name: "Share", exact: true }).click();
     await dialog.getByRole("button", { name: "Save", exact: true }).waitFor();
     await tab.waitForFunction(
@@ -500,7 +510,7 @@ test(
     await editor.click();
     await tab.locator(".wiki-mobile-formatting").waitFor();
     await checkControlSizes(tab.locator(".wiki-mobile-formatting [data-ui-button]"));
-    await checkControlSizes(tab.locator(".wiki-section-heading [data-ui-button]"));
+    await checkControlSizes(tab.locator(".editor-file-card"));
     assert.equal(
       await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       true,
@@ -1058,5 +1068,159 @@ test(
       () => tab.getByRole("menuitem", { name: "Version history", exact: true }).click(),
       tab.locator(".wiki-side-panel .loading-skeleton-list"),
     );
+  },
+);
+
+test(
+  "Wiki file blocks choose uploads or Drive without opening a native dialog first",
+  { timeout: 90000 },
+  async (t) => {
+    const f = await fixture(t, { assets: true, collaboration: true });
+    for (const user of ["alice", "bob"])
+      for (const role of ["system-wiki-user", "system-drive-user"])
+        await f.db
+          .prepare("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)")
+          .bind(user, role)
+          .run();
+    const call = async (path, data, method = "POST", actor = "alice") => {
+      const binary = data instanceof Uint8Array;
+      const response = await f.mf.dispatchFetch("https://office.test/api" + path, {
+        method,
+        headers: {
+          Authorization: `Bearer ${f.tokens[actor]}`,
+          "Content-Type": binary ? "application/octet-stream" : "application/json",
+        },
+        body: data === undefined ? undefined : binary ? data : JSON.stringify(data),
+      });
+      assert.ok(response.ok, await response.clone().text());
+      return response.status === 204 ? null : response.json();
+    };
+    const { space } = await call("/wiki/spaces", { name: "File blocks" }),
+      { page } = await call(`/wiki/spaces/${space.id}/pages`, {});
+    await call(
+      `/wiki/spaces/${space.id}/members`,
+      { email: "bob@office.test", role: "viewer", version: space.acl_version },
+      "PUT",
+    );
+    const { item: folder } = await call("/drive/folders", { name: "Documents" });
+    const bytes = Buffer.from("Drive file contents"),
+      { upload } = await call("/drive/uploads", {
+        name: "from-drive.txt",
+        parent_id: folder.id,
+        size: bytes.length,
+        content_type: "text/plain",
+      });
+    await call(`/drive/uploads/${upload.id}/content`, bytes, "PUT");
+    const { item } = await call(`/drive/uploads/${upload.id}/complete`, {});
+    await call(
+      `/wiki/pages/${page.id}/assets?filename=legacy.txt`,
+      Buffer.from("Legacy attachment"),
+    );
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const origin = (await f.mf.ready).origin,
+      url = `${origin}/wiki/${space.id}/${page.id}`;
+    const login = async (user) => {
+      const context = await browser.newContext({ locale: "en-US" }),
+        tab = await context.newPage();
+      await tab.goto(origin + "/login");
+      await tab.locator("input[type=email]").fill(user + "@office.test");
+      await tab
+        .locator("input[type=password]")
+        .fill("a long password for calendar integration tests");
+      await tab.locator("button[type=submit]").click();
+      await tab.waitForURL((u) => u.pathname != "/login");
+      await tab.goto(url);
+      await tab.locator(".collaborative-prose").waitFor();
+      return tab;
+    };
+    const tab = await login("alice"),
+      editor = tab.locator(".collaborative-prose");
+    const errors = [];
+    tab.on("pageerror", (error) => errors.push(error.message));
+    let nativeChoices = 0;
+    tab.on("filechooser", () => nativeChoices++);
+    const popup = tab.getByRole("dialog", { name: "Attach file", exact: true });
+    const insert = async () => {
+      await editor.press("ControlOrMeta+End");
+      await tab.keyboard.insertText("/file");
+      await tab.getByRole("option", { name: "File", exact: true }).click();
+      await popup.waitFor();
+    };
+    assert.equal(await tab.locator(".wiki-assets").count(), 0);
+    await editor.fill("/file");
+    await tab.getByRole("option", { name: "File", exact: true }).click();
+    await popup.waitFor();
+    assert.equal(nativeChoices, 0);
+    await popup.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal((await editor.textContent()).trim(), "/file");
+    await editor.fill("");
+    await insert();
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/file-source-popup.png` });
+    const uploadPath = `**/api/wiki/pages/${page.id}/assets?filename=uploaded.txt`;
+    await tab.route(uploadPath, (route) =>
+      route.fulfill({ status: 503, contentType: "application/json", body: "{}" }),
+    );
+    const choose = async () => {
+      const [chooser] = await Promise.all([
+        tab.waitForEvent("filechooser"),
+        popup.getByRole("button", { name: "Choose a file", exact: true }).click(),
+      ]);
+      await chooser.setFiles({
+        name: "uploaded.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("Uploaded block bytes"),
+      });
+    };
+    await choose();
+    await popup.getByRole("alert").waitFor();
+    assert.equal(await editor.locator(".editor-file-block").count(), 0);
+    await tab.unroute(uploadPath);
+    await choose();
+    await popup.waitFor({ state: "hidden" });
+    await editor.getByRole("button", { name: /uploaded.txt/ }).waitFor();
+    await waitForWikiSave(f, tab);
+    const [download] = await Promise.all([
+      tab.waitForEvent("download"),
+      editor.getByRole("button", { name: /uploaded.txt/ }).click(),
+    ]);
+    const chunks = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), "Uploaded block bytes");
+    await insert();
+    const beforeDrive = nativeChoices;
+    await popup.getByRole("tab", { name: "Drive", exact: true }).click();
+    await popup.getByRole("button", { name: "Documents", exact: true }).click();
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/file-drive-picker.png` });
+    await popup.getByRole("button", { name: /from-drive.txt/ }).click();
+    await popup.waitFor({ state: "hidden" });
+    assert.equal(nativeChoices, beforeDrive);
+    await editor.getByRole("button", { name: /from-drive.txt/ }).waitFor();
+    await waitForWikiSave(f, tab);
+    await tab.reload();
+    await editor.getByRole("button", { name: /uploaded.txt/ }).waitFor();
+    await editor.getByRole("button", { name: /from-drive.txt/ }).waitFor();
+    assert.equal(await editor.locator(".editor-file-block").count(), 2);
+    if (process.env.WIKI_UI_CAPTURE_DIR)
+      await tab.screenshot({ path: `${process.env.WIKI_UI_CAPTURE_DIR}/file-blocks.png` });
+    await tab
+      .locator(".wiki-page-action-buttons")
+      .getByRole("button", { name: "Page actions", exact: true })
+      .click();
+    await tab.getByRole("menuitem", { name: "Attachments", exact: true }).click();
+    const legacy = tab.getByRole("dialog", { name: "Attachments", exact: true });
+    await legacy.getByRole("button", { name: /legacy.txt/ }).waitFor();
+    await legacy.getByRole("button", { name: "Done", exact: true }).click();
+    const bob = await login("bob");
+    await bob.locator(".editor-file-card").filter({ hasText: "from-drive.txt" }).click();
+    await bob.locator(".app-notification").waitFor();
+    assert.equal(bob.url(), url);
+    const denied = await f.mf.dispatchFetch(`https://office.test/api/drive/items/${item.id}`, {
+      headers: { Authorization: `Bearer ${f.tokens.bob}` },
+    });
+    assert.equal(denied.status, 404);
+    assert.deepEqual(errors, []);
   },
 );

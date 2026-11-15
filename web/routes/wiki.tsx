@@ -1,3 +1,4 @@
+import { WikiFiles, useWikiFiles } from "../components/wiki-files";
 import { useSession } from "../lib/session";
 import { WikiPeople, WikiAvatar } from "../components/wiki-people";
 import { PersonPhotosProvider } from "../components/person-avatar";
@@ -51,7 +52,6 @@ type Member = {
   has_profile_image?: boolean;
   profile_image_version?: string | null;
 };
-type Asset = { id: string; filename: string; byte_size: number; content_type: string };
 const roleName = (role: string) =>
   role === "owner"
     ? t("wiki.owner")
@@ -790,16 +790,14 @@ function Move({ page, onClose }: { page: Page; onClose: () => void }) {
     </WikiDialog>
   );
 }
-function Discussion({ page, comments = false }: { page: Page; comments?: boolean }) {
+function Discussion({ page }: { page: Page }) {
   const account = useAccount();
   const sessionId = useSession().session?.tokens.session_id;
   const draftKey = `officeflare.wiki.draft.${sessionId}.${page.id}`;
   const pending = useRef(false),
     request = useRef<AbortController | null>(null);
-  const uploadInput = useRef<HTMLInputElement>(null);
   const wiki = useWiki(),
     [entries, setComments] = useState<WikiComment[]>([]),
-    [assets, setAssets] = useState<Asset[]>([]),
     [draft, setDraft] = useState(() => {
       try {
         return sessionStorage.getItem(draftKey) ?? "";
@@ -816,29 +814,22 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
     const controller = new AbortController();
     request.current = controller;
     try {
-      if (comments) {
-        let cursor: string | null = null;
-        const all: WikiComment[] = [];
-        do {
-          const data: { comments: WikiComment[]; next_cursor: string | null } = await api(
-            `/api/wiki/pages/${page.id}/comments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
-            { signal: controller.signal },
-          );
-          all.unshift(...data.comments);
-          cursor = data.next_cursor;
-        } while (cursor && !controller.signal.aborted);
-        if (!controller.signal.aborted) setComments(all);
-      } else {
-        const data = await api<{ assets: Asset[] }>(`/api/wiki/pages/${page.id}/assets`, {
-          signal: controller.signal,
-        });
-        if (!controller.signal.aborted) setAssets(data.assets);
-      }
+      let cursor: string | null = null;
+      const all: WikiComment[] = [];
+      do {
+        const data: { comments: WikiComment[]; next_cursor: string | null } = await api(
+          `/api/wiki/pages/${page.id}/comments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+          { signal: controller.signal },
+        );
+        all.unshift(...data.comments);
+        cursor = data.next_cursor;
+      } while (cursor && !controller.signal.aborted);
+      if (!controller.signal.aborted) setComments(all);
       if (!controller.signal.aborted) setLoadError("");
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [page.id, comments]);
+  }, [page.id]);
   useEffect(() => {
     const run = () => {
       if (!pending.current)
@@ -872,40 +863,6 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
       setBusy(false);
     }
   };
-  const attach = async (file: File) => {
-    if (pending.current) return;
-    pending.current = true;
-    setError("");
-    setBusy(true);
-    try {
-      await api(`/api/wiki/pages/${page.id}/assets?filename=${encodeURIComponent(file.name)}`, {
-        method: "POST",
-        body: file,
-      });
-      await load();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
-  };
-  const download = async (asset: Asset) => {
-    setError("");
-    try {
-      const blob = await api<Blob>(`/api/wiki/pages/${page.id}/assets/${asset.id}`, {
-        response: "blob",
-      });
-      const url = URL.createObjectURL(blob),
-        a = document.createElement("a");
-      a.href = url;
-      a.download = asset.filename;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
   const resolve = async (comment: WikiComment) => {
     if (pending.current) return;
     pending.current = true;
@@ -925,116 +882,74 @@ function Discussion({ page, comments = false }: { page: Page; comments?: boolean
     }
   };
   return (
-    <div className={`wiki-discussion ${comments ? "is-comments" : ""}`}>
+    <div className="wiki-discussion is-comments">
       {loading && <LoadingSkeleton kind="list" rows={3} />}
       {(error || loadError) && (
         <p role="alert" className="wiki-error">
           {error || loadError}
         </p>
       )}
-      {!comments && (
-        <>
-          <div className="wiki-section-heading">
-            <h2>{t("wiki.attachments")}</h2>
-            {page.role >= 3 && wiki.can("assets.upload") && (
-              <>
-                <Button
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => uploadInput.current?.click()}
-                >
-                  <Icon name="attachment" />
-                  {t("wiki.attach")}
-                </Button>
-                <input
-                  ref={uploadInput}
-                  type="file"
-                  hidden
-                  disabled={busy}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void attach(file);
-                    event.target.value = "";
-                  }}
+      <>
+        <ul className="wiki-comments">
+          {entries.map((comment) => (
+            <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>
+              <div>
+                <WikiAvatar
+                  id={comment.author_user_id}
+                  name={comment.author_name}
+                  person={comment}
                 />
-              </>
-            )}
-          </div>
-          <ul className="wiki-assets">
-            {assets.map((asset) => (
-              <li key={asset.id}>
-                <Button variant="ghost" onClick={() => void download(asset)}>
-                  <Icon name="file" />
-                  {asset.filename}
-                  <small>{t("wiki.fileSize", { size: Math.ceil(asset.byte_size / 1024) })}</small>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {comments && (
-        <>
-          <ul className="wiki-comments">
-            {entries.map((comment) => (
-              <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>
-                <div>
-                  <WikiAvatar
-                    id={comment.author_user_id}
-                    name={comment.author_name}
-                    person={comment}
-                  />
-                  <strong>{comment.author_name}</strong>
-                  <time dateTime={new Date(comment.created_at * 1000).toISOString()}>
-                    {formatDateTime(comment.created_at)}
-                  </time>
-                </div>
-                <p>{comment.body}</p>
-                {(page.role >= 4 || comment.author_user_id === account.user?.id) &&
-                  wiki.can("comments.create") && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void resolve(comment)}
-                    >
-                      {t(comment.resolved_at ? "wiki.reopen" : "wiki.resolve")}
-                    </Button>
-                  )}
-              </li>
-            ))}
-          </ul>
-          {page.role >= 2 && wiki.can("comments.create") && (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void post();
+                <strong>{comment.author_name}</strong>
+                <time dateTime={new Date(comment.created_at * 1000).toISOString()}>
+                  {formatDateTime(comment.created_at)}
+                </time>
+              </div>
+              <p>{comment.body}</p>
+              {(page.role >= 4 || comment.author_user_id === account.user?.id) &&
+                wiki.can("comments.create") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void resolve(comment)}
+                  >
+                    {t(comment.resolved_at ? "wiki.reopen" : "wiki.resolve")}
+                  </Button>
+                )}
+            </li>
+          ))}
+        </ul>
+        {page.role >= 2 && wiki.can("comments.create") && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void post();
+            }}
+          >
+            <Textarea
+              aria-label={t("wiki.comments")}
+              placeholder={t("wiki.commentPlaceholder")}
+              value={draft}
+              maxLength={10000}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                try {
+                  sessionStorage.setItem(draftKey, event.target.value);
+                } catch {}
               }}
-            >
-              <Textarea
-                aria-label={t("wiki.comments")}
-                placeholder={t("wiki.commentPlaceholder")}
-                value={draft}
-                maxLength={10000}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  try {
-                    sessionStorage.setItem(draftKey, event.target.value);
-                  } catch {}
-                }}
-              />
-              <Button type="submit" disabled={busy || !draft.trim()}>
-                {t("wiki.post")}
-              </Button>
-            </form>
-          )}
-        </>
-      )}
+            />
+            <Button type="submit" disabled={busy || !draft.trim()}>
+              {t("wiki.post")}
+            </Button>
+          </form>
+        )}
+      </>
     </div>
   );
 }
 function OpenPage({ page }: { page: Page }) {
   const notify = useNotifications();
+  const browseFiles = useWikiFiles();
   const command = useRef(false);
   const [commandBusy, setCommandBusy] = useState(false);
   const wiki = useWiki(),
@@ -1234,6 +1149,12 @@ function OpenPage({ page }: { page: Page }) {
                   {t("wiki.move")}
                 </Menu.Item>
               )}
+              {page.role > 0 && (
+                <Menu.Item onClick={browseFiles}>
+                  <Icon name="attachment" />
+                  {t("wiki.attachments")}
+                </Menu.Item>
+              )}
               {page.role > 0 && wiki.can("pages.export") && (
                 <Menu.Item onClick={() => void exportPage()}>
                   <Icon name="download" />
@@ -1303,11 +1224,10 @@ function OpenPage({ page }: { page: Page }) {
         <p className="wiki-page-updated">
           {t("wiki.updatedDate", { date: formatDateTime(page.updated_at) })}
         </p>
-        <Discussion key={page.id} page={page} />
       </div>
       {page.role > 0 && panel === "comments" && (
         <WikiSidePanel title={t("wiki.comments")} onClose={() => setPanel(null)}>
-          <Discussion key={page.id} page={page} comments />
+          <Discussion key={page.id} page={page} />
         </WikiSidePanel>
       )}
       {page.role > 0 && panel === "history" && (
@@ -1366,7 +1286,9 @@ export function WikiPage() {
   if (page?.role === 0)
     return (
       <WikiPeople key={page.id} pageId={page.id}>
-        <OpenPage page={page} />
+        <WikiFiles page={page}>
+          <OpenPage page={page} />
+        </WikiFiles>
       </WikiPeople>
     );
   if (!wiki.space) return <WikiHome />;
@@ -1398,7 +1320,9 @@ export function WikiPage() {
   if (!page) return <WikiHome />;
   return (
     <WikiPeople key={page.id} pageId={page.id}>
-      <OpenPage page={page} />
+      <WikiFiles page={page}>
+        <OpenPage page={page} />
+      </WikiFiles>
     </WikiPeople>
   );
 }

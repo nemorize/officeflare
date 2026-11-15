@@ -448,7 +448,6 @@
 
 .wiki-child-pages,
 .wiki-comments,
-.wiki-assets,
 .wiki-members {
   list-style: none;
   padding: 0;
@@ -480,12 +479,6 @@
   font-weight: 500;
   margin: 20px 0 12px;
 }
-.wiki-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
 .wiki-comments li {
   border-bottom: 1px solid var(--ui-border);
   padding: 14px 0;
@@ -515,14 +508,6 @@
   height: auto;
   margin: 16px 0 8px;
   resize: vertical;
-}
-.wiki-assets [data-ui-button] {
-  max-width: 100%;
-  white-space: normal;
-}
-.wiki-assets small {
-  color: var(--ui-muted);
-  margin-inline-start: 8px;
 }
 .wiki-member-form {
   display: flex;
@@ -1393,4 +1378,56 @@ body:has(.wiki-create-page) .app-notifications {
   .wiki-page {
     padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
+}
+
+.wiki-file-upload {
+  display: grid;
+  gap: 12px;
+  padding-block: 24px 8px;
+}
+.wiki-file-upload p {
+  color: var(--ui-muted);
+  font-size: 12px;
+  margin: 0;
+}
+.wiki-file-list {
+  display: grid;
+  gap: 4px;
+  max-height: 340px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.wiki-file-list > [data-ui-button] {
+  width: 100%;
+  text-align: start;
+  justify-content: flex-start;
+  min-height: 44px;
+  gap: 10px;
+}
+.wiki-file-list > [data-ui-button] > span {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.wiki-file-list > [data-ui-button] > svg {
+  flex-shrink: 0;
+}
+.wiki-file-list small {
+  white-space: nowrap;
+  color: var(--ui-muted);
+}
+.wiki-file-list > p {
+  color: var(--ui-muted);
+  font-size: 12px;
+  padding: 12px;
+}
+.wiki-file-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+.drive-file-picker {
+  display: grid;
+  gap: 12px;
 }

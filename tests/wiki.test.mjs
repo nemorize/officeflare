@@ -794,3 +794,56 @@ test("Wiki sibling order changes atomically and rejects stale or unauthorized ch
     expected: 403,
   });
 });
+
+test("File blocks survive collaboration and reject malformed references", async (t) => {
+  const f = await fixture(t),
+    space = await f.space(),
+    page = await f.page(space.id),
+    connection = await f.connect(page.resource_id),
+    ready = await connection.next("ready");
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, decodeBytes(ready.state));
+  let update;
+  doc.on("update", (bytes) => (update = bytes));
+  const block = new Y.XmlElement("fileAttachment");
+  doc.transact(() => {
+    for (const [key, value] of Object.entries({
+      source: "upload",
+      id: "test-asset",
+      name: "notes.txt",
+      size: 12,
+      contentType: "text/plain",
+    }))
+      block.setAttribute(key, value);
+    const fragment = doc.getXmlFragment("content");
+    fragment.delete(0, fragment.length);
+    fragment.insert(0, [block]);
+  });
+  connection.send({
+    type: "update",
+    epoch: ready.epoch,
+    id: "file-valid",
+    update: encodeBytes(update),
+  });
+  await connection.next("ack");
+  const text = await f.raw(`/wiki/pages/${page.id}/export`);
+  assert.match(await text.text(), /notes.txt/);
+  const saved = await f.call(`/collaboration/resources/${page.resource_id}/content`),
+    copy = new Y.Doc();
+  Y.applyUpdate(copy, decodeBytes(saved.state));
+  assert.equal(copy.getXmlFragment("content").get(0).getAttribute("id"), "test-asset");
+  block.setAttribute("source", "https://attacker.test");
+  connection.send({
+    type: "update",
+    epoch: ready.epoch,
+    id: "file-invalid",
+    update: encodeBytes(update),
+  });
+  await connection.next("error");
+  const after = await f.call(`/collaboration/resources/${page.resource_id}/content`),
+    unchanged = new Y.Doc();
+  Y.applyUpdate(unchanged, decodeBytes(after.state));
+  assert.equal(after.seq, saved.seq);
+  assert.equal(unchanged.getXmlFragment("content").get(0).getAttribute("source"), "upload");
+  for (const value of [doc, copy, unchanged]) value.destroy();
+});

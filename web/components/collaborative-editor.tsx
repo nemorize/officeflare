@@ -16,6 +16,7 @@ import { t } from "../../shared/i18n/index.ts";
 import { CollaborationClient, type CollaborationTransport } from "../lib/collaboration/client";
 import { EditorBlockMenu } from "./editor-block-menu";
 import { LoadingSkeleton } from "./loading-skeleton";
+import { EditorFileBlock } from "./editor-file";
 import { Button, Icon, Popover, PopoverPopup } from "./ui";
 export function downloadText(filename: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
@@ -58,6 +59,7 @@ function Editor({
       extensions: [
         StarterKit.configure({ undoRedo: false, link: { openOnClick: false } }),
         TableKit.configure({ table: { resizable: true } }),
+        EditorFileBlock,
         Collaboration.configure({ document: client.doc, field: "content" }),
         CollaborationCaret.configure({
           provider: client,

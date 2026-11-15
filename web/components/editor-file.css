@@ -1,0 +1,30 @@
+.editor-file-block {
+  margin: 12px 0;
+}
+.editor-file-card[data-ui-button] {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+}
+.editor-file-card > svg {
+  flex-shrink: 0;
+  color: var(--ui-muted);
+}
+.editor-file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.editor-file-card > small {
+  margin-inline-start: auto;
+  white-space: nowrap;
+  color: var(--ui-muted);
+  font-weight: 400;
+}
+.editor-file-block.is-selected .editor-file-card {
+  outline: 1px solid var(--ui-control-focus);
+}

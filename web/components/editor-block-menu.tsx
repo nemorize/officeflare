@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { t } from "../../shared/i18n/index.ts";
-import { Icon, type IconProps } from "./ui";
+import { Icon, useNotifications, type IconProps } from "./ui";
+import { errorMessage } from "../lib/api";
+import { insertFileBlock, useEditorFiles } from "./editor-file";
 
 type BlockCommand = {
   id: string;
@@ -96,6 +98,21 @@ export function EditorBlockMenu({
   editor: Editor | null;
   editable: boolean;
 }) {
+  const files = useEditorFiles(),
+    notify = useNotifications();
+  const fileCommand = useRef<BlockCommand | null>(null);
+  fileCommand.current = files
+    ? {
+        id: "file",
+        label: t("editorFiles.file"),
+        icon: "attachment",
+        words: ["file", "attachment", "upload", "drive"],
+        run: (editor, range) =>
+          void insertFileBlock(editor, range, files).catch((failure) =>
+            notify.error(failure instanceof Error ? failure.message : errorMessage(failure)),
+          ),
+      }
+    : null;
   const [menu, setMenu] = useState<MenuState | null>(null),
     [selected, setSelected] = useState(0);
   const current = useRef(menu),
@@ -139,7 +156,7 @@ export function EditorBlockMenu({
         setMenu(null);
         return;
       }
-      const items = commands().filter(
+      const items = [...commands(), ...(fileCommand.current ? [fileCommand.current] : [])].filter(
         (command) =>
           command.label.toLocaleLowerCase().includes(query) ||
           command.words.some((word) => word.includes(query)),

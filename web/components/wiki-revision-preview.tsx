@@ -6,6 +6,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { decodeBytes } from "../../shared/collaboration";
 import { richTextValue } from "../../shared/rich-text";
 import { t } from "../../shared/i18n/index.ts";
+import { EditorFileBlock } from "./editor-file";
 export function WikiRevisionPreview({ state }: { state: string }) {
   const content = useMemo(() => {
     const doc = new Y.Doc();
@@ -16,7 +17,7 @@ export function WikiRevisionPreview({ state }: { state: string }) {
   }, [state]);
   const editor = useEditor(
     {
-      extensions: [StarterKit, TableKit],
+      extensions: [StarterKit, TableKit, EditorFileBlock],
       content: content.json,
       editable: false,
       editorProps: { attributes: { class: "collaborative-prose" } },
