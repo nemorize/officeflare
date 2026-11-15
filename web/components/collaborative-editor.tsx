@@ -235,15 +235,10 @@ function Editor({
           ))}
         </div>
       )}
-      <div
-        className="wiki-editor-content"
-        data-empty={editor?.isEmpty || undefined}
-        data-placeholder={editable ? t("wiki.editorPlaceholder") : undefined}
-      >
+      <div className="wiki-editor-content">
         <EditorContent editor={editor} />
       </div>
       <EditorBlockMenu editor={editor} editable={editable} />
-      {editable && <p className="wiki-editor-help">{t("wiki.editorHint")}</p>}
     </div>
   );
 }

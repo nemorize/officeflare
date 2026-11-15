@@ -84,10 +84,9 @@ export function WikiHome() {
       <header className="wiki-home-heading">
         <div>
           <h1>{wiki.space?.name || t("wiki.title")}</h1>
-          <p className="wiki-home-description">
-            {wiki.space?.description ||
-              t(wiki.space ? "wiki.spaceIntro" : "wiki.welcomeDescription")}
-          </p>
+          {wiki.space?.description && (
+            <p className="wiki-home-description">{wiki.space.description}</p>
+          )}
         </div>
         <div className="wiki-home-actions">
           {wiki.space && wiki.space.role >= 4 && wiki.can("sharing.internal") && (
@@ -126,8 +125,7 @@ export function WikiHome() {
       ) : (
         <section className="wiki-list-empty">
           <Icon name="book" />
-          <h2>{t(wiki.space ? "wiki.firstPage" : "wiki.welcome")}</h2>
-          <p>{t(wiki.space ? "wiki.firstPageDescription" : "wiki.welcomeDescription")}</p>
+          <h2>{t(wiki.space ? "wiki.noPagesYet" : "wiki.noSpaces")}</h2>
         </section>
       )}
       {dialog && (

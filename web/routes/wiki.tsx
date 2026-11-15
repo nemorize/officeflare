@@ -78,7 +78,6 @@ function Members() {
   return (
     <section className="wiki-settings">
       <h1>{t("wiki.members")}</h1>
-      <p className="wiki-muted">{t("wiki.membersDescription")}</p>
       {error && (
         <p role="alert" className="wiki-error">
           {error}
@@ -281,11 +280,6 @@ function PageList({ view, query = "" }: { view: string; query?: string }) {
                     : "wiki.noFavorites",
               )}
             </h2>
-            {view !== "search" && (
-              <p>
-                {t(view === "trash" ? "wiki.emptyTrashDescription" : "wiki.noFavoritesDescription")}
-              </p>
-            )}
           </div>
         )
       )}
@@ -647,7 +641,6 @@ function Discussion({ page }: { page: Page }) {
           </label>
         )}
       </div>
-      {!assets.length && <p className="wiki-muted">{t("wiki.noAttachments")}</p>}
       <ul className="wiki-assets">
         {assets.map((asset) => (
           <li key={asset.id}>
@@ -660,7 +653,6 @@ function Discussion({ page }: { page: Page }) {
         ))}
       </ul>
       <h2>{t("wiki.comments")}</h2>
-      {!comments.length && <p className="wiki-muted">{t("wiki.noComments")}</p>}
       <ul className="wiki-comments">
         {comments.map((comment) => (
           <li key={comment.id} className={comment.resolved_at ? "is-resolved" : ""}>

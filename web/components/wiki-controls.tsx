@@ -97,7 +97,6 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
           void save();
         }}
       >
-        {!space && <p className="wiki-muted">{t("wiki.spaceIntro")}</p>}
         <label>
           {t("wiki.spaceName")}
           <Input
@@ -115,7 +114,6 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
             rows={3}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder={t("wiki.spaceDescriptionPlaceholder")}
           />
         </label>
         {!space && (
@@ -138,9 +136,6 @@ export function WikiSpaceDialog({ space, onClose }: { space?: WikiSpace; onClose
                   </Radio.Root>
                   <span>
                     <strong>{t(value === "team" ? "wiki.teamSpace" : "wiki.personalSpace")}</strong>
-                    <small>
-                      {t(value === "team" ? "wiki.teamSpaceHint" : "wiki.personalSpaceHint")}
-                    </small>
                   </span>
                 </label>
               ))}

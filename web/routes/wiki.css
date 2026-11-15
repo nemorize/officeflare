@@ -336,12 +336,6 @@
   font-size: 16px;
   font-weight: 500;
 }
-.wiki-list-empty p {
-  margin: 0;
-  max-width: 360px;
-  font-size: 12px;
-  line-height: 1.7;
-}
 .wiki-settings > .wiki-page-table {
   margin-top: 24px;
 }
@@ -500,17 +494,6 @@
 .wiki-editor-content {
   position: relative;
 }
-.wiki-editor-content[data-empty]::before {
-  content: attr(data-placeholder);
-  position: absolute;
-  top: 0;
-  left: 0;
-  color: var(--ui-subtle);
-  pointer-events: none;
-  font-size: 14px;
-  line-height: 1.8;
-}
-.wiki-editor-help,
 .wiki-page-updated {
   font-size: 11px;
   color: var(--ui-subtle);
@@ -804,9 +787,6 @@
   display: grid;
   gap: 20px;
 }
-.wiki-space-form > p {
-  margin: 0;
-}
 .wiki-space-kinds > span {
   display: block;
   font-size: 12px;
@@ -826,13 +806,6 @@
 .wiki-space-kinds strong {
   display: block;
   font-weight: 500;
-}
-.wiki-space-kinds small {
-  display: block;
-  margin-top: 4px;
-  color: var(--ui-muted);
-  font-size: 11px;
-  font-weight: 400;
 }
 .wiki-space-kinds label:has([data-disabled]) {
   opacity: 0.5;
@@ -942,12 +915,6 @@
   display: block;
   font-size: 12px;
   font-weight: 500;
-}
-.wiki-block-menu small {
-  display: block;
-  font-size: 10px;
-  color: var(--ui-muted);
-  margin-top: 3px;
 }
 .wiki-block-menu > p {
   padding: 10px;

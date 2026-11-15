@@ -8,7 +8,6 @@ import { Icon, type IconProps } from "./ui";
 type BlockCommand = {
   id: string;
   label: string;
-  hint: string;
   icon: IconProps["name"];
   words: string[];
   run: (editor: Editor, range: { from: number; to: number }) => void;
@@ -17,7 +16,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "paragraph",
     label: t("wiki.paragraph"),
-    hint: t("wiki.paragraphHint"),
     icon: "text",
     words: ["text", "paragraph"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).setParagraph().run(),
@@ -25,7 +23,6 @@ const commands = (): BlockCommand[] => [
   ...([1, 2, 3] as const).map((level) => ({
     id: `h${level}`,
     label: t("wiki.headingLevel", { level }),
-    hint: t("wiki.headingHint"),
     icon: "heading" as const,
     words: [`h${level}`, "heading"],
     run: (editor: Editor, range: { from: number; to: number }) =>
@@ -34,7 +31,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "bullet",
     label: t("wiki.bulletList"),
-    hint: t("wiki.listHint"),
     icon: "bulletList",
     words: ["bullet", "list"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).toggleBulletList().run(),
@@ -42,7 +38,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "number",
     label: t("wiki.orderedList"),
-    hint: t("wiki.listHint"),
     icon: "numberedList",
     words: ["number", "ordered"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
@@ -50,7 +45,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "quote",
     label: t("wiki.quote"),
-    hint: t("wiki.quoteHint"),
     icon: "quote",
     words: ["quote"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
@@ -58,7 +52,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "code",
     label: t("wiki.codeBlock"),
-    hint: t("wiki.codeHint"),
     icon: "code",
     words: ["code"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
@@ -66,7 +59,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "table",
     label: t("wiki.table"),
-    hint: t("wiki.tableHint"),
     icon: "table",
     words: ["table"],
     run: (editor, range) =>
@@ -80,7 +72,6 @@ const commands = (): BlockCommand[] => [
   {
     id: "divider",
     label: t("wiki.divider"),
-    hint: t("wiki.dividerHint"),
     icon: "divider",
     words: ["divider", "line"],
     run: (editor, range) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
@@ -248,7 +239,6 @@ export function EditorBlockMenu({
             </span>
             <span>
               <strong>{command.label}</strong>
-              <small>{command.hint}</small>
             </span>
           </button>
         ))}
