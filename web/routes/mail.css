@@ -653,29 +653,11 @@
 .mail-sidebar-content .workspace-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   flex: 1;
   min-height: 0;
-  padding: 0 12px 16px;
   scrollbar-width: thin;
 }
-.mail-nav-group:not([hidden]) {
-  display: grid;
-  gap: 2px;
-}
-.mail-sidebar-content .workspace-nav a {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 40px;
-  min-height: 40px;
-  padding: 0 12px;
-  margin: 0;
-  gap: 12px;
-}
 .mail-sidebar-content :is(.workspace-nav a, .mail-more-link) > svg {
-  width: 18px;
-  height: 18px;
   flex-shrink: 0;
 }
 .mail-sidebar-content .workspace-nav a span {
@@ -694,6 +676,9 @@
 .mail-sidebar-content .mail-more-link {
   justify-content: flex-start;
   width: 100%;
+  border: 0;
+  font-weight: 400;
+  line-height: inherit;
 }
 .mail-custom-folders {
   margin-top: 16px;
@@ -704,7 +689,7 @@
   justify-content: space-between;
   gap: 8px;
   min-height: 36px;
-  padding-left: 12px;
+  padding-inline-start: 10px;
 }
 .mail-sidebar-content .mail-folder-heading h2 {
   margin: 0;
@@ -715,7 +700,7 @@
 }
 .mail-folder-empty {
   margin: 0;
-  padding: 4px 12px 8px;
+  padding: 4px 10px 8px;
   color: var(--ui-subtle);
   font-size: 12px;
   line-height: 18px;
@@ -1983,14 +1968,6 @@
 }
 .mail-settings-placeholder .mail-settings-save {
   min-height: 63px;
-}
-
-.workspace-drawer-body .mail-sidebar-content .workspace-nav a {
-  height: 44px;
-  min-height: 44px;
-}
-.workspace-drawer-body .mail-more-link {
-  min-height: 44px;
 }
 
 @media (max-width: 760px) {

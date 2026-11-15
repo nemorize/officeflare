@@ -734,7 +734,7 @@ export function MailSidebar() {
           {nav(primary)}
           <Button
             variant="ghost"
-            className="mail-more-link"
+            className="workspace-nav-item mail-more-link"
             aria-expanded={more}
             aria-controls={extraId}
             onClick={() => setMore(!more)}
