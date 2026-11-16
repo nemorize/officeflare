@@ -508,6 +508,11 @@ export const mailApplicationHosts = sqliteTable("mail_application_hosts", {
   hostname: text().primaryKey().notNull(),
   created_at: timestamp("created_at"),
 });
+export const deploymentLocks = sqliteTable("deployment_locks", {
+  name: text().primaryKey().notNull(),
+  lease_token: text().notNull(),
+  expires_at: integer().notNull(),
+});
 
 // migrations/0009_create_mail_control.sql is the DDL source. Mail contents live in DO SQL.
 

@@ -1,18 +1,17 @@
-import { generateKeyPair, exportJWK } from "jose";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { generateAuthKeys } from "./auth-keys.mjs";
 
 const path = resolve(process.argv[2] ?? ".dev.vars");
 const mailKeyLine = `MAIL_ENCRYPTION_KEY='${randomBytes(32).toString("base64url")}'\n`;
 try {
-  const { privateKey } = await generateKeyPair("ES256", { extractable: true });
-  const kid = randomUUID();
-  const signing = { active_kid: kid, keys: [{ ...(await exportJWK(privateKey)), kid }] };
-  const encryption = { active_version: 1, keys: { 1: randomBytes(32).toString("base64url") } };
+  const keys = await generateAuthKeys();
   await writeFile(
     path,
-    `AUTH_SIGNING_KEYS='${JSON.stringify(signing)}'\nMFA_ENCRYPTION_KEYS='${JSON.stringify(encryption)}'\n${mailKeyLine}`,
+    Object.entries(keys)
+      .map(([name, value]) => `${name}='${value}'\n`)
+      .join(""),
     { flag: "wx", mode: 0o600 },
   );
   console.log(

@@ -60,7 +60,7 @@ test("public deployment defaults contain no account or domain and keep optional 
   assert.equal(rawConfig.keep_vars, true);
   assert.deepEqual(rawConfig.secrets.required, required);
   const installer = parseEnv(await readFile(".dev.vars.example", "utf8"));
-  assert.deepEqual(Object.keys(installer).sort(), [...required, "MAIL_ENCRYPTION_KEY"].sort());
+  assert.deepEqual(Object.keys(installer), []);
   for (const name of optional) assert.ok(!rawConfig.secrets.required.includes(name));
 });
 

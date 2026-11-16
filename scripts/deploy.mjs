@@ -9,6 +9,7 @@ import {
 import { bootstrapAdministrator } from "./bootstrap-administrator.mjs";
 import { runWrangler, runTypeScript, runViteBuild } from "./wrangler.mjs";
 import { deployAndRememberHosts } from "./deployment-hosts.mjs";
+import { ensureDeploymentSecrets } from "./deployment-secrets.mjs";
 
 export function deploymentOptions(args) {
   const options = {};
@@ -99,7 +100,6 @@ export async function ensureWikiResources(config, flags, wrangler = runWrangler)
   const bucket = config.r2_buckets?.find((entry) => entry.binding === "WIKI_BUCKET");
   if (bucket) await ensureBucket(bucket, flags, wrangler);
 }
-
 export async function ensureAIResources(config, flags, wrangler = runWrangler) {
   const bucket = config.r2_buckets?.find((entry) => entry.binding === "AI_BUCKET");
   if (bucket) await ensureBucket(bucket, flags, wrangler);
@@ -194,6 +194,7 @@ export async function deploy(
     typecheck = runTypeScript,
     buildWeb = runViteBuild,
     bootstrap = bootstrapAdministrator,
+    initializeSecrets = ensureDeploymentSecrets,
     bindDatabase = withDatabaseConfig,
     log = console.log,
   } = {},
@@ -227,6 +228,8 @@ export async function deploy(
     const boundFlags = ["--config", path, ...(options.env ? ["--env", options.env] : [])];
     log("Applying D1 migrations...");
     await wrangler(["d1", "migrations", "apply", "DB", "--remote", ...boundFlags]);
+    log("Preparing Worker authentication and encryption keys...");
+    await initializeSecrets(config, boundFlags, options, wrangler);
     log("Initializing the first administrator...");
     await bootstrap({ flags: boundFlags, wrangler, log });
     log("Deploying the Worker...");

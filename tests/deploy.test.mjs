@@ -213,6 +213,11 @@ function recorder(failAt) {
         assert.deepEqual(options.flags, boundFlags);
         record("bootstrap");
       },
+      initializeSecrets: async (_config, selectedFlags, options) => {
+        assert.deepEqual(selectedFlags, boundFlags);
+        assert.equal(options.env, "production");
+        record("secrets");
+      },
       wrangler: async (args, options) => {
         const stage =
           args[0] === "types"
@@ -255,6 +260,7 @@ test("deployment prepares D1, migrates and initializes before publishing the Wor
     "list",
     "bind",
     "migrations",
+    "secrets",
     "bootstrap",
     "deploy",
   ]);
@@ -286,6 +292,7 @@ test("every failed deployment stage prevents later stages", async (t) => {
     "create",
     "bind",
     "migrations",
+    "secrets",
     "bootstrap",
     "deploy",
   ];
