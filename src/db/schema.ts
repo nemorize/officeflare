@@ -820,6 +820,40 @@ export const notificationPushDeliveries = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.seq, table.token_id] })],
 );
+export const mailPushOutbox = sqliteTable(
+  "mail_push_outbox",
+  {
+    seq: integer().primaryKey({ autoIncrement: true }),
+    source_key: text().notNull(),
+    mailbox_id: text()
+      .notNull()
+      .references(() => mailMailboxes.id, { onDelete: "cascade" }),
+    user_id: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    body: text().notNull(),
+    created_at: timestamp("created_at"),
+    lease_until: integer().notNull().default(0),
+    lease_token: text(),
+    delivered_at: integer(),
+  },
+  (table) => [uniqueIndex("mail_push_outbox_source_user").on(table.source_key, table.user_id)],
+);
+export const mailPushDeliveries = sqliteTable(
+  "mail_push_deliveries",
+  {
+    seq: integer()
+      .notNull()
+      .references(() => mailPushOutbox.seq, { onDelete: "cascade" }),
+    token_id: text()
+      .notNull()
+      .references(() => pushTokens.id, { onDelete: "cascade" }),
+    lease_until: integer().notNull().default(0),
+    delivered_at: integer(),
+  },
+  (table) => [primaryKey({ columns: [table.seq, table.token_id] })],
+);
 
 export const driveAccounts = sqliteTable("drive_accounts", {
   user_id: text()

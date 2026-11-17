@@ -1,7 +1,5 @@
-import { sql } from "drizzle-orm";
 import { t } from "../../shared/i18n/index.ts";
-import { createDatabase } from "../db";
-import { prepareNotification } from "./service";
+import { now } from "../auth/types";
 import { recoverNotifications } from "./jobs";
 
 export async function notifyIncomingMail(
@@ -11,8 +9,9 @@ export async function notifyIncomingMail(
   subject: string,
   from: string,
 ) {
-  const db = createDatabase(env.DB);
-  const recipients = await env.DB.withSession("first-primary")
+  const db = env.DB.withSession("first-primary"),
+    timestamp = now();
+  const recipients = await db
     .prepare(
       `SELECT u.id FROM users u
     JOIN mail_mailboxes b ON b.id = ?
@@ -26,19 +25,23 @@ export async function notifyIncomingMail(
     .bind(mailboxId)
     .all<{ id: string }>();
   for (let start = 0; start < recipients.results.length; start += 50) {
-    const statements = prepareNotification(
-      db,
-      {
-        source_key: `mail:${mailboxId}:${ingestId}`,
-        type: "mail.received",
-        title: (subject || t("push.newMail")).slice(0, 160),
-        body: from.slice(0, 254),
-        target_path: "/mail",
-        recipient_ids: recipients.results.slice(start, start + 50).map((row) => row.id),
-      },
-      sql`1`,
+    await db.batch(
+      recipients.results.slice(start, start + 50).map((row) =>
+        db
+          .prepare(
+            `INSERT INTO mail_push_outbox (source_key, mailbox_id, user_id, title, body, created_at)
+          VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (source_key, user_id) DO NOTHING`,
+          )
+          .bind(
+            `mail:${mailboxId}:${ingestId}`,
+            mailboxId,
+            row.id,
+            (subject || t("push.newMail")).slice(0, 160),
+            from.slice(0, 254),
+            timestamp,
+          ),
+      ),
     );
-    await db.batch(statements);
   }
   if (recipients.results.length && env.NOTIFICATION_QUEUE)
     await recoverNotifications(env).catch((error) =>

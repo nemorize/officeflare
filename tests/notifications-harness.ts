@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { createDatabase } from "../src/db";
 import { prepareNotification, type NotificationEvent } from "../src/notifications/service";
 import { consumeNotifications, recoverNotifications } from "../src/notifications/jobs";
+import { notifyIncomingMail } from "../src/notifications/mail";
 import type { AuthEnv } from "../src/auth/types";
 
 // Test-only producer and delivery controls; none of these endpoints ship in the Worker.
@@ -11,12 +12,18 @@ export default {
       condition?: boolean;
       rollback?: boolean;
       seq?: number;
+      kind?: "notifications.invalidate" | "mail.push";
+      mailbox_id?: string;
+      ingest_id?: string;
     };
-    if (new URL(request.url).pathname === "/recover") await recoverNotifications(env);
-    else if (new URL(request.url).pathname === "/deliver") {
+    const path = new URL(request.url).pathname;
+    if (path === "/recover") await recoverNotifications(env);
+    else if (path === "/mail")
+      await notifyIncomingMail(env, data.mailbox_id!, data.ingest_id!, data.title, data.body);
+    else if (path === "/deliver") {
       let action = "";
       const message = {
-        body: { kind: "notifications.invalidate", seq: data.seq },
+        body: { kind: data.kind ?? "notifications.invalidate", seq: data.seq },
         ack: () => {
           action = "ack";
         },

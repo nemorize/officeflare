@@ -23,15 +23,14 @@ interface PushEvent {
   title: string;
   body: string;
   target_path: string | null;
-  type: string;
-  source_key: string;
+  created_at: number;
 }
 export async function deliverPush(env: Env, seq: number) {
   if (!fcmWebConfig(env)) return;
   const db = env.DB.withSession("first-primary");
   const event = await db
     .prepare(
-      `SELECT c.user_id, i.id, e.title, e.body, e.target_path, e.type, e.source_key
+      `SELECT c.user_id, i.id, e.title, e.body, e.target_path, e.type, c.created_at
     FROM notification_changes c JOIN notification_inbox i ON i.id = c.notification_id
     JOIN notification_events e ON e.id = i.event_id JOIN push_settings p ON p.id = 1
     WHERE c.seq = ? AND c.kind = 'created' AND p.web_push_enabled = 1
@@ -40,7 +39,7 @@ export async function deliverPush(env: Env, seq: number) {
       AND c.created_at > unixepoch() - 86400`,
     )
     .bind(seq)
-    .first<PushEvent>();
+    .first<PushEvent & { type: string }>();
   if (!event) return;
   if (!knownType(event.type)) return;
   const definition = notificationTypes[event.type];
@@ -60,29 +59,43 @@ export async function deliverPush(env: Env, seq: number) {
       .first();
     if (suppressed) return;
   }
-  if (event.type === "mail.received") {
-    const mailboxId = event.source_key.split(":")[1];
-    const access = await db
-      .prepare(
-        `SELECT b.id FROM mail_mailboxes b
-      JOIN users u ON u.id = ? LEFT JOIN mail_mailbox_members m ON m.mailbox_id = b.id AND m.user_id = u.id
-      WHERE b.id = ? AND b.status = 'active' AND (b.owner_user_id = u.id OR m.can_read = 1)
+  await deliverPushEvent(env, seq, event, "notification_push_deliveries");
+}
+
+export async function deliverMailPush(env: Env, seq: number) {
+  if (!fcmWebConfig(env)) return;
+  const event = await env.DB.withSession("first-primary")
+    .prepare(
+      `SELECT o.user_id, 'mail-' || o.seq AS id, o.title, o.body, '/mail' AS target_path, o.created_at
+      FROM mail_push_outbox o JOIN push_settings p ON p.id = 1
+      JOIN mail_mailboxes b ON b.id = o.mailbox_id
+      LEFT JOIN mail_mailbox_members m ON m.mailbox_id = b.id AND m.user_id = o.user_id
+      WHERE o.seq = ? AND o.delivered_at IS NULL AND p.web_push_enabled = 1
+      AND o.created_at > unixepoch() - 86400
+      AND b.status = 'active' AND (b.owner_user_id = o.user_id OR m.can_read = 1)
       AND EXISTS (SELECT 1 FROM user_roles r JOIN role_permissions p ON p.role_id = r.role_id
-        WHERE r.user_id = u.id AND p.permission_key = 'mail.access')`,
-      )
-      .bind(event.user_id, mailboxId ?? "")
-      .first();
-    if (!access) return;
-  }
+        WHERE r.user_id = o.user_id AND p.permission_key = 'mail.access')`,
+    )
+    .bind(seq)
+    .first<PushEvent>();
+  if (event) await deliverPushEvent(env, seq, event, "mail_push_deliveries");
+}
+
+async function deliverPushEvent(
+  env: Env,
+  seq: number,
+  event: PushEvent,
+  deliveries: "notification_push_deliveries" | "mail_push_deliveries",
+) {
+  const db = env.DB.withSession("first-primary");
   const tokens = await db
     .prepare(
       `SELECT t.* FROM push_tokens t
-    JOIN notification_changes c ON c.seq = ?
-    WHERE t.user_id = ? AND t.created_at <= c.created_at
-    AND NOT EXISTS (SELECT 1 FROM notification_push_deliveries d
-      WHERE d.seq = c.seq AND d.token_id = t.id AND d.delivered_at IS NOT NULL)`,
+    WHERE t.user_id = ? AND t.created_at <= ?
+    AND NOT EXISTS (SELECT 1 FROM ${deliveries} d
+      WHERE d.seq = ? AND d.token_id = t.id AND d.delivered_at IS NOT NULL)`,
     )
-    .bind(seq, event.user_id)
+    .bind(event.user_id, event.created_at, seq)
     .all<{
       id: string;
       token: string;
@@ -106,10 +119,10 @@ export async function deliverPush(env: Env, seq: number) {
         }
         const claim = await db
           .prepare(
-            `INSERT INTO notification_push_deliveries (seq, token_id, lease_until)
+            `INSERT INTO ${deliveries} (seq, token_id, lease_until)
         SELECT ?, id, ? FROM push_tokens WHERE id = ? AND session_id = ? AND token = ?
         ON CONFLICT (seq, token_id) DO UPDATE SET lease_until = excluded.lease_until
-        WHERE notification_push_deliveries.delivered_at IS NULL AND notification_push_deliveries.lease_until <= ?
+        WHERE ${deliveries}.delivered_at IS NULL AND ${deliveries}.lease_until <= ?
         RETURNING token_id`,
           )
           .bind(seq, now() + 60, token.id, token.session_id, token.token, now())
@@ -117,7 +130,7 @@ export async function deliverPush(env: Env, seq: number) {
         if (!claim) {
           const pending = await db
             .prepare(
-              "SELECT token_id FROM notification_push_deliveries WHERE seq = ? AND token_id = ? AND delivered_at IS NULL",
+              `SELECT token_id FROM ${deliveries} WHERE seq = ? AND token_id = ? AND delivered_at IS NULL`,
             )
             .bind(seq, token.id)
             .first();
@@ -141,14 +154,14 @@ export async function deliverPush(env: Env, seq: number) {
           else
             await db
               .prepare(
-                "UPDATE notification_push_deliveries SET delivered_at = ?, lease_until = 0 WHERE seq = ? AND token_id = ?",
+                `UPDATE ${deliveries} SET delivered_at = ?, lease_until = 0 WHERE seq = ? AND token_id = ?`,
               )
               .bind(now(), seq, token.id)
               .run();
         } catch (error) {
           await db
             .prepare(
-              "UPDATE notification_push_deliveries SET lease_until = 0 WHERE seq = ? AND token_id = ? AND delivered_at IS NULL",
+              `UPDATE ${deliveries} SET lease_until = 0 WHERE seq = ? AND token_id = ? AND delivered_at IS NULL`,
             )
             .bind(seq, token.id)
             .run();

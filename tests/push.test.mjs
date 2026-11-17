@@ -85,6 +85,14 @@ async function fixture(t, configured = true, options = {}) {
           compatibilityDate: "2026-09-29",
           d1Databases: { DB: "push-test" },
           durableObjects: { NOTIFICATION_HUB: { className: "NotificationHubDO", useSQLite: true } },
+          ...(options.queues
+            ? {
+                queueProducers: { NOTIFICATION_QUEUE: "officeflare-notifications" },
+                queueConsumers: {
+                  "officeflare-notifications": { maxBatchSize: 100, maxBatchTimeout: 0 },
+                },
+              }
+            : {}),
           outboundService,
           bindings: {
             AUTH_SIGNING_KEYS: JSON.stringify({
@@ -107,6 +115,9 @@ async function fixture(t, configured = true, options = {}) {
           ],
           compatibilityDate: "2026-09-29",
           d1Databases: { DB: "push-test" },
+          ...(options.queues
+            ? { queueProducers: { NOTIFICATION_QUEUE: "officeflare-notifications" } }
+            : {}),
           outboundService,
           bindings: fcm,
           durableObjects: {
@@ -190,11 +201,29 @@ async function fixture(t, configured = true, options = {}) {
         .first()
     )?.seq;
   };
-  const deliver = async (seq) =>
+  const publishMail = async (ingest_id, mailbox_id = "mailbox") => {
+    const response = await publisher.fetch("https://internal/mail", {
+      method: "POST",
+      body: JSON.stringify({
+        mailbox_id,
+        ingest_id,
+        title: "New mail",
+        body: "sender@example.test",
+      }),
+    });
+    assert.equal(response.status, 200, await response.text());
+    return (
+      await db
+        .prepare("SELECT seq, user_id FROM mail_push_outbox WHERE source_key = ? ORDER BY seq")
+        .bind(`mail:${mailbox_id}:${ingest_id}`)
+        .all()
+    ).results;
+  };
+  const deliver = async (seq, kind = "notifications.invalidate") =>
     (
       await publisher.fetch("https://internal/deliver", {
         method: "POST",
-        body: JSON.stringify({ seq }),
+        body: JSON.stringify({ seq, kind }),
       })
     ).json();
   const register = (
@@ -227,7 +256,10 @@ async function fixture(t, configured = true, options = {}) {
     register,
     enable,
     publish,
+    publishMail,
     deliver,
+    deliverMail: (seq) => deliver(seq, "mail.push"),
+    recover: () => publisher.fetch("https://internal/recover", { method: "POST", body: "{}" }),
     sent,
     oauth,
     failures,
@@ -453,32 +485,149 @@ test("upgrading preserves existing installation policies and explicit administra
   }
 });
 
-test("suppressed notifications and revoked mailbox access never produce a push", async (t) => {
+test("incoming mail only queues pushes and retries failed devices without changing the notification center", async (t) => {
   const f = await fixture(t);
   await f.enable();
   await f.register("mail-token");
+  await f.register("retry-token", "retry_device_12345");
+  await f.register("bob-token", "device_bob_1234567", f.bob);
+  await f.db
+    .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ('bob', 'system-mail-user')")
+    .run();
+  await f.db
+    .prepare(
+      "INSERT INTO mail_mailboxes (id, owner_user_id, name, status) VALUES ('mailbox', 'alice', 'Shared', 'active')",
+    )
+    .run();
+  await f.db
+    .prepare(
+      "INSERT INTO mail_mailbox_members (mailbox_id, user_id, can_read) VALUES ('mailbox', 'bob', 1)",
+    )
+    .run();
   await f.call("/notifications/preferences", {
     method: "PUT",
     tokens: f.alice,
     data: { enabled: false, rules: {}, version: 0 },
   });
   assert.equal(await f.publish("suppressed"), undefined);
-  const seq = await f.publish("mail:missing-mailbox:ingest", {
-    type: "mail.received",
-    target_path: "/mail",
-  });
-  assert.equal(seq, undefined);
-  await f.call("/notifications/preferences", {
+  const summary = await f.call("/notifications/summary", { tokens: f.alice });
+  const changes = (await f.db.prepare("SELECT COUNT(*) n FROM notification_changes").first()).n;
+  const queued = await f.publishMail("incoming");
+  assert.deepEqual(await f.publishMail("incoming"), queued);
+  assert.equal(queued.length, 2);
+  assert.equal(
+    (
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM notification_events WHERE type GLOB 'mail.*'")
+        .first()
+    ).n,
+    0,
+  );
+  assert.equal(
+    (await f.db.prepare("SELECT COUNT(*) n FROM notification_changes").first()).n,
+    changes,
+  );
+  assert.deepEqual(await f.call("/notifications/summary", { tokens: f.alice }), summary);
+  const alice = queued.find((row) => row.user_id === "alice").seq;
+  const bob = queued.find((row) => row.user_id === "bob").seq;
+  f.failures.set("retry-token", "UNAVAILABLE");
+  assert.equal((await f.deliverMail(alice)).action, "retry");
+  assert.equal((await f.deliverMail(bob)).action, "ack");
+  f.failures.delete("retry-token");
+  await Promise.all([f.deliverMail(alice), f.deliverMail(alice)]);
+  assert.equal((await f.deliverMail(alice)).action, "ack");
+  assert.deepEqual(f.sent.map((message) => message.token).sort(), [
+    "bob-token",
+    "mail-token",
+    "retry-token",
+    "retry-token",
+  ]);
+  assert.equal(f.sent[0].data.title, "New mail");
+  assert.equal(f.sent[0].data.body, "sender@example.test");
+  assert.equal(f.sent[0].data.target_path, "/mail");
+  assert.match(f.sent[0].data.notification_id, /^mail-\d+$/);
+  assert.deepEqual(await f.publishMail("missing", "missing-mailbox"), []);
+});
+
+test("queued mail pushes recheck mailbox access, session validity, age and administrator policy", async (t) => {
+  const f = await fixture(t);
+  await f.register("mail-token");
+  await f.db
+    .prepare(
+      "INSERT INTO mail_mailboxes (id, owner_user_id, name, status) VALUES ('mailbox', 'alice', 'Inbox', 'active')",
+    )
+    .run();
+  const [revoked] = await f.publishMail("revoked");
+  await f.db.prepare("UPDATE mail_mailboxes SET owner_user_id = 'bob' WHERE id = 'mailbox'").run();
+  await f.deliverMail(revoked.seq);
+  await f.db
+    .prepare("UPDATE mail_mailboxes SET owner_user_id = 'alice' WHERE id = 'mailbox'")
+    .run();
+  const [expired] = await f.publishMail("expired");
+  await f.db
+    .prepare("UPDATE mail_push_outbox SET created_at = unixepoch() - 86401 WHERE seq = ?")
+    .bind(expired.seq)
+    .run();
+  await f.deliverMail(expired.seq);
+  const [disabled] = await f.publishMail("disabled");
+  const settings = await f.call("/push/settings", { tokens: f.alice });
+  await f.call("/push/settings", {
     method: "PUT",
     tokens: f.alice,
-    data: { enabled: true, rules: {}, version: 1 },
+    data: { web_push_enabled: false, version: settings.version },
   });
-  const inaccessible = await f.publish("mail:missing-mailbox:ingest2", {
-    type: "mail.received",
-    target_path: "/mail",
-  });
-  await f.deliver(inaccessible);
+  await f.deliverMail(disabled.seq);
+  await f.enable();
+  const [session] = await f.publishMail("session");
+  await f.db
+    .prepare("UPDATE user_sessions SET revoked_at = unixepoch() WHERE id = ?")
+    .bind(f.alice.session_id)
+    .run();
+  await f.deliverMail(session.seq);
   assert.equal(f.sent.length, 0);
+});
+
+test("recovery sends pending mail through the notification queue without creating inbox items", async (t) => {
+  const f = await fixture(t, true, { queues: true });
+  await f.register("mail-token");
+  await f.db
+    .prepare(
+      "INSERT INTO mail_mailboxes (id, owner_user_id, name, status) VALUES ('mailbox', 'alice', 'Inbox', 'active')",
+    )
+    .run();
+  // Simulate a producer that committed its outbox before the queue was available.
+  await f.db
+    .prepare(
+      `INSERT INTO mail_push_outbox (source_key, mailbox_id, user_id, title, body)
+    VALUES ('mail:mailbox:recovered', 'mailbox', 'alice', 'Recovered mail', 'sender@example.test')`,
+    )
+    .run();
+  const response = await f.recover();
+  assert.equal(response.status, 200, await response.text());
+  let delivered;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    delivered = await f.db.prepare("SELECT delivered_at FROM mail_push_outbox").first();
+    if (delivered.delivered_at !== null) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.notEqual(delivered.delivered_at, null);
+  const mail = f.sent.filter((message) => message.data.target_path === "/mail");
+  assert.equal(mail.length, 1);
+  assert.equal(mail[0].data.title, "Recovered mail");
+  assert.equal(
+    (
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM notification_events WHERE type GLOB 'mail.*'")
+        .first()
+    ).n,
+    0,
+  );
+  await f.publishMail("automatic");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (f.sent.filter((message) => message.data.target_path === "/mail").length === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(f.sent.filter((message) => message.data.target_path === "/mail").length, 2);
 });
 
 test("queued pushes respect current preferences and concurrent delivery keeps Unicode payloads bounded", async (t) => {

@@ -214,6 +214,13 @@ test("Notification center: ownership, atomic delivery, preferences and synchroni
       await call("?state=invalid", { token, expected: 400 });
       await call("?limit=101", { token, expected: 400 });
       await call("?type=mail.new", { token, expected: 400 });
+      await call("?type=mail.received", { token, expected: 400 });
+      await call("?service=mail", { token, expected: 400 });
+      const catalog = await call("/types", { token });
+      assert.equal(
+        catalog.types.some((item) => item.service === "mail"),
+        false,
+      );
     },
   );
   await t.test(
@@ -524,6 +531,8 @@ test("Notification center: ownership, atomic delivery, preferences and synchroni
 });
 
 test("Notification navigation stays on registered workspace routes", () => {
+  assert.equal(notificationTarget("/mail"), null);
+  assert.equal(pushTarget("/mail"), "/mail");
   for (const path of ["/notifications", "/profile/notifications"])
     assert.equal(returnToWorkspace(path), path);
   assert.equal(notificationTarget("/profile/sessions"), "/profile/sessions");
