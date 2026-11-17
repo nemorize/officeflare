@@ -274,36 +274,6 @@
     transform: translateX(385%);
   }
 }
-.calendar-empty {
-  padding: 64px 24px;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-}
-.calendar-empty > span {
-  display: grid;
-  place-items: center;
-  width: 70px;
-  height: 70px;
-  border-radius: 22px;
-  background: var(--ui-surface);
-  color: var(--ui-muted);
-  margin-bottom: 22px;
-}
-.calendar-empty h2 {
-  font-weight: 500;
-  font-size: 18px;
-  margin-bottom: 9px;
-}
-.calendar-empty p {
-  max-width: 340px;
-  color: var(--ui-muted);
-  font-size: 12px;
-  line-height: 1.8;
-}
 .calendar-month-view {
   display: flex;
   flex: 1;

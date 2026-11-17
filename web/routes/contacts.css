@@ -461,36 +461,6 @@
 .contacts-detail-restore {
   padding: 0 18px 26px;
 }
-.contacts-empty {
-  flex: 1;
-  min-height: 230px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 45px 24px 80px;
-  gap: 10px;
-}
-.contacts-empty > svg {
-  color: var(--ui-subtle);
-}
-.contacts-empty h2 {
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.3px;
-  margin: 5px 0 0;
-}
-.contacts-empty p {
-  max-width: 325px;
-  color: var(--ui-muted);
-  font-size: 12px;
-  line-height: 1.7;
-  margin: 0;
-}
-.contacts-empty button {
-  margin-top: 12px;
-}
 .contacts-pagination {
   display: flex;
   justify-content: space-between;
@@ -719,6 +689,10 @@
 .contacts-fields-page {
   overflow: auto;
   flex: 1;
+}
+.contacts-fields-page:has(> .workspace-empty-state) {
+  display: flex;
+  flex-direction: column;
 }
 .contacts-field-hint {
   font-size: 12px;

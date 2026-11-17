@@ -1526,6 +1526,11 @@
 .drive-public-table {
   padding: 0 28px 25px;
 }
+.drive-public-table:has(> .workspace-empty-state) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
 .drive-public-table .drive-table-header,
 .drive-public-table .drive-file-row {
   grid-template-columns: minmax(160px, 1fr) 140px 90px 35px;

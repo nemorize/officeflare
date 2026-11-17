@@ -17,6 +17,7 @@ import {
 import { Confirm, ConsolePageHeader } from "../components/console-shared";
 import { SettingsSection } from "../components/settings-layout";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import { Button, Icon, SelectControl, Textarea, useNotifications } from "../components/ui";
 
 const typeLabels = {
@@ -109,11 +110,7 @@ export function ContactFieldsPage() {
       {contacts.loading && !contacts.fields.length ? (
         <LoadingSkeleton rows={4} />
       ) : !contacts.error && !contacts.fields.length ? (
-        <div className="contacts-empty">
-          <Icon name="controls" width={36} height={36} />
-          <h2>{t("contacts.emptyFields")}</h2>
-          <p>{t("contacts.customDescription")}</p>
-        </div>
+        <WorkspaceEmptyState icon="controls" title={t("contacts.emptyFields")} />
       ) : (
         <>
           {render(false)}

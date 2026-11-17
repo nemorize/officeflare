@@ -8,19 +8,23 @@ export function WorkspaceEmptyState({
   description,
   children,
   className = "",
+  iconBackground = false,
 }: {
   icon: IconProps["name"];
   title: string;
-  description?: string;
+  description?: ReactNode;
   children?: ReactNode;
   className?: string;
+  iconBackground?: boolean;
 }) {
   return (
     <div className={`workspace-empty-state ${className}`.trim()}>
-      <div className="workspace-empty-state-art" aria-hidden="true">
-        <span />
-        <Icon name={icon} width="54" height="54" />
-        <span />
+      <div
+        className="workspace-empty-state-art"
+        data-icon-background={iconBackground || undefined}
+        aria-hidden="true"
+      >
+        <Icon name={icon} width={28} height={28} />
       </div>
       <h2>{title}</h2>
       {description && <p>{description}</p>}

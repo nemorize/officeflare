@@ -16,6 +16,7 @@ import {
   type DriveContentLoader,
 } from "../components/drive-preview";
 import { ApiError } from "../lib/api";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import {
   driveDate,
   driveSize,
@@ -313,11 +314,11 @@ export function PublicDrivePage() {
               )}
               <DriveNotice error={error} />
               {!loading && !items.length && !error && (
-                <div className="drive-empty">
-                  <Icon name="folder" width="46" height="46" />
-                  <h2>{t("routesDrivePublic.thisFolderIsEmpty")}</h2>
-                  <p>{t("routesDrivePublic.filesAddedByTheOwnerWillAppearHere")}</p>
-                </div>
+                <WorkspaceEmptyState
+                  icon="folder"
+                  title={t("routesDrivePublic.thisFolderIsEmpty")}
+                  description={t("routesDrivePublic.filesAddedByTheOwnerWillAppearHere")}
+                />
               )}
               {!!items.length && (
                 <div

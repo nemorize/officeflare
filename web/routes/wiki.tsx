@@ -19,6 +19,7 @@ import { WikiRevisionPreview } from "../components/wiki-revision-preview";
 import { WikiHome, WikiPageTable, WikiStarred } from "../components/wiki-home";
 import { WorkspaceIconButton } from "../components/workspace-controls";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import { formatDateTime } from "../lib/regional";
 import { WorkspaceConfirm, WorkspaceNotice } from "../components/workspace-dialog";
 import { WikiRenameDialog } from "../components/wiki-rename-dialog";
@@ -322,10 +323,10 @@ function PageList({ view, query = "" }: { view: "search" | "trash"; query?: stri
         !loading &&
         !pages.length &&
         !error && (
-          <div className="wiki-list-empty">
-            <Icon name={view === "search" ? "search" : "trash"} />
-            <h2>{t(view === "search" ? "wiki.noResults" : "wiki.emptyTrash")}</h2>
-          </div>
+          <WorkspaceEmptyState
+            icon={view === "search" ? "search" : "trash"}
+            title={t(view === "search" ? "wiki.noResults" : "wiki.emptyTrash")}
+          />
         )
       )}
       {cursor && (

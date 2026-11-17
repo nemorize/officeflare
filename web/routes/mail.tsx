@@ -32,6 +32,7 @@ import { useAccount } from "../components/account-context";
 import { useAccess } from "../components/console-access";
 import { useSession } from "../lib/session";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import { Confirm } from "../components/console-shared";
 export function MailReady({ children, read = true }: { children: ReactNode; read?: boolean }) {
   const mail = useMail(),
@@ -881,25 +882,24 @@ function MailList({
             />
           ))}
           {!resource.loading && !resource.error && !messages.length && (
-            <div className="mail-empty">
-              <span className="mail-empty-illustration">
-                <Icon name={query ? "search" : "inbox"} width="32" height="32" />
-              </span>
-              <h2>
-                {query
+            <WorkspaceEmptyState
+              iconBackground
+              icon={query ? "search" : "inbox"}
+              title={
+                query
                   ? t("routesMail.noMatchingMessages")
                   : section === "inbox"
                     ? t("routesMail.youReAllCaughtUp")
-                    : t("routesMail.isEmpty", { title: title })}
-              </h2>
-              <p>
-                {query
+                    : t("routesMail.isEmpty", { title })
+              }
+              description={
+                query
                   ? t("routesMail.tryADifferentSearchOrRemoveAFilter")
                   : section === "drafts"
                     ? t("routesMail.yourDraftsAreSavedHereAutomatically")
-                    : t("routesMail.messagesWillAppearHereWhenYouNeedThem")}
-              </p>
-            </div>
+                    : t("routesMail.messagesWillAppearHereWhenYouNeedThem")
+              }
+            />
           )}
         </div>
         {selecting && selectedRows.length > 0 && (

@@ -25,6 +25,7 @@ import {
 } from "../components/calendar-collaboration";
 import { CalendarSettingsDialog } from "../components/calendar-settings";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import {
   calendarApi,
   calendarFailure,
@@ -53,13 +54,13 @@ function CalendarEmpty({
   children: React.ReactNode;
 }) {
   return (
-    <div className="calendar-empty">
-      <span>
-        <Icon name={icon} width="28" height="28" />
-      </span>
-      <h2>{title}</h2>
-      <p>{children}</p>
-    </div>
+    <WorkspaceEmptyState
+      className="calendar-empty"
+      iconBackground
+      icon={icon}
+      title={title}
+      description={children}
+    />
   );
 }
 function SharedCalendars() {

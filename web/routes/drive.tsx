@@ -753,7 +753,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
                           : t("routesDrive.uploadYourFilesOrCreateAFolderToGet")
             }
           >
-            {writable && !kind && (
+            {!mobile && writable && !kind && (
               <Button variant="primary" onClick={() => drive.chooseFiles()}>
                 <Icon name="upload" />
                 {t("routesDrive.uploadFiles")}

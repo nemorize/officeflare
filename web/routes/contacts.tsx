@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from "react-router";
 import { t, plural } from "../../shared/i18n/index.ts";
 import { api } from "../lib/api";
 import { formatDateTime } from "../lib/regional";
+import { useWorkspaceMobile } from "../lib/workspace-responsive";
 import {
   contactInitials,
   contactLocation,
@@ -19,6 +20,7 @@ import {
 } from "../components/contacts-controls";
 import { Confirm } from "../components/console-shared";
 import { LoadingSkeleton } from "../components/loading-skeleton";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import { Button, Icon, Menu, MenuPopup, useNotifications } from "../components/ui";
 
 export function ContactsPage() {
@@ -26,6 +28,7 @@ export function ContactsPage() {
     location = useLocation(),
     [params, setParams] = useSearchParams(),
     view = contactLocation(location.pathname),
+    mobile = useWorkspaceMobile(),
     notify = useNotifications(),
     action = useContactAction();
   const selected = params.get("contact"),
@@ -122,27 +125,24 @@ export function ContactsPage() {
           </span>
         )}
         {!loading && !resource.error && !list.length ? (
-          <div className="contacts-empty">
-            <Icon name={view.trash ? "trash" : "users"} width={36} height={36} />
-            <h2>
-              {t(
-                view.trash
-                  ? "contacts.emptyTrash"
-                  : query || view.folder || view.unfiled
-                    ? "contacts.emptySearch"
-                    : "contacts.emptyTitle",
-              )}
-            </h2>
-            <p>
-              {t(
-                view.trash
-                  ? "contacts.emptyTrashDescription"
-                  : query || view.folder || view.unfiled
-                    ? "contacts.emptySearchDescription"
-                    : "contacts.emptyDescription",
-              )}
-            </p>
-            {!view.trash && contacts.can("entries.create") && (
+          <WorkspaceEmptyState
+            icon={view.trash ? "trash" : query ? "search" : "users"}
+            title={t(
+              view.trash
+                ? "contacts.emptyTrash"
+                : query || view.folder || view.unfiled
+                  ? "contacts.emptySearch"
+                  : "contacts.emptyTitle",
+            )}
+            description={t(
+              view.trash
+                ? "contacts.emptyTrashDescription"
+                : query || view.folder || view.unfiled
+                  ? "contacts.emptySearchDescription"
+                  : "contacts.emptyDescription",
+            )}
+          >
+            {!mobile && !view.trash && contacts.can("entries.create") && (
               <Button
                 variant="primary"
                 disabled={contacts.loading || !!contacts.error}
@@ -152,7 +152,7 @@ export function ContactsPage() {
                 {t("contacts.newContact")}
               </Button>
             )}
-          </div>
+          </WorkspaceEmptyState>
         ) : (
           (loading || !!list.length) && (
             <div className="contacts-table-scroll" aria-busy={loading}>

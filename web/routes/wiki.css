@@ -257,27 +257,10 @@
   justify-content: flex-end;
   gap: 6px;
 }
-.wiki-list-empty {
+:is(.wiki-home, .wiki-settings):has(> .workspace-empty-state) {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 80px 24px;
-  gap: 10px;
-  color: var(--ui-muted);
-}
-.wiki-list-empty > svg {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 8px;
-  color: var(--ui-subtle);
-}
-.wiki-list-empty h2 {
-  margin: 0;
-  color: var(--ui-text);
-  font-size: 16px;
-  font-weight: 500;
+  min-height: 100%;
 }
 .wiki-settings > .wiki-page-table {
   margin-top: 24px;

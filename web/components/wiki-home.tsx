@@ -186,10 +186,10 @@ export function WikiHome() {
           <WikiPageTable pages={pages} />
         </section>
       ) : (
-        <section className="wiki-list-empty">
-          <Icon name="book" />
-          <h2>{t(wiki.space ? "wiki.noPagesYet" : "wiki.noSpaces")}</h2>
-        </section>
+        <WorkspaceEmptyState
+          icon="book"
+          title={t(wiki.space ? "wiki.noPagesYet" : "wiki.noSpaces")}
+        />
       )}
       {dialog && (
         <WikiSpaceDialog

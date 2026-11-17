@@ -18,6 +18,7 @@ import {
 } from "../components/notification-center-context";
 import { api, errorMessage } from "../lib/api";
 import { PushNotificationSettings } from "../components/push-settings";
+import { WorkspaceEmptyState } from "../components/workspace-empty-state";
 import type {
   NotificationPreferences,
   NotificationState,
@@ -116,15 +117,11 @@ export function NotificationsPage() {
           </p>
         )}
         {!list.loading && !list.error && !list.items.length && (
-          <div className="notification-empty">
-            <Icon
-              name={state === "archived" ? "archive" : state === "snoozed" ? "clock" : "bell"}
-              width="28"
-              height="28"
-            />
-            <strong>{t("routesNotifications.noNotificationsHere")}</strong>
-            <p>{t("routesNotifications.updatesWillAppearAsActivityHappens")}</p>
-          </div>
+          <WorkspaceEmptyState
+            icon={state === "archived" ? "archive" : state === "snoozed" ? "clock" : "bell"}
+            title={t("routesNotifications.noNotificationsHere")}
+            description={t("routesNotifications.updatesWillAppearAsActivityHappens")}
+          />
         )}
       </div>
       {list.next && (
