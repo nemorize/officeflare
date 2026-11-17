@@ -246,8 +246,18 @@ export function ContactsTopbar({
             />
           )}
         </SearchField>
-        {mobile && <div className="contacts-topbar-actions">{createButton}</div>}
       </header>
+      {mobile && (
+        <Button
+          variant="primary"
+          className="contacts-mobile-create"
+          disabled={!contacts.can("entries.create") || contacts.loading || !!contacts.error}
+          onClick={() => contacts.edit()}
+        >
+          <Icon name="plus" />
+          {t("contacts.newContact")}
+        </Button>
+      )}
       <WorkspaceNavigationDrawer
         open={menu}
         onOpenChange={setMenu}

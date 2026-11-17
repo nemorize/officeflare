@@ -147,11 +147,6 @@
 .contacts-search input:focus-visible {
   outline: none;
 }
-.contacts-topbar-actions {
-  display: flex;
-  gap: 4px;
-  margin-inline-start: auto;
-}
 .contacts-page {
   --contact-row-height: 54px;
   --contact-name-height: 52px;
@@ -783,6 +778,12 @@
   }
 }
 @media (max-width: 760px) {
+  .contacts-mobile-create[data-ui-button] {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 30;
+  }
   .contacts-page {
     --contact-row-height: 62px;
     --contact-name-height: 60px;

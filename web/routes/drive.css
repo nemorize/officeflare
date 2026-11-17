@@ -1633,8 +1633,7 @@
     margin-left: 0;
   }
   .drive-mobile-menu,
-  .drive-mobile-account,
-  .drive-inline-new {
+  .drive-mobile-account {
     display: block;
   }
   .drive-mobile-account .notification-mobile-actions {
@@ -1642,15 +1641,6 @@
     gap: 2px;
   }
   .drive-header-actions > button:first-of-type:not([data-size="icon"]) {
-    display: none;
-  }
-  .drive-inline-new .drive-new-button {
-    min-width: 0;
-  }
-  .drive-inline-new .drive-new-button svg:first-child {
-    width: 14px;
-  }
-  .drive-inline-new .drive-new-button svg:last-child {
     display: none;
   }
   .drive-layout-grid .drive-row-select {
@@ -1868,6 +1858,16 @@
 }
 
 @media (max-width: 760px) {
+  .drive-inline-new {
+    display: block;
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 30;
+  }
+  .drive-selection-mode .drive-inline-new {
+    display: none;
+  }
   .drive-layout-list .drive-table-header,
   .drive-layout-list .drive-file-row {
     grid-template-columns: 44px minmax(0, 1fr) 76px 44px;

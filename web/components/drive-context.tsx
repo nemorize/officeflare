@@ -54,17 +54,24 @@ export function useDrive() {
   if (!value) throw new Error(t("componentsDriveContext.driveproviderIsRequired"));
   return value;
 }
-export function DriveNewMenu() {
+export function DriveNewMenu({ mobile = false }: { mobile?: boolean }) {
   const drive = useDrive();
   return (
     <Menu.Root>
       <Menu.Trigger
         render={
-          <WorkspaceCreateButton
-            label={t("componentsDriveContext.new")}
-            dropdown
-            className="drive-new-button"
-          />
+          mobile ? (
+            <Button variant="primary" className="drive-new-button">
+              <Icon name="plus" />
+              {t("componentsDriveContext.new")}
+            </Button>
+          ) : (
+            <WorkspaceCreateButton
+              label={t("componentsDriveContext.new")}
+              dropdown
+              className="drive-new-button"
+            />
+          )
         }
         disabled={!drive.target.writable}
       />

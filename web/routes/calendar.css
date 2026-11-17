@@ -2029,15 +2029,11 @@
     font-size: 9px;
   }
   .calendar-mobile-create[data-ui-button] {
-    display: grid;
-    position: absolute;
-    right: 20px;
-    bottom: calc(22px + env(safe-area-inset-bottom));
-    width: 52px;
-    height: 52px;
-    border-radius: 17px;
-    box-shadow: 0 4px 16px #0002;
-    z-index: 7;
+    display: inline-flex;
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 30;
   }
   .calendar-agenda {
     padding-inline: 12px;

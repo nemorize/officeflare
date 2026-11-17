@@ -440,7 +440,7 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
           </div>
           <div className="drive-header-actions">
             <div className="drive-inline-new">
-              <DriveNewMenu />
+              <DriveNewMenu mobile />
             </div>
             {folder && folderResource.data?.item.effective_role === "owner" && (
               <Button

@@ -433,12 +433,12 @@ export function CalendarPage() {
               {calendar.can("events.create") && (
                 <Button
                   variant="primary"
-                  size="icon"
                   className="calendar-mobile-create"
                   aria-label={t("routesCalendar.createEvent")}
                   onClick={() => calendar.setCreate({ date: calendar.date })}
                 >
-                  <Icon name="plus" width="22" height="22" />
+                  <Icon name="plus" />
+                  {t("routesCalendar.createEvent")}
                 </Button>
               )}
             </>
