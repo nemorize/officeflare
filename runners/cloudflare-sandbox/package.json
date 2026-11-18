@@ -1,0 +1,33 @@
+{
+  "name": "officeflare-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "EXECUTOR_TOKEN": {
+        "description": "Required: a random token of at least 32 characters. Use the same value as the API key when connecting this MCP server in Officeflare. Generate with: openssl rand -hex 32"
+      },
+      "EXECUTIONS": {
+        "description": "Isolated Python and JavaScript executions. Containers require a Workers Paid plan."
+      }
+    }
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "cf-typegen": "wrangler types",
+    "typecheck": "npm run cf-typegen && tsc --noEmit",
+    "build": "npm run typecheck && wrangler deploy --dry-run --containers-rollout none --outdir dist",
+    "deploy": "wrangler deploy",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "typescript": "7.0.2",
+    "wrangler": "4.164.0"
+  }
+}

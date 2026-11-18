@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "officeflare-sandbox",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "workers_dev": true,
+  "secrets": {
+    "required": ["EXECUTOR_TOKEN"],
+  },
+  "containers": [
+    {
+      "class_name": "SandboxExecution",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "runtime": { "dockerfile": "./Dockerfile" },
+      },
+    },
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "EXECUTIONS", "class_name": "SandboxExecution" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SandboxExecution"] }],
+}

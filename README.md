@@ -8,9 +8,19 @@
 
 ## Installation
 
+### Officeflare
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nemorize/officeflare)
 
 Click **Deploy to Cloudflare** above and follow the setup steps to install Officeflare in your own Cloudflare account.
+
+### Sandbox runner (optional, Workers Paid)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nemorize/officeflare/tree/develop/runners/cloudflare-sandbox)
+
+Deploys a separate MCP server for Python and JavaScript execution. It requires [Workers Paid](https://developers.cloudflare.com/containers/platform/pricing/). The Officeflare deployment does not include a container binding.
+
+During setup, enter a random `EXECUTOR_TOKEN` of at least 32 characters. After deployment, register `https://<runner-worker>.workers.dev/mcp` in **Console → AI → MCP servers**, then add a connection in **AI → Connections** using the token as the API key. Enable the connection's tools in the chat room.
 
 ## Features
 

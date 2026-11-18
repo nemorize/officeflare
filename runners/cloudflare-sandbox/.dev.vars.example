@@ -1,0 +1,3 @@
+# Generate with: openssl rand -hex 32
+# Use this value as the API key for the MCP connection in Officeflare.
+EXECUTOR_TOKEN=
