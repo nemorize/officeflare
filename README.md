@@ -48,7 +48,7 @@ During setup, enter a random `EXECUTOR_TOKEN` of at least 32 characters. After d
 
   - **Storage**: Files, folders, and uploads.
   - **Browsing**: List/grid views, search, and filters.
-  - **Previews**: PDFs, images, and text.
+  - **Previews**: Flyfish previews for PDFs, Microsoft Office, iWork, Hangul, OpenDocument, images, media, text and code, archives, email, e-books, diagrams, 3D models, design files, and structured data. HLS playlists, PlantUML, and Typst open as source.
   - **History**: Versions, comments, activity, and trash recovery.
   - **Permissions**: Viewer, commenter, and editor roles.
   - **Links**: Passwords, expiration, and download controls.

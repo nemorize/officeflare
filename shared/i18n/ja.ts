@@ -2128,25 +2128,15 @@ export const ja = defineTranslations(en, {
   "componentsDriveDialogs.you": " （自分）",
   "componentsDriveOwner.sharedAccount": "共有アカウント",
   "componentsDriveOwner.u": "U",
-  "componentsDrivePdfPreview.canvasUnavailable": "Canvasを利用できません",
-  "componentsDrivePdfPreview.page": "{name}、{page}ページ",
-  "componentsDrivePdfPreview.pageOf": "{value2}ページ中{page}ページ",
-  "componentsDrivePdfPreview.pdfPages": "PDFのページ",
-  "componentsDrivePdfPreview.pdfPreviewOf": "{name}のPDFプレビュー",
-  "componentsDrivePdfPreview.renderingPage": "ページを描画中…",
-  "componentsDrivePdfPreview.thisPdfCouldNotBePreviewedDownloadItTo":
-    "このPDFをプレビューできません。ダウンロードしてPDFリーダーで開いてください。",
-  "componentsDrivePdfPreview.thisPdfIsPasswordProtectedDownloadItToOpen":
-    "このPDFはパスワードで保護されています。ダウンロードしてPDFリーダーで開いてください。",
-  "componentsDrivePdfPreview.thisPdfPageCouldNotBePreviewedYouCan":
-    "このPDFのページをプレビューできません。ファイルのダウンロードは可能です。",
   "componentsDrivePreview.closePreview": "プレビューを閉じる",
+  "componentsDrivePreview.couldNotPreviewFile": "このファイルをプレビューできません。",
+  "componentsDrivePreview.filePasswordProtected": "このファイルはパスワードで保護されています。",
   "componentsDrivePreview.download": "ダウンロード",
   "componentsDrivePreview.downloadThisFileToOpenItOnYourDevice":
     "デバイスで開くには、このファイルをダウンロードしてください。",
   "componentsDrivePreview.downloading": "ダウンロード中…",
   "componentsDrivePreview.noPreviewAvailable": "プレビューなし",
-  "componentsDrivePreview.preparingPdfPreview": "PDFプレビューを準備中…",
+  "componentsDrivePreview.noSearchMatches": "一致する項目なし",
   "componentsDrivePreview.preparingPreview": "プレビューを準備中…",
   "componentsDrivePreview.previewAndDownloadsDisabled": "プレビューとダウンロードは無効です",
   "componentsDrivePreview.share": "共有",

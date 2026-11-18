@@ -792,9 +792,12 @@ async function capture(browser, demo, dates, stage) {
   await shoot(scenes[9]);
   await page.getByRole("button", { name: "Dismiss completed uploads", exact: true }).click();
   await page.getByRole("button", { name: demo.briefName, exact: true }).dblclick();
-  await page.waitForFunction(() =>
-    document.querySelector(".drive-pdf-accessible-text")?.textContent.includes("NORTHSTAR STUDIO"),
-  );
+  await page
+    .frameLocator("iframe.drive-preview-viewer")
+    .getByText("NORTHSTAR STUDIO", { exact: true })
+    .first()
+    .waitFor({ state: "visible" });
+  await page.locator(".drive-preview-viewer-loading").waitFor({ state: "hidden" });
   await shoot(scenes[10]);
   await page.getByRole("button", { name: "Share", exact: true }).click();
   await page.getByRole("tab", { name: "Public links", exact: true }).click();

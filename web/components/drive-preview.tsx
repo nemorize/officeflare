@@ -1,11 +1,11 @@
-import { t } from "../../shared/i18n/index.ts";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { getLocale, t } from "../../shared/i18n/index.ts";
+import { DRIVE_PREVIEW_LIMIT } from "../../shared/drive-preview.ts";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, Dialog, DialogPopup, Icon, useNotifications } from "./ui";
 import { api } from "../lib/api";
-import { driveSize, fileKind, formatBytes, previewKind, type DriveItem } from "../lib/drive";
+import { driveSize, fileKind, formatBytes, itemPreviewSource, type DriveItem } from "../lib/drive";
+import type { DriveViewerEvent, DriveViewerInput } from "../lib/drive-viewer-protocol";
 import { DriveFileIcon, DriveIconButton, DriveNotice, driveFailure } from "./drive-controls";
-
-const DrivePdfPreview = lazy(() => import("./drive-pdf-preview"));
 
 export type DriveContentLoader = (path: string, signal: AbortSignal) => Promise<Response>;
 export const privateDriveContent: DriveContentLoader = (path, signal) =>
@@ -66,44 +66,95 @@ export function DrivePreview({
   basePath?: string;
 }) {
   const notify = useNotifications(),
-    kind = previewKind(item);
-  const [content, setContent] = useState<{ url?: string; text?: string }>({}),
-    [loading, setLoading] = useState(!!kind && canPreview),
+    source = itemPreviewSource(item),
+    format = source?.format,
+    endpoint = source?.endpoint,
+    version = item.current_version?.id ?? item.current_version_id;
+  const frame = useRef<HTMLIFrameElement>(null),
+    close = useRef(onClose);
+  close.current = onClose;
+  const [file, setFile] = useState<File | null>(null),
+    [loading, setLoading] = useState(!!format && canPreview),
+    [viewerLoading, setViewerLoading] = useState(false),
     [error, setError] = useState(""),
     [downloading, setDownloading] = useState(false);
+
   useEffect(() => {
     const controller = new AbortController();
-    let url: string | undefined;
-    setContent({});
+    setFile(null);
     setError("");
-    setLoading(!!kind && canPreview);
-    if (kind && canPreview)
-      void loader(
-        `${basePath}/${kind === "text" && !["text/plain"].includes(item.current_version?.content_type ?? item.content_type ?? "") ? "content" : "preview"}`,
-        controller.signal,
-      )
+    setViewerLoading(false);
+    setLoading(!!format && canPreview);
+    if (format && canPreview)
+      void loader(`${basePath}/${endpoint}`, controller.signal)
         .then(async (response) => {
-          if (kind === "text") {
-            const text = await response.text();
-            if (!controller.signal.aborted) setContent({ text });
-          } else {
-            url = URL.createObjectURL(await response.blob());
-            if (!controller.signal.aborted) setContent({ url });
-            else URL.revokeObjectURL(url);
+          if (Number(response.headers.get("Content-Length")) > DRIVE_PREVIEW_LIMIT) {
+            void response.body?.cancel().catch(() => {});
+            throw new Error(t("componentsDrivePreview.thisFileIsLargerThanThe20MbPreview"));
           }
-          if (!controller.signal.aborted) setLoading(false);
+          const blob = await response.blob();
+          controller.signal.throwIfAborted();
+          if (blob.size > DRIVE_PREVIEW_LIMIT)
+            throw new Error(t("componentsDrivePreview.thisFileIsLargerThanThe20MbPreview"));
+          setViewerLoading(true);
+          setFile(new File([blob], item.name, { type: blob.type }));
         })
         .catch((failure) => {
-          if (!controller.signal.aborted) {
-            setError(driveFailure(failure));
-            setLoading(false);
-          }
+          if (!controller.signal.aborted) setError(driveFailure(failure));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
         });
-    return () => {
-      controller.abort();
-      if (url) URL.revokeObjectURL(url);
+    return () => controller.abort();
+  }, [basePath, version, format, endpoint, item.name, canPreview, loader]);
+
+  useLayoutEffect(() => {
+    if (!file || !format) return;
+    const origin = window.location.origin;
+    const message: DriveViewerInput = {
+      kind: "drive-viewer:open",
+      file,
+      format,
+      locale: getLocale(),
+      theme: document.documentElement.dataset.colorScheme === "dark" ? "dark" : "light",
+      noSearchMatches: t("componentsDrivePreview.noSearchMatches"),
     };
-  }, [item.id, basePath, kind, canPreview, loader]);
+    const timeout = setTimeout(() => {
+      setViewerLoading(false);
+      setError(t("componentsDrivePreview.couldNotPreviewFile"));
+    }, 45_000);
+    function receive(event: MessageEvent<DriveViewerEvent>) {
+      if (event.source !== frame.current?.contentWindow || event.origin !== origin) return;
+      switch (event.data?.kind) {
+        case "drive-viewer:ready":
+          frame.current?.contentWindow?.postMessage(message, origin);
+          break;
+        case "drive-viewer:loaded":
+          clearTimeout(timeout);
+          setViewerLoading(false);
+          break;
+        case "drive-viewer:error":
+          clearTimeout(timeout);
+          setViewerLoading(false);
+          setError(
+            t(
+              event.data.encrypted
+                ? "componentsDrivePreview.filePasswordProtected"
+                : "componentsDrivePreview.couldNotPreviewFile",
+            ),
+          );
+          break;
+        case "drive-viewer:close":
+          close.current();
+          break;
+      }
+    }
+    window.addEventListener("message", receive);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("message", receive);
+    };
+  }, [file, format]);
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <DialogPopup
@@ -158,30 +209,31 @@ export function DrivePreview({
             />
           </div>
         </header>
-        <div
-          className={`drive-preview-body${kind === "text" ? " drive-preview-text-body" : kind === "pdf" ? " drive-preview-pdf-body" : ""}`}
-        >
-          {loading ? (
+        <div className={`drive-preview-body${file && !error ? " drive-preview-viewer-body" : ""}`}>
+          {error ? (
+            <DriveNotice error={error} />
+          ) : file && !loading ? (
+            <>
+              <iframe
+                ref={frame}
+                className="drive-preview-viewer"
+                title={item.name}
+                sandbox="allow-scripts allow-same-origin"
+                referrerPolicy="no-referrer"
+                src="/drive-viewer.html"
+              />
+              {viewerLoading && (
+                <div className="drive-preview-viewer-loading" role="status">
+                  <span className="drive-spinner" />
+                  <p>{t("componentsDrivePreview.preparingPreview")}</p>
+                </div>
+              )}
+            </>
+          ) : loading ? (
             <div className="drive-state" role="status">
               <span className="drive-spinner" />
               <p>{t("componentsDrivePreview.preparingPreview")}</p>
             </div>
-          ) : error ? (
-            <DriveNotice error={error} />
-          ) : content.text !== undefined ? (
-            <pre className="drive-preview-text">{content.text}</pre>
-          ) : content.url && kind === "image" ? (
-            <img src={content.url} alt={item.name} />
-          ) : content.url && kind === "pdf" ? (
-            <Suspense
-              fallback={
-                <div className="drive-state" role="status">
-                  {t("componentsDrivePreview.preparingPdfPreview")}
-                </div>
-              }
-            >
-              <DrivePdfPreview url={content.url} name={item.name} />
-            </Suspense>
           ) : (
             <div className="drive-state">
               <DriveFileIcon item={item} large />
@@ -193,7 +245,7 @@ export function DrivePreview({
               <p>
                 {!canDownload
                   ? t("componentsDrivePreview.theOwnerHasSharedFileInformationOnly")
-                  : driveSize(item) > 20 * 1024 * 1024
+                  : driveSize(item) > DRIVE_PREVIEW_LIMIT
                     ? t("componentsDrivePreview.thisFileIsLargerThanThe20MbPreview")
                     : t("componentsDrivePreview.downloadThisFileToOpenItOnYourDevice")}
               </p>

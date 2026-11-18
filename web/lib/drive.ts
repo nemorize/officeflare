@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n/index.ts";
+import { DRIVE_PREVIEW_LIMIT, drivePreviewSource } from "../../shared/drive-preview.ts";
 import { formatDateTime, getRegionalLocale } from "./regional.ts";
 import type { ApiOptions } from "./api-client";
 
@@ -153,16 +154,11 @@ export function fileKind(item: DriveItem) {
     return { label: t("libDrive.video"), icon: "image" as const, tone: "video" };
   return { label: t("libDrive.file"), icon: "file" as const, tone: "file" };
 }
-export const previewKind = (item: DriveItem) => {
-  if (driveSize(item) > 20 * 1024 * 1024) return null;
-  const type = driveType(item).split(";")[0]!.toLowerCase();
-  if (["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"].includes(type))
-    return "image";
-  if (type === "application/pdf") return "pdf";
-  if (type.startsWith("text/") || ["application/json", "application/xml"].includes(type))
-    return "text";
-  return null;
-};
+export const itemPreviewSource = (item: DriveItem) =>
+  item.kind === "folder" || driveSize(item) > DRIVE_PREVIEW_LIMIT
+    ? null
+    : drivePreviewSource(item.name, driveType(item));
+export const previewKind = (item: DriveItem) => itemPreviewSource(item)?.format ?? null;
 export function selectDriveItems(
   ids: string[],
   selected: Set<string>,

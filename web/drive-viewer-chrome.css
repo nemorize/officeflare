@@ -1,0 +1,446 @@
+/* Flyfish declares its defaults on the shell, including in dark mode. */
+:host(#drive-viewer) [part~="shell"] {
+  --file-viewer-bg: var(--ui-chrome);
+  --file-viewer-content-bg: var(--ui-chrome);
+  --file-viewer-text: var(--ui-text);
+  --file-viewer-muted: var(--ui-muted);
+  --file-viewer-font: 13px/1.5 var(--ui-font);
+  --file-viewer-border: var(--ui-border);
+  --file-viewer-toolbar-bg: var(--ui-background);
+  --file-viewer-toolbar-border: var(--ui-border);
+  --file-viewer-toolbar-shadow: var(--ui-shadow-popup);
+  --file-viewer-toolbar-radius: var(--ui-radius-control);
+  --file-viewer-toolbar-gap: 6px 16px;
+  --file-viewer-toolbar-min-height: 46px;
+  --file-viewer-toolbar-padding: 6px 14px;
+  --file-viewer-group-bg: transparent;
+  --file-viewer-group-border: transparent;
+  --file-viewer-group-padding: 0;
+  --file-viewer-button-color: var(--ui-nav-text);
+  --file-viewer-button-hover-bg: var(--ui-hover);
+  --file-viewer-button-hover-color: var(--ui-text);
+  --file-viewer-button-disabled-color: color-mix(
+    in srgb,
+    var(--ui-muted) 56%,
+    var(--ui-background)
+  );
+  --file-viewer-button-radius: var(--ui-radius-control);
+  --file-viewer-focus-ring: var(--ui-control-focus);
+}
+
+:host(#drive-viewer) [part~="toolbar"] {
+  justify-content: flex-start;
+}
+
+:host(#drive-viewer) [part~="toolbar-group"]:not([role="search"]) {
+  margin-inline-start: auto;
+}
+
+:host(#drive-viewer) :is([part~="toolbar"], [part~="toolbar-group"]):not(:has(button:enabled)) {
+  display: none;
+}
+
+:host(#drive-viewer) [part~="toolbar"] :is([part~="button"], [part~="toolbar-status"]) {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:host(#drive-viewer) [part~="toolbar-group"][role="search"] {
+  flex: 0 1 440px;
+  min-width: 0;
+  min-height: 34px;
+  flex-wrap: nowrap;
+  gap: 0;
+  padding-inline: 3px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface);
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+
+:host(#drive-viewer) [part~="toolbar-group"][role="search"]:hover {
+  background: var(--ui-hover);
+}
+
+:host(#drive-viewer) [part~="toolbar-group"][role="search"]:focus-within {
+  border-color: var(--ui-control-focus);
+  background: var(--ui-background);
+}
+
+:host(#drive-viewer) [role="search"] [part~="input"] {
+  flex: 1 1 0;
+  order: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ui-text);
+  box-shadow: none;
+}
+
+:host(#drive-viewer) [role="search"] [part~="input"]::placeholder {
+  color: var(--ui-muted);
+}
+
+:host(#drive-viewer) [role="search"] [part~="input"]::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+:host(#drive-viewer) [role="search"] > [part~="toolbar-status"] {
+  order: 2;
+  min-width: 0;
+  margin-inline-start: 4px;
+  padding-inline: 7px 4px;
+  border-inline-start: 1px solid var(--ui-border);
+  line-height: 20px;
+}
+
+:host(#drive-viewer) [role="search"]:not([data-search-active]) > [part~="toolbar-status"],
+:host(#drive-viewer)
+  [role="search"]:not([data-search-navigation])
+  > :is([data-viewer-toolbar-key="search-previous"], [data-viewer-toolbar-key="search-next"]),
+:host(#drive-viewer) [role="search"] > [data-viewer-toolbar-key="search-clear"]:disabled {
+  display: none;
+}
+
+:host(#drive-viewer) [data-viewer-toolbar-key="search-submit"] {
+  order: 0;
+  --drive-toolbar-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m21 21-4.5-4.5 M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+:host(#drive-viewer) [data-viewer-toolbar-key="search-next"] {
+  order: 4;
+  --drive-toolbar-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m8 5 7 7-7 7' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:host(#drive-viewer) [data-viewer-toolbar-key="search-previous"] {
+  order: 3;
+  --drive-toolbar-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m16 5-7 7 7 7' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:host(#drive-viewer) [data-viewer-toolbar-key="search-clear"] {
+  order: 5;
+  --drive-toolbar-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 6 12 12 M6 18 18 6' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+:host(#drive-viewer) [role="search"] button[data-viewer-toolbar-key^="search-"] {
+  position: relative;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: calc(var(--ui-radius-control) - 3px);
+  font-size: 0;
+}
+
+:host(#drive-viewer) [part~="toolbar"] button[data-viewer-toolbar-key^="search-"]::before {
+  position: absolute;
+  inset: 0;
+  width: 16px;
+  height: 16px;
+  margin: auto;
+  mask: var(--drive-toolbar-icon) center / contain no-repeat;
+  background: currentColor;
+  content: "";
+}
+
+@media (forced-colors: active) {
+  :host(#drive-viewer) [part~="toolbar"] button[data-viewer-toolbar-key^="search-"]::before {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+
+  :host(#drive-viewer)
+    [part~="toolbar"]
+    button[data-viewer-toolbar-key^="search-"]:disabled::before {
+    background: GrayText;
+  }
+}
+
+/* Renderer controls live beside their documents. Select the controls explicitly. */
+:host(#drive-viewer)
+  :is(
+    .pdf-shell,
+    .pdf-wrapper,
+    .iwork-viewer,
+    .archive-shell,
+    .archive-viewer,
+    .epub-viewer,
+    .drawing-viewer
+  ) {
+  background: var(--ui-chrome);
+  color: var(--ui-text);
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-toolbar,
+    .pdf-toolbar-group,
+    .excel-wrapper .toolbar,
+    .archive-preview-toolbar,
+    .epub-toolbar,
+    .psd-toolbar,
+    .drawing-toolbar
+  ) {
+  border-color: var(--ui-border);
+  background: var(--ui-background);
+  box-shadow: none;
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-nav-pane,
+    .pdf-nav-tabs,
+    .pdf-nav-head,
+    .iwork-nav,
+    .archive-sidebar,
+    .epub-toc,
+    .psd-sidebar,
+    .psd-sidebar-header
+  ) {
+  border-color: var(--ui-border);
+  background: var(--ui-sidebar);
+  color: var(--ui-text);
+}
+
+:host(#drive-viewer) :is(.pdf-toolbar-group, .pdf-page-button, .archive-entry) {
+  border-radius: var(--ui-radius-control);
+  border-color: var(--ui-border);
+  background: var(--ui-background);
+  color: var(--ui-nav-text);
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-icon-button,
+    .pdf-scale-button,
+    .pdf-nav-tabs button,
+    .pdf-outline-button,
+    .iwork-nav button,
+    .excel-wrapper .sheet-tab,
+    .epub-toc-item
+  ) {
+  border-color: transparent;
+  border-radius: var(--ui-radius-control);
+  background: transparent;
+  color: var(--ui-nav-text);
+  font: 500 12px/1.35 var(--ui-font);
+}
+
+:host(#drive-viewer) .pdf-icon-button {
+  font-size: 16px;
+}
+
+:host(#drive-viewer)
+  :is(
+    .pptx-slideshow-button,
+    .archive-sidebar-toggle,
+    .epub-icon-button,
+    .epub-button,
+    .psd-actions button,
+    .drawing-actions button
+  ) {
+  border-color: var(--ui-control-border);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-background);
+  color: var(--ui-text);
+  font: 500 12px/1.35 var(--ui-font);
+  box-shadow: none;
+}
+
+:host(#drive-viewer) .archive-search {
+  border-color: var(--ui-control-border);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-background);
+  color: var(--ui-text);
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-toolbar button,
+    .pdf-nav-tabs button,
+    .pdf-page-button,
+    .pdf-outline-button,
+    .iwork-nav button,
+    .excel-wrapper .sheet-tab,
+    .pptx-slideshow-button,
+    .archive-sidebar-toggle,
+    .archive-entry,
+    .epub-toc-item,
+    .epub-icon-button,
+    .epub-button,
+    .psd-actions button,
+    .drawing-actions button
+  ):hover:not(:disabled) {
+  background: var(--ui-hover);
+  color: var(--ui-text);
+  border-color: var(--ui-control-border);
+  box-shadow: none;
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-icon-button--active,
+    .pdf-nav-tabs .active,
+    .pdf-page-button--active,
+    .iwork-nav .active,
+    .excel-wrapper .sheet-tab.active,
+    .archive-entry.active,
+    .epub-icon-button.active,
+    .epub-toc-item.active
+  ) {
+  background: var(--ui-selected);
+  color: var(--ui-text);
+  border-color: var(--ui-control-border);
+  box-shadow: none;
+}
+
+:host(#drive-viewer)
+  :is(.pdf-toolbar button, .epub-button, .psd-actions button, .drawing-actions button):disabled {
+  color: var(--file-viewer-button-disabled-color);
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-toolbar button,
+    .pdf-nav-pane button,
+    .iwork-nav button,
+    .excel-wrapper .sheet-tab,
+    .pptx-slideshow-button,
+    .archive-sidebar button,
+    .archive-preview-toolbar button,
+    .archive-search,
+    .epub-toolbar button,
+    .epub-toc-item,
+    .psd-actions button,
+    .psd-layer input,
+    .drawing-actions button,
+    [part~="button"]
+  ):focus-visible {
+  outline: 1px solid var(--ui-control-focus);
+  outline-offset: -1px;
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-page-meter,
+    .pdf-rotation-meter,
+    .pdf-outline-toggle,
+    .excel-wrapper .summary,
+    .archive-head p,
+    .archive-head span,
+    .archive-preview-toolbar span,
+    .archive-entry small,
+    .entry-copy em,
+    .epub-progress,
+    .epub-title span,
+    .epub-toc-head span,
+    .drawing-actions span
+  ) {
+  color: var(--ui-muted);
+  font-weight: 500;
+}
+
+:host(#drive-viewer)
+  :is(.pdf-nav-head strong, .pdf-page-meter strong, .epub-toc-head, .drawing-title strong) {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+:host(#drive-viewer)
+  :is(
+    .pdf-page-thumb:not(.pdf-page-thumb--thumbnail),
+    .pptx-slideshow-button-key,
+    .entry-ext,
+    .drawing-title span
+  ) {
+  background: var(--ui-surface);
+  color: var(--ui-nav-text);
+  border-color: var(--ui-border);
+  font-weight: 500;
+}
+
+:host(#drive-viewer) .psd-viewer {
+  --psd-bg: var(--ui-chrome);
+  --psd-surface: var(--ui-background);
+  --psd-border: var(--ui-border);
+  --psd-text: var(--ui-text);
+  --psd-muted: var(--ui-muted);
+  --psd-accent: var(--ui-accent);
+}
+
+:host(#drive-viewer) .psd-layer {
+  background: var(--ui-background);
+  color: var(--ui-text);
+}
+
+:host(#drive-viewer) .psd-layer[data-kind="group"] {
+  background: var(--ui-surface);
+}
+
+:host(#drive-viewer) .psd-layer:hover {
+  border-color: var(--ui-control-border);
+}
+
+:host(#drive-viewer) .markdown-body {
+  --bgColor-default: var(--ui-background);
+  --bgColor-muted: var(--ui-surface);
+  --bgColor-neutral-muted: var(--ui-hover);
+  --borderColor-default: var(--ui-control-border);
+  --borderColor-muted: var(--ui-border);
+  --borderColor-neutral-muted: var(--ui-border);
+  --fgColor-default: var(--ui-text);
+  --fgColor-muted: var(--ui-muted);
+  --fgColor-accent: var(--ui-link);
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-frame);
+  box-shadow: var(--ui-shadow-popup);
+}
+
+@media (max-width: 520px) {
+  :host(#drive-viewer) [part~="shell"] {
+    --file-viewer-toolbar-padding: 4px 8px;
+    --file-viewer-toolbar-gap: 4px 8px;
+  }
+
+  :host(#drive-viewer) [part~="toolbar-group"][role="search"] {
+    flex: 1 1 100%;
+  }
+
+  :host(#drive-viewer) .pdf-toolbar {
+    flex-wrap: wrap;
+    min-height: 0;
+    gap: 4px;
+    padding: 4px 8px;
+    overflow: visible;
+  }
+
+  :host(#drive-viewer) .pdf-toolbar-group {
+    gap: 0;
+    padding-inline: 2px;
+  }
+
+  :host(#drive-viewer) .pdf-page-meter {
+    min-width: 42px;
+  }
+
+  :host(#drive-viewer) .pdf-scale-button {
+    width: 44px;
+  }
+
+  :host(#drive-viewer) .pdf-rotation-meter {
+    min-width: 26px;
+  }
+
+  :host(#drive-viewer) .iwork-nav {
+    padding: 6px 8px;
+  }
+
+  :host(#drive-viewer) .iwork-nav button {
+    margin: 0 4px 0 0;
+  }
+}

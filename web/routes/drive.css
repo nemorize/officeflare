@@ -1335,85 +1335,23 @@
   background: var(--ui-surface);
   padding: 28px;
 }
-.drive-preview-body img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 3px;
-  box-shadow: 0 2px 8px #0000000d;
-}
-.drive-preview-body.drive-preview-pdf-body {
+.drive-preview-body.drive-preview-viewer-body {
+  position: relative;
   padding: 0;
 }
-.drive-pdf-preview {
-  display: flex;
-  flex-direction: column;
+.drive-preview-viewer {
   width: 100%;
   height: 100%;
-  min-height: 0;
-}
-.drive-pdf-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  padding: 6px;
+  border: 0;
   background: var(--ui-background);
-  border-bottom: 1px solid var(--ui-border);
-  font-size: 12px;
-  flex-shrink: 0;
 }
-.drive-pdf-page-area {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 16px;
-}
-.drive-pdf-page-area canvas {
-  display: block;
-  margin: 0 auto;
-  box-shadow: 0 2px 12px #00000014;
-}
-.drive-pdf-page-area canvas[hidden] {
-  display: none;
-}
-.drive-pdf-loading {
+.drive-preview-viewer-loading {
   position: absolute;
-  inset: 20px 0 auto;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--ui-muted);
-}
-.drive-pdf-accessible-text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.drive-preview-text-body {
-  align-items: flex-start;
-}
-.drive-preview-text {
-  margin: 0;
-  background: var(--ui-background);
-  max-width: 900px;
-  width: 100%;
-  min-height: 100%;
-  padding: 35px 40px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 1.8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  border: 1px solid var(--ui-border);
-  border-radius: 4px;
-  box-shadow: 0 2px 8px #00000005;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  background: var(--ui-surface);
 }
 .drive-public-shell {
   min-height: 100dvh;
@@ -1695,10 +1633,6 @@
   }
   .drive-preview-body {
     padding: 12px;
-  }
-  .drive-preview-text {
-    padding: 20px 17px;
-    font-size: 10px;
   }
   .drive-public-shell {
     padding: 12px;

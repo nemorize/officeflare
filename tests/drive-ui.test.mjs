@@ -6,6 +6,7 @@ import {
   driveLocation,
   formatBytes,
   folderPaths,
+  itemPreviewSource,
   previewKind,
   publicShareUrl,
   selectDriveItems,
@@ -13,6 +14,9 @@ import {
 } from "../web/lib/drive.ts";
 import { createApiClient } from "../web/lib/api-client.ts";
 import { driveSearchParams, isDriveSearch, readDriveSearch } from "../web/lib/drive-search.ts";
+import { marked } from "marked";
+import { configureDriveViewerMarkdown } from "../web/lib/drive-viewer-markdown.ts";
+import { prepareDriveViewerFile } from "../web/lib/drive-viewer-text.ts";
 
 test("Drive searches retain advanced constraints and reset without leaving hidden filters", () => {
   const fields = {
@@ -67,11 +71,86 @@ test("Drive roles, route views and file previews reflect actual capabilities", (
     folder: null,
     view: "recent",
   });
-  assert.equal(previewKind({ size: 12, content_type: "image/svg+xml" }), null);
-  assert.equal(previewKind({ size: 12, content_type: "text/html" }), "text");
+  assert.equal(previewKind({ size: 12, content_type: "image/svg+xml" }), "svg");
+  assert.equal(previewKind({ size: 12, content_type: "text/html" }), "html");
   assert.equal(previewKind({ size: 21 * 1024 * 1024, content_type: "image/png" }), null);
   assert.equal(previewKind({ size: 1, content_type: "application/pdf" }), "pdf");
   assert.equal(formatBytes(1024 ** 3), "1 GB");
+});
+test("Drive detects supported documents when uploads lack a specific MIME type", () => {
+  for (const [name, format] of [
+    ["Letter.DOC", "doc"],
+    ["Letter.docx", "docx"],
+    ["Slides.ppt", "ppt"],
+    ["Slides.pptx", "pptx"],
+    ["Budget.xls", "xls"],
+    ["Budget.xlsx", "xlsx"],
+    ["Letter.pages", "pages"],
+    ["Slides.key", "key"],
+    ["Budget.numbers", "numbers"],
+    ["공문.hwp", "hwp"],
+    ["공문.hwpx", "hwpx"],
+    ["Letter.odt", "odt"],
+    ["Slides.odp", "odp"],
+    ["Budget.ods", "ods"],
+    ["Letter.sxw", "sxw"],
+    ["Readme.txt", "txt"],
+    ["Readme.MD", "md"],
+    ["Camera.HEIC", "heic"],
+    ["Book.epub", "epub"],
+    ["Files.7z", "7z"],
+    ["Slides.ofd", "ofd"],
+    ["Mail.eml", "eml"],
+    ["Sketch.drawio", "drawio"],
+    ["Track.gpx", "gpx"],
+    ["Asset.glb", "glb"],
+    ["Data.parquet", "parquet"],
+    ["Clip.mp4", "mp4"],
+    ["Sound.flac", "flac"],
+  ]) {
+    assert.deepEqual(itemPreviewSource({ name, content_type: "application/octet-stream" }), {
+      format,
+      inline: false,
+      endpoint: "preview",
+    });
+  }
+  assert.equal(
+    previewKind({ name: "Unnamed", content_type: "application/vnd.apple.numbers" }),
+    "numbers",
+  );
+  assert.equal(previewKind({ name: "Readme.md", size: 21 * 1024 * 1024 }), null);
+  assert.equal(previewKind({ name: "Readme.md", kind: "folder" }), null);
+});
+test("Drive preview routing keeps raw HTML on the download-protected endpoint", () => {
+  assert.deepEqual(itemPreviewSource({ name: "page.html", content_type: "text/html" }), {
+    format: "html",
+    endpoint: "content",
+    inline: false,
+  });
+  assert.deepEqual(itemPreviewSource({ name: "drawing.svg", content_type: "image/svg+xml" }), {
+    format: "svg",
+    endpoint: "preview",
+    inline: false,
+  });
+  assert.equal(previewKind({ name: "engineering.dwg" }), null);
+  assert.equal(previewKind({ name: "playlist.m3u8" }), "txt");
+});
+test("Drive Markdown preview removes remote image sources before rendering", () => {
+  configureDriveViewerMarkdown();
+  const html = marked.parse(
+    '# Preview\n\n![Remote chart](https://example.test/chart.png)\n\n<img src="https://example.test/photo.png">',
+    { async: false },
+  );
+  assert.match(html, /<h1>Preview<\/h1>/);
+  assert.match(html, /Remote chart/);
+  assert.match(html, /&lt;img/);
+  assert.doesNotMatch(html, /<img/);
+});
+test("Drive text preview preserves Korean CP949 files", async () => {
+  const file = new File([Uint8Array.of(0xc7, 0xd1, 0xb1, 0xdb)], "legacy.txt");
+  const prepared = await prepareDriveViewerFile(file, "txt", "ko");
+  assert.equal(await prepared.text(), "한글");
+  assert.equal(await prepareDriveViewerFile(file, "txt", "en"), file);
 });
 test("Folder upload builds parent paths before children without path traversal", () => {
   assert.deepEqual(

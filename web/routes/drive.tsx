@@ -53,6 +53,7 @@ import {
   driveSize,
   fileKind,
   formatBytes,
+  itemPreviewSource,
   selectDriveItems,
   type DriveItem,
 } from "../lib/drive";
@@ -1011,19 +1012,11 @@ export function DrivePage({ linkedItem }: { linkedItem?: DriveItem } = {}) {
       )}
       {preview && (
         <DrivePreview
+          key={preview.id}
           item={preview}
           canDownload={preview.actions?.download !== false}
           canPreview={
-            preview.actions?.download !== false ||
-            [
-              "text/plain",
-              "application/pdf",
-              "image/jpeg",
-              "image/png",
-              "image/gif",
-              "image/webp",
-              "image/avif",
-            ].includes(preview.current_version?.content_type ?? preview.content_type ?? "")
+            preview.actions?.download !== false || itemPreviewSource(preview)?.inline === true
           }
           onClose={() => setPreview(null)}
           onShare={

@@ -1,18 +1,18 @@
 import { t } from "../../shared/i18n/index.ts";
+import { DRIVE_PREVIEW_LIMIT, drivePreviewSource } from "../../shared/drive-preview.ts";
 import { now, uuid } from "../auth/types";
-import { first, identity, itemCondition, requireItem, statement } from "./access";
+import {
+  combine,
+  first,
+  identity,
+  itemCondition,
+  permission,
+  requireItem,
+  statement,
+} from "./access";
 import { fail, identifier } from "./input";
 import type { Condition, DriveContext, DriveItem, DriveVersion } from "./types";
 
-const previewTypes = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-  "text/plain",
-  "application/pdf",
-]);
 const disposition = (name: string, inline: boolean) =>
   `${inline ? "inline" : "attachment"}; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (value) => `%${value.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 function range(header: string | undefined, size: number) {
@@ -49,8 +49,23 @@ export async function content(
     item.id,
   );
   if (!version) fail(404, t("driveContent.fileVersionNotFound"));
-  if (preview && !previewTypes.has(version.content_type))
-    fail(400, t("driveContent.thisFileTypeDoesNotSupportInlinePreview"));
+  const source = preview ? drivePreviewSource(item.name, version.content_type) : null;
+  const inline = source?.inline ?? false;
+  if (preview) {
+    if (source?.endpoint !== "preview")
+      fail(400, t("driveContent.thisFileTypeDoesNotSupportInlinePreview"));
+    if (!inline) {
+      // Document previews pass the original bytes to a browser parser.
+      if (!linkId) {
+        const download = permission(c.get("identity").user.id, "drive.files.download");
+        if (!(await first(c.env, `SELECT 1 WHERE ${download.sql}`, ...download.args)))
+          fail(403, t("drivePolicy.driveActionIsRestrictedByYourRoleAccountStatus"));
+        check = combine(check, download);
+      }
+      if (version.size > DRIVE_PREVIEW_LIMIT)
+        fail(413, t("componentsDrivePreview.thisFileIsLargerThanThe20MbPreview"));
+    }
+  }
   const object = await c.env.DRIVE_BUCKET.head(version.blob_key);
   if (!object || object.size !== version.size || object.etag !== version.etag)
     fail(503, t("driveContent.fileContentIsUnavailable"));
@@ -58,8 +73,8 @@ export async function content(
     "Cache-Control": "private, no-store",
     ETag: object.httpEtag,
     "Accept-Ranges": "bytes",
-    "Content-Type": version.content_type,
-    "Content-Disposition": disposition(item.name, preview),
+    "Content-Type": preview && !inline ? "application/octet-stream" : version.content_type,
+    "Content-Disposition": disposition(item.name, inline),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": t("driveContent.sandboxDefaultSrcNoneFrameAncestorsSelf"),

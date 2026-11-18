@@ -2102,25 +2102,15 @@ export const en = defineMessages({
   "componentsDriveDialogs.you": " (you)",
   "componentsDriveOwner.sharedAccount": "Shared account",
   "componentsDriveOwner.u": "U",
-  "componentsDrivePdfPreview.canvasUnavailable": "Canvas unavailable",
-  "componentsDrivePdfPreview.page": "{name}, page {page}",
-  "componentsDrivePdfPreview.pageOf": "Page {page} of {value2}",
-  "componentsDrivePdfPreview.pdfPages": "PDF pages",
-  "componentsDrivePdfPreview.pdfPreviewOf": "PDF preview of {name}",
-  "componentsDrivePdfPreview.renderingPage": "Rendering page…",
-  "componentsDrivePdfPreview.thisPdfCouldNotBePreviewedDownloadItTo":
-    "This PDF could not be previewed. Download it to open with your PDF reader.",
-  "componentsDrivePdfPreview.thisPdfIsPasswordProtectedDownloadItToOpen":
-    "This PDF is password protected. Download it to open with your PDF reader.",
-  "componentsDrivePdfPreview.thisPdfPageCouldNotBePreviewedYouCan":
-    "This PDF page could not be previewed. You can still download the file.",
   "componentsDrivePreview.closePreview": "Close preview",
+  "componentsDrivePreview.couldNotPreviewFile": "This file could not be previewed.",
+  "componentsDrivePreview.filePasswordProtected": "This file is password protected.",
   "componentsDrivePreview.download": "Download",
   "componentsDrivePreview.downloadThisFileToOpenItOnYourDevice":
     "Download this file to open it on your device.",
   "componentsDrivePreview.downloading": "Downloading…",
   "componentsDrivePreview.noPreviewAvailable": "No preview available",
-  "componentsDrivePreview.preparingPdfPreview": "Preparing PDF preview…",
+  "componentsDrivePreview.noSearchMatches": "No matches",
   "componentsDrivePreview.preparingPreview": "Preparing preview…",
   "componentsDrivePreview.previewAndDownloadsDisabled": "Preview and downloads disabled",
   "componentsDrivePreview.share": "Share",

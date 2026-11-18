@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { randomBytes, createHash } from "node:crypto";
 import { generateKeyPair, exportJWK } from "jose";
 import { build } from "esbuild";
@@ -21,6 +21,23 @@ const harness = await build({
   platform: "browser",
   external: ["cloudflare:workers", "../dist/index.js"],
   target: "es2022",
+});
+
+test("Drive preview build includes the local Flyfish runtime assets", async () => {
+  const root = "dist/client/file-viewer";
+  const assets = [
+    "vendor/pdf/pdf.worker.mjs",
+    "vendor/ppt/dist/pptjs.worker.js",
+    "vendor/iwork/iwork.worker.js",
+    "vendor/hangul/hangul.worker.js",
+    "vendor/libarchive/libarchive.wasm",
+    "vendor/design/idml.worker.js",
+    "wasm/model/occt-import-js.wasm",
+  ];
+  for (const asset of assets) {
+    const { size } = await stat(`${root}/${asset}`);
+    assert.ok(size > 0 && size <= 25 * 1024 * 1024, asset);
+  }
 });
 
 async function fixture(t, options = {}) {
@@ -1574,6 +1591,43 @@ test("Drive read-only roles, shared ACLs and policy changes guard actual bytes",
     expected: 412,
   });
   await f.call("/uploads", { method: "POST", data: { name: "Too big", size: 2 }, expected: 413 });
+});
+
+test("Drive document previews keep download permissions and serve original bytes as attachments", async (t) => {
+  const f = await fixture(t);
+  const markdown = await f.upload("README.MD", "# Shared document", null, "owner", {
+    content_type: "application/octet-stream",
+  });
+  const text = await f.upload("Readable.txt");
+  await f.share(markdown.id, "viewer", "viewer");
+  await f.share(text.id, "viewer", "viewer");
+  await testRole(f, "viewer", ["drive.access", "drive.files.download"]);
+  const allowed = await f.raw(`/items/${markdown.id}/preview`, { actor: "viewer" });
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.headers.get("content-type"), "application/octet-stream");
+  assert.match(allowed.headers.get("content-disposition"), /^attachment/);
+  assert.equal(await allowed.text(), "# Shared document");
+
+  const revoked = await f.raw(`/items/${markdown.id}/preview`, {
+    actor: "viewer",
+    fault: true,
+    headers: {
+      "X-Test-After-Storage":
+        "DELETE FROM role_permissions WHERE role_id='role-viewer' AND permission_key='drive.files.download'",
+    },
+  });
+  assert.equal(revoked.status, 404);
+  await f.call(`/items/${markdown.id}/preview`, { actor: "viewer", expected: 403 });
+  assert.equal((await f.raw(`/items/${text.id}/preview`, { actor: "viewer" })).status, 200);
+
+  const publicLink = await f.link(markdown.id, { allow_download: true });
+  const metadataLink = await f.link(markdown.id, { allow_download: false });
+  const publicPreview = (token) => `/public/${token}/items/${markdown.id}/preview`;
+  assert.equal(
+    await (await f.raw(publicPreview(publicLink.token), { actor: null })).text(),
+    "# Shared document",
+  );
+  await f.call(publicPreview(metadataLink.token), { actor: null, expected: 403 });
 });
 
 test("Drive public policies apply to existing links and admin revocation is immediate", async (t) => {

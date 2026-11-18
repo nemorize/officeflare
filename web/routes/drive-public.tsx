@@ -407,6 +407,7 @@ export function PublicDrivePage() {
       </section>
       {preview && (
         <DrivePreview
+          key={preview.id}
           item={preview}
           onClose={() => setPreview(null)}
           loader={loader}

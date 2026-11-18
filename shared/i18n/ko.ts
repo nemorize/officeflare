@@ -2108,25 +2108,15 @@ export const ko = defineTranslations(en, {
   "componentsDriveDialogs.you": " (나)",
   "componentsDriveOwner.sharedAccount": "공유 계정",
   "componentsDriveOwner.u": "U",
-  "componentsDrivePdfPreview.canvasUnavailable": "Canvas를 이용할 수 없습니다",
-  "componentsDrivePdfPreview.page": "{name}, {page}페이지",
-  "componentsDrivePdfPreview.pageOf": "전체 {value2}페이지 중 {page}페이지",
-  "componentsDrivePdfPreview.pdfPages": "PDF 페이지",
-  "componentsDrivePdfPreview.pdfPreviewOf": "{name} PDF 미리보기",
-  "componentsDrivePdfPreview.renderingPage": "페이지 렌더링 중…",
-  "componentsDrivePdfPreview.thisPdfCouldNotBePreviewedDownloadItTo":
-    "이 PDF를 미리 볼 수 없습니다. 다운로드하여 PDF 리더에서 여세요.",
-  "componentsDrivePdfPreview.thisPdfIsPasswordProtectedDownloadItToOpen":
-    "이 PDF는 비밀번호로 보호되어 있습니다. 다운로드하여 PDF 리더에서 여세요.",
-  "componentsDrivePdfPreview.thisPdfPageCouldNotBePreviewedYouCan":
-    "이 PDF 페이지를 미리 볼 수 없습니다. 파일은 다운로드할 수 있습니다.",
   "componentsDrivePreview.closePreview": "미리보기 닫기",
+  "componentsDrivePreview.couldNotPreviewFile": "이 파일을 미리 볼 수 없습니다.",
+  "componentsDrivePreview.filePasswordProtected": "비밀번호로 보호된 파일입니다.",
   "componentsDrivePreview.download": "다운로드",
   "componentsDrivePreview.downloadThisFileToOpenItOnYourDevice":
     "기기에서 열려면 파일을 다운로드하세요.",
   "componentsDrivePreview.downloading": "다운로드 중…",
   "componentsDrivePreview.noPreviewAvailable": "미리보기 없음",
-  "componentsDrivePreview.preparingPdfPreview": "PDF 미리보기 준비 중…",
+  "componentsDrivePreview.noSearchMatches": "일치 항목 없음",
   "componentsDrivePreview.preparingPreview": "미리보기 준비 중…",
   "componentsDrivePreview.previewAndDownloadsDisabled": "미리보기 및 다운로드 비활성화됨",
   "componentsDrivePreview.share": "공유",

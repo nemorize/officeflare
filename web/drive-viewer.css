@@ -1,0 +1,30 @@
+@import "./theme.css";
+
+body {
+  margin: 0;
+  background: var(--ui-chrome);
+}
+#drive-viewer {
+  height: 100dvh;
+  min-height: 0;
+}
+.drive-compatible-document {
+  box-sizing: border-box;
+  width: min(100%, 900px);
+  margin-inline: auto;
+  padding: clamp(16px, 4vw, 40px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  background: var(--ui-background);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.drive-compatible-document table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.drive-compatible-document td {
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--ui-control-border);
+}
