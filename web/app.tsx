@@ -406,7 +406,7 @@ const router = createBrowserRouter(
             />
           ))}
           <Route
-            path="ai/:page?"
+            path="ai/:page?/:id?"
             element={
               <ConsoleGate
                 permissions={["settings", "providers", "quotas", "usage", "audit"].map(

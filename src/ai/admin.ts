@@ -27,6 +27,7 @@ import {
 import { rulesFor, settings } from "./quota";
 import { closeReconciledRun, reconcileInvocation, usageAdjustment } from "./reconciliation";
 import { userPrincipal } from "./types";
+import { modelRouteWrites, registerAIConfiguration } from "./configuration.ts";
 
 type Resource = {
   table: string;
@@ -105,6 +106,7 @@ const resources: Record<string, Resource> = {
       "data_policy_json",
       "limits_json",
       "enabled",
+      "model_id",
     ],
     json: ["required_capabilities_json", "generation_json", "data_policy_json", "limits_json"],
   },
@@ -780,6 +782,7 @@ aiAdmin.put("/consumers/:id/profiles", async (c) => {
     profiles,
   });
 });
+registerAIConfiguration(aiAdmin, { permission, mutation: adminMutation, validate: validateConfig });
 aiAdmin.get("/:resource", async (c) => {
   const spec = resources[c.req.param("resource")];
   if (!spec) fail(404, "AI_NOT_FOUND");
@@ -832,6 +835,9 @@ aiAdmin.post("/:resource", async (c) => {
       ...entries.map(([, value]) => value as string | number | null),
       ...won.args,
     ),
+    ...(resource === "profiles" && typeof data.model_id === "string"
+      ? modelRouteWrites(c.env, data.model_id, won, id)
+      : []),
   ]);
   return c.json(
     {
@@ -892,6 +898,19 @@ aiAdmin.patch("/:resource/:id", async (c) => {
         id,
         ...won.args,
       ),
+      ...(resource === "profiles" && typeof data.model_id === "string"
+        ? modelRouteWrites(c.env, data.model_id, won, id)
+        : []),
+      ...(resource === "profiles" && data.model_id === null
+        ? [
+            statement(
+              c.env,
+              `UPDATE ai_profile_routes SET enabled=0,version=version+1 WHERE profile_id=? AND ${won.sql}`,
+              id,
+              ...won.args,
+            ),
+          ]
+        : []),
     ],
   );
   return c.json({

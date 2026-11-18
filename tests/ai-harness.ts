@@ -22,6 +22,8 @@ import { Hono } from "hono";
 import { oauthCallback } from "../src/ai/oauth";
 import { accountCredentials } from "../src/ai/credentials";
 import type { Account, Provider } from "../src/ai/types";
+import { providerModelCatalog } from "../src/ai/model-catalog.ts";
+import { providerRejection } from "../src/ai/providers";
 
 registerAIConsumer("fixture.classify", { principals: ["service"], billing: "service" });
 export default {
@@ -40,7 +42,9 @@ export default {
           form.get("grant_type") ?? "",
         );
         if (form.get("grant_type") === "refresh_token") {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(2000, Number(oauth.refresh_delay ?? 150))),
+          );
           return Response.json({
             access_token: "fixture-refreshed",
             refresh_token: "fixture-refresh-rotated",
@@ -64,7 +68,27 @@ export default {
           gateway_authorized: headers.get("cf-aig-authorization") === "Bearer fixture-gateway-key",
         }),
       );
+      if (init?.method === undefined && /\/models(?:[/?]|$)/.test(url))
+        return Response.json(
+          JSON.parse(
+            (await (await env.MAIL_BUCKET.get("ai-fixture-catalog"))?.text()) ??
+              '{"data":[{"id":"fixture","name":"Fixture model"}]}',
+          ),
+        );
       if (mode.kind === "unknown") throw new Error("Connection lost after provider acceptance");
+      if (
+        headers.get("authorization") === "Bearer fixture-credit-blocked-key" &&
+        mode.kind !== "credit-restored"
+      )
+        return Response.json(
+          { error: { type: "insufficient_quota", code: "billing_limit_reached" } },
+          { status: 429 },
+        );
+      if (headers.get("authorization") === "Bearer fixture-credit-exhausted-key")
+        return Response.json(
+          { error: { code: "insufficient_credits" } },
+          { status: 402, headers: { "retry-after": "3600" } },
+        );
       if (headers.get("authorization") === "Bearer fixture-rejected-key")
         return new Response(null, { status: 429, headers: { "retry-after": "60" } });
       if (mode.kind === "delay") await new Promise((resolve) => setTimeout(resolve, 150));
@@ -206,6 +230,32 @@ export default {
     if (pathname.startsWith("/test-ai/")) {
       try {
         const body = (await request.json()) as Record<string, unknown>;
+        if (pathname === "/test-ai/catalog")
+          return Response.json(
+            await providerModelCatalog(
+              env,
+              String(body.id),
+              String(body.user ?? "admin"),
+              body.cursor ? String(body.cursor) : undefined,
+              fetcher,
+            ),
+          );
+        if (pathname === "/test-ai/rejection") {
+          const error = await providerRejection(
+            Response.json(body.body ?? {}, {
+              status: Number(body.status),
+              headers: body.headers as Record<string, string>,
+            }),
+          );
+          return Response.json({
+            status: error.status,
+            accepted: error.accepted,
+            code: error.code,
+            retryAfter: error.retryAfter,
+            exhausted: error.exhausted,
+            blocked: error.blocked,
+          });
+        }
         if (pathname === "/test-ai/tool")
           return Response.json(
             await runBuiltinTool(

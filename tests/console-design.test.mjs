@@ -180,12 +180,29 @@ test(
       if (item.table) assert.deepEqual(item.table, reference.table, `${item.path} table styling`);
     }
 
-    await page.goto(`${origin}/console/ai/providers`);
     const consolePage = page.locator(".console-page");
+    const editor = consolePage.locator(".console-detail-page");
+    const panelStyle = () =>
+      editor
+        .locator(".console-section")
+        .first()
+        .evaluate((node) => {
+          const style = getComputedStyle(node);
+          const input = node.querySelector('[data-ui="input"]');
+          return {
+            width: node.getBoundingClientRect().width,
+            padding: style.padding,
+            radius: style.borderRadius,
+            inputWidth: input.getBoundingClientRect().width,
+          };
+        });
+    await page.goto(`${origin}/console/mail/domains/new`);
+    await editor.getByRole("textbox", { name: "Domain", exact: true }).waitFor();
+    const mailPanel = await panelStyle();
+
+    await page.goto(`${origin}/console/ai/providers`);
     await consolePage.getByRole("table").waitFor();
-    assert.equal(await consolePage.getByRole("tablist").count(), 2);
-    await consolePage.getByRole("tablist").nth(1).getByRole("tab").nth(1).click();
-    await page.waitForURL(/\/console\/ai\/accounts$/);
+    assert.equal(await consolePage.getByRole("tablist").count(), 1);
     await consolePage.getByRole("table").waitFor();
     const search = consolePage.getByRole("searchbox");
     await search.fill("no matching provider account");
@@ -195,19 +212,26 @@ test(
     const account = consolePage.getByRole("row").filter({ hasText: "Shared fixture" });
     await account.waitFor();
     await account.getByRole("button", { name: "Edit", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Name", exact: true }).waitFor();
-    assert.equal(await dialog.locator('[data-ui="form"].console-form').count(), 1);
+    await page.waitForURL(`**/console/ai/providers/${f.provider.id}`);
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    await editor.getByRole("textbox", { name: "Name", exact: true }).waitFor();
+    assert.equal(await editor.locator('[data-ui="form"].console-form').count(), 1);
+    assert.equal(await editor.locator(".console-form > .console-section").count(), 3);
+    assert.deepEqual(await panelStyle(), mailPanel);
     if (captureDir)
       await page.screenshot({
-        path: `${captureDir}/ai-account-dialog-desktop.png`,
+        path: `${captureDir}/ai-provider-editor-desktop.png`,
         fullPage: true,
       });
     await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+    assert.equal(await editor.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
     if (captureDir)
-      await page.screenshot({ path: `${captureDir}/ai-account-dialog-mobile.png`, fullPage: true });
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.screenshot({
+        path: `${captureDir}/ai-provider-editor-mobile.png`,
+        fullPage: true,
+      });
+    await editor.getByRole("link", { name: "Providers", exact: true }).click();
+    await page.waitForURL("**/console/ai/providers");
     await f.db
       .prepare(
         "WITH RECURSIVE events(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM events WHERE n<205) INSERT INTO ai_audit_events(event_key,actor_key,action,target_type) SELECT 'console-layout-'||n,'admin','console-layout.'||n,'settings' FROM events",

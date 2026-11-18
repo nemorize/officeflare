@@ -92,7 +92,7 @@ test(
       await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/reference-contacts.png" });
     await page.goto(origin + "/ai");
     await page.getByRole("heading", { name: "New conversation" }).waitFor();
-    await page.getByRole("combobox", { name: "Model profile", exact: true }).waitFor();
+    await page.getByRole("combobox", { name: "Model", exact: true }).waitFor();
     assert.deepEqual(await chromeStyle(), reference);
     const input = page.getByRole("textbox", { name: "Message", exact: true });
     await input.fill("Review recent mail");
@@ -103,7 +103,7 @@ test(
     );
     if (process.env.AI_UI_CAPTURE_DIR)
       await page.screenshot({ path: process.env.AI_UI_CAPTURE_DIR + "/welcome-desktop.png" });
-    await choose(page, "Model profile", "Focused chat");
+    await choose(page, "Model", "Focused chat");
     const shortHeight = await input.evaluate((element) => element.clientHeight);
     await input.fill(Array.from({ length: 55 }, (_, i) => `Plan step ${i + 1}`).join("\n"));
     assert.ok((await input.evaluate((element) => element.clientHeight)) > shortHeight);
@@ -116,11 +116,11 @@ test(
     const roomId = new URL(page.url()).pathname.split("/").at(-1);
     assert.equal((await f.call(`/api/ai/rooms/${roomId}`)).room.profile_key, "fixture-focused");
     await page.getByRole("button", { name: "Stop", exact: true }).waitFor();
-    assert.equal(await page.getByRole("combobox", { name: "Model profile" }).isDisabled(), true);
+    assert.equal(await page.getByRole("combobox", { name: "Model" }).isDisabled(), true);
     const run = await lastRun(f, roomId);
     await f.testCall("advance", { id: run.id });
     await page.locator(".ai-run-state").getByText("Completed", { exact: true }).waitFor();
-    await mutation(page, `/rooms/${roomId}`, () => choose(page, "Model profile", "Fixture chat"));
+    await mutation(page, `/rooms/${roomId}`, () => choose(page, "Model", "Fixture chat"));
     assert.equal((await f.call(`/api/ai/rooms/${roomId}`)).room.profile_key, "fixture-chat");
     await page.locator(".ai-chat-scroll").evaluate((element) => {
       element.scrollTop = 0;
@@ -399,126 +399,137 @@ test(
 );
 
 test(
-  "AI console configures credentials, model prices, routing and feature access using typed forms",
+  "AI console configures providers and credentials together and orders provider models on a separate screen",
   { timeout: 90000 },
   async (t) => {
-    const f = await browserFixture(t, {}, "admin"),
+    const f = await browserFixture(t, { configure: false }, "admin"),
       { page, origin } = f;
-    await page.goto(origin + "/console/ai/accounts");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    let dialog = page.getByRole("dialog");
-    await choose(page, "AI provider", "Fixture");
-    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("UI credential");
-    await dialog.getByLabel("API key", { exact: true }).fill("fixture-ui-provider-key");
-    await choose(page, "Account access", "Whole workspace");
-    await choose(page, "Sharing authorization", "Provider permits workspace sharing");
-    await dialog
-      .getByRole("textbox", { name: "Authorization reference", exact: true })
-      .fill("approved-workspace-use");
-    await mutation(page, "/api/ai/admin/accounts", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
+    await page.goto(origin + "/console/ai/providers");
+    await page.getByRole("button", { name: "Add provider", exact: true }).click();
+    await page.waitForURL("**/console/ai/providers/new");
+    const editor = page.locator(".console-detail-page");
+    await editor.getByRole("heading", { name: "Add provider", exact: true }).waitFor();
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    await editor.getByRole("textbox", { name: "Name", exact: true }).fill("UI provider");
+    await editor.getByRole("textbox", { name: "Identifier", exact: true }).fill("ui-provider");
+    await editor
+      .getByRole("textbox", { name: "API base URL", exact: true })
+      .fill("https://provider.example/v1");
+    await editor.getByLabel("API key", { exact: true }).fill("fixture-provider-key");
+    const { item: createdProvider } = await mutation(page, "/api/ai/admin/provider-configs", () =>
+      editor.getByRole("button", { name: "Add provider", exact: true }).click(),
     );
-    await dialog.waitFor({ state: "hidden" });
-    const account = (await f.admin("/accounts")).items.find(
-      (item) => item.name === "UI credential",
+    await page.waitForURL(`**/console/ai/providers/${createdProvider.id}`);
+    assert.ok(createdProvider.accounts[0].has_secret);
+    assert.ok(!(await page.locator("body").textContent()).includes("fixture-provider-key"));
+    await page.reload();
+    assert.equal(await editor.getByLabel("API key", { exact: true }).inputValue(), "");
+    await editor.getByRole("textbox", { name: "Name", exact: true }).fill("UI provider updated");
+    const { item: provider } = await mutation(page, `/provider-configs/${createdProvider.id}`, () =>
+      editor.getByRole("button", { name: "Save changes", exact: true }).click(),
     );
-    assert.ok(account.has_secret);
-    assert.ok(!(await page.locator("body").textContent()).includes("fixture-ui-provider-key"));
-    const accountRow = page.getByRole("row").filter({ hasText: "UI credential" });
-    await accountRow.getByRole("button", { name: "Edit", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    assert.equal(await dialog.getByLabel("API key", { exact: true }).inputValue(), "");
-    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("UI credential updated");
-    await mutation(page, `/accounts/${account.id}`, () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    assert.equal(
-      (await f.admin("/accounts")).items.find((item) => item.id === account.id).credential_version,
-      account.credential_version,
+    await editor.getByRole("heading", { name: "UI provider updated", exact: true }).waitFor();
+    assert.ok(page.url().endsWith("/console/ai/providers/" + provider.id));
+    await page.route("**/api/ai/admin/provider-configs/*/models", async (route) =>
+      route.fulfill({
+        json: {
+          models: [
+            {
+              id: "fixture-ui-model",
+              name: "UI provider model",
+              context_tokens: 131072,
+              max_output_tokens: 8192,
+              pricing: { input: 2500000, output: 10000000 },
+            },
+          ],
+          next_cursor: null,
+        },
+      }),
     );
     await page.goto(origin + "/console/ai/models");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Identifier", exact: true }).fill("ui-model");
-    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("UI model");
-    await dialog.getByRole("textbox", { name: "Model vendor", exact: true }).fill("Fixture vendor");
-    await mutation(page, "/api/ai/admin/models", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    await page.goto(origin + "/console/ai/deployments");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    await choose(page, "AI provider", "Fixture");
-    await choose(page, "Model", "UI model");
-    await dialog
-      .getByRole("textbox", { name: "Provider model ID", exact: true })
-      .fill("fixture-ui-model");
-    await dialog
-      .getByRole("spinbutton", { name: "Context window (tokens)", exact: true })
-      .fill("131072");
-    await dialog
-      .getByRole("spinbutton", { name: "Maximum output tokens", exact: true })
-      .fill("8192");
-    await dialog
+    await page.getByRole("button", { name: "Add model", exact: true }).click();
+    await page.waitForURL("**/console/ai/models/new");
+    await editor.getByRole("heading", { name: "Add model", exact: true }).waitFor();
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    await editor.getByRole("textbox", { name: "Identifier", exact: true }).fill("ui-model");
+    await editor.getByRole("textbox", { name: "Name", exact: true }).fill("UI model");
+    await choose(page, "AI provider", provider.name);
+    await choose(page, "Available provider models", "UI provider model (fixture-ui-model)");
+    await editor
       .getByRole("checkbox", { name: "The model's usage bounds are verified", exact: true })
       .check();
-    await dialog
+    assert.equal(
+      await editor
+        .getByRole("spinbutton", { name: "Input price (USD / 1M tokens)", exact: true })
+        .inputValue(),
+      "2.5",
+    );
+    await editor.getByRole("button", { name: "Add provider", exact: true }).click();
+    const second = editor.locator(".ai-config-record").nth(1);
+    await second.getByRole("combobox", { name: "AI provider", exact: true }).click();
+    await page.getByRole("option", { name: provider.name, exact: true }).click();
+    await second.getByRole("combobox", { name: "Available provider models", exact: true }).click();
+    await page.getByRole("option", { name: "Enter a model ID", exact: true }).click();
+    await second
+      .getByRole("textbox", { name: "Provider model ID", exact: true })
+      .fill("second-provider-model");
+    await second
       .getByRole("spinbutton", { name: "Input price (USD / 1M tokens)", exact: true })
-      .fill("2.5");
-    await dialog
+      .fill("0");
+    await second
       .getByRole("spinbutton", { name: "Output price (USD / 1M tokens)", exact: true })
-      .fill("10");
-    await mutation(page, "/api/ai/admin/deployments", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    const deployment = (await f.admin("/deployments")).items.find(
-      (item) => item.provider_model_id === "fixture-ui-model",
-    );
-    assert.equal(JSON.parse(deployment.pricing_json).input, 2500000);
-    assert.equal(JSON.parse(deployment.pricing_json).output, 10000000);
-    await page.goto(origin + "/console/ai/profiles");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Identifier", exact: true }).fill("ui-profile");
-    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill("UI profile");
-    await mutation(page, "/api/ai/admin/profiles", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    await page.goto(origin + "/console/ai/routes");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    await choose(page, "Model profile", "UI profile");
-    await choose(page, "AI provider", "Fixture");
-    await choose(page, "Model deployment", "fixture-ui-model");
-    await choose(page, "Account pool", "Pool");
-    await mutation(page, "/api/ai/admin/routes", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    await page.goto(origin + "/console/ai/consumers");
-    await page
-      .getByRole("row")
-      .filter({ hasText: "hub.chat" })
-      .getByRole("button", { name: "Model profiles", exact: true })
-      .click();
-    dialog = page.getByRole("dialog");
-    await dialog.getByRole("checkbox", { name: "UI profile", exact: true }).check();
-    await mutation(page, "/consumers/hub.chat/profiles", () =>
-      dialog.getByRole("button", { name: "Save", exact: true }).click(),
-    );
-    await dialog.waitFor({ state: "hidden" });
-    assert.ok(
-      (await f.call("/api/ai/models")).profiles.some((profile) => profile.key === "ui-profile"),
+      .fill("0");
+    await second
+      .getByRole("checkbox", { name: "The model's usage bounds are verified", exact: true })
+      .check();
+    await second.getByRole("button", { name: "Move provider up", exact: true }).click();
+    assert.equal(
+      await editor
+        .locator(".ai-config-record")
+        .first()
+        .getByRole("textbox", { name: "Provider model ID", exact: true })
+        .inputValue(),
+      "second-provider-model",
     );
     if (process.env.AI_UI_CAPTURE_DIR)
       await page.screenshot({
-        path: process.env.AI_UI_CAPTURE_DIR + "/console-desktop.png",
-        fullPage: true,
+        path: process.env.AI_UI_CAPTURE_DIR + "/model-providers-desktop.png",
       });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      true,
+    );
+    if (process.env.AI_UI_CAPTURE_DIR)
+      await page.screenshot({
+        path: process.env.AI_UI_CAPTURE_DIR + "/model-providers-mobile.png",
+      });
+    const { item: model } = await mutation(page, "/api/ai/admin/model-configs", () =>
+      editor.getByRole("button", { name: "Add model", exact: true }).click(),
+    );
+    await page.waitForURL(`**/console/ai/models/${model.id}`);
+    assert.deepEqual(
+      model.providers.map((source) => source.provider_model_id),
+      ["second-provider-model", "fixture-ui-model"],
+    );
+    assert.ok(
+      (await f.call("/api/ai/models")).profiles.some((profile) => profile.name === "UI model"),
+    );
+    await page.setViewportSize({ width: 1440, height: 1024 });
+    await page.goto(origin + "/console/ai/models/" + model.id);
+    assert.equal(
+      await editor.getByRole("textbox", { name: "Name", exact: true }).inputValue(),
+      "UI model",
+    );
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForURL("**/console/ai/models");
+    await page.goto(origin + "/console/ai/accounts");
+    await page.waitForURL("**/console/ai/providers");
+    assert.equal(
+      await page.getByRole("tab", { name: "Provider accounts", exact: true }).count(),
+      0,
+    );
     assert.deepEqual(f.errors, []);
   },
 );
@@ -592,8 +603,9 @@ test(
       data: { version: quota.subject.version, overrides: [] },
       expected: 403,
     });
-    await viewer.goto(origin + "/console/ai/providers");
+    await viewer.goto(origin + "/console/ai/providers/new");
     await viewer.getByRole("heading", { name: "Access restricted", exact: true }).waitFor();
+    assert.equal(await viewer.locator(".console-form").count(), 0);
     assert.deepEqual(f.errors, []);
   },
 );

@@ -59,7 +59,7 @@ export async function accountCredentials(
     if (Number(lock.expires_at) <= now())
       await statement(
         env,
-        "UPDATE ai_provider_accounts SET status='reauth_required',last_error_code='REFRESH_UNKNOWN',version=version+1 WHERE id=? AND credential_version=?",
+        "UPDATE ai_provider_accounts SET status='reauth_required',last_error_code='REFRESH_UNKNOWN',version=version+1 WHERE id=? AND credential_version=? AND status='active'",
         account.id,
         account.credential_version,
       ).run();
@@ -124,7 +124,7 @@ export async function accountCredentials(
   } catch {
     await statement(
       env,
-      "UPDATE ai_provider_accounts SET status='reauth_required',last_error_code='REFRESH_UNKNOWN',version=version+1 WHERE id=? AND credential_version=? AND json_extract(metadata_json,'$._refresh.token')=?",
+      "UPDATE ai_provider_accounts SET status='reauth_required',last_error_code='REFRESH_UNKNOWN',version=version+1 WHERE id=? AND credential_version=? AND status='active' AND json_extract(metadata_json,'$._refresh.token')=?",
       account.id,
       account.credential_version,
       token,

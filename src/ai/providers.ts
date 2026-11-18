@@ -22,9 +22,77 @@ export class ProviderFailure extends Error {
     readonly accepted: boolean,
     readonly code: string,
     readonly retryAfter = 0,
+    readonly exhausted = status === 429 || status === 402,
+    readonly blocked = false,
   ) {
     super(code);
   }
+}
+
+function resetDelay(value: string | null, epoch = Date.now()): number | null {
+  if (!value) return null;
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    const amount = Number(value);
+    return amount > 1e12 ? (amount - epoch) / 1000 : amount > 1e9 ? amount - epoch / 1000 : amount;
+  }
+  if (/^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$/.test(value)) {
+    let seconds = 0;
+    for (const match of value.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h|d)/g))
+      seconds +=
+        Number(match[1]) *
+        (({ ms: 0.001, s: 1, m: 60, h: 3600, d: 86400 } as Record<string, number>)[match[2]!] ?? 0);
+    return seconds;
+  }
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? (date - epoch) / 1000 : null;
+}
+
+/** Explicit rejections are safe to roll; ambiguous acceptance is never retried. */
+export async function providerRejection(response: Response): Promise<ProviderFailure> {
+  let payload: any = {};
+  try {
+    payload = JSON.parse(new TextDecoder().decode(await boundedBody(response, 65536)));
+  } catch {
+    /* Error bodies are optional and never logged. */
+  }
+  const code = String(payload?.error?.code ?? payload?.error?.type ?? payload?.error?.status ?? "");
+  const type = String(payload?.error?.type ?? "");
+  const hard =
+    response.status === 402 ||
+    [code, type].some((value) =>
+      [
+        "insufficient_quota",
+        "insufficient_credits",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+        "billing_limit_reached",
+        "organization_quota_exceeded",
+        "project_quota_exceeded",
+      ].includes(value),
+    );
+  const exhausted = response.status === 429 || hard || code === "RESOURCE_EXHAUSTED";
+  const delays = [
+    "retry-after",
+    "x-ratelimit-reset",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-reset-tokens",
+    "x-ratelimit-reset-project-tokens",
+    "anthropic-ratelimit-requests-reset",
+    "anthropic-ratelimit-tokens-reset",
+  ].map((name) => resetDelay(response.headers.get(name)));
+  if (Array.isArray(payload?.error?.details))
+    for (const detail of payload.error.details)
+      if (typeof detail?.retryDelay === "string") delays.push(resetDelay(detail.retryDelay));
+  const known = delays.filter((delay): delay is number => delay !== null && delay > 0);
+  const retry = Math.ceil(Math.min(31 * 86400, known.length ? Math.max(...known) : 60));
+  return new ProviderFailure(
+    response.status,
+    response.status >= 500 || response.status === 408,
+    hard ? "QUOTA_EXHAUSTED" : "HTTP_" + response.status,
+    exhausted && (!hard || known.length) ? retry : 0,
+    exhausted,
+    hard && !known.length,
+  );
 }
 export function safeUrl(value: string) {
   if (!value.startsWith("https://")) fail(400, "AI_INVALID_INPUT");
@@ -569,13 +637,7 @@ export async function callProvider(
     throw new ProviderFailure(502, true, "CONNECTION_UNKNOWN");
   }
   if (!response.ok) {
-    await response.body?.cancel();
-    throw new ProviderFailure(
-      response.status,
-      response.status >= 500 || response.status === 408,
-      "HTTP_" + response.status,
-      Math.min(3600, Math.max(0, Number(response.headers.get("retry-after")) || 0)),
-    );
+    throw await providerRejection(response);
   }
   let data: { events: any[]; streamed: boolean };
   try {

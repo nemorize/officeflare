@@ -31,6 +31,7 @@ export async function fixture(
     beforeRegionalPreferencesMigration,
     beforeContactsRolesMigration,
     beforePersonalWikiMigration,
+    beforeAIConfigurationMigration,
   } = {},
 ) {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -127,6 +128,8 @@ export async function fixture(
       await beforeRegionalPreferencesMigration(db);
     if (file === "0040_personal_wiki_spaces.sql" && beforePersonalWikiMigration)
       await beforePersonalWikiMigration(db);
+    if (file === "0044_ai_model_providers.sql" && beforeAIConfigurationMigration)
+      await beforeAIConfigurationMigration(db);
     let statement = "",
       trigger = false;
     for (const line of (await readFile(`migrations/${file}`, "utf8")).split("\n")) {

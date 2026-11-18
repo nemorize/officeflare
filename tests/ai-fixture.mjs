@@ -12,11 +12,15 @@ const harness = await build({
   loader: { ".sql": "text" },
   target: "es2022",
 });
-export async function fixture(t, { configure = true, assets = false, wiki = false } = {}) {
+export async function fixture(
+  t,
+  { configure = true, assets = false, wiki = false, beforeAIConfigurationMigration } = {},
+) {
   const f = await calendarFixture(t, {
     ai: true,
     assets,
     collaboration: wiki,
+    beforeAIConfigurationMigration,
     workerEntry: {
       type: "ESModule",
       path: "tests/ai-harness.js",

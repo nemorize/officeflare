@@ -85,6 +85,7 @@ export interface Profile {
   required_capabilities_json: string;
   limits_json: string;
   data_policy_json: string;
+  model_id: string | null;
 }
 export interface Provider {
   id: string;
@@ -125,6 +126,7 @@ export interface Route {
   config_json: string;
   priority: number;
   version: number;
+  model_id?: string | null;
 }
 export interface Deployment {
   id: string;

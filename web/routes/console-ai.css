@@ -10,6 +10,35 @@
   display: grid;
   gap: 16px;
 }
+.ai-config-record + .ai-config-record {
+  border-block-start: 1px solid var(--ui-border);
+  margin-block-start: 20px;
+  padding-block-start: 20px;
+}
+.ai-config-record > .console-record {
+  border: 0;
+  padding-block: 0 12px;
+}
+.ai-config-record details > .console-form-grid + .console-form-grid,
+.ai-config-record details > .console-check {
+  margin-block-start: 16px;
+}
+.ai-config-credentials {
+  display: grid;
+  gap: 8px;
+  min-inline-size: 0;
+}
+.ai-config-credentials > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ai-config-order {
+  padding-inline-start: 20px;
+  margin: 0;
+  line-height: 1.7;
+}
 .ai-rule-row {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1fr 1fr;

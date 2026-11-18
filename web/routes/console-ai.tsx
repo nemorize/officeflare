@@ -41,6 +41,11 @@ import {
   ConsoleState,
 } from "../components/console-settings";
 import "./console-ai.css";
+import {
+  AIConfigurationEditorPage,
+  AIModelSettings,
+  AIProviderSettings,
+} from "./console-ai-configuration";
 const endpoint = "/api/ai/admin";
 const options = (items: AIRecord[] = [], blank = true) => [
   ...(blank ? [{ value: "", label: t("aiui.choose") }] : []),
@@ -79,24 +84,32 @@ function can(permission: string, write = false, permissions: string[]) {
   return permissions.includes(`admin.ai.${permission}.${write ? "manage" : "read"}`);
 }
 export function AIConsolePage() {
-  const { page } = useParams(),
+  const { page, id } = useParams(),
     { permissions } = useAccess(),
     navigate = useNavigate();
+  if (page && ["accounts", "gateways", "pools", "deployments", "routes"].includes(page))
+    return (
+      <Navigate
+        to={`/console/ai/${["accounts", "gateways", "pools"].includes(page) ? "providers" : page === "routes" ? "profiles" : "models"}`}
+        replace
+      />
+    );
   const pages = aiConsolePages.filter((item) => permissions.includes(item.permission));
   const current = pages.find((item) => item.page === page);
   if (!page)
     return pages[0] ? <Navigate to={`/console/ai/${pages[0].page}`} replace /> : <AccessDenied />;
   if (!current) return <AccessDenied />;
+  if (id && page !== "providers" && page !== "models") return <AccessDenied />;
   const spec = aiAdminSpecs.find((item) => item.key === page);
   const groups = [
     { id: "settings", label: t("aiui.settings"), members: ["settings"] },
     {
       id: "providers",
       label: t("aiui.providers"),
-      members: ["providers", "accounts", "gateways", "pools"],
+      members: ["providers"],
     },
-    { id: "models", label: t("aiui.models"), members: ["models", "deployments"] },
-    { id: "profiles", label: t("aiui.profiles"), members: ["profiles", "routes", "consumers"] },
+    { id: "models", label: t("aiui.models"), members: ["models"] },
+    { id: "profiles", label: t("aiui.profiles"), members: ["profiles", "consumers"] },
     { id: "mcp", label: t("aiui.mcpServers"), members: ["mcp-servers"] },
     { id: "quotas", label: t("aiui.userLimits"), members: ["quotas", "quota-plans"] },
     { id: "usage", label: t("aiui.usage"), members: ["usage", "activity", "reconciliation"] },
@@ -108,8 +121,14 @@ export function AIConsolePage() {
     .filter((group) => group.pages.length);
   const group = groups.find((item) => item.members.includes(page))!;
   const content = (
-    <div key={page}>
-      {spec ? (
+    <div key={id ? `${page}/${id}` : page}>
+      {id && (page === "providers" || page === "models") ? (
+        <AIConfigurationEditorPage kind={page} id={id} />
+      ) : page === "providers" ? (
+        <AIProviderSettings />
+      ) : page === "models" ? (
+        <AIModelSettings />
+      ) : spec ? (
         <ResourcePage spec={spec} />
       ) : page === "settings" ? (
         <SettingsPage />
@@ -124,7 +143,8 @@ export function AIConsolePage() {
   );
   return (
     <ConsoleSettingsLayout
-      title={t("aiui.administration")}
+      title={t("aiui.title")}
+      description={t("aiConfig.consoleDescription")}
       pages={groups.map((item) => ({ path: item.id, name: item.label }))}
       selected={group.id}
       onNavigate={(next) =>
@@ -365,7 +385,9 @@ function ResourceEditor({
     can("providers", false, permissions) ? `${endpoint}/providers` : null,
   );
   const modelData = useAIResource<{ items: AIRecord[] }>(
-    spec.key === "deployments" ? `${endpoint}/models` : null,
+    ["deployments", "profiles"].includes(spec.key) && can("providers", false, permissions)
+      ? `${endpoint}/models`
+      : null,
   );
   const poolData = useAIResource<{ items: AIRecord[] }>(
     spec.key === "routes" && can("providers", false, permissions) ? `${endpoint}/pools` : null,
@@ -846,19 +868,10 @@ function SettingsPage() {
       <ConsoleSection title={t("aiui.setupTitle")}>
         <ol className="console-setup-steps">
           <li>
-            <Link to="/console/ai/providers">{t("aiui.setupProvider")}</Link>
+            <Link to="/console/ai/providers">{t("aiui.providers")}</Link>
           </li>
           <li>
-            <Link to="/console/ai/accounts">{t("aiui.setupAccounts")}</Link>
-          </li>
-          <li>
-            <Link to="/console/ai/deployments">{t("aiui.setupModels")}</Link>
-          </li>
-          <li>
-            <Link to="/console/ai/routes">{t("aiui.setupRouting")}</Link>
-          </li>
-          <li>
-            <Link to="/console/ai/consumers">{t("aiui.setupConsumer")}</Link>
+            <Link to="/console/ai/models">{t("aiui.models")}</Link>
           </li>
         </ol>
       </ConsoleSection>

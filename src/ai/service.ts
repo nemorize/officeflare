@@ -347,14 +347,16 @@ export async function executeInvocation(
       fail(409, "AI_CONFLICT");
     const routes = await rows<Route>(
       env,
-      "SELECT r.* FROM ai_profile_routes r JOIN ai_account_pools p ON p.id=r.pool_id LEFT JOIN ai_gateways g ON g.id=r.gateway_id WHERE r.profile_id=? AND r.enabled=1 AND p.enabled=1 AND p.archived_at IS NULL AND (r.gateway_id IS NULL OR (g.enabled=1 AND g.archived_at IS NULL)) ORDER BY r.priority",
+      "SELECT r.*,profile.model_id FROM ai_profile_routes r JOIN ai_profiles profile ON profile.id=r.profile_id JOIN ai_account_pools p ON p.id=r.pool_id LEFT JOIN ai_gateways g ON g.id=r.gateway_id LEFT JOIN ai_model_providers mp ON mp.model_id=profile.model_id AND mp.deployment_id=r.deployment_id WHERE r.profile_id=? AND r.enabled=1 AND p.enabled=1 AND p.archived_at IS NULL AND (profile.model_id IS NULL OR (mp.enabled=1 AND mp.pool_id=r.pool_id)) AND (r.gateway_id IS NULL OR (g.enabled=1 AND g.archived_at IS NULL)) ORDER BY COALESCE(mp.priority,r.priority),r.id",
       resolved.profile.id,
     );
-    let ordinal = 0;
+    let ordinal = 0,
+      failures = 0;
     for (const route of routes) {
       const deployment = await first<Deployment>(
         env,
-        "SELECT d.* FROM ai_model_deployments d JOIN ai_models m ON m.id=d.model_id WHERE d.id=? AND d.enabled=1 AND d.archived_at IS NULL AND m.enabled=1 AND m.archived_at IS NULL",
+        "SELECT d.* FROM ai_model_deployments d JOIN ai_models m ON m.id=COALESCE(?,d.model_id) WHERE d.id=? AND d.enabled=1 AND d.archived_at IS NULL AND (d.cooldown_until IS NULL OR d.cooldown_until<=unixepoch()) AND m.enabled=1 AND m.archived_at IS NULL",
+        route.model_id ?? null,
         route.deployment_id,
       );
       const provider = await first<Provider>(
@@ -425,8 +427,9 @@ export async function executeInvocation(
         ),
         strategy,
       );
+      let exhausted = false;
       for (const account of accounts) {
-        if (++ordinal > pinned.limits.max_attempts) break;
+        if (failures >= pinned.limits.max_attempts) break;
         if (now() >= invocation.deadline_at) fail(422, "AI_LIMIT_REACHED");
         const current = await first<{ status: string }>(
           env,
@@ -446,6 +449,7 @@ export async function executeInvocation(
         const attemptId = uuid(),
           config = await settings(env),
           attemptContext = { ...resolved.context, epoch: config.policy_epoch };
+        ordinal++;
         const auth = resolved.guard;
         const candidateGuard: Guard = {
           sql: `${auth.sql} AND EXISTS(SELECT 1 FROM ai_invocations WHERE id=? AND execution_token=? AND status='running') AND EXISTS(SELECT 1 FROM ai_provider_accounts a JOIN ai_pool_members m ON m.account_id=a.id JOIN ai_profile_routes r ON r.pool_id=m.pool_id JOIN ai_providers p ON p.id=a.provider_id JOIN ai_model_deployments d ON d.id=r.deployment_id WHERE a.id=? AND a.status='active' AND a.credential_version=? AND (a.cooldown_until IS NULL OR a.cooldown_until<=unixepoch()) AND m.enabled=1 AND r.id=? AND r.version=? AND r.enabled=1 AND p.enabled=1 AND d.enabled=1 AND d.version=? AND (SELECT count(*) FROM ai_inference_attempts x WHERE x.account_id=a.id AND x.status IN('prepared','in_flight','unknown'))<a.concurrency_limit AND (a.quota_group_key IS NULL OR (SELECT count(*) FROM ai_inference_attempts x JOIN ai_provider_accounts grouped ON grouped.id=x.account_id WHERE grouped.provider_id=a.provider_id AND grouped.quota_group_key=a.quota_group_key AND x.status IN('prepared','in_flight','unknown'))<(SELECT min(concurrency_limit) FROM ai_provider_accounts grouped WHERE grouped.provider_id=a.provider_id AND grouped.quota_group_key=a.quota_group_key AND grouped.status='active')))`,
@@ -494,6 +498,7 @@ export async function executeInvocation(
                   credentials.version,
                   canonical({
                     route,
+                    model_id: route.model_id ?? deployment.model_id,
                     deployment,
                     provider: { id: provider.id, adapter_key: provider.adapter_key },
                     bound,
@@ -705,21 +710,32 @@ export async function executeInvocation(
               "UPDATE ai_provider_accounts SET status='reauth_required',version=version+1 WHERE id=?",
               account.id,
             ).run();
-          if (error instanceof ProviderFailure && error.status === 429)
+          if (error instanceof ProviderFailure && error.exhausted) {
+            exhausted = true;
             await statement(
               env,
-              "UPDATE ai_provider_accounts SET cooldown_until=?,last_error_code='RATE_LIMIT' WHERE id=? OR (provider_id=? AND quota_group_key=? AND ? IS NOT NULL)",
-              now() + (error.retryAfter || 60),
+              "UPDATE ai_provider_accounts SET cooldown_until=?,last_error_code=? WHERE id=? OR (provider_id=? AND quota_group_key=? AND ? IS NOT NULL)",
+              error.blocked ? 253402300799 : now() + (error.retryAfter || 60),
+              error.code,
               account.id,
               account.provider_id,
               account.quota_group_key,
               account.quota_group_key,
             ).run();
+          } else failures++;
           lastError = error;
           lastCode = error instanceof ProviderFailure ? "AI_PROVIDER_ERROR" : errorCode(error);
         }
       }
-      if (ordinal >= pinned.limits.max_attempts) break;
+      if (exhausted)
+        await statement(
+          env,
+          `UPDATE ai_model_deployments SET cooldown_until=(SELECT min(a.cooldown_until) FROM ai_provider_accounts a JOIN ai_pool_members m ON m.account_id=a.id WHERE m.pool_id=? AND m.enabled=1 AND a.status='active'),last_error_code='QUOTA_EXHAUSTED' WHERE id=? AND NOT EXISTS(SELECT 1 FROM ai_provider_accounts a JOIN ai_pool_members m ON m.account_id=a.id WHERE m.pool_id=? AND m.enabled=1 AND a.status='active' AND (a.cooldown_until IS NULL OR a.cooldown_until<=unixepoch()))`,
+          route.pool_id,
+          deployment.id,
+          route.pool_id,
+        ).run();
+      if (failures >= pinned.limits.max_attempts) break;
     }
     await finishInvocation(env, invocation, "failed", lastCode);
     if (lastError && !(lastError instanceof ProviderFailure)) throw lastError;

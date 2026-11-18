@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// Migrations 0038 and 0039 own STRICT, CHECK, foreign keys, indexes and triggers.
+// Migrations 0038, 0039 and 0044 own STRICT, CHECK, foreign keys, indexes and triggers.
 // Keep this typed query model in sync with those authoritative SQL definitions.
 
 export const aiAccountPools = sqliteTable("ai_account_pools", {
@@ -312,6 +312,21 @@ export const aiModelDeployments = sqliteTable("ai_model_deployments", {
     .notNull()
     .default(sql`unixepoch()`),
   archived_at: integer(),
+  cooldown_until: integer(),
+  last_error_code: text(),
+});
+
+export const aiModelProviders = sqliteTable("ai_model_providers", {
+  id: text().primaryKey().notNull(),
+  model_id: text().notNull(),
+  provider_id: text().notNull(),
+  deployment_id: text().notNull(),
+  pool_id: text().notNull(),
+  gateway_id: text(),
+  priority: integer().notNull(),
+  enabled: integer()
+    .notNull()
+    .default(sql`1`),
 });
 
 export const aiModels = sqliteTable("ai_models", {
@@ -319,6 +334,7 @@ export const aiModels = sqliteTable("ai_models", {
   key: text().notNull(),
   name: text().notNull(),
   vendor: text().notNull(),
+  profile_id: text(),
   capabilities_json: text()
     .notNull()
     .default(sql`'{}'`),
@@ -420,6 +436,7 @@ export const aiProfiles = sqliteTable("ai_profiles", {
   id: text().primaryKey().notNull(),
   key: text().notNull(),
   name: text().notNull(),
+  model_id: text(),
   required_capabilities_json: text()
     .notNull()
     .default(sql`'{}'`),
@@ -500,6 +517,8 @@ export const aiProviders = sqliteTable("ai_providers", {
   name: text().notNull(),
   adapter_key: text().notNull(),
   base_url: text().notNull(),
+  pool_id: text(),
+  gateway_id: text(),
   config_json: text()
     .notNull()
     .default(sql`'{}'`),
