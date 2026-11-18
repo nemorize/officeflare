@@ -3,6 +3,24 @@ import { defineTranslations } from "./resource.ts";
 
 // Keep every source key and named parameter; do not fall back to English.
 export const ko = defineTranslations(en, {
+  "aiConfig.modelCapabilities": "모델 기능 및 한도",
+  "aiConfig.maxContext": "최대 컨텍스트(토큰)",
+  "aiConfig.modelLimitsHint":
+    "컨텍스트는 입력과 출력을 포함합니다. 한도를 비워 두면 프로바이더와 호출 정책의 한도를 사용합니다.",
+  "aiConfig.defaultReasoning": "기본 추론 레벨",
+  "aiConfig.automaticReasoning": "프로바이더 기본값",
+  "aiConfig.defaultReasoningHint":
+    "연결된 프로바이더 모델의 고급 설정에서 지원하는 레벨을 선택하세요.",
+  "aiConfig.unsupportedReasoning":
+    "활성화된 프로바이더 모델이 지원하는 레벨을 기본값으로 선택하세요.",
+  "aiConfig.supportedReasoning": "지원 추론 레벨",
+  "aiConfig.reasoning.none": "끄기",
+  "aiConfig.reasoning.minimal": "최소",
+  "aiConfig.reasoning.low": "낮음",
+  "aiConfig.reasoning.medium": "중간",
+  "aiConfig.reasoning.high": "높음",
+  "aiConfig.reasoning.xhigh": "매우 높음",
+  "aiConfig.reasoning.max": "최대",
   "aiConfig.providerHint": "프로바이더와 인증 정보, 선택적 게이트웨이를 한 번에 설정합니다.",
   "aiConfig.consoleDescription": "AI 프로바이더, 모델, 도구 연결 및 사용 한도를 관리합니다.",
   "aiConfig.modelHint": "프로바이더가 제공하는 모델을 Officeflare 모델에 연결합니다.",

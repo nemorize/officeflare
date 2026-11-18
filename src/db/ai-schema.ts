@@ -324,6 +324,7 @@ export const aiModelProviders = sqliteTable("ai_model_providers", {
   pool_id: text().notNull(),
   gateway_id: text(),
   priority: integer().notNull(),
+  reasoning_levels_json: text(),
   enabled: integer()
     .notNull()
     .default(sql`1`),

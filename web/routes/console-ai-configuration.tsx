@@ -4,7 +4,10 @@ import { t, type StaticMessageKey } from "../../shared/i18n/index.ts";
 import {
   aiAdapters,
   aiProtocols,
+  aiReasoningLevels,
   defaultAIProtocol,
+  isAIReasoningLevel,
+  reasoningLevelsFor,
   type AIConfiguredAccount,
   type AIModelConfiguration,
   type AIModelProvider,
@@ -68,6 +71,7 @@ const blankSource = (): AIModelProvider => ({
   protocol: "openai_responses",
   auth_mode: "api",
   enabled: true,
+  reasoning_levels: [],
   capabilities: {
     schema_version: 1,
     streaming: true,
@@ -366,7 +370,14 @@ export function AIConfigurationEditorPage({ kind, id }: { kind: ConfigurationKin
               initial={
                 item
                   ? (item as AIModelConfiguration)
-                  : { key: "", name: "", vendor: "", enabled: true, providers: [blankSource()] }
+                  : {
+                      key: "",
+                      name: "",
+                      vendor: "",
+                      enabled: true,
+                      capabilities: {},
+                      providers: [blankSource()],
+                    }
               }
               providers={providers.data.items}
               onSaved={saved}
@@ -729,12 +740,33 @@ function ModelEditor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const change = (patch: Partial<ModelDraft>) => setValue((old) => ({ ...old, ...patch }));
-  const changeSource = (index: number, patch: Partial<AIModelProvider>) =>
+  const changeSource = (index: number, patch: Partial<AIModelProvider>) => {
     change({
-      providers: value.providers.map((source, i) =>
-        i === index ? { ...source, ...patch } : source,
-      ),
+      providers: value.providers.map((source, i) => {
+        if (i !== index) return source;
+        const next = { ...source, ...patch };
+        if (
+          next.provider_id !== source.provider_id ||
+          next.provider_model_id !== source.provider_model_id ||
+          next.auth_mode !== source.auth_mode ||
+          next.protocol !== source.protocol
+        )
+          next.reasoning_levels = [];
+        return next;
+      }),
     });
+  };
+  const { default_reasoning_effort: defaultEffort, ...tokenCapabilities } = value.capabilities;
+  const availableEfforts = aiReasoningLevels.filter((level) =>
+    value.providers.some(
+      (source) =>
+        source.enabled &&
+        reasoningLevelsFor(source.protocol).includes(level) &&
+        source.reasoning_levels?.includes(level),
+    ),
+  );
+  const unsupportedDefault =
+    defaultEffort !== undefined && !availableEfforts.includes(defaultEffort);
   function move(index: number, direction: number) {
     const next = [...value.providers];
     [next[index], next[index + direction]] = [next[index + direction]!, next[index]!];
@@ -742,7 +774,7 @@ function ModelEditor({
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || unsupportedDefault) return;
     setBusy(true);
     setError("");
     try {
@@ -785,6 +817,73 @@ function ModelEditor({
           <Check checked={value.enabled} onChange={(enabled) => change({ enabled })}>
             {t("common.enabled")}
           </Check>
+        </ConsoleFieldset>
+      </ConsoleSection>
+      <ConsoleSection
+        title={t("aiConfig.modelCapabilities")}
+        description={t("aiConfig.modelLimitsHint")}
+      >
+        <ConsoleFieldset disabled={busy}>
+          <div className="console-form-grid">
+            <ConsoleInput
+              label={t("aiConfig.maxContext")}
+              type="number"
+              min={1}
+              value={String(value.capabilities.context_tokens ?? "")}
+              onValueChange={(next) => {
+                const { context_tokens, ...rest } = value.capabilities;
+                change({
+                  capabilities: next === "" ? rest : { ...rest, context_tokens: Number(next) },
+                });
+              }}
+            />
+            <ConsoleInput
+              label={t("aiui.maxOutput")}
+              type="number"
+              min={1}
+              max={
+                value.capabilities.context_tokens === undefined
+                  ? undefined
+                  : value.capabilities.context_tokens - 1
+              }
+              value={String(value.capabilities.max_output_tokens ?? "")}
+              onValueChange={(next) => {
+                const { max_output_tokens, ...rest } = value.capabilities;
+                change({
+                  capabilities: next === "" ? rest : { ...rest, max_output_tokens: Number(next) },
+                });
+              }}
+            />
+          </div>
+          <ConsoleSelectField
+            label={t("aiConfig.defaultReasoning")}
+            value={defaultEffort ?? ""}
+            disabled={busy || (!availableEfforts.length && !unsupportedDefault)}
+            options={[
+              { value: "", label: t("aiConfig.automaticReasoning") },
+              ...availableEfforts.map((level) => ({
+                value: level,
+                label: t(`aiConfig.reasoning.${level}`),
+              })),
+              ...(unsupportedDefault
+                ? [{ value: defaultEffort, label: t(`aiConfig.reasoning.${defaultEffort}`) }]
+                : []),
+            ]}
+            onChange={(level) =>
+              change({
+                capabilities: isAIReasoningLevel(level)
+                  ? { ...tokenCapabilities, default_reasoning_effort: level }
+                  : tokenCapabilities,
+              })
+            }
+          />
+          <p className="console-subtext">
+            {t(
+              unsupportedDefault
+                ? "aiConfig.unsupportedReasoning"
+                : "aiConfig.defaultReasoningHint",
+            )}
+          </p>
         </ConsoleFieldset>
       </ConsoleSection>
       <ConsoleSection
@@ -985,32 +1084,55 @@ function ModelEditor({
                       onChange={(patch) => changeSource(index, patch)}
                     />
                   </div>
-                  <Check
-                    checked={source.capabilities.tool_calls === true}
-                    onChange={(checked) =>
-                      changeSource(index, {
-                        capabilities: { ...source.capabilities, tool_calls: checked },
-                      })
-                    }
-                  >
-                    {t("aiui.supportsTools")}
-                  </Check>
-                  <Check
-                    checked={source.capabilities.json_schema === true}
-                    onChange={(checked) =>
-                      changeSource(index, {
-                        capabilities: { ...source.capabilities, json_schema: checked },
-                      })
-                    }
-                  >
-                    {t("aiui.supportsJSON")}
-                  </Check>
-                  <Check
-                    checked={source.enabled}
-                    onChange={(enabled) => changeSource(index, { enabled })}
-                  >
-                    {t("common.enabled")}
-                  </Check>
+                  {source.provider_model_id && reasoningLevelsFor(source.protocol).length > 0 && (
+                    <fieldset className="ai-config-reasoning">
+                      <legend>{t("aiConfig.supportedReasoning")}</legend>
+                      {reasoningLevelsFor(source.protocol).map((level) => (
+                        <Check
+                          key={level}
+                          checked={source.reasoning_levels?.includes(level) ?? false}
+                          onChange={(checked) => {
+                            const levels = source.reasoning_levels ?? [];
+                            changeSource(index, {
+                              reasoning_levels: checked
+                                ? [...levels, level]
+                                : levels.filter((item) => item !== level),
+                            });
+                          }}
+                        >
+                          {t(`aiConfig.reasoning.${level}`)}
+                        </Check>
+                      ))}
+                    </fieldset>
+                  )}
+                  <div className="ai-config-options">
+                    <Check
+                      checked={source.capabilities.tool_calls === true}
+                      onChange={(checked) =>
+                        changeSource(index, {
+                          capabilities: { ...source.capabilities, tool_calls: checked },
+                        })
+                      }
+                    >
+                      {t("aiui.supportsTools")}
+                    </Check>
+                    <Check
+                      checked={source.capabilities.json_schema === true}
+                      onChange={(checked) =>
+                        changeSource(index, {
+                          capabilities: { ...source.capabilities, json_schema: checked },
+                        })
+                      }
+                    >
+                      {t("aiui.supportsJSON")}
+                    </Check>
+                    <Check
+                      checked={source.enabled}
+                      onChange={(enabled) => changeSource(index, { enabled })}
+                    >
+                      {t("common.enabled")}
+                    </Check>
+                  </div>
                 </details>
               </ConsoleFieldset>
             </div>
@@ -1026,7 +1148,11 @@ function ModelEditor({
         >
           {t("common.cancel")}
         </Button>
-        <Button type="submit" variant="primary" disabled={busy || !value.providers.length}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={busy || unsupportedDefault || !value.providers.length}
+        >
           {busy ? t("common.saving") : initial.id ? t("common.saveChanges") : addLabel("models")}
         </Button>
       </ConsoleFormActions>

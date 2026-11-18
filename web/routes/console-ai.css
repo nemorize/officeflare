@@ -23,6 +23,24 @@
 .ai-config-record details > .console-check {
   margin-block-start: 16px;
 }
+.ai-config-reasoning,
+.ai-config-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin: 16px 0 0;
+}
+.ai-config-reasoning {
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+.ai-config-reasoning > legend {
+  margin-block-end: 8px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
 .ai-config-credentials {
   display: grid;
   gap: 8px;

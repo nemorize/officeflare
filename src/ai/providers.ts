@@ -151,7 +151,12 @@ export const price = (pricing: Record<string, unknown>, usage: AIUsage): number 
   if (!Number.isSafeInteger(result)) fail(422, "AI_LIMIT_REACHED");
   return result;
 };
-export function usageBound(request: AIRequest, deployment: Deployment, limits: AILimits) {
+export function usageBound(
+  request: AIRequest,
+  deployment: Deployment,
+  limits: AILimits,
+  contextMaximum = Infinity,
+) {
   const caps = parse(deployment.capabilities_json);
   const input =
     new TextEncoder().encode(
@@ -184,7 +189,10 @@ export function usageBound(request: AIRequest, deployment: Deployment, limits: A
     (plan && limits.max_output_tokens < outputMaximum)
   )
     fail(422, "AI_USAGE_BOUND_UNAVAILABLE");
-  if (outputBound > outputMaximum || input + outputBound > Number(caps.context_tokens ?? 0))
+  if (
+    outputBound > outputMaximum ||
+    input + outputBound > Math.min(contextMaximum, Number(caps.context_tokens ?? 0))
+  )
     fail(422, "AI_LIMIT_REACHED");
   const usage: AIUsage = {
     input_tokens: input,
@@ -607,6 +615,16 @@ export async function callProvider(
         : {}),
     };
     url = base + "/chat/completions";
+    if (protocol === "openai_chat" && generation.reasoning_effort !== undefined) {
+      if (provider.adapter_key === "openrouter") {
+        body.reasoning = { effort: generation.reasoning_effort };
+        delete body.reasoning_effort;
+      }
+      if (provider.adapter_key === "openai") {
+        body.max_completion_tokens = limits.max_output_tokens;
+        delete body.max_tokens;
+      }
+    }
     if (protocol === "cloudflare_run") {
       const modelPath = model.split("/").map(encodeURIComponent).join("/");
       url = base + (gateway ? "/" : "/run/") + modelPath;

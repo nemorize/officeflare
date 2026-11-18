@@ -455,6 +455,19 @@ test(
     await editor.getByRole("textbox", { name: "Name", exact: true }).fill("UI model");
     await choose(page, "AI provider", provider.name);
     await choose(page, "Available provider models", "UI provider model (fixture-ui-model)");
+    const limits = editor.locator("section").filter({
+      has: page.getByRole("heading", { name: "Model capabilities and limits", exact: true }),
+    });
+    await limits
+      .getByRole("spinbutton", { name: "Maximum context (tokens)", exact: true })
+      .fill("65536");
+    await limits
+      .getByRole("spinbutton", { name: "Maximum output tokens", exact: true })
+      .fill("4096");
+    await editor.getByText("Advanced settings", { exact: true }).click();
+    await editor.getByRole("checkbox", { name: "High", exact: true }).check();
+    await choose(page, "Default reasoning level", "High");
+    await editor.getByText("Advanced settings", { exact: true }).click();
     await editor
       .getByRole("checkbox", { name: "The model's usage bounds are verified", exact: true })
       .check();
@@ -512,6 +525,12 @@ test(
       model.providers.map((source) => source.provider_model_id),
       ["second-provider-model", "fixture-ui-model"],
     );
+    assert.deepEqual(model.capabilities, {
+      context_tokens: 65536,
+      max_output_tokens: 4096,
+      default_reasoning_effort: "high",
+    });
+    assert.deepEqual(model.providers[1].reasoning_levels, ["high"]);
     assert.ok(
       (await f.call("/api/ai/models")).profiles.some((profile) => profile.name === "UI model"),
     );
@@ -520,6 +539,18 @@ test(
     assert.equal(
       await editor.getByRole("textbox", { name: "Name", exact: true }).inputValue(),
       "UI model",
+    );
+    assert.equal(
+      await limits
+        .getByRole("spinbutton", { name: "Maximum context (tokens)", exact: true })
+        .inputValue(),
+      "65536",
+    );
+    assert.equal(
+      await limits
+        .getByRole("combobox", { name: "Default reasoning level", exact: true })
+        .textContent(),
+      "High",
     );
     assert.equal(await page.getByRole("dialog").count(), 0);
     await editor.getByRole("button", { name: "Cancel", exact: true }).click();

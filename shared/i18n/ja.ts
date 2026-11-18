@@ -3,6 +3,23 @@ import { defineTranslations } from "./resource.ts";
 
 // Keep every source key and named parameter; do not fall back to English.
 export const ja = defineTranslations(en, {
+  "aiConfig.modelCapabilities": "モデルの機能と上限",
+  "aiConfig.maxContext": "最大コンテキスト（トークン）",
+  "aiConfig.modelLimitsHint":
+    "コンテキストには入力と出力が含まれます。空欄の場合はプロバイダーとリクエストの上限が適用されます。",
+  "aiConfig.defaultReasoning": "既定の推論レベル",
+  "aiConfig.automaticReasoning": "プロバイダーの既定値",
+  "aiConfig.defaultReasoningHint": "各プロバイダーモデルの詳細設定で対応レベルを選択してください。",
+  "aiConfig.unsupportedReasoning":
+    "有効なプロバイダーモデルが対応するレベルを既定値に選択してください。",
+  "aiConfig.supportedReasoning": "対応する推論レベル",
+  "aiConfig.reasoning.none": "オフ",
+  "aiConfig.reasoning.minimal": "最小",
+  "aiConfig.reasoning.low": "低",
+  "aiConfig.reasoning.medium": "中",
+  "aiConfig.reasoning.high": "高",
+  "aiConfig.reasoning.xhigh": "非常に高い",
+  "aiConfig.reasoning.max": "最大",
   "aiConfig.providerHint": "プロバイダー、認証情報、任意のゲートウェイをまとめて設定します。",
   "aiConfig.consoleDescription": "AIプロバイダー、モデル、ツール接続、利用上限を管理します。",
   "aiConfig.modelHint": "プロバイダーのモデルをOfficeflareモデルに接続します。",

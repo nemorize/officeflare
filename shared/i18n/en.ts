@@ -2,6 +2,23 @@ import { defineMessages } from "./resource.ts";
 
 // English source messages. Keep keys stable when editing copy.
 export const en = defineMessages({
+  "aiConfig.modelCapabilities": "Model capabilities and limits",
+  "aiConfig.maxContext": "Maximum context (tokens)",
+  "aiConfig.modelLimitsHint":
+    "Context includes input and output. Leave the limits blank to use provider and request limits.",
+  "aiConfig.defaultReasoning": "Default reasoning level",
+  "aiConfig.automaticReasoning": "Provider default",
+  "aiConfig.defaultReasoningHint":
+    "Choose supported levels under Advanced settings for each provider model.",
+  "aiConfig.unsupportedReasoning": "Select a default level supported by an enabled provider model.",
+  "aiConfig.supportedReasoning": "Supported reasoning levels",
+  "aiConfig.reasoning.none": "Off",
+  "aiConfig.reasoning.minimal": "Minimal",
+  "aiConfig.reasoning.low": "Low",
+  "aiConfig.reasoning.medium": "Medium",
+  "aiConfig.reasoning.high": "High",
+  "aiConfig.reasoning.xhigh": "Extra high",
+  "aiConfig.reasoning.max": "Maximum",
   "aiConfig.providerHint": "Configure the provider, credentials, and optional gateway together.",
   "aiConfig.consoleDescription": "Manage AI providers, models, tool connections, and usage limits.",
   "aiConfig.modelHint": "Connect provider models to an Officeflare model.",

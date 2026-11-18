@@ -4,6 +4,7 @@ import { can } from "../authorization/access";
 import { permissionClosure } from "../authorization/permissions";
 import type { AppEnv, AuthContext } from "../auth/types";
 import { now, uuid as newId } from "../auth/types";
+import { isAIReasoningLevel } from "../../shared/ai-configuration.ts";
 import { consumerCatalog, consumerDefinition } from "./consumers";
 import { fail } from "./errors";
 import { assertSchema } from "./json-schema";
@@ -256,6 +257,17 @@ function validateConfig(resource: string, data: Record<string, unknown>) {
           if (key !== "schema_version" && amount !== null) integer(amount, 1);
       if (field === "generation_json")
         fields(parsed, ["schema_version", "temperature", "top_p", "reasoning_effort"]);
+      if (field === "capabilities_json" && resource === "models") {
+        const context =
+          parsed.context_tokens === undefined ? undefined : integer(parsed.context_tokens, 1);
+        if (parsed.max_output_tokens !== undefined)
+          integer(parsed.max_output_tokens, 1, context === undefined ? undefined : context - 1);
+        if (
+          parsed.default_reasoning_effort !== undefined &&
+          !isAIReasoningLevel(parsed.default_reasoning_effort)
+        )
+          fail(400, "AI_INVALID_INPUT");
+      }
       if (field === "pricing_json") {
         fields(parsed, [
           "schema_version",

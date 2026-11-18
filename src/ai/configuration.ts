@@ -1,7 +1,13 @@
 import type { Hono } from "hono";
 import type { AppEnv, AuthContext } from "../auth/types";
 import { uuid } from "../auth/types";
-import { aiAdapters, aiProtocols } from "../../shared/ai-configuration.ts";
+import {
+  aiAdapters,
+  aiProtocols,
+  reasoningLevelsFor,
+  type AIModelCapabilities,
+  type AIReasoningLevel,
+} from "../../shared/ai-configuration.ts";
 import { fail } from "./errors";
 import { seal, unseal } from "./secrets";
 import {
@@ -123,7 +129,7 @@ async function modelConfigurations(env: AIEnv, id?: string) {
   );
   const sources = await rows<Row>(
     env,
-    `SELECT mp.model_id,mp.id,mp.provider_id,mp.enabled,d.provider_model_id,d.protocol,d.auth_mode,d.capabilities_json,d.pricing_json,d.config_json,d.cooldown_until FROM ai_model_providers mp JOIN ai_model_deployments d ON d.id=mp.deployment_id WHERE mp.model_id IN(SELECT value FROM json_each(?)) ORDER BY mp.priority`,
+    `SELECT mp.model_id,mp.id,mp.provider_id,mp.enabled,mp.reasoning_levels_json,d.provider_model_id,d.protocol,d.auth_mode,d.capabilities_json,d.pricing_json,d.config_json,d.cooldown_until FROM ai_model_providers mp JOIN ai_model_deployments d ON d.id=mp.deployment_id WHERE mp.model_id IN(SELECT value FROM json_each(?)) ORDER BY mp.priority`,
     canonical(models.map((model) => model.id)),
   );
   return models.map((model) => ({
@@ -133,15 +139,29 @@ async function modelConfigurations(env: AIEnv, id?: string) {
     vendor: model.vendor,
     enabled: !!model.enabled,
     version: model.version,
+    capabilities: parse(model.capabilities_json),
     providers: sources
       .filter((source) => source.model_id === model.id)
-      .map(({ model_id, capabilities_json, pricing_json, config_json, enabled, ...source }) => ({
-        ...source,
-        enabled: !!enabled,
-        capabilities: parse(capabilities_json),
-        pricing: parse(pricing_json),
-        config: parse(config_json),
-      })),
+      .map(
+        ({
+          model_id,
+          capabilities_json,
+          reasoning_levels_json,
+          pricing_json,
+          config_json,
+          enabled,
+          ...source
+        }) => ({
+          ...source,
+          enabled: !!enabled,
+          capabilities: parse(capabilities_json),
+          ...(reasoning_levels_json === null
+            ? {}
+            : { reasoning_levels: parse(reasoning_levels_json) }),
+          pricing: parse(pricing_json),
+          config: parse(config_json),
+        }),
+      ),
   }));
 }
 async function modelConfiguration(env: AIEnv, id: string) {
@@ -488,6 +508,7 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
       "name",
       "vendor",
       "enabled",
+      "capabilities",
       "providers",
     ]);
     const id = updating ? text(c.req.param("id"), 100) : uuid();
@@ -500,6 +521,14 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
       name = text(input.name, 200),
       vendor = text(input.vendor ?? "", 200, true),
       enabled = flag(input.enabled);
+    const modelData: Record<string, unknown> = {
+      capabilities_json:
+        input.capabilities === undefined
+          ? (previous?.capabilities_json ?? "{}")
+          : object(input.capabilities),
+    };
+    validate("models", modelData);
+    const modelCapabilities = parse<AIModelCapabilities>(String(modelData.capabilities_json));
     if (!Array.isArray(input.providers) || !input.providers.length || input.providers.length > 64)
       fail(400, "AI_INVALID_INPUT");
     const existing = previous
@@ -520,6 +549,7 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
         "auth_mode",
         "enabled",
         "capabilities",
+        "reasoning_levels",
         "pricing",
         "config",
       ]),
@@ -542,6 +572,8 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
       ),
     );
     const sources: Row[] = [];
+    const defaultEffort = modelCapabilities.default_reasoning_effort;
+    let supportsDefault = defaultEffort === undefined;
     for (const source of requested) {
       if (source.id && !existing.some((row) => row.id === source.id)) fail(400, "AI_INVALID_INPUT");
       const provider = providerRows.find((row) => row.id === source.provider_id);
@@ -584,14 +616,36 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
           row.protocol === data.protocol &&
           row.auth_mode === data.auth_mode,
       );
+      const previousSource = existing.find((row) => row.deployment_id === deployment?.id);
+      const reasoningLevels: unknown =
+        source.reasoning_levels === undefined && previousSource?.reasoning_levels_json != null
+          ? parse(previousSource.reasoning_levels_json)
+          : source.reasoning_levels;
+      const allowedLevels = reasoningLevelsFor(data.protocol);
+      if (
+        reasoningLevels !== undefined &&
+        (!Array.isArray(reasoningLevels) ||
+          reasoningLevels.some((level) => !allowedLevels.includes(level as AIReasoningLevel)) ||
+          new Set(reasoningLevels).size !== reasoningLevels.length)
+      )
+        fail(400, "AI_INVALID_INPUT");
+      if (
+        defaultEffort !== undefined &&
+        data.enabled &&
+        Array.isArray(reasoningLevels) &&
+        reasoningLevels.includes(defaultEffort)
+      )
+        supportsDefault = true;
       sources.push({
         ...data,
         id: source.id ?? uuid(),
         deployment_id: deployment?.id ?? uuid(),
         pool_id: provider.pool_id,
         gateway_id: provider.gateway_id,
+        reasoning_levels_json: reasoningLevels === undefined ? null : canonical(reasoningLevels),
       });
     }
+    if (!supportsDefault) fail(400, "AI_CAPABILITY_UNSUPPORTED");
     if (
       new Set(
         sources.map((source) =>
@@ -616,12 +670,13 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
       const writes = [
         statement(
           c.env,
-          `INSERT INTO ai_models(id,key,name,vendor,enabled) SELECT ?,?,?,?,? WHERE ${won.sql} ON CONFLICT(id) DO UPDATE SET name=excluded.name,vendor=excluded.vendor,enabled=excluded.enabled,version=ai_models.version+1,updated_at=unixepoch()`,
+          `INSERT INTO ai_models(id,key,name,vendor,enabled,capabilities_json) SELECT ?,?,?,?,?,? WHERE ${won.sql} ON CONFLICT(id) DO UPDATE SET name=excluded.name,vendor=excluded.vendor,enabled=excluded.enabled,capabilities_json=excluded.capabilities_json,version=ai_models.version+1,updated_at=unixepoch()`,
           id,
           key,
           name,
           vendor,
           enabled,
+          String(modelData.capabilities_json),
           ...won.args,
         ),
         statement(
@@ -650,7 +705,7 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
           ),
           statement(
             c.env,
-            `INSERT INTO ai_model_providers(id,model_id,provider_id,deployment_id,pool_id,gateway_id,priority,enabled) SELECT ?,?,?,?,?,?,?,? WHERE ${won.sql}`,
+            `INSERT INTO ai_model_providers(id,model_id,provider_id,deployment_id,pool_id,gateway_id,priority,enabled,reasoning_levels_json) SELECT ?,?,?,?,?,?,?,?,? WHERE ${won.sql}`,
             source.id,
             id,
             source.provider_id,
@@ -659,6 +714,7 @@ export function registerAIConfiguration(app: Hono<AppEnv>, deps: Dependencies) {
             source.gateway_id,
             priority,
             source.enabled,
+            source.reasoning_levels_json,
             ...won.args,
           ),
         ),

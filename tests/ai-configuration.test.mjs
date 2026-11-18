@@ -192,6 +192,73 @@ test("changing a model's provider preserves prior attempt history and rejects st
   assert.deepEqual((await f.db.prepare("PRAGMA foreign_key_check").all()).results, []);
 });
 
+test("model limits and reasoning constrain provider selection and the outgoing request", async (t) => {
+  const f = await fixture(t, { configure: false });
+  const first = await createProvider(f, "low-reasoning"),
+    second = await createProvider(f, "high-reasoning");
+  const model = await createModel(f, "reasoning-model", [
+    {
+      ...source(first, "low"),
+      reasoning_levels: ["low"],
+    },
+    {
+      ...source(second, "high"),
+      reasoning_levels: ["high"],
+    },
+  ]);
+  const path = `/model-configs/${model.id}`;
+  const settings = {
+    context_tokens: 3000,
+    max_output_tokens: 512,
+    default_reasoning_effort: "high",
+  };
+  await f.admin(path, {
+    method: "PATCH",
+    data: { ...writeModel(model), capabilities: { ...settings, context_tokens: 512 } },
+    expected: 400,
+  });
+  await f.admin(path, {
+    method: "PATCH",
+    data: {
+      ...writeModel(model),
+      capabilities: { ...settings, default_reasoning_effort: "medium" },
+    },
+    expected: 400,
+  });
+  const { item: saved } = await f.admin(path, {
+    method: "PATCH",
+    data: { ...writeModel(model), capabilities: settings },
+  });
+  const { capabilities: omitted, ...legacy } = writeModel(saved);
+  for (const provider of legacy.providers) delete provider.reasoning_levels;
+  await f.admin(path, { method: "PATCH", data: legacy });
+  assert.deepEqual((await f.admin(path)).item.capabilities, settings);
+  await createModel(f, "same-upstream-model", [
+    { ...source(second, "high"), reasoning_levels: [] },
+  ]);
+
+  await enable(f);
+  assert.equal((await infer(f, model.name)).text, "Hello");
+  const profile = (await f.call("/api/ai/models")).profiles.find(
+    (profile) => profile.name === model.name,
+  );
+  const rejected = await f.testCall(
+    "infer",
+    f.request({
+      profileKey: profile.key,
+      messages: [{ role: "user", content: "a".repeat(1600) }],
+    }),
+    422,
+  );
+  assert.equal(rejected.code, "AI_LIMIT_REACHED");
+  const requests = (await f.bucket.list({ prefix: "ai-requests/" })).objects;
+  assert.equal(requests.length, 1);
+  const { body } = await (await f.bucket.get(requests[0].key)).json();
+  assert.equal(body.model, "high");
+  assert.equal(body.max_output_tokens, 512);
+  assert.deepEqual(body.reasoning, { effort: "high" });
+});
+
 test("profile model changes rebuild routes and clearing the model disables the old routes", async (t) => {
   const f = await fixture(t, { configure: false });
   const provider = await createProvider(f, "profile-provider");

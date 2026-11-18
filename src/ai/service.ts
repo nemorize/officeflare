@@ -1,5 +1,11 @@
 import { now, uuid } from "../auth/types";
 import { permissionClosure } from "../authorization/permissions";
+import {
+  isAIReasoningLevel,
+  reasoningLevelsFor,
+  type AIModelCapabilities,
+  type AIReasoningLevel,
+} from "../../shared/ai-configuration.ts";
 import { consumerDefinition } from "./consumers";
 import { accountCredentials } from "./credentials";
 import { errorCode, fail, type AICode } from "./errors";
@@ -345,17 +351,22 @@ export async function executeInvocation(
       resolved.consumer.version !== pinned.consumer_version
     )
       fail(409, "AI_CONFLICT");
-    const routes = await rows<Route>(
+    const routes = await rows<Route & { reasoning_levels_json: string | null }>(
       env,
-      "SELECT r.*,profile.model_id FROM ai_profile_routes r JOIN ai_profiles profile ON profile.id=r.profile_id JOIN ai_account_pools p ON p.id=r.pool_id LEFT JOIN ai_gateways g ON g.id=r.gateway_id LEFT JOIN ai_model_providers mp ON mp.model_id=profile.model_id AND mp.deployment_id=r.deployment_id WHERE r.profile_id=? AND r.enabled=1 AND p.enabled=1 AND p.archived_at IS NULL AND (profile.model_id IS NULL OR (mp.enabled=1 AND mp.pool_id=r.pool_id)) AND (r.gateway_id IS NULL OR (g.enabled=1 AND g.archived_at IS NULL)) ORDER BY COALESCE(mp.priority,r.priority),r.id",
+      "SELECT r.*,profile.model_id,mp.reasoning_levels_json FROM ai_profile_routes r JOIN ai_profiles profile ON profile.id=r.profile_id JOIN ai_account_pools p ON p.id=r.pool_id LEFT JOIN ai_gateways g ON g.id=r.gateway_id LEFT JOIN ai_model_providers mp ON mp.model_id=profile.model_id AND mp.deployment_id=r.deployment_id WHERE r.profile_id=? AND r.enabled=1 AND p.enabled=1 AND p.archived_at IS NULL AND (profile.model_id IS NULL OR (mp.enabled=1 AND mp.pool_id=r.pool_id)) AND (r.gateway_id IS NULL OR (g.enabled=1 AND g.archived_at IS NULL)) ORDER BY COALESCE(mp.priority,r.priority),r.id",
       resolved.profile.id,
     );
+    const {
+      schema_version: _schemaVersion,
+      reasoning_effort: profileEffort,
+      ...generation
+    } = parse(resolved.profile.generation_json);
     let ordinal = 0,
       failures = 0;
     for (const route of routes) {
-      const deployment = await first<Deployment>(
+      const deployment = await first<Deployment & { model_capabilities_json: string }>(
         env,
-        "SELECT d.* FROM ai_model_deployments d JOIN ai_models m ON m.id=COALESCE(?,d.model_id) WHERE d.id=? AND d.enabled=1 AND d.archived_at IS NULL AND (d.cooldown_until IS NULL OR d.cooldown_until<=unixepoch()) AND m.enabled=1 AND m.archived_at IS NULL",
+        "SELECT d.*,m.capabilities_json AS model_capabilities_json FROM ai_model_deployments d JOIN ai_models m ON m.id=COALESCE(?,d.model_id) WHERE d.id=? AND d.enabled=1 AND d.archived_at IS NULL AND (d.cooldown_until IS NULL OR d.cooldown_until<=unixepoch()) AND m.enabled=1 AND m.archived_at IS NULL",
         route.model_id ?? null,
         route.deployment_id,
       );
@@ -367,6 +378,7 @@ export async function executeInvocation(
       if (!deployment || !provider) continue;
       const required = parse(resolved.profile.required_capabilities_json),
         capabilities = parse(deployment.capabilities_json),
+        modelCapabilities = parse<AIModelCapabilities>(deployment.model_capabilities_json),
         policy = parse(resolved.profile.data_policy_json);
       if (
         Object.entries(required).some(
@@ -393,9 +405,31 @@ export async function executeInvocation(
         lastCode = "AI_CAPABILITY_UNSUPPORTED";
         continue;
       }
+      const effort = profileEffort ?? modelCapabilities.default_reasoning_effort;
+      const reasoningLevels =
+        route.reasoning_levels_json === null
+          ? undefined
+          : parse<AIReasoningLevel[]>(route.reasoning_levels_json);
+      if (
+        effort !== undefined &&
+        (reasoningLevels !== undefined || profileEffort == null) &&
+        (!isAIReasoningLevel(effort) ||
+          !reasoningLevels?.includes(effort) ||
+          !reasoningLevelsFor(deployment.protocol).includes(effort))
+      ) {
+        lastCode = "AI_CAPABILITY_UNSUPPORTED";
+        continue;
+      }
+      const limits = {
+        ...pinned.limits,
+        max_output_tokens: Math.min(
+          pinned.limits.max_output_tokens,
+          modelCapabilities.max_output_tokens ?? Infinity,
+        ),
+      };
       let bound: ReturnType<typeof usageBound>;
       try {
-        bound = usageBound(request, deployment, pinned.limits);
+        bound = usageBound(request, deployment, limits, modelCapabilities.context_tokens);
       } catch (error) {
         lastError = error;
         lastCode = errorCode(error);
@@ -560,17 +594,14 @@ export async function executeInvocation(
             executionToken,
           ).first();
           if (!sent) fail(409, "AI_CANCELLED");
-          const { schema_version: _schemaVersion, ...generation } = parse(
-            resolved.profile.generation_json,
-          );
           const result = await callProvider(
             request,
             provider,
             deployment,
             account,
             credentials.credentials,
-            pinned.limits,
-            generation,
+            limits,
+            { ...generation, ...(effort === undefined ? {} : { reasoning_effort: effort }) },
             gateway,
             runtime,
           );

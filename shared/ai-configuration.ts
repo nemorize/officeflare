@@ -16,6 +16,38 @@ export const aiProtocols = [
 export type AIAdapter = (typeof aiAdapters)[number];
 export type AIProtocol = (typeof aiProtocols)[number];
 export type AIConfigurationObject = Record<string, unknown>;
+export const aiReasoningLevels = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+export type AIReasoningLevel = (typeof aiReasoningLevels)[number];
+export const isAIReasoningLevel = (value: unknown): value is AIReasoningLevel =>
+  aiReasoningLevels.some((level) => level === value);
+
+export function reasoningLevelsFor(protocol: string): readonly AIReasoningLevel[] {
+  switch (protocol) {
+    case "openai_responses":
+    case "openai_chat":
+      return aiReasoningLevels;
+    case "anthropic_messages":
+      return ["low", "medium", "high", "xhigh", "max"];
+    case "google_generate_content":
+      return ["minimal", "low", "medium", "high"];
+    default:
+      return [];
+  }
+}
+
+export interface AIModelCapabilities extends AIConfigurationObject {
+  context_tokens?: number;
+  max_output_tokens?: number;
+  default_reasoning_effort?: AIReasoningLevel;
+}
 
 export interface AIConfiguredAccount {
   id?: string;
@@ -59,6 +91,7 @@ export interface AIModelProvider {
   auth_mode: "api" | "chatgpt_plan" | "platform";
   enabled: boolean;
   capabilities: AIConfigurationObject;
+  reasoning_levels?: AIReasoningLevel[];
   pricing: AIConfigurationObject;
   config?: AIConfigurationObject;
   cooldown_until?: number | null;
@@ -70,6 +103,7 @@ export interface AIModelConfiguration {
   name: string;
   vendor: string;
   enabled: boolean;
+  capabilities: AIModelCapabilities;
   providers: AIModelProvider[];
 }
 export interface AIProviderModel {
